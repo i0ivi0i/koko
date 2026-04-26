@@ -1111,6 +1111,187 @@ describe("媒体查看器适配器", () => {
     }
   });
 
+  it("时间线 owner 切到新卡片时，会先在隐藏预热宿主切源，等就绪后再迁到可见宿主", async () => {
+    const firstMount = document.createElement("div");
+    const hiddenStageMount = document.createElement("div");
+    const secondVisibleMount = document.createElement("div");
+    hiddenStageMount.className = "message-video-canonical-stage-host";
+    hiddenStageMount.dataset.stageHost = "true";
+    hiddenStageMount.dataset.attachmentId = "att-inline-owner-stage-2";
+    document.body.append(firstMount, hiddenStageMount, secondVisibleMount);
+
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const video = document.createElement("video");
+    Object.assign(video, { play, pause });
+    const readySpy = vi.fn();
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn((source, deps = {}) =>
+        创建测试VideoJs播放器壳({
+          初始源: source,
+          mountTarget: deps.mountTarget ?? undefined,
+          video,
+        })
+      ),
+    });
+
+    const firstInput = {
+      attachmentId: "att-inline-owner-stage-1",
+      mountTarget: firstMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-owner-stage-1",
+        posterSrc: "http://media.local/poster-inline-owner-stage-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: () => undefined,
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+    const secondInputBase = {
+      attachmentId: "att-inline-owner-stage-2",
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-owner-stage-2",
+        posterSrc: "http://media.local/poster-inline-owner-stage-2",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: (currentVideo: HTMLVideoElement) => {
+          currentVideo.currentTime = 18.5;
+        },
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        标记可见接管已就绪: () => {
+          readySpy();
+        },
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    try {
+      globalVideoPlayer.同步时间线自动播(firstInput);
+      await 等待查看器任务完成(6);
+
+      const 初始视频 = firstMount.querySelector<HTMLVideoElement>("video");
+      expect(初始视频).toBe(video);
+      play.mockClear();
+
+      globalVideoPlayer.同步时间线自动播({
+        ...secondInputBase,
+        mountTarget: hiddenStageMount,
+      });
+      await 等待查看器任务完成(6);
+
+      const 预热中视频 = hiddenStageMount.querySelector<HTMLVideoElement>("video");
+      expect(预热中视频).toBe(初始视频);
+      expect(预热中视频?.currentSrc || 预热中视频?.src).toContain("inline-owner-stage-2");
+      expect(预热中视频?.autoplay).toBe(false);
+      expect(play).not.toHaveBeenCalled();
+
+      预热中视频!.dispatchEvent(new Event("loadedmetadata"));
+      预热中视频!.dispatchEvent(new Event("seeked"));
+      await 等待查看器任务完成(6);
+      expect(readySpy).toHaveBeenCalled();
+
+      globalVideoPlayer.同步时间线自动播({
+        ...secondInputBase,
+        mountTarget: secondVisibleMount,
+      });
+      await 等待查看器任务完成(6);
+
+      const 揭帘后视频 = secondVisibleMount.querySelector<HTMLVideoElement>("video");
+      expect(揭帘后视频).toBe(初始视频);
+      expect(揭帘后视频?.autoplay).toBe(true);
+      expect(揭帘后视频?.currentTime).toBeCloseTo(18.5, 2);
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      globalVideoPlayer.销毁();
+    }
+  });
+
+  it("时间线 owner 切到同源附件且 hidden stage 不会再触发媒体事件时，也会立即打开可见接管就绪", async () => {
+    const firstMount = document.createElement("div");
+    const hiddenStageMount = document.createElement("div");
+    hiddenStageMount.className = "message-video-canonical-stage-host";
+    hiddenStageMount.dataset.stageHost = "true";
+    hiddenStageMount.dataset.attachmentId = "att-inline-owner-same-src-2";
+    document.body.append(firstMount, hiddenStageMount);
+
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const video = document.createElement("video");
+    Object.assign(video, { play, pause });
+    const readySpy = vi.fn();
+    const sharedSource = {
+      kind: "file" as const,
+      src: "blob:http://media.local/shared-inline-owner-same-src",
+      posterSrc: "http://media.local/poster-inline-owner-same-src",
+      width: 1280,
+      height: 720,
+    };
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn((source, deps = {}) =>
+        创建测试VideoJs播放器壳({
+          初始源: source,
+          mountTarget: deps.mountTarget ?? undefined,
+          video,
+        })
+      ),
+    });
+
+    try {
+      globalVideoPlayer.同步时间线自动播({
+        attachmentId: "att-inline-owner-same-src-1",
+        mountTarget: firstMount,
+        source: sharedSource,
+        回调: {
+          恢复播放位置: () => undefined,
+          广播播放位置: () => undefined,
+          标记首帧已就绪: () => undefined,
+          广播媒体会话信号: () => undefined,
+        },
+      });
+      await 等待查看器任务完成(6);
+
+      play.mockClear();
+      pause.mockClear();
+      readySpy.mockClear();
+
+      globalVideoPlayer.同步时间线自动播({
+        attachmentId: "att-inline-owner-same-src-2",
+        mountTarget: hiddenStageMount,
+        source: sharedSource,
+        回调: {
+          恢复播放位置: () => undefined,
+          广播播放位置: () => undefined,
+          标记首帧已就绪: () => undefined,
+          标记可见接管已就绪: () => {
+            readySpy();
+          },
+          广播媒体会话信号: () => undefined,
+        },
+      });
+      await 等待查看器任务完成(6);
+
+      /**
+       * 真实房间里很多高竖视频附件其实共享同一个 swarm/file 播放源。
+       * 这种情况下 hidden stage 不一定再触发 `loadeddata/canplay/seeked`，
+       * 如果不主动补一次 ready 判定，reveal gate 就会永远卡住，用户只能看到暂停预览帧。
+       */
+      expect(readySpy).toHaveBeenCalledTimes(1);
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(play).not.toHaveBeenCalled();
+    } finally {
+      globalVideoPlayer.销毁();
+    }
+  });
+
   it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(

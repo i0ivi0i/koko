@@ -11,6 +11,7 @@ import {
 type 时间线自动播回调 = {
   恢复播放位置(video: HTMLVideoElement): void;
   标记首帧已就绪(src: string | null): void;
+  标记可见接管已就绪?(video: HTMLVideoElement): void;
   广播播放位置(
     video: HTMLVideoElement,
     force?: boolean,
@@ -85,6 +86,9 @@ const 同步播放器展示模式 = (
   skin?.parentElement?.setAttribute("data-presentation", presentation);
 };
 
+const 是时间线隐藏预热宿主 = (mountTarget: HTMLElement | null | undefined): boolean =>
+  mountTarget?.dataset.stageHost === "true";
+
 const 绑定查看器媒体信号 = (
   video: HTMLVideoElement,
   回调: 查看器媒体回调
@@ -136,6 +140,9 @@ const 绑定时间线自动播信号 = (
   input: 全局唯一播放器时间线输入
 ): (() => void) => {
   const 读取当前源 = (): string | null => video.currentSrc || video.getAttribute("src");
+  const 广播可见接管已就绪 = (): void => {
+    input.回调.标记可见接管已就绪?.(video);
+  };
   const listeners: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [
     [
       "loadedmetadata",
@@ -147,18 +154,28 @@ const 绑定时间线自动播信号 = (
       "loadeddata",
       () => {
         input.回调.标记首帧已就绪(读取当前源());
+        广播可见接管已就绪();
       },
     ],
     [
       "canplay",
       () => {
         input.回调.标记首帧已就绪(读取当前源());
+        广播可见接管已就绪();
+      },
+    ],
+    [
+      "seeked",
+      () => {
+        input.回调.标记首帧已就绪(读取当前源());
+        广播可见接管已就绪();
       },
     ],
     [
       "playing",
       () => {
         input.回调.标记首帧已就绪(读取当前源());
+        广播可见接管已就绪();
         input.回调.广播媒体会话信号({ type: "PLAYER_PLAYING" });
       },
     ],
@@ -203,7 +220,11 @@ const 绑定时间线自动播信号 = (
   };
 };
 
-const 配置时间线自动播视频 = (video: HTMLVideoElement, attachmentId: string): void => {
+const 配置时间线自动播视频 = (
+  video: HTMLVideoElement,
+  attachmentId: string,
+  options: { stageOnly?: boolean } = {}
+): void => {
   /**
    * 时间线 owner 槽位里的 canonical player 仍然要伪装成原来的预览表面：
    * 1. 消息窗现有查询、节流和回归测试都围绕 `.message-video-preview` 这条壳层约定；
@@ -215,7 +236,14 @@ const 配置时间线自动播视频 = (video: HTMLVideoElement, attachmentId: s
   video.dataset.canonicalPlayer = "true";
   video.muted = true;
   video.loop = 媒体是否默认循环播放("video");
-  video.autoplay = true;
+  /**
+   * 时间线 owner 交接时，canonical player 可能先被挂到隐藏预热宿主：
+   * 1. 这个阶段只允许它后台切源、seek、等首帧就绪；
+   * 2. 禁止在 hidden stage 上直接开播，否则时间轴会在揭帘前偷偷往前跑；
+   * 3. 真正开始播放只允许发生在可见 inline host 上。
+   */
+  video.autoplay = !options.stageOnly;
+  video.preload = options.stageOnly ? "auto" : "metadata";
   video.controls = false;
   video.playsInline = true;
   video.setAttribute("disablepictureinpicture", "");
@@ -379,15 +407,32 @@ export function 创建全局唯一播放器(
       if (当前操作 !== 操作代次 || 当前时间线输入 !== 当前输入 || 当前查看器输入) {
         return;
       }
+      const 隐藏预热宿主 = 是时间线隐藏预热宿主(当前输入.mountTarget);
       解绑当前绑定();
       activeShell.挂载到宿主(当前输入.mountTarget!);
       activeShell.同步(当前输入.source);
       const video = activeShell.读取视频元素();
-      配置时间线自动播视频(video, 当前输入.attachmentId);
+      配置时间线自动播视频(video, 当前输入.attachmentId, {
+        stageOnly: 隐藏预热宿主,
+      });
       当前绑定清理 = 绑定时间线自动播信号(video, 当前输入);
       当前表面 = "inline";
       待归位附件Id = null;
       当前输入.回调.恢复播放位置(video);
+      if (隐藏预热宿主) {
+        当前输入.回调.标记可见接管已就绪?.(video);
+        /**
+         * hidden stage 的职责只有“把同一颗 canonical player 预热到可见切换前的正确 source/time”：
+         * 1. 这里显式 pause，防止浏览器沿着 muted autoplay 在幕后先偷偷播放；
+         * 2. 某些同源切换场景不会再触发 `loadeddata/canplay/seeked`，所以上面要主动补一次 ready 探测；
+         * 3. 如果当前位置/seek 还没对齐，消息窗侧的 reveal gate 会继续拒绝，不会因为这次主动探测误开门；
+         * 2. 等消息窗确认 canonical 已 ready 并把 mountTarget 切成可见 host 后，
+         *    才允许后续那次 `同步时间线自动播` 重新 `play()`；
+         * 3. 这样用户看到的就不再是“可见表面上的 loadstart + seek”，而是准备好后再揭帘。
+         */
+        video.pause();
+        return;
+      }
       /**
        * 时间线 owner 接管后即便浏览器表面上已经把 `autoplay` 置真，也不能假设它一定会立刻恢复播放：
        * 1. 同源续播、宿主迁移、测试环境 stub 都可能让 `paused`/实际播放状态短暂失真；

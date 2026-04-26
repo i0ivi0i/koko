@@ -601,6 +601,71 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
   });
 
+  it("高竖视频交接落入 dead zone 时，会保持旧 owner 并挂起新的 pending，而不是掉成 null", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "anchor",
+      attachmentId: "att-video-dead-zone-old",
+      kind: "video",
+      src: "http://media.local/original-att-video-dead-zone-old",
+      thumbnailUrl: "http://media.local/poster-att-video-dead-zone-old",
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-dead-zone-old",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-dead-zone-old",
+      playback,
+    });
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-dead-zone-old",
+          visibilityRatio: 0.437,
+          distanceToViewportCenter: 319.4,
+        },
+        {
+          attachmentId: "att-video-dead-zone-new",
+          visibilityRatio: 0.506,
+          distanceToViewportCenter: 280.6,
+        },
+      ],
+    });
+
+    /**
+     * 这不是观察器抖动，而是高竖视频天然会落入“所有候选都低于 0.6”的数学死区。
+     * runtime 这里不能把 owner 清空；正确语义是旧 owner 继续保活，同时挂起更接近视口中心的新 pending。
+     */
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-dead-zone-old"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-dead-zone-new"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-dead-zone-new"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+  });
+
   it("自动播 owner 正在交接时，连续空观测达到阈值后仍会释放旧 owner 与 pending", () => {
     const actor = 创建媒体运行时Actor();
 

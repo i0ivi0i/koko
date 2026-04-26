@@ -100,6 +100,24 @@ export class 房间消息窗 extends LitElement {
    * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
    */
   private readonly 时间线视频首帧就绪源 = new Map<string, string>();
+  /**
+   * canonical player 可见接管就绪缓存：
+   * - key: attachmentId
+   * - value: 已经在隐藏预热宿主上完成 source/time 对齐、可以揭帘到可见卡片的 src
+   *
+   * 设计约束：
+   * 1. 这不是普通预览 `<video>` 的首帧 ready，而是“唯一播放器自己已经准备好接管可见表面”；
+   * 2. 不能与 `时间线视频首帧就绪源` 复用，否则预览壳刚 ready 就会误判成 canonical 也 ready；
+   * 3. reveal gate 只认这张表，确保用户永远看不到 canonical player 在可见卡片上现场换源/seek。
+   */
+  private readonly 时间线唯一播放器可见接管就绪源 = new Map<string, string>();
+  /**
+   * 只记录“正在进行跨附件 handoff 的那一条 owner”：
+   * 1. 初次拿到 owner 或同附件重新拿回 owner，不需要强制 hidden stage；
+   * 2. 真正会让用户看到抽搐的，是 A 附件退场、B 附件接管时把 canonical player 直接显露到 B 卡片；
+   * 3. 因此 hidden stage 必须只在跨附件 handoff 期间生效，不能把所有 owner 获取都拖进隐藏预热。
+   */
+  private 时间线隐藏接管附件Id: string | null = null;
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -141,6 +159,8 @@ export class 房间消息窗 extends LitElement {
     读取默认全局唯一播放器().同步时间线自动播(null);
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
+    this.时间线唯一播放器可见接管就绪源.clear();
+    this.时间线隐藏接管附件Id = null;
     this.自动播位置上报记录.clear();
     super.disconnectedCallback();
   }
@@ -183,6 +203,33 @@ export class 房间消息窗 extends LitElement {
       })
     );
     this.调度自动播候选(scrollContainer);
+  }
+
+  protected override willUpdate(changedProperties: PropertyValues<this>): void {
+    if (changedProperties.has("inlineAutoplayOwnerAttachmentId")) {
+      const previousOwnerAttachmentId =
+        changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
+      const currentOwnerAttachmentId = this.inlineAutoplayOwnerAttachmentId;
+      if (previousOwnerAttachmentId && previousOwnerAttachmentId !== currentOwnerAttachmentId) {
+        this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
+      }
+      if (
+        previousOwnerAttachmentId &&
+        currentOwnerAttachmentId &&
+        currentOwnerAttachmentId !== previousOwnerAttachmentId
+      ) {
+        /**
+         * reveal gate 只对“这一轮 owner 交接”有效，绝不能跨轮次复用：
+         * 1. 同一附件多次进出 owner 是消息流常态，上一轮 ready 不代表这一轮 canonical player 仍然已经对齐；
+         * 2. 如果继续沿用旧缓存，render 会直接显露可见 canonical host，唯一播放器就会在用户眼前现场切源 / seek；
+         * 3. 因此 owner 每次切到新附件时，都必须先清掉该附件历史 ready 结论，强制重新走 hidden stage 校验。
+         */
+        this.时间线唯一播放器可见接管就绪源.delete(currentOwnerAttachmentId);
+        this.时间线隐藏接管附件Id = currentOwnerAttachmentId;
+      } else if (currentOwnerAttachmentId !== this.时间线隐藏接管附件Id) {
+        this.时间线隐藏接管附件Id = null;
+      }
+    }
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
@@ -229,6 +276,11 @@ export class 房间消息窗 extends LitElement {
         this.时间线视频首帧就绪源.delete(attachmentId);
       }
     }
+    for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.时间线唯一播放器可见接管就绪源.delete(attachmentId);
+      }
+    }
   }
 
   private 读取时间线视频首帧是否就绪(attachmentId: string, src: string | null): boolean {
@@ -249,6 +301,62 @@ export class 房间消息窗 extends LitElement {
     }
     this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
     this.requestUpdate();
+  }
+
+  private 读取时间线唯一播放器是否可见接管就绪(
+    attachmentId: string,
+    src: string | null
+  ): boolean {
+    const normalizedSrc = this.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
+      return false;
+    }
+    return this.时间线唯一播放器可见接管就绪源.get(attachmentId) === normalizedSrc;
+  }
+
+  private 标记时间线唯一播放器可见接管已就绪(
+    attachmentId: string,
+    video: HTMLVideoElement
+  ): void {
+    const currentSrc = this.读取视频当前播放源(video);
+    const normalizedSrc = this.归一化时间线视频播放源(currentSrc);
+    if (!normalizedSrc || video.seeking) {
+      return;
+    }
+    const 最低可见接管就绪状态 =
+      typeof video.HAVE_FUTURE_DATA === "number" ? video.HAVE_FUTURE_DATA : 3;
+    if (video.readyState < 最低可见接管就绪状态) {
+      /**
+       * hidden stage 里的 canonical player 只有在“已经具备继续播放所需数据”后才允许揭帘：
+       * 1. 只看 `loadedmetadata/seeked/currentTime` 还不够，浏览器此时仍可能在可见宿主上立刻 `waiting/loadstart`；
+       * 2. `HAVE_FUTURE_DATA` 对应 `canplay` 语义，更接近“揭帘后用户不会先看到一次卡顿”；
+       * 3. 这条门槛只影响 reveal，不影响后台 source/time 对齐，所以不会把播放真相拆成第二套。
+       */
+      return;
+    }
+    /**
+     * reveal gate 只接受“canonical player 已经追上当前续播点”的事实：
+     * 1. 如果这条附件有保存位置，而当前 canonical video 还停在更早时间，说明它只是刚 load 完，还没 seek 到位；
+     * 2. 这时继续保留目标卡片自己的暂停预览帧，让唯一播放器留在隐藏宿主完成对齐；
+     * 3. 等 `seeked/canplay/playing` 再次回抛且 currentTime 已对齐后，才允许揭帘。
+     */
+    const position = this.读取自动播恢复位置(attachmentId, currentSrc);
+    if (position && Math.abs(video.currentTime - position.currentTime) >= 0.25) {
+      return;
+    }
+    if (this.时间线唯一播放器可见接管就绪源.get(attachmentId) === normalizedSrc) {
+      return;
+    }
+    this.时间线唯一播放器可见接管就绪源.set(attachmentId, normalizedSrc);
+    this.requestUpdate();
+    /**
+     * reveal gate 打开后，真正的可见 canonical host 是在下一轮 Lit 更新里才会进入 DOM。
+     * 单靠 `requestUpdate()` 不会触发 `同步时间线自动播播放状态()` 的属性变更分支，
+     * 所以这里要在更新完成后显式再同步一次唯一播放器宿主，把同一颗壳从 hidden stage 迁回可见卡片。
+     */
+    void this.updateComplete.then(() => {
+      this.同步时间线唯一播放器宿主();
+    });
   }
 
   /**
@@ -343,6 +451,37 @@ export class 房间消息窗 extends LitElement {
       return null;
     }
     return position;
+  }
+
+  private 读取时间线现有预览视频是否可继续显示(
+    attachmentId: string,
+    src: string | null
+  ): boolean {
+    const normalizedExpectedSrc = this.归一化时间线视频播放源(src);
+    if (!normalizedExpectedSrc) {
+      return false;
+    }
+    const previewVideo = this.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
+    );
+    if (!previewVideo || !previewVideo.isConnected) {
+      return false;
+    }
+    const normalizedCurrentSrc = this.归一化时间线视频播放源(
+      this.读取视频当前播放源(previewVideo)
+    );
+    if (normalizedCurrentSrc !== normalizedExpectedSrc) {
+      return false;
+    }
+    /**
+     * 真实浏览器里，非 owner 的 preview `<video>` 可能已经拿到首帧，
+     * 但 `loadeddata/canplay` 还没来得及把缓存写回本轮 render。
+     * 这里补看 DOM 现状，避免“明明已经有稳定可见帧，却因为缓存慢一拍而直接显露 canonical host”。
+     */
+    return (
+      previewVideo.readyState >= 2 ||
+      previewVideo.currentTime > 0
+    );
   }
 
   private 恢复时间线自动播播放位置(
@@ -884,9 +1023,13 @@ export class 房间消息窗 extends LitElement {
       读取默认全局唯一播放器().同步时间线自动播(null);
       return;
     }
-    const host = this.querySelector<HTMLElement>(
+    const visibleHost = this.querySelector<HTMLElement>(
       `.message-video-canonical-host[data-attachment-id="${ownerAttachmentId}"]`
     );
+    const stageHost = this.querySelector<HTMLElement>(
+      `.message-video-canonical-stage-host[data-attachment-id="${ownerAttachmentId}"]`
+    );
+    const host = visibleHost ?? stageHost;
     const src = host?.dataset.videoSrc?.trim() ?? "";
     const kind = host?.dataset.videoKind === "hls" ? "hls" : "file";
     const width = Number(host?.dataset.videoWidth ?? "0");
@@ -911,6 +1054,9 @@ export class 房间消息窗 extends LitElement {
         },
         标记首帧已就绪: (currentSrc) => {
           this.标记时间线视频首帧已就绪(ownerAttachmentId, currentSrc);
+        },
+        标记可见接管已就绪: (video) => {
+          this.标记时间线唯一播放器可见接管已就绪(ownerAttachmentId, video);
         },
         广播播放位置: (video, force = false, allowReleasedOwner = false) => {
           this.广播自动播播放位置(ownerAttachmentId, video, force, allowReleasedOwner);
@@ -1207,8 +1353,8 @@ export class 房间消息窗 extends LitElement {
             /**
              * 自动播 owner 交接时，新的 swarm autoplay playback 结果不一定与 owner 切换同拍到达：
              * 1. 如果这里硬等 `inlineAutoplayPlayback`，旧 host 会先撤掉，而新 host 要晚一拍才出现；
-             * 2. `同步时间线唯一播放器宿主()` 随后就会把这段空窗上抛成 `null`，唯一播放器被迫 destroy/recreate；
-             * 3. 正确做法是：当前 owner 只要已经有同文件预览源，就立刻暴露 canonical host；
+             * 2. 但如果直接把 canonical host 暴露到可见卡片上，唯一播放器又会在用户眼前现场切源 / seek；
+             * 3. 因此这里先收口“owner 需要的 canonical source”，再由 reveal gate 决定它是进隐藏预热宿主还是可见宿主；
              * 4. 后续更正式的 autoplay swarm 源到达时，只允许同一颗壳继续 `同步(source)`，不允许再换主节点。
              */
             const ownerCanonicalVideoSrc =
@@ -1216,6 +1362,12 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
               Boolean(ownerCanonicalVideoSrc);
+            const shouldRevealCanonicalHost =
+              shouldRenderInlineVideo &&
+              this.读取时间线唯一播放器是否可见接管就绪(
+                attachment.attachmentId,
+                ownerCanonicalVideoSrc
+              );
             const previewVideoSrc = shouldRenderInlineVideo
               ? ownerCanonicalVideoSrc
               : timelinePreviewVideoSrc;
@@ -1243,7 +1395,28 @@ export class 房间消息窗 extends LitElement {
             const shouldGateVideoUntilFirstFrame =
               shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
             const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
-            const 时间线视频预览内容 = shouldRenderInlineVideo
+            const hasReadyPreviewSurface =
+              Boolean(restorableTimelineFrame) ||
+              isFirstFrameReady ||
+              this.读取时间线现有预览视频是否可继续显示(
+                attachment.attachmentId,
+                previewVideoSrc
+              );
+            /**
+             * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
+             * 1. 有保存续播点、首帧缓存，或 DOM 上那张 preview `<video>` 自己已经 ready，都算“可继续显示”；
+             * 2. 这时必须先保留现有预览帧，让 canonical player 在隐藏宿主里完成 source/time 对齐；
+             * 3. 如果当前卡片其实还没有任何可显示帧，再强行 hidden stage 只会把 autoplay 体验拖成长时间静止态；
+             * 4. 因此真正的裁决不是“所有 owner 都 hidden stage”，而是“已有稳定可见帧时才 hidden stage”。
+             */
+            const shouldUseHiddenStageCover =
+              shouldRenderInlineVideo &&
+              this.时间线隐藏接管附件Id === attachment.attachmentId &&
+              hasReadyPreviewSurface;
+            const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
+            const shouldRenderVisibleCanonicalHost =
+              shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
+            const 时间线视频预览内容 = shouldRenderVisibleCanonicalHost
               ? html`
                   <div
                     class="message-video-canonical-host"
@@ -1323,13 +1496,29 @@ export class 房间消息窗 extends LitElement {
                        */
                     }}
                   ></video>
+                  ${shouldRenderStageHost
+                    ? html`
+                        <div
+                          class="message-video-canonical-stage-host"
+                          data-stage-host="true"
+                          data-attachment-id=${attachment.attachmentId}
+                          data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                          data-video-src=${previewVideoSrc ?? ""}
+                          data-video-poster=${previewVideoPoster ?? ""}
+                          data-video-width=${attachment.width}
+                          data-video-height=${attachment.height}
+                          style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"
+                          aria-hidden="true"
+                        ></div>
+                      `
+                    : null}
                 `;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
              * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
              * 2. runtime preview 作为该 `<video>` 的 poster，而不是另起一颗 `<img>` 与 autoplay 互切；
              * 3. 没有任何 poster 时，先用轻量 guard 遮挡，等 `loadeddata/canplay/playing` 任一事件到达再揭开像素；
-             * 4. 这样从非 owner 切到 owner 只改 autoplay/loop，避免节点重建与首帧黑闪；
+             * 4. owner 交接前若目标卡片已经有暂停预览帧，就先保留它；canonical player 在隐藏宿主切源就绪后再揭帘；
              * 5. 有同源播放位置时，非 owner 也用视频自身暂停帧做预览，禁止退回开头 poster；
              * 6. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
              */

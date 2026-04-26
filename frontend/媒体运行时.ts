@@ -6,7 +6,10 @@ import type {
   媒体播放结果,
   媒体播放位置,
 } from "./媒体/index.js";
-import { 选择消息视频自动播Owner } from "./媒体/index.js";
+import {
+  选择消息视频自动播Owner,
+  选择消息视频自动播连续Owner候选,
+} from "./媒体/index.js";
 
 const 长任务阈值毫秒 = 100;
 const 自动播空观测释放阈值 = 2;
@@ -272,6 +275,31 @@ const 重算自动播候选补丁 = (
     context.inlineAutoplayPendingAttachmentId ?? context.inlineAutoplayOwnerAttachmentId
   );
   if (!nextOwnerAttachmentId) {
+    const continuityOwnerAttachmentId = 选择消息视频自动播连续Owner候选(candidates);
+    if (continuityOwnerAttachmentId) {
+      /**
+       * 高竖视频在滚动交接区会天然掉进 `0.6` dead zone：
+       * - 这不是观察器抖动，而是“卡片略高于视口”时，旧卡片和新卡片会同时只露半屏多一点；
+       * - 如果这里直接把 owner 清空，消息窗会马上撤掉 canonical host，可见表面随即闪回 preview/poster；
+       * - 正确语义是：正式 owner 门槛仍保留，但 dead zone 里继续给出一条连续性候选，
+       *   让旧 owner 保活，或把更接近中心的新卡片挂成 pending，等待正常 settle。
+       */
+      if (continuityOwnerAttachmentId === context.inlineAutoplayOwnerAttachmentId) {
+        return {
+          inlineAutoplayPendingAttachmentId: null,
+          inlineAutoplayConsecutiveEmptyObservedCount: 0,
+        };
+      }
+      if (continuityOwnerAttachmentId === context.inlineAutoplayPendingAttachmentId) {
+        return {
+          inlineAutoplayConsecutiveEmptyObservedCount: 0,
+        };
+      }
+      return {
+        inlineAutoplayPendingAttachmentId: continuityOwnerAttachmentId,
+        inlineAutoplayConsecutiveEmptyObservedCount: 0,
+      };
+    }
     /**
      * IntersectionObserver 与虚拟列表重排会偶发一帧“候选暂时清空”。
      * 这里直接清 owner 会让时间线在 `<video>/<img poster>` 之间抖动闪烁，

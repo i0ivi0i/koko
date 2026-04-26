@@ -262,6 +262,30 @@ const 等待时间线唯一播放器挂载 = async (
   }
 };
 
+const 驱动时间线Canonical就绪 = async (
+  pane: 房间消息窗,
+  attachmentId: string
+): Promise<HTMLVideoElement | null> => {
+  const canonicalVideo = pane.querySelector<HTMLVideoElement>(
+    `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
+  );
+  if (!canonicalVideo) {
+    return null;
+  }
+  Object.defineProperty(canonicalVideo, "readyState", {
+    configurable: true,
+    value: 3,
+  });
+  canonicalVideo.dispatchEvent(new Event("loadedmetadata"));
+  canonicalVideo.dispatchEvent(new Event("seeked"));
+  canonicalVideo.dispatchEvent(new Event("canplay"));
+  await pane.updateComplete;
+  await 等待时间线唯一播放器挂载(pane);
+  return pane.querySelector<HTMLVideoElement>(
+    `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
+  );
+};
+
 describe("房间消息窗媒体查看器", () => {
   it("IntersectionObserver 首次接管前，也会先用当前视口量测给出可见自动播候选", async () => {
     const pane = 创建媒体消息窗();
@@ -1531,6 +1555,7 @@ describe("房间消息窗媒体查看器", () => {
 
       pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
       await pane.updateComplete;
+      await 等待时间线唯一播放器挂载(pane);
 
       const ownerVideo = pane.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-1"]'
@@ -1792,7 +1817,8 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(ownerVideo).not.toBeNull();
-    expect(ownerVideo?.autoplay).toBe(true);
+    const 就绪后的OwnerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
+    expect(就绪后的OwnerVideo?.autoplay).toBe(true);
 
     pane.inlineAutoplayOwnerAttachmentId = null;
     await pane.updateComplete;
@@ -1888,7 +1914,8 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(ownerVideo).not.toBeNull();
-    expect(ownerVideo?.autoplay).toBe(true);
+    const 就绪后的OwnerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
+    expect(就绪后的OwnerVideo?.autoplay).toBe(true);
     expect(ownerVideo?.getAttribute("src")).toBe(playback.src);
 
     pane.inlineAutoplayOwnerAttachmentId = null;
@@ -1904,11 +1931,16 @@ describe("房间消息窗媒体查看器", () => {
 
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const reacquiredVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(reacquiredVideo).not.toBe(releasedVideo);
+    /**
+     * 归位零闪烁场景允许继续复用同一个预览节点：
+     * 我们真正关心的是 canonical 标记和 swarm src 不要抖动，
+     * 不是“必须重建一个新 DOM 节点”。反过来说，能复用旧节点更接近真实丝滑体验。
+     */
     expect(reacquiredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(reacquiredVideo?.autoplay).toBe(true);
     expect(reacquiredVideo?.getAttribute("src")).toBe(playback.src);
@@ -1999,7 +2031,12 @@ describe("房间消息窗媒体查看器", () => {
     const secondPreviewVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-2"]'
     );
-    expect(firstOwnerVideo?.autoplay).toBe(true);
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
+    expect(
+      pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
+      )?.autoplay
+    ).toBe(true);
     expect(firstOwnerVideo?.getAttribute("src")).toBe(playback1.src);
     expect(secondPreviewVideo?.autoplay).toBe(false);
     expect(secondPreviewVideo?.getAttribute("src")).toBe(playback2.src);
@@ -2009,18 +2046,22 @@ describe("房间消息窗媒体查看器", () => {
       "att-video-2": playback2,
     };
     await pane.updateComplete;
+    await 驱动时间线Canonical就绪(pane, "att-video-2");
 
     const firstReleasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     const secondOwnerVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-2"]'
+      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
     );
     expect(firstReleasedVideo).not.toBe(firstOwnerVideo);
     expect(firstReleasedVideo?.dataset.canonicalPlayer).toBeUndefined();
     expect(firstReleasedVideo?.autoplay).toBe(false);
     expect(firstReleasedVideo?.getAttribute("src")).toBe(playback1.src);
-    expect(secondOwnerVideo).not.toBe(secondPreviewVideo);
+    /**
+     * 新 owner 这侧允许继续复用原来的预览节点，把 canonical 标记和 autoplay 直接提升上去；
+     * 只要 swarm src 没抖、且最终只有一颗 canonical player，就比“先删预览再插入新节点”更丝滑。
+     */
     expect(secondOwnerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(secondOwnerVideo?.autoplay).toBe(true);
     expect(secondOwnerVideo?.getAttribute("src")).toBe(playback2.src);
@@ -2028,7 +2069,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("双视频自动播 owner 交接时，即便新 owner 的 autoplay playback 晚一拍回灌，也不会先上抛 null surface", async () => {
+  it("双视频自动播 owner 交接时，即便新 owner 的 autoplay playback 晚一拍回灌，也不会先删除目标卡片自己的预览帧", async () => {
     const pane = 创建媒体消息窗();
     const 全局唯一播放器 = 读取默认全局唯一播放器();
     const 同步时间线自动播Spy = vi.spyOn(全局唯一播放器, "同步时间线自动播");
@@ -2091,10 +2132,24 @@ describe("房间消息窗媒体查看器", () => {
     pane.inlineAutoplayPlaybackByAttachmentId = {
       "att-video-1": playback1,
     };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-2": {
+        src: playback2.src,
+        currentTime: 22.5,
+        updatedAt: Date.now(),
+      },
+    };
 
     document.body.appendChild(pane);
     await pane.updateComplete;
     await 等待时间线唯一播放器挂载(pane);
+
+    const 切换前预览视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]'
+    );
+    expect(切换前预览视频).not.toBeNull();
+    切换前预览视频!.dispatchEvent(new Event("loadedmetadata"));
+    expect(切换前预览视频?.currentTime).toBeCloseTo(22.5, 2);
 
     同步时间线自动播Spy.mockClear();
     /**
@@ -2110,20 +2165,375 @@ describe("房间消息窗媒体查看器", () => {
     const 交接调用序列 = 同步时间线自动播Spy.mock.calls.map(([input]) =>
       input ? input.attachmentId : null
     );
-    const 新Owner宿主 = pane.querySelector<HTMLElement>(
+    const 新Owner可见宿主 = pane.querySelector<HTMLElement>(
       '.message-video-canonical-host[data-attachment-id="att-video-2"]'
     );
-    const 新Owner视频 = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
+    const 新Owner隐藏预热宿主 = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+    );
+    const 新Owner预览视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'
+    );
+    const 新Owner播放指示器 = pane.querySelector(
+      '.message-video-card[data-attachment-id="att-video-2"] .message-video-play-indicator'
     );
 
     expect(交接调用序列).not.toContain(null);
     expect(交接调用序列.at(-1)).toBe("att-video-2");
-    expect(新Owner宿主).not.toBeNull();
-    expect(新Owner宿主?.dataset.videoSrc).toBe(playback2.src);
-    expect(新Owner视频).not.toBeNull();
-    expect(新Owner视频?.autoplay).toBe(true);
-    expect(新Owner视频?.getAttribute("src")).toBe(playback2.src);
+    expect(新Owner可见宿主).toBeNull();
+    expect(新Owner隐藏预热宿主).not.toBeNull();
+    expect(新Owner隐藏预热宿主?.dataset.videoSrc).toBe(playback2.src);
+    expect(新Owner隐藏预热宿主?.dataset.stageHost).toBe("true");
+    expect(新Owner预览视频).toBe(切换前预览视频);
+    expect(新Owner预览视频?.autoplay).toBe(false);
+    expect(新Owner预览视频?.getAttribute("src")).toBe(playback2.src);
+    expect(新Owner预览视频?.currentTime).toBeCloseTo(22.5, 2);
+    expect(新Owner播放指示器).toBeNull();
+
+    pane.remove();
+  });
+
+  it("双视频自动播 owner 交接时，只要目标卡片已经有同源预览视频，也必须先走隐藏预热宿主而不是直接显露 canonical host", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const 切换前预览视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]'
+    );
+    expect(切换前预览视频).not.toBeNull();
+    expect(切换前预览视频?.dataset.canonicalPlayer).toBeUndefined();
+    expect(切换前预览视频?.getAttribute("src")).toBe(playback2.src);
+    Object.defineProperty(切换前预览视频!, "readyState", {
+      configurable: true,
+      value: 2,
+    });
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    await pane.updateComplete;
+
+    /**
+     * 真实房间里很多切换目标卡片没有保存续播点，但已经有同源 preview `<video>`。
+     * 如果这里仍然直接显露 canonical host，唯一播放器就会在用户眼前现场 loadstart/seeking。
+     */
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-host[data-attachment-id="att-video-2"]'
+      )
+    ).toBeNull();
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+      )
+    ).not.toBeNull();
+    expect(
+      pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'
+      )
+    ).toBe(切换前预览视频);
+
+    pane.remove();
+  });
+
+  it("双视频自动播 owner 再次切回旧附件时，禁止复用上一次遗留的可见接管就绪缓存", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 720,
+            height: 1280,
+            displayWidth: 320,
+            displayHeight: 569,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const 切换前预览视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]'
+    );
+    expect(切换前预览视频).not.toBeNull();
+    Object.defineProperty(切换前预览视频!, "readyState", {
+      configurable: true,
+      value: 2,
+    });
+
+    const 旧附件残留就绪源 = new URL(playback2.src, window.location.href).href;
+    const pane内部探针 = pane as any as {
+      时间线唯一播放器可见接管就绪源: Map<string, string>;
+    };
+    pane内部探针.时间线唯一播放器可见接管就绪源.set(
+      "att-video-2",
+      旧附件残留就绪源
+    );
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-2": playback2,
+    };
+    await pane.updateComplete;
+
+    /**
+     * 真实房间里同一条附件会多次进出 owner。
+     * reveal gate 只能认“这一次 handoff 刚刚确认就绪”的事实，
+     * 绝不能拿上一轮遗留缓存直接显露 canonical host。
+     */
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-host[data-attachment-id="att-video-2"]'
+      )
+    ).toBeNull();
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+      )
+    ).not.toBeNull();
+
+    pane.remove();
+  });
+
+  it("双视频自动播 owner 交接时，会等 canonical 在隐藏预热宿主上就绪后才揭帘到新卡片", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-2": {
+        src: playback2.src,
+        currentTime: 22.5,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const 隐藏预热视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
+    );
+    expect(隐藏预热视频).not.toBeNull();
+
+    Object.defineProperty(隐藏预热视频!, "readyState", {
+      configurable: true,
+      value: 1,
+    });
+    隐藏预热视频!.dispatchEvent(new Event("loadedmetadata"));
+    隐藏预热视频!.dispatchEvent(new Event("seeked"));
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
+    ).toBeNull();
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+      )
+    ).not.toBeNull();
+
+    Object.defineProperty(隐藏预热视频!, "readyState", {
+      configurable: true,
+      value: 3,
+    });
+    隐藏预热视频!.dispatchEvent(new Event("canplay"));
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const 揭帘后可见宿主 = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-host[data-attachment-id="att-video-2"]'
+    );
+    const 揭帘后隐藏预热宿主 = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+    );
+    const 揭帘后Canonical视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
+    );
+    const 揭帘后预览视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'
+    );
+
+    expect(揭帘后可见宿主).not.toBeNull();
+    expect(揭帘后隐藏预热宿主).toBeNull();
+    expect(揭帘后Canonical视频).toBe(隐藏预热视频);
+    expect(揭帘后Canonical视频?.autoplay).toBe(true);
+    expect(揭帘后Canonical视频?.currentTime).toBeCloseTo(22.5, 2);
+    expect(揭帘后预览视频).toBeNull();
 
     pane.remove();
   });
@@ -2208,12 +2618,13 @@ describe("房间消息窗媒体查看器", () => {
     };
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).not.toBe(readyPreviewVideo);
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
+    expect(ownerVideo).not.toBe(readyPreviewVideo);
     expect(ownerVideo?.getAttribute("poster")).toBeNull();
     expect(ownerVideo?.autoplay).toBe(true);
 
