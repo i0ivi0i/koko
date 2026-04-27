@@ -74,7 +74,11 @@ export interface 媒体传输端口 {
   ): Promise<媒体附件转发结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
-  loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果>;
+  loadMediaLocator(
+    sessionId: string,
+    attachmentId: string,
+    signal?: AbortSignal
+  ): Promise<媒体定位结果>;
   buildAttachmentContentUrl(
     attachmentId: string,
     sessionId: string,
@@ -196,8 +200,15 @@ const 创建HTTP错误构造器 =
 const 创建JSON接口 = (baseUrl: string) => {
   const 构造HTTP错误 = 创建HTTP错误构造器(baseUrl);
   return {
-    async get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
-      const response = await fetch(`${baseUrl}${path}`, { headers });
+    async get<T>(
+      path: string,
+      headers: Record<string, string> = {},
+      signal?: AbortSignal
+    ): Promise<T> {
+      const response = await fetch(`${baseUrl}${path}`, {
+        headers,
+        ...(signal ? { signal } : {}),
+      });
       if (!response.ok) {
         throw await 构造HTTP错误("GET", path, response);
       }
@@ -257,8 +268,8 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
       媒体传输.abandonMediaUpload(sessionId, attachmentId),
     completeMediaUpload: (sessionId, attachmentId) =>
       媒体传输.completeMediaUpload(sessionId, attachmentId),
-    loadMediaLocator: (sessionId, attachmentId) =>
-      媒体传输.loadMediaLocator(sessionId, attachmentId),
+    loadMediaLocator: (sessionId, attachmentId, signal) =>
+      媒体传输.loadMediaLocator(sessionId, attachmentId, signal),
     buildAttachmentContentUrl: (
       attachmentId,
       sessionId,

@@ -47,6 +47,11 @@ const 自动播时间戳常规上报最小变化秒 = 0.75;
 const 近视口真实预览视频预算上限 = 6;
 const 近视口活媒体会话预算上限 = 24;
 const 近视口活视频会话预算上限 = 12;
+const 消息虚拟列表overscan消息数 = 4;
+const 首帧兜底消息预算上限 = 12;
+const 首帧兜底最小消息数量 = 6;
+const 首帧兜底默认视口高度 = 720;
+const 首帧兜底视口覆盖倍率 = 1.25;
 
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
@@ -143,7 +148,7 @@ export class 房间消息窗 extends LitElement {
       count: 0,
       getItemKey: (index) => this.items[index]?.id ?? index,
       estimateSize: (index) => this.估算消息行高度(index),
-      overscan: 30,
+      overscan: 消息虚拟列表overscan消息数,
       gap: 10,
       initialRect: { width: 360, height: 720 },
       rangeExtractor: (range) => this.提取消息虚拟范围(range),
@@ -213,6 +218,15 @@ export class 房间消息窗 extends LitElement {
 
   private dispatchScroll(event: Event): void {
     const scrollContainer = event.currentTarget as HTMLElement;
+    /**
+     * 纯滚动换窗时，旧 preview `<video>` 的退场时机必须前置到 scroll 这一拍：
+     * 1. 浏览器拿到新的 scrollTop 以后，虚拟窗口会立刻向新 range 迁移；
+     * 2. 如果还等下一次 Lit render 才清源，旧 `/webtorrent/...` 可能已经继续追了几拍；
+     * 3. 这里先按几何位置释放一屏外的旧 preview 源，再走后续虚拟窗口/自动播同步，
+     *    避免真实浏览器滚动时冒残留 404。
+     */
+    this.清理滚动后远离视口的时间线视频表面(scrollContainer);
+    this.清理即将退场时间线视频表面(this.读取当前虚拟消息项());
     this.dispatchEvent(
       new CustomEvent<{ scrollContainer: HTMLElement }>("room-scroll", {
         detail: { scrollContainer },
@@ -259,16 +273,15 @@ export class 房间消息窗 extends LitElement {
         this.时间线隐藏接管附件Id = null;
       }
     }
-    if (
-      changedProperties.has("items") ||
-      changedProperties.has("mediaPlaybackByAttachmentId") ||
-      changedProperties.has("mediaPreviewByAttachmentId") ||
-      changedProperties.has("inlineAutoplayOwnerAttachmentId") ||
-      changedProperties.has("inlineAutoplayPlaybackByAttachmentId") ||
-      changedProperties.has("inlineAutoplayPositionByAttachmentId")
-    ) {
-      this.清理即将退场时间线视频表面();
-    }
+    /**
+     * 退场视频源清理不能只盯属性变更：
+     * 1. 虚拟列表纯滚动换窗时，Lit update 可能只来自 controller 的 range 变化；
+     * 2. 这时如果还等 `items/playback/preview` 改了才清理，旧 `<video src="/webtorrent/...">`
+     *    会在 DOM 复用/卸载前继续追旧 swarm，真实浏览器就会冒出残留 404；
+     * 3. 现在每次 render 前都先对齐“下一拍应该还活着哪些视频表面”，
+     *    因为当前预算下页面里同时存在的 preview/canonical host 数量已经被压到很小，这层清理成本可控。
+     */
+    this.清理即将退场时间线视频表面();
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
@@ -410,9 +423,9 @@ export class 房间消息窗 extends LitElement {
     }
   }
 
-  private 清理即将退场时间线视频表面(): void {
+  private 清理即将退场时间线视频表面(virtualItems = this.读取当前虚拟消息项()): void {
     const { previewVideoSrcByAttachmentId, canonicalVideoSrcByAttachmentId } =
-      this.读取即将渲染的时间线视频表面期望();
+      this.读取即将渲染的时间线视频表面期望(virtualItems);
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       'video.message-video-preview:not([data-canonical-player="true"])'
     );
@@ -446,6 +459,34 @@ export class 房间消息窗 extends LitElement {
         continue;
       }
       host.dataset.videoSrc = "";
+    }
+  }
+
+  private 清理滚动后远离视口的时间线视频表面(scrollContainer: HTMLElement): void {
+    const viewportRect = scrollContainer.getBoundingClientRect();
+    const previewVideos = this.querySelectorAll<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    for (const video of previewVideos) {
+      const attachmentId = video.dataset.attachmentId?.trim() ?? "";
+      if (
+        !attachmentId ||
+        attachmentId === this.inlineAutoplayOwnerAttachmentId ||
+        attachmentId === this.最近退场Owner附件Id
+      ) {
+        continue;
+      }
+      const rect = video.getBoundingClientRect();
+      const edgeGap =
+        rect.bottom <= viewportRect.top
+          ? viewportRect.top - rect.bottom
+          : rect.top >= viewportRect.bottom
+            ? rect.top - viewportRect.bottom
+            : 0;
+      if (edgeGap <= Math.max(rect.height, viewportRect.height)) {
+        continue;
+      }
+      this.释放时间线预览视频资源(video);
     }
   }
 
@@ -1108,16 +1149,27 @@ export class 房间消息窗 extends LitElement {
    * - 真正谁拥有自动播资格，必须继续交给上层编排裁决。
    */
   private 读取自动播候选(scrollContainer: HTMLElement): 消息视频自动播候选[] {
+    const 裁剪预算 = (candidates: Iterable<消息视频自动播候选>): 消息视频自动播候选[] =>
+      Array.from(candidates)
+        .sort(
+          (left, right) =>
+            left.distanceToViewportCenter - right.distanceToViewportCenter ||
+            right.visibilityRatio - left.visibilityRatio ||
+            left.attachmentId.localeCompare(right.attachmentId)
+        )
+        .slice(0, 近视口活视频会话预算上限);
     if (this.自动播候选观察器) {
-      return Array.from(this.自动播候选可见条目.values());
+      return 裁剪预算(this.自动播候选可见条目.values());
     }
     const viewportRect = scrollContainer.getBoundingClientRect();
     const videoEntries = Array.from(
       this.querySelectorAll<HTMLButtonElement>("button.message-video-preview-trigger[data-attachment-id]")
     );
-    return videoEntries
-      .map((entry) => this.量测按钮自动播候选(entry, viewportRect))
-      .filter((candidate): candidate is 消息视频自动播候选 => candidate !== null);
+    return 裁剪预算(
+      videoEntries
+        .map((entry) => this.量测按钮自动播候选(entry, viewportRect))
+        .filter((candidate): candidate is 消息视频自动播候选 => candidate !== null)
+    );
   }
 
   private dispatchJumpToLatest(): void {
@@ -1185,12 +1237,36 @@ export class 房间消息窗 extends LitElement {
       return virtualItems;
     }
 
-    // Lit 父壳用属性把消息交给子组件时，首帧可能早于 controller 完成 range 计算。
-    // 这里兜一层固定首窗，防止小房间首帧空白；TanStack virtualizer 就绪后会接管后续 range。
+    /**
+     * Lit 父壳把消息属性喂给子组件时，首帧可能早于 virtualizer 算出真实 range。
+     * 这里仍要兜底，但兜底只服务“先别空白”，不能再退化成：
+     * 1. 先把 30 多条历史消息一次性塞进 DOM；
+     * 2. 再让自动播候选/媒体窗口从这批假首屏里推导出大批重对象；
+     * 3. 最后等真正的 virtualizer range 回来以后再被动裁员。
+     *
+     * 所以首帧兜底只覆盖大约一屏到一屏多一点，并且硬限制消息数量；
+     * 真正的 overscan 仍然交给 TanStack virtualizer 在下一拍接管。
+     */
+    const 视口高度 =
+      this.messageScrollRef.value?.clientHeight || this.clientHeight || 首帧兜底默认视口高度;
+    const 目标覆盖高度 = Math.max(视口高度 * 首帧兜底视口覆盖倍率, 首帧兜底默认视口高度);
+    let 累积高度 = 0;
+    let 已选消息数 = 0;
+    let endIndex = 0;
+    for (; endIndex < this.items.length; endIndex += 1) {
+      累积高度 += this.估算消息行高度(endIndex) + 10;
+      已选消息数 += 1;
+      if (已选消息数 >= 首帧兜底消息预算上限) {
+        break;
+      }
+      if (已选消息数 >= 首帧兜底最小消息数量 && 累积高度 >= 目标覆盖高度) {
+        break;
+      }
+    }
     const indexes = this.提取消息虚拟范围({
       startIndex: 0,
-      endIndex: Math.min(this.items.length - 1, 30),
-      overscan: 30,
+      endIndex: Math.min(this.items.length - 1, endIndex),
+      overscan: 0,
       count: this.items.length,
     });
     const starts: number[] = [];

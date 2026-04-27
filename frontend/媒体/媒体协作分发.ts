@@ -25,6 +25,8 @@ type WebTorrent发现运行时 = {
   tracker?: WebTorrent跟踪客户端 | null;
 };
 
+const 协作分发移除排水延迟毫秒 = 2_000;
+
 export interface WebTorrent连接 {
   readonly type?: string;
 }
@@ -796,14 +798,21 @@ export function 清理协作分发底层会话(
     return;
   }
   try {
-    // `client.remove()` 本身就是 WebTorrent 官方的移除入口；
-    // 成功时不要再同步二次 destroy，同失败时才回退到当前 torrent。
-    const removeResult = remove.call(runtime.client, session.torrentInfoHash, {
-      destroyStore: false,
-    });
-    void Promise.resolve(removeResult).catch(() => {
-      销毁协作分发Torrent(session);
-    });
+    /**
+     * 浏览器 `<video>` 在 detach/removeAttribute('src') 之后，已经飞出去的 range/content 请求
+     * 还可能惯性跑一小拍；如果这里立刻 remove，官方 worker 会马上撤掉 `/webtorrent/...`
+     * 路由，尾波请求就会直接打成 404。
+     *
+     * 这里故意只留一个很短的排水窗口：不是继续保活零引用重会话，只是给浏览器一个自然停流的机会。
+     */
+    globalThis.setTimeout(() => {
+      const removeResult = remove.call(runtime.client, session.torrentInfoHash, {
+        destroyStore: false,
+      });
+      void Promise.resolve(removeResult).catch(() => {
+        销毁协作分发Torrent(session);
+      });
+    }, 协作分发移除排水延迟毫秒);
   } catch {
     销毁协作分发Torrent(session);
   }

@@ -16,12 +16,21 @@ export interface 媒体定位缓存仓库 {
 
 type 媒体定位器依赖 = {
   getSessionId(): string;
-  loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果>;
+  loadMediaLocator(
+    sessionId: string,
+    attachmentId: string,
+    signal?: AbortSignal
+  ): Promise<媒体定位结果>;
   repo?: 媒体定位缓存仓库;
 };
 
 type 定位缓存项 = 媒体定位缓存记录;
 type 媒体定位缓存快照 = Record<string, 媒体定位缓存记录>;
+type 进行中定位请求 = {
+  promise: Promise<媒体定位结果>;
+  controller: AbortController;
+  requestVersion: number;
+};
 
 const 媒体定位缓存存储键 = "koko_media_locators";
 
@@ -170,7 +179,32 @@ export function 创建内存媒体定位缓存仓库(
 export function 创建媒体定位器(deps: 媒体定位器依赖) {
   const repo = deps.repo ?? 创建内存媒体定位缓存仓库();
   const cache = new Map<string, 定位缓存项>();
-  const inflight = new Map<string, Promise<媒体定位结果>>();
+  const inflight = new Map<string, 进行中定位请求>();
+  const requestVersionByAttachment = new Map<string, number>();
+
+  const 创建定位中止错误 = (): Error => {
+    const error = new Error("media locator request aborted");
+    error.name = "AbortError";
+    return error;
+  };
+
+  const 是否定位中止错误 = (error: unknown): boolean =>
+    error instanceof Error && error.name === "AbortError";
+
+  /**
+   * 每个 attachment 的 locator 请求都带独立代次：
+   * 1. 单附件退场时要允许只作废这一条旧请求，而不是把整个定位器全清；
+   * 2. 即使底层 transport/mock 没有真的响应 AbortSignal，旧请求回来的时候也必须识别为过期；
+   * 3. 因此“signal.abort + requestVersion 失效”两层同时保留，避免 stale locator 回写缓存。
+   */
+  const 推进定位请求代次 = (attachmentId: string): number => {
+    const nextVersion = (requestVersionByAttachment.get(attachmentId) ?? 0) + 1;
+    requestVersionByAttachment.set(attachmentId, nextVersion);
+    return nextVersion;
+  };
+
+  const 读取定位请求代次 = (attachmentId: string): number =>
+    requestVersionByAttachment.get(attachmentId) ?? 0;
 
   /**
    * locator 缓存必须跟 session 一起收口：
@@ -223,9 +257,23 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     void repo.保存(next);
   };
 
+  const 放弃未完成定位 = (attachmentId: string): void => {
+    const request = inflight.get(attachmentId);
+    if (!request) {
+      return;
+    }
+    inflight.delete(attachmentId);
+    推进定位请求代次(attachmentId);
+    request.controller.abort();
+  };
+
   const 清空 = (): void => {
+    for (const attachmentId of Array.from(inflight.keys())) {
+      放弃未完成定位(attachmentId);
+    }
     cache.clear();
     inflight.clear();
+    requestVersionByAttachment.clear();
   };
 
   const 获取定位 = async (
@@ -239,12 +287,25 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     }
     const inflightRequest = inflight.get(attachmentId);
     if (inflightRequest) {
-      return inflightRequest;
+      return inflightRequest.promise;
     }
+    const requestVersion = 推进定位请求代次(attachmentId);
+    const controller = new AbortController();
+    let requestState!: 进行中定位请求;
     let request!: Promise<媒体定位结果>;
     request = (async () => {
       try {
-        const locator = await deps.loadMediaLocator(currentSessionId, attachmentId);
+        const locator = await deps.loadMediaLocator(
+          currentSessionId,
+          attachmentId,
+          controller.signal
+        );
+        if (
+          controller.signal.aborted ||
+          读取定位请求代次(attachmentId) !== requestVersion
+        ) {
+          throw 创建定位中止错误();
+        }
         const next = {
           attachmentId,
           sessionId: currentSessionId,
@@ -255,21 +316,32 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
         await repo.保存(next);
         return locator;
       } catch (error) {
+        if (
+          controller.signal.aborted ||
+          读取定位请求代次(attachmentId) !== requestVersion
+        ) {
+          throw (是否定位中止错误(error) ? error : 创建定位中止错误());
+        }
         if (cached) {
           return cached.value;
         }
         throw error;
       } finally {
-        if (inflight.get(attachmentId) === request) {
+        if (inflight.get(attachmentId) === requestState) {
           inflight.delete(attachmentId);
         }
       }
     })();
-    inflight.set(attachmentId, request);
+    requestState = {
+      promise: request,
+      controller,
+      requestVersion,
+    };
+    inflight.set(attachmentId, requestState);
     try {
       return await request;
     } finally {
-      if (inflight.get(attachmentId) === request) {
+      if (inflight.get(attachmentId) === requestState) {
         inflight.delete(attachmentId);
       }
     }
@@ -279,6 +351,7 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     读取缓存,
     获取定位,
     标记过期,
+    放弃未完成定位,
     清空,
   };
 }

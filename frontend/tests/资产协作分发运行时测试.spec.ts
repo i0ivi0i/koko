@@ -629,7 +629,8 @@ describe("资产协作分发运行时", () => {
     });
   });
 
-  it("tracker 拒绝 join_ticket 后会丢弃旧 swarm 会话，并发出 ticket 失效信号而不是继续复用脏会话", async () => {
+  it("tracker 拒绝 join_ticket 后会立即丢弃运行时会话，并在短排水窗口后通过官方 remove 收尾", async () => {
+    vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-ticket-invalid"
@@ -668,12 +669,19 @@ describe("资产协作分发运行时", () => {
       swarmId: "swarm-att-ticket-invalid",
     });
     expect(读取协作分发会话状态("swarm-att-ticket-invalid")).toBeNull();
+    expect(remove).not.toHaveBeenCalled();
+    /**
+     * 运行时真相必须立即摘掉脏会话，但底层 `/webtorrent/...` 路由会故意留一个极短排水窗口，
+     * 让浏览器已经飞出去的 range/content 请求自然停掉，避免旧视频尾波直接撞成 404。
+     */
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(remove).toHaveBeenCalledWith("torrent-info-hash-att-ticket-invalid", {
       destroyStore: false,
     });
   });
 
-  it("查看器关闭释放最后一个未完成补齐消费者时，会立即销毁重型 swarm", async () => {
+  it("查看器关闭释放最后一个未完成补齐消费者时，会立即从运行时摘掉重型 swarm，并在短排水窗口后 remove", async () => {
+    vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-viewer-close-1"
@@ -705,6 +713,8 @@ describe("资产协作分发运行时", () => {
     });
 
     expect(读取协作分发会话状态("swarm-att-viewer-close-1")).toBeNull();
+    expect(remove).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(remove).toHaveBeenCalledTimes(1);
   });
 

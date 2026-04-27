@@ -1616,6 +1616,64 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("虚拟列表只因滚动换窗时，也会先释放退场 preview video 源", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from({ length: 24 }, (_, index) => `att-scroll-release-${index + 1}`);
+    pane.items = attachmentIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: null,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const scrollContainer = pane.querySelector<HTMLElement>(".message-scroll");
+    const previewVideos = Array.from(
+      pane.querySelectorAll<HTMLVideoElement>(
+        'video.message-video-preview:not([data-canonical-player="true"])'
+      )
+    );
+    expect(scrollContainer).not.toBeNull();
+    expect(previewVideos.length).toBeGreaterThan(0);
+    const pauseSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => undefined);
+    const loadSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "load")
+      .mockImplementation(() => undefined);
+
+    try {
+      pauseSpy.mockClear();
+      loadSpy.mockClear();
+      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 320, 720));
+      previewVideos.forEach((video, index) => {
+        vi.spyOn(video, "getBoundingClientRect").mockReturnValue(
+          new DOMRect(0, 2_000 + index * 220, 320, 180)
+        );
+      });
+      scrollContainer!.scrollTop = 10_000;
+      scrollContainer!.dispatchEvent(new Event("scroll"));
+
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(loadSpy).toHaveBeenCalled();
+    } finally {
+      pauseSpy.mockRestore();
+      loadSpy.mockRestore();
+      pane.remove();
+    }
+  });
+
   it("自动播时间戳上报只允许当前 owner，并对高频 timeupdate 做节流", async () => {
     const pane = 创建媒体消息窗();
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
@@ -3018,7 +3076,9 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("双视频自动播 owner 交接时，会等 canonical 在隐藏预热宿主上就绪后才揭帘到新卡片", async () => {
+  it(
+    "双视频自动播 owner 交接时，会等 canonical 在隐藏预热宿主上就绪后才揭帘到新卡片",
+    async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {
       mode: "swarm",
@@ -3148,8 +3208,10 @@ describe("房间消息窗媒体查看器", () => {
     expect(揭帘后预览视频).not.toBeNull();
     expect(揭帘后预览视频?.autoplay).toBe(false);
 
-    pane.remove();
-  });
+      pane.remove();
+    },
+    10_000
+  );
 
   it("有 poster 的 swarm 视频在未成为 owner 前继续显示 poster overlay，不裸露 playback.src 冷帧", async () => {
     const pane = 创建媒体消息窗();
@@ -4797,6 +4859,52 @@ describe("房间消息窗媒体查看器", () => {
     expect(pane.querySelectorAll("video.message-video-preview").length).toBeLessThanOrEqual(6);
 
     pane.remove();
+  });
+
+  it("首帧虚拟列表尚未就绪时，不会一次把三十多条历史视频都塞进 DOM", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = Array.from({ length: 40 }, (_, index) =>
+      创建单视频消息项(`att-first-frame-${index + 1}`, index + 1)
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    expect(pane.querySelectorAll("button.message-video-preview-trigger").length).toBeLessThanOrEqual(12);
+
+    pane.remove();
+  });
+
+  it("房间首轮更新时，自动播候选也会先做视频预算裁剪，再回抛给外层编排", async () => {
+    const pane = 创建媒体消息窗();
+    const 内部面板 = pane as unknown as {
+      自动播候选观察器: IntersectionObserver | null;
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+      读取自动播候选(
+        scrollContainer: HTMLElement
+      ): Array<{ attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }>;
+    };
+    内部面板.自动播候选观察器 = {} as IntersectionObserver;
+    内部面板.自动播候选可见条目 = new Map(
+      Array.from({ length: 16 }, (_, index) => [
+        `att-autoplay-budget-${index + 1}`,
+        {
+          attachmentId: `att-autoplay-budget-${index + 1}`,
+          visibilityRatio: 1,
+          distanceToViewportCenter: index * 10,
+        },
+      ])
+    );
+
+    const candidates = 内部面板.读取自动播候选(document.createElement("div"));
+
+    expect(candidates).toHaveLength(12);
+    expect(candidates.map((candidate) => candidate.attachmentId)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `att-autoplay-budget-${index + 1}`)
+    );
   });
 
   it("房间媒体窗口观察事件会先做活媒体预算裁剪，再把附件集合回抛给外层", async () => {

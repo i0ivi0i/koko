@@ -68,10 +68,17 @@ export function 创建视频预览协作(
       attemptedAtMs: number;
     }
   >();
+  type 视频预览抓帧任务记录 = {
+    promise: Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>>;
+    abortController: AbortController;
+    consumers: Set<string>;
+  };
   const 视频预览抓帧任务表 = new Map<
     string,
-    Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>>
+    视频预览抓帧任务记录
   >();
+  const 视频预览抓帧消费者任务索引 = new Map<string, string>();
+  const 视频预览抓帧附件消费者索引 = new Map<string, Set<string>>();
   const 可见候选缺源重试最小间隔毫秒 = 600;
 
   const 构造视频预览抓帧任务键 = (
@@ -81,26 +88,100 @@ export function 创建视频预览协作(
     return contentHash ? `content:${contentHash}` : `src:${previewSource}`;
   };
 
+  const 构造视频预览抓帧消费者键 = (attachmentId: string, generation: number): string =>
+    `${attachmentId}#${generation}`;
+
+  const 绑定视频预览抓帧消费者 = (
+    attachmentId: string,
+    consumerKey: string,
+    taskKey: string
+  ): void => {
+    视频预览抓帧消费者任务索引.set(consumerKey, taskKey);
+    let attachmentConsumers = 视频预览抓帧附件消费者索引.get(attachmentId);
+    if (!attachmentConsumers) {
+      attachmentConsumers = new Set<string>();
+      视频预览抓帧附件消费者索引.set(attachmentId, attachmentConsumers);
+    }
+    attachmentConsumers.add(consumerKey);
+  };
+
+  const 释放视频预览抓帧消费者 = (consumerKey: string): void => {
+    const taskKey = 视频预览抓帧消费者任务索引.get(consumerKey);
+    if (!taskKey) {
+      return;
+    }
+    视频预览抓帧消费者任务索引.delete(consumerKey);
+    const attachmentId = consumerKey.split("#")[0];
+    if (!attachmentId) {
+      return;
+    }
+    const attachmentConsumers = 视频预览抓帧附件消费者索引.get(attachmentId);
+    attachmentConsumers?.delete(consumerKey);
+    if (attachmentConsumers && attachmentConsumers.size === 0) {
+      视频预览抓帧附件消费者索引.delete(attachmentId);
+    }
+    const task = 视频预览抓帧任务表.get(taskKey);
+    if (!task) {
+      return;
+    }
+    task.consumers.delete(consumerKey);
+    if (task.consumers.size === 0) {
+      /**
+       * 共享抓帧任务只有在“最后一个附件引用也退场”后才允许 abort：
+       * 1. 同内容多附件仍可共享同一条隐藏 probe；
+       * 2. 但一旦没有任何附件还在等它，就必须立刻停流，不准继续拖着旧 `/webtorrent/...`；
+       * 3. 这样附件退场与后台抓帧之间终于是一条同进同退的真相链。
+       */
+      task.abortController.abort();
+      视频预览抓帧任务表.delete(taskKey);
+    }
+  };
+
+  const 释放附件全部视频预览抓帧消费者 = (attachmentId: string): void => {
+    const attachmentConsumers = Array.from(
+      视频预览抓帧附件消费者索引.get(attachmentId) ?? []
+    );
+    for (const consumerKey of attachmentConsumers) {
+      释放视频预览抓帧消费者(consumerKey);
+    }
+  };
+
   const 读取或创建视频预览抓帧任务 = (
     taskKey: string,
-    previewSource: string
+    previewSource: string,
+    attachmentId: string,
+    generation: number
   ): Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>> => {
+    const consumerKey = 构造视频预览抓帧消费者键(attachmentId, generation);
     const existing = 视频预览抓帧任务表.get(taskKey);
     if (existing) {
-      return existing;
+      existing.consumers.add(consumerKey);
+      绑定视频预览抓帧消费者(attachmentId, consumerKey, taskKey);
+      return existing.promise;
     }
     /**
      * 抓帧是 poster 体验态，不是 WebTorrent 正式补齐/做种链。
      * 同一内容在消息流里出现多次时，只允许一个隐藏 video/streamURL 读流探针；
      * 其他附件共享这次结果，避免把 WebTorrent torrent 的 `verified` 监听器堆成假泄漏告警。
      */
-    const task = deps.抓取视频预览({ src: previewSource }).finally(() => {
-      if (视频预览抓帧任务表.get(taskKey) === task) {
-        视频预览抓帧任务表.delete(taskKey);
-      }
-    });
-    视频预览抓帧任务表.set(taskKey, task);
-    return task;
+    const abortController = new AbortController();
+    const taskRecord: 视频预览抓帧任务记录 = {
+      abortController,
+      consumers: new Set<string>([consumerKey]),
+      promise: deps
+        .抓取视频预览({
+          src: previewSource,
+          signal: abortController.signal,
+        })
+        .finally(() => {
+          if (视频预览抓帧任务表.get(taskKey) === taskRecord) {
+            视频预览抓帧任务表.delete(taskKey);
+          }
+        }),
+    };
+    绑定视频预览抓帧消费者(attachmentId, consumerKey, taskKey);
+    视频预览抓帧任务表.set(taskKey, taskRecord);
+    return taskRecord.promise;
   };
 
   const 写入视频预览状态 = (
@@ -205,6 +286,7 @@ export function 创建视频预览协作(
       写入视频预览状态(attachmentId, { phase: "loading" });
 
       void (async () => {
+        const 当前抓帧消费者键 = 构造视频预览抓帧消费者键(attachmentId, 当前代次);
         let shouldReleasePreviewConsumer = false;
         try {
           let contentHash = 当前预览播放源?.contentHash ?? null;
@@ -298,7 +380,9 @@ export function 创建视频预览协作(
 
           const preview = await 读取或创建视频预览抓帧任务(
             构造视频预览抓帧任务键(contentHash, previewSource),
-            previewSource
+            previewSource,
+            attachmentId,
+            当前代次
           );
           if (shouldReleasePreviewConsumer) {
             deps.释放协作分发消费者({
@@ -344,13 +428,23 @@ export function 创建视频预览协作(
             return;
           }
           标记视频预览缺源(attachmentId);
+        } finally {
+          释放视频预览抓帧消费者(当前抓帧消费者键);
         }
       })();
     },
 
     删除视频预览状态(attachmentId: string): void {
+      释放附件全部视频预览抓帧消费者(attachmentId);
       视频预览缺源阻断版本表.delete(attachmentId);
       视频预览缺源可见重试记录表.delete(attachmentId);
+      /**
+       * 单附件退场不只是“把当前状态删掉”：
+       * 1. 进行中的 locator / swarm / 抓帧异步链可能稍后才回来；
+       * 2. 如果不同时作废解析代次，旧任务会把 `ready/missing_source` 再写回已退场附件；
+       * 3. 因此这里要显式剪断 attachment 级解析真相，确保退场就是退场。
+       */
+      视频预览解析代次表.delete(attachmentId);
       if (!视频预览状态表.delete(attachmentId)) {
         return;
       }
@@ -359,10 +453,15 @@ export function 创建视频预览协作(
     },
 
     清空(): void {
+      for (const task of 视频预览抓帧任务表.values()) {
+        task.abortController.abort();
+      }
       视频预览状态表.clear();
       视频预览解析代次表.clear();
       视频预览缺源阻断版本表.clear();
       视频预览缺源可见重试记录表.clear();
+      视频预览抓帧消费者任务索引.clear();
+      视频预览抓帧附件消费者索引.clear();
       视频预览抓帧任务表.clear();
     },
   };

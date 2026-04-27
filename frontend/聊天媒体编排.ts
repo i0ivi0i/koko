@@ -189,8 +189,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
-    loadMediaLocator: (sessionId, attachmentId) =>
-      deps.transport().loadMediaLocator(sessionId, attachmentId),
+    loadMediaLocator: (sessionId, attachmentId, signal) =>
+      deps.transport().loadMediaLocator(sessionId, attachmentId, signal),
     repo: deps.媒体定位仓库 ?? 创建内存媒体定位缓存仓库(),
   });
   const 刷新协作分发入群定位 = (input: {
@@ -260,6 +260,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       consumerId: 构造预览ConsumerId(attachmentId),
       ...(input.丢弃未完成预览补齐 ? { 丢弃未完成补齐: true } : {}),
     });
+    /**
+     * 附件会话退场后，旧 locator 请求必须立刻失效：
+     * 1. 当前窗口真相已经否定了这条附件的活跃身份；
+     * 2. 不能让它继续在后台返回后回写 cache / preview / swarm 事实；
+     * 3. 这里只中止未完成请求，不清掉当前 session 的已命中缓存，方便附件再次回到窗口时复用。
+     */
+    媒体定位器.放弃未完成定位(attachmentId);
     session.销毁();
     媒体会话表.delete(attachmentId);
     if (input.清理协作补齐) {
@@ -504,29 +511,30 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 活媒体会话集合不再默认等于“当前房间全部附件”：
      * 1. RoomPane 会回抛当前虚拟窗口里的附件集合；
      * 2. 自动播候选会再补上一层“马上就要露头”的高价值视频窗口；
-     * 3. 如果两类窗口信号都还没到，再临时回退到旧行为，避免首拍把单消息房间直接清空。
+     * 3. viewer / autoplay owner 这类显式交互 owner 也可以越过窗口观察单独保活；
+     * 4. 但只要没有任何窗口/owner/candidate 真相，宁可暂时不建立会话，也不能再把整房历史附件误当成活窗口。
       */
-      const activeWindowIds = new Set<string>([
-        ...当前媒体窗口附件Id集合,
-        ...当前自动播候选附件Id集合,
-      ]);
-      const viewerAttachmentId =
-        读取媒体运行时上下文().currentViewerRequest?.startAttachmentId?.trim() ?? "";
-      if (viewerAttachmentId) {
-        activeWindowIds.add(viewerAttachmentId);
-      }
-      const autoplayOwnerAttachmentId =
-        读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId?.trim() ?? "";
-      if (autoplayOwnerAttachmentId) {
-        activeWindowIds.add(autoplayOwnerAttachmentId);
-      }
-      if (activeWindowIds.size === 0) {
-        return attachments;
-      }
+    const activeWindowIds = new Set<string>([
+      ...当前媒体窗口附件Id集合,
+      ...当前自动播候选附件Id集合,
+    ]);
+    const viewerAttachmentId =
+      读取媒体运行时上下文().currentViewerRequest?.startAttachmentId?.trim() ?? "";
+    if (viewerAttachmentId) {
+      activeWindowIds.add(viewerAttachmentId);
+    }
+    const autoplayOwnerAttachmentId =
+      读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId?.trim() ?? "";
+    if (autoplayOwnerAttachmentId) {
+      activeWindowIds.add(autoplayOwnerAttachmentId);
+    }
+    if (activeWindowIds.size === 0) {
+      return [];
+    }
     const activeAttachments = attachments.filter((attachment) =>
       activeWindowIds.has(attachment.attachmentId)
     );
-    return activeAttachments.length > 0 ? activeAttachments : attachments;
+    return activeAttachments;
   };
 
   const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>

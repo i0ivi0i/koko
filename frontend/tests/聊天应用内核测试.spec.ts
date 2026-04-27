@@ -82,6 +82,18 @@ type 聊天媒体测试端口 = {
 const 读取媒体编排供测试 = (kernel: unknown): 聊天媒体测试端口 =>
   (kernel as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
 
+const 观察媒体窗口 = async (
+  kernel: { dispatch(command: unknown): Promise<unknown> },
+  attachmentIds: string[]
+): Promise<void> => {
+  await kernel.dispatch({
+    type: "ROOM_MEDIA_WINDOW_OBSERVED",
+    attachmentIds,
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
 describe("聊天应用内核", () => {
   it("时间线合流不再在聊天应用内核里直接揉 messages 数组", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
@@ -393,30 +405,19 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-1"]);
     await kernel.dispatch({
-      type: "MEDIA_OPEN_REQUESTED",
-      request: {
-        startAttachmentId: "att-video-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-1",
-            src: "http://media.local/original-att-video-1",
-            posterSrc: null,
-            width: 1280,
-            height: 720,
-          },
-        ],
-      },
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-1",
+          visibilityRatio: 0.92,
+          distanceToViewportCenter: 0,
+        },
+      ],
     });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
-      if (playback?.mode === "anchor") {
-        break;
-      }
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await Promise.resolve();
+    await Promise.resolve();
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -521,6 +522,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-image-1"]);
 
     expect(kernel.snapshot().media.playbackByAttachmentId["att-image-1"]).toMatchObject({
       src: "http://media.local/original-att-image-1",
@@ -618,6 +620,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-image-cache-1"]);
 
     await kernel.dispatch({
       type: "MEDIA_OPEN_REQUESTED",
@@ -676,6 +679,7 @@ describe("聊天应用内核", () => {
     await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
     await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
     await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await 观察媒体窗口(reopenedKernel, ["att-image-cache-1"]);
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const session =
         reopenedKernel.snapshot().media.sessionByAttachmentId["att-image-cache-1"];
@@ -763,6 +767,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-cache-1"]);
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
       attachmentId: "att-video-cache-1",
@@ -807,6 +812,7 @@ describe("聊天应用内核", () => {
     await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
     await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
     await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await 观察媒体窗口(reopenedKernel, ["att-video-cache-1"]);
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const session =
         reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-1"];
@@ -1017,6 +1023,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-cache-manifest-1"]);
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
       attachmentId: "att-video-cache-manifest-1",
@@ -1052,6 +1059,7 @@ describe("聊天应用内核", () => {
     await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
     await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
     await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await 观察媒体窗口(reopenedKernel, ["att-video-cache-manifest-1"]);
     expect(
       reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-manifest-1"]
     ).toMatchObject({
@@ -1166,30 +1174,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
-    await kernel.dispatch({
-      type: "MEDIA_OPEN_REQUESTED",
-      request: {
-        startAttachmentId: "att-video-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-1",
-            src: "http://media.local/original-att-video-1",
-            posterSrc: null,
-            width: 1280,
-            height: 720,
-          },
-        ],
-      },
-    });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
-      if (playback?.mode === "anchor") {
-        break;
-      }
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await 观察媒体窗口(kernel, ["att-image-seeding-1"]);
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -1280,6 +1265,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-image-backfill-1"]);
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -1909,6 +1895,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-1"]);
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -2066,6 +2053,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-release-1"]);
 
     kernel.dispose();
 
@@ -2194,6 +2182,7 @@ describe("聊天应用内核", () => {
       expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
       expect(打开查看器).toHaveBeenCalledTimes(1);
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -2313,6 +2302,7 @@ describe("聊天应用内核", () => {
         surface: "inline_autoplay",
       });
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -2403,6 +2393,7 @@ describe("聊天应用内核", () => {
         "att-video-inline-fast"
       );
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -2567,6 +2558,7 @@ describe("聊天应用内核", () => {
         "att-video-inline-3"
       );
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -2621,6 +2613,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await 观察媒体窗口(kernel, ["att-video-lazy-1"]);
 
     expect(解析播放结果).not.toHaveBeenCalled();
     expect(kernel.snapshot().media.playbackByAttachmentId["att-video-lazy-1"]).toBeUndefined();
@@ -2771,6 +2764,7 @@ describe("聊天应用内核", () => {
       });
       expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -2916,6 +2910,7 @@ describe("聊天应用内核", () => {
       });
       expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -3522,6 +3517,7 @@ describe("聊天应用内核", () => {
         longTaskCount: 0,
       });
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });
@@ -3604,6 +3600,7 @@ describe("聊天应用内核", () => {
       });
       expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
     } finally {
+      kernel.dispose();
       vi.useRealTimers();
     }
   });

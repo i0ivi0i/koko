@@ -845,6 +845,7 @@ describe("媒体协作分发", () => {
   });
 
   it("client.remove 可用时只走官方移除链，不会再同步二次 destroy 同一 torrent", async () => {
+    vi.useFakeTimers();
     const remove = vi.fn().mockResolvedValue(undefined);
     const destroy = vi.fn();
     const session = {
@@ -859,16 +860,23 @@ describe("媒体协作分发", () => {
       },
     } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
 
-    清理协作分发底层会话(session, runtime);
-    await Promise.resolve();
+    try {
+      清理协作分发底层会话(session, runtime);
+      expect(remove).not.toHaveBeenCalled();
 
-    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-1", {
-      destroyStore: false,
-    });
-    expect(destroy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-1", {
+        destroyStore: false,
+      });
+      expect(destroy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("client.remove 异步失败时会降级 destroy 当前 torrent，而不是把 reject 泄到外面", async () => {
+    vi.useFakeTimers();
     const remove = vi.fn().mockRejectedValue(new Error("remove failed"));
     const destroy = vi.fn();
     const session = {
@@ -883,19 +891,27 @@ describe("媒体协作分发", () => {
       },
     } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
 
-    清理协作分发底层会话(session, runtime);
-    await Promise.resolve();
-    await Promise.resolve();
+    try {
+      清理协作分发底层会话(session, runtime);
+      expect(remove).not.toHaveBeenCalled();
 
-    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-2", {
-      destroyStore: false,
-    });
-    expect(destroy).toHaveBeenCalledWith({
-      destroyStore: false,
-    });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-2", {
+        destroyStore: false,
+      });
+      expect(destroy).toHaveBeenCalledWith({
+        destroyStore: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("同一个会话被重复清理时只会走一次 remove，不会把第二次清理变成新的 reject 源", async () => {
+    vi.useFakeTimers();
     const remove = vi.fn().mockResolvedValue(undefined);
     const destroy = vi.fn();
     const session = {
@@ -911,15 +927,21 @@ describe("媒体协作分发", () => {
       },
     } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
 
-    清理协作分发底层会话(session, runtime);
-    清理协作分发底层会话(session, runtime);
-    await Promise.resolve();
+    try {
+      清理协作分发底层会话(session, runtime);
+      清理协作分发底层会话(session, runtime);
+      expect(remove).not.toHaveBeenCalled();
 
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-3", {
-      destroyStore: false,
-    });
-    expect(destroy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-3", {
+        destroyStore: false,
+      });
+      expect(destroy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("同一 attachment 在同一页面被再次打开时会复用同一个 torrent 会话", async () => {

@@ -45,6 +45,7 @@ type 视频预览输入 = {
 
 type 媒体源视频预览输入 = {
   src: string;
+  signal?: AbortSignal;
   createProbeElement?: () => HTMLVideoElement;
   createCanvasElement?: () => HTMLCanvasElement;
   setTimeout?: typeof globalThis.setTimeout;
@@ -116,6 +117,14 @@ export async function 派生视频预览(
 export async function 从媒体源抓取视频预览(
   input: 媒体源视频预览输入
 ): Promise<视频预览派生结果> {
+  if (input.signal?.aborted) {
+    return {
+      objectUrl: null,
+      source: "none",
+      width: null,
+      height: null,
+    };
+  }
   const createProbeElement =
     input.createProbeElement ?? (() => document.createElement("video"));
   const scheduleTimeout = input.setTimeout ?? globalThis.setTimeout.bind(globalThis);
@@ -132,6 +141,16 @@ export async function 从媒体源抓取视频预览(
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     let rvfc兜底定时器: ReturnType<typeof setTimeout> | null = null;
     let rvfc请求序号 = 0;
+    const abortSignal = input.signal ?? null;
+
+    const onAbort = (): void => {
+      finish({
+        objectUrl: null,
+        source: "none",
+        width: null,
+        height: null,
+      });
+    };
 
     const 取消RVFC兜底 = (): void => {
       if (!rvfc兜底定时器) {
@@ -151,7 +170,28 @@ export async function 从媒体源抓取视频预览(
       probe.onloadeddata = null;
       probe.onseeked = null;
       probe.onerror = null;
-      probe.src = "";
+      abortSignal?.removeEventListener("abort", onAbort);
+      /**
+       * 隐藏抓帧探针也必须遵守和时间线 `<video>` 一样的退场协议：
+       * 1. 仅把 `src = ""` 留给浏览器自己善后，真实浏览器里经常还会拖着旧 `/webtorrent/...` 继续追几拍；
+       * 2. 这里统一显式 pause + remove src + load，明确告诉媒体栈“这条源已经失效”；
+       * 3. 这样附件退场、代次作废、超时失败时，后台探针不会再悄悄把旧 swarm 路由拖到 404。
+       */
+      try {
+        probe.pause?.();
+      } catch {
+        // 个别测试桩或浏览器探针实现可能没有完整媒体状态；清理阶段不能因这里中断。
+      }
+      try {
+        probe.removeAttribute?.("src");
+      } catch {
+        probe.src = "";
+      }
+      try {
+        probe.load?.();
+      } catch {
+        // 某些探针实现会拒绝无源 load；这里吞掉即可，关键是优先剪断旧源。
+      }
     };
 
     const finish = (result: 视频预览派生结果): void => {
@@ -290,6 +330,11 @@ export async function 从媒体源抓取视频预览(
         height: null,
       });
     }, timeoutMs);
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+    if (abortSignal?.aborted) {
+      onAbort();
+      return;
+    }
     probe.src = input.src;
     probe.load?.();
   });

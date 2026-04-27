@@ -123,13 +123,29 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
       attachmentId,
     });
-    void deps
-      .解析播放结果({
+    const 自动播播放结果Promise = deps.解析播放结果({
+      attachmentId,
+      kind: attachment.kind,
+      surface: "inline_autoplay",
+      consumerId: deps.构造自动播ConsumerId(attachmentId),
+    });
+    /**
+     * 自动播解析是壳层异步副作用，不能因为下游替身/异常返回了非 Promise 就把线程炸穿：
+     * 1. 正常实现本来就应该返回 Promise；
+     * 2. 但这里仍要把“非 thenable”降级成一次受控失败，而不是制造未处理异常；
+     * 3. 这样 owner 真相依旧只会落成 `failed`，不会把整个浏览器运行时拖死。
+     */
+    if (
+      !自动播播放结果Promise ||
+      typeof (自动播播放结果Promise as PromiseLike<媒体播放结果>).then !== "function"
+    ) {
+      deps.接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
         attachmentId,
-        kind: attachment.kind,
-        surface: "inline_autoplay",
-        consumerId: deps.构造自动播ConsumerId(attachmentId),
-      })
+      });
+      return;
+    }
+    void 自动播播放结果Promise
       .then((playback) => {
         if (
           deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||

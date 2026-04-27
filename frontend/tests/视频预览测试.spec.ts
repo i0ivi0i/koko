@@ -129,4 +129,51 @@ describe("视频预览", () => {
     expect(result.source).toBe("rvfc");
     expect(result.objectUrl).toContain("data:image/webp");
   });
+
+  it("附件退场中止隐藏抓帧探针时，会主动 pause + remove src + load 释放旧源", async () => {
+    const abortController = new AbortController();
+    const pause = vi.fn();
+    const removeAttribute = vi.fn();
+    const load = vi.fn();
+    const probe = {
+      preload: "",
+      muted: false,
+      playsInline: false,
+      readyState: 0,
+      duration: 0,
+      videoWidth: 0,
+      videoHeight: 0,
+      onloadedmetadata: null as (() => void) | null,
+      onloadeddata: null as (() => void) | null,
+      onseeked: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: "",
+      pause,
+      removeAttribute,
+      load,
+    } as unknown as HTMLVideoElement;
+
+    const resultPromise = 从媒体源抓取视频预览({
+      src: "blob:video-preview-abort",
+      signal: abortController.signal,
+      timeoutMs: 500,
+      createProbeElement: () => probe,
+    });
+
+    abortController.abort();
+    const result = await resultPromise;
+
+    expect(result).toEqual({
+      objectUrl: null,
+      source: "none",
+      width: null,
+      height: null,
+    });
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(removeAttribute).toHaveBeenCalledWith("src");
+    /**
+     * 第一次 `load()` 是真正开始抓帧，第二次 `load()` 是退场清理时显式要求浏览器放弃旧源。
+     */
+    expect(load).toHaveBeenCalledTimes(2);
+  });
 });

@@ -54,7 +54,7 @@ describe("传输", () => {
     expect(source).toContain("媒体传输.forwardMediaAttachment(kind, input)");
     expect(source).toContain("媒体传输.abandonMediaUpload(sessionId, attachmentId)");
     expect(source).toContain("媒体传输.completeMediaUpload(sessionId, attachmentId)");
-    expect(source).toContain("媒体传输.loadMediaLocator(sessionId, attachmentId)");
+    expect(source).toContain("媒体传输.loadMediaLocator(sessionId, attachmentId, signal)");
     expect(source).toContain("后台传输.loadAdminOverview(token)");
     expect(source).toContain("后台传输.adminLogin(username, password)");
     expect(source).toContain("后台传输.adminRooms(token)");
@@ -112,7 +112,7 @@ describe("传输", () => {
     );
     expect(readSource).not.toContain("deps.transport.createSocket");
 
-    expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId)");
+    expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId, signal)");
     expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash)");
     expect(mediaSource).toContain("deps.transport().reuseMediaBySourceHash(kind, input)");
     expect(mediaSource).toContain("deps.transport().forwardMediaAttachment(kind, input)");
@@ -912,6 +912,40 @@ describe("传输", () => {
       },
       blob_asset: null,
     });
+  });
+
+  it("loadMediaLocator 会把 abort signal 透传给 locator fetch，允许上层真正取消旧请求", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-locator-signal-1",
+          kind: "video",
+          status: "ready",
+          thumbnail_url: null,
+          preview_asset: null,
+          distribution: null,
+          streaming_asset: null,
+          file_asset: null,
+          blob_asset: null,
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = 创建测试传输();
+    const controller = new AbortController();
+
+    await transport.loadMediaLocator("s-1", "att-locator-signal-1", controller.signal);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/att-locator-signal-1/locator?session_id=s-1",
+      {
+        headers: {},
+        signal: controller.signal,
+      }
+    );
   });
 
   it("loadMediaLocator 与 complete 响应会把 streaming 生命周期和 survival_mode 收口进共享契约", async () => {

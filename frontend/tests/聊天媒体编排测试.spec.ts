@@ -358,12 +358,17 @@ describe("聊天媒体编排", () => {
       抓取视频预览,
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
     await 刷新异步队列();
 
     expect(解析协作分发源).toHaveBeenCalledTimes(1);
-    expect(抓取视频预览).toHaveBeenCalledWith({ src: swarmPreviewSrc });
+    expect(抓取视频预览).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: swarmPreviewSrc,
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(抓取视频预览).not.toHaveBeenCalledWith(
       expect.objectContaining({ src: `http://media.local/canonical-${attachmentId}.mp4` })
     );
@@ -653,7 +658,7 @@ describe("聊天媒体编排", () => {
       解析播放结果: vi.fn().mockResolvedValue(生成锚点视频播放结果(attachmentId)),
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
     expect(抓取视频预览).not.toHaveBeenCalled();
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
@@ -661,7 +666,7 @@ describe("聊天媒体编排", () => {
     });
 
     // 同一 sourceVersion 下再次同步，只允许维持 missing_source，不允许重新尝试冷源抓帧。
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
     expect(抓取视频预览).not.toHaveBeenCalled();
 
@@ -775,7 +780,7 @@ describe("聊天媒体编排", () => {
       解析播放结果: vi.fn().mockResolvedValue(playback),
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
     expect(抓取视频预览).not.toHaveBeenCalled();
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
@@ -792,7 +797,12 @@ describe("聊天媒体编排", () => {
     await 刷新异步队列();
     await 刷新异步队列();
 
-    expect(抓取视频预览).toHaveBeenCalledWith({ src: playback.src });
+    expect(抓取视频预览).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: playback.src,
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
       phase: "ready",
       src: `blob:preview-${attachmentId}`,
@@ -937,7 +947,7 @@ describe("聊天媒体编排", () => {
       解析播放结果: vi.fn(() => 延后播放结果.promise),
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
 
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
@@ -955,7 +965,12 @@ describe("聊天媒体编排", () => {
     await 刷新异步队列();
     await 刷新异步队列();
 
-    expect(抓取视频预览).toHaveBeenCalledWith({ src: swarmPreviewSrc });
+    expect(抓取视频预览).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: swarmPreviewSrc,
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
       phase: "ready",
       src: previewObjectUrl,
@@ -1847,7 +1862,7 @@ describe("聊天媒体编排", () => {
       释放附件播放资源,
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件(["att-image-destroy-1"]);
     await 刷新异步队列();
 
     编排.销毁();
@@ -1921,7 +1936,7 @@ describe("聊天媒体编排", () => {
     编排.销毁();
   });
 
-  it("房间媒体窗口观察一更新，就会立刻把整房历史会话裁回当前窗口", async () => {
+  it("窗口真相未到前，不会先把整房历史附件拉成活媒体会话", async () => {
     const 消息列表 = 生成连续视频消息(20);
     const 编排 = 创建聊天媒体编排({
       transport: () =>
@@ -1958,7 +1973,7 @@ describe("聊天媒体编排", () => {
     });
 
     编排.同步消息附件播放结果();
-    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toHaveLength(20);
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toHaveLength(0);
 
     编排.同步媒体窗口附件(
       Array.from({ length: 6 }, (_, index) => `att-video-window-${index + 1}`)

@@ -17,7 +17,11 @@ import type {
   预览资源描述,
 } from "../../契约.js";
 
-type 读取JSON = <T>(path: string, headers?: Record<string, string>) => Promise<T>;
+type 读取JSON = <T>(
+  path: string,
+  headers?: Record<string, string>,
+  signal?: AbortSignal
+) => Promise<T>;
 type 提交JSON = <T>(path: string, body: object) => Promise<T>;
 
 export interface 媒体HTTP接口依赖 {
@@ -135,9 +139,15 @@ export class 媒体HTTP接口 {
     return this.解析媒体上传结果(result);
   }
 
-  async loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+  async loadMediaLocator(
+    sessionId: string,
+    attachmentId: string,
+    signal?: AbortSignal
+  ): Promise<媒体定位结果> {
     const locator = await this.deps.get<媒体定位结果>(
-      `/api/media/${attachmentId}/locator?session_id=${sessionId}`
+      `/api/media/${attachmentId}/locator?session_id=${sessionId}`,
+      {},
+      signal
     );
     const { original_url: _legacyOriginalUrl, ...locatorWithoutLegacyOriginalUrl } = locator as {
       original_url?: string;

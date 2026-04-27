@@ -292,11 +292,275 @@ describe("视频预览协作", () => {
     expect(解析协作分发预览源).toHaveBeenCalledTimes(1);
     expect(抓取视频预览).toHaveBeenCalledWith({
       src: `blob:http://media.local/swarm-preview-${attachmentId}`,
+      signal: expect.any(AbortSignal),
     });
     expect(协作.读取视频预览状态(attachmentId)).toEqual({
       phase: "ready",
       src: `blob:preview-${attachmentId}`,
       source: "embedded_hint",
     });
+  });
+
+  it("附件退场后，进行中的预览解析不会把旧状态重新写回已删除附件", async () => {
+    const attachmentId = "att-preview-retired-1";
+    const locatorDeferred = 创建延后Promise<{
+      attachment_id: string;
+      kind: "video";
+      status: "ready";
+      thumbnail_url: null;
+      distribution: {
+        content_id: string;
+        content_hash: string;
+        swarm_id: string;
+        web_seed_until: string;
+        torrent_url: string;
+        torrent_info_hash: string;
+        announce_urls: string[];
+        web_seed_url: string;
+        join_ticket: null;
+        ticket_expires_at: null;
+        media_state: {
+          code: "MEDIA_READY";
+          retry_after_ms: null;
+        };
+        survival_mode: "server_assisted";
+      };
+      file_asset: {
+        asset_id: string;
+        content_hash: string;
+        kind: "file_video";
+        variants: {
+          canonical: {
+            id: "canonical";
+            mime_type: "video/mp4";
+            url: string;
+            width: number;
+            height: number;
+          };
+        };
+        manifest: null;
+        lifecycle: null;
+        origin: {
+          original_url: string;
+          expires_at_epoch_seconds: number;
+          available: true;
+          role: "cold_backup_only";
+        };
+        distribution: {
+          swarm_id: string;
+          announce_urls: string[];
+          web_seed_url: string;
+          join_ticket: null;
+          ticket_expires_at: null;
+          survival_mode: "server_assisted";
+        };
+      };
+    }>();
+    const 获取媒体定位 = vi.fn(async () => await locatorDeferred.promise);
+    const 解析协作分发预览源 = vi.fn(async () => ({
+      src: `blob:http://media.local/swarm-preview-${attachmentId}`,
+    }));
+    const 抓取视频预览 = vi.fn(async () => ({
+      objectUrl: `blob:preview-${attachmentId}`,
+      source: "embedded_hint" as const,
+      width: 1280,
+      height: 720,
+    }));
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (id) => ({ attachmentId: id, kind: "video" }),
+      读取会话播放源版本: () => 11,
+      读取当前视频预览播放源: () => null,
+      获取媒体定位,
+      解析协作分发预览源,
+      释放协作分发消费者: vi.fn(),
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览,
+      接收媒体运行时事实: vi.fn(),
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (id) => `preview:${id}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+    协作.解析视频预览(attachmentId);
+    await 刷新异步队列();
+    协作.删除视频预览状态(attachmentId);
+
+    locatorDeferred.resolve({
+      attachment_id: attachmentId,
+      kind: "video",
+      status: "ready",
+      thumbnail_url: null,
+      distribution: {
+        content_id: `content_${attachmentId}`,
+        content_hash: `hash-${attachmentId}`,
+        swarm_id: `swarm-${attachmentId}`,
+        web_seed_until: "1775942400",
+        torrent_url: `http://media.local/torrent-${attachmentId}`,
+        torrent_info_hash: `torrent-info-hash-${attachmentId}`,
+        announce_urls: ["ws://127.0.0.1:7072"],
+        web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY",
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted",
+      },
+      file_asset: {
+        asset_id: attachmentId,
+        content_hash: `hash-${attachmentId}`,
+        kind: "file_video",
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "video/mp4",
+            url: `http://media.local/canonical-${attachmentId}.mp4`,
+            width: 1280,
+            height: 720,
+          },
+        },
+        manifest: null,
+        lifecycle: null,
+        origin: {
+          original_url: `http://media.local/original-${attachmentId}`,
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only",
+        },
+        distribution: {
+          swarm_id: `swarm-${attachmentId}`,
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "server_assisted",
+        },
+      },
+    });
+    await 刷新异步队列();
+
+    expect(获取媒体定位).toHaveBeenCalledTimes(1);
+    expect(解析协作分发预览源).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).toHaveBeenCalledTimes(1);
+    expect(协作.读取视频预览状态(attachmentId)).toBeNull();
+  });
+
+  it("附件退场时会中止正在进行的隐藏抓帧探针，并在收尾后释放 preview consumer", async () => {
+    const attachmentId = "att-preview-abort-1";
+    const 释放协作分发消费者 = vi.fn();
+    let 抓帧Signal: AbortSignal | null = null;
+    const 抓取视频预览 = vi.fn(
+      ({ signal }: { src: string; signal?: AbortSignal }) =>
+        new Promise<{
+          objectUrl: null;
+          source: "none";
+          width: null;
+          height: null;
+        }>((resolve) => {
+          抓帧Signal = signal ?? null;
+          signal?.addEventListener(
+            "abort",
+            () => {
+              resolve({
+                objectUrl: null,
+                source: "none",
+                width: null,
+                height: null,
+              });
+            },
+            { once: true }
+          );
+        })
+    );
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (id) => ({ attachmentId: id, kind: "video" }),
+      读取会话播放源版本: () => 12,
+      读取当前视频预览播放源: () => null,
+      获取媒体定位: vi.fn(async () => ({
+        attachment_id: attachmentId,
+        kind: "video" as const,
+        status: "ready" as const,
+        thumbnail_url: null,
+        distribution: {
+          content_id: `content_${attachmentId}`,
+          content_hash: `hash-${attachmentId}`,
+          swarm_id: `swarm-${attachmentId}`,
+          web_seed_until: "1775942400",
+          torrent_url: `http://media.local/torrent-${attachmentId}`,
+          torrent_info_hash: `torrent-info-hash-${attachmentId}`,
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+          join_ticket: null,
+          ticket_expires_at: null,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
+          survival_mode: "server_assisted" as const,
+        },
+        file_asset: {
+          asset_id: attachmentId,
+          content_hash: `hash-${attachmentId}`,
+          kind: "file_video" as const,
+          variants: {
+            canonical: {
+              id: "canonical",
+              mime_type: "video/mp4",
+              url: `http://media.local/canonical-${attachmentId}.mp4`,
+              width: 1280,
+              height: 720,
+            },
+          },
+          manifest: null,
+          lifecycle: null,
+          origin: {
+            original_url: `http://media.local/original-${attachmentId}`,
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+          distribution: {
+            swarm_id: `swarm-${attachmentId}`,
+            announce_urls: ["ws://127.0.0.1:7072"],
+            web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+            join_ticket: null,
+            ticket_expires_at: null,
+            survival_mode: "server_assisted" as const,
+          },
+        },
+      })),
+      解析协作分发预览源: vi.fn(async () => ({
+        src: `blob:http://media.local/swarm-preview-${attachmentId}`,
+      })),
+      释放协作分发消费者,
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览,
+      接收媒体运行时事实: vi.fn(),
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (id) => `preview:${id}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+    协作.解析视频预览(attachmentId);
+    await 刷新异步队列();
+
+    const 当前抓帧Signal = 抓帧Signal as AbortSignal | null;
+    if (!当前抓帧Signal) {
+      throw new Error("测试前提失败：抓帧 signal 没有建立");
+    }
+    expect(当前抓帧Signal.aborted).toBe(false);
+
+    协作.删除视频预览状态(attachmentId);
+    await 刷新异步队列();
+
+    expect(当前抓帧Signal.aborted).toBe(true);
+    expect(释放协作分发消费者).toHaveBeenCalledWith({
+      attachmentId,
+      consumerId: `preview:${attachmentId}`,
+    });
+    expect(协作.读取视频预览状态(attachmentId)).toBeNull();
   });
 });

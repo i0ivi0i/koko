@@ -259,6 +259,94 @@ describe("媒体定位器", () => {
     expect(loadMediaLocator).toHaveBeenCalledTimes(1);
   });
 
+  it("附件退场后会中止旧 locator 请求，并允许下一任 owner 重新发起请求", async () => {
+    const 创建中止错误 = () => {
+      const error = new Error("locator aborted");
+      error.name = "AbortError";
+      return error;
+    };
+    const 首轮定位 = {
+      attachment_id: "att-abort-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: "http://media.local/thumb-old",
+      distribution: {
+        content_id: "content_att-abort-1-old",
+        content_hash: "hash-abort-1-old",
+        swarm_id: "swarm-hash-abort-1-old",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-abort-1-old",
+        torrent_info_hash: "torrent-info-hash-abort-1-old",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-abort-1-old",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted" as const,
+      },
+    };
+    const 次轮定位 = {
+      attachment_id: "att-abort-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: "http://media.local/thumb-new",
+      distribution: {
+        content_id: "content_att-abort-1-new",
+        content_hash: "hash-abort-1-new",
+        swarm_id: "swarm-hash-abort-1-new",
+        web_seed_until: "1776028800",
+        torrent_url: "http://media.local/torrent-abort-1-new",
+        torrent_info_hash: "torrent-info-hash-abort-1-new",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-abort-1-new",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted" as const,
+      },
+    };
+    const loadMediaLocator = vi
+      .fn<
+        (sessionId: string, attachmentId: string, signal?: AbortSignal) => Promise<typeof 首轮定位>
+      >()
+      .mockImplementationOnce(
+        async (_sessionId: string, _attachmentId: string, signal?: AbortSignal) =>
+          await new Promise<typeof 首轮定位>((resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => {
+                reject(创建中止错误());
+              },
+              { once: true }
+            );
+          })
+      )
+      .mockResolvedValueOnce(次轮定位);
+    const 定位器 = 创建媒体定位器({
+      getSessionId: () => "s-test",
+      loadMediaLocator,
+    });
+
+    const staleRequest = 定位器.获取定位("att-abort-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    定位器.放弃未完成定位("att-abort-1");
+
+    await expect(staleRequest).rejects.toMatchObject({ name: "AbortError" });
+    expect(定位器.读取缓存("att-abort-1")).toBeNull();
+
+    const current = await 定位器.获取定位("att-abort-1");
+
+    expect(current.thumbnail_url).toBe("http://media.local/thumb-new");
+    expect(current.distribution?.content_hash).toBe("hash-abort-1-new");
+    expect(loadMediaLocator).toHaveBeenCalledTimes(2);
+  });
+
   it("重新创建定位器后会继续命中持久化 locator，而不是重开页面就重新请求后端", async () => {
     const records = new Map<string, unknown>();
     const repo = {
