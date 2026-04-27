@@ -12,6 +12,7 @@ import {
   创建媒体发布器,
   构造媒体Tus传输选项,
   大视频高吞吐阈值字节数,
+  媒体Tus单请求体分块字节数,
   媒体Tus文件并发上限,
   媒体Tus重试延迟毫秒数组,
   type 媒体上传器,
@@ -366,6 +367,7 @@ describe("媒体发布器", () => {
       uploadSessionId: "upload-session-1",
     }) as {
       parallelUploads?: number;
+      chunkSize: number;
       metadataForPartialUploads?: Record<string, string>;
       uploadDataDuringCreation: boolean;
       addRequestId: boolean;
@@ -378,8 +380,22 @@ describe("媒体发布器", () => {
         upload_session_id: "upload-session-1",
       }),
     );
-    expect(transportOptions.uploadDataDuringCreation).toBe(true);
+    expect(transportOptions.chunkSize).toBe(媒体Tus单请求体分块字节数);
+    expect(transportOptions.uploadDataDuringCreation).toBe(false);
     expect(transportOptions.addRequestId).toBe(true);
+  });
+
+  it("默认 Tus 传输也必须显式限制单请求体大小，禁止误撞 Cloudflare 免费代理 100 MB 上限", () => {
+    const transportOptions = 构造媒体Tus传输选项({
+      tusEndpoint: "http://storage.local/files",
+      profile: "default",
+    }) as {
+      chunkSize: number;
+      uploadDataDuringCreation: boolean;
+    };
+
+    expect(transportOptions.chunkSize).toBe(媒体Tus单请求体分块字节数);
+    expect(transportOptions.uploadDataDuringCreation).toBe(false);
   });
 
   it("Uppy 本地文件会忽略传入 id，只有 relativePath 变化才会改变内部 file.id", () => {

@@ -219,13 +219,10 @@ function Build-CaddyfileContent {
 $siteAddressLine {
     tls internal
 
-    # Tus 上传必须直达 tusd sidecar；否则会落到后端 8080 导致一直上传中。
-    @tus path /files*
-    reverse_proxy @tus 127.0.0.1:1081
-
-    # WebTorrent public announce 必须先进入 Rust 后端验票代理；
-    # Caddy 不能把 /api/swarm/announce 直反到裸 tracker。
-
+    # 浏览器任何环境都只认这一个 HTTPS 入口：
+    # 1. /files 继续由后端同源代理转给内部 tusd，禁止 Caddy 额外维护第二条公开上传旁路；
+    # 2. /api/swarm/announce 继续先进入 Rust 后端验票代理，禁止直反裸 tracker；
+    # 3. 这样本地 HTTPS、局域网测试、未来 Linux 公网部署都站在同一套浏览器 contract 上。
     reverse_proxy 127.0.0.1:$AppPort
 }
 "@

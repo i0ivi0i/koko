@@ -121,6 +121,15 @@ export const 大视频单文件并行分片数 = 4;
 export const 媒体Tus重试延迟毫秒数组 = [0, 1000, 3000, 5000] as const;
 
 /**
+ * 这里必须显式限制单请求体大小，而不能继续吃 tus-js-client 的 Infinity 默认值：
+ * 1. 官方文档明确说 `chunkSize` 默认是 Infinity，等于允许单个 PATCH/POST 一把把整文件送出去；
+ * 2. 只有在代理/服务端存在请求体上限时，才应该手动设定 `chunkSize`；
+ * 3. Cloudflare 免费代理公开链路的单请求体上限是 100 MB，所以这里故意收口到 32 MiB，
+ *    给请求头、重试和后续实现调整都留出安全余量，禁止把“大文件也能直接一把上传”误宣传成已成立事实。
+ */
+export const 媒体Tus单请求体分块字节数 = 32 * 1024 * 1024;
+
+/**
  * 视频本地预制通常会在极短时间内结束。
  * 这里给“处理中草稿”加一个很短的显示门槛，避免快路径里出现一闪而过的临时方框。
  */
@@ -139,6 +148,7 @@ type 媒体Tus传输选项 = {
   endpoint: string;
   limit: number;
   retryDelays: number[];
+  chunkSize: number;
   uploadDataDuringCreation: boolean;
   addRequestId: boolean;
   parallelUploads?: number;
@@ -290,7 +300,8 @@ export function 构造媒体Tus传输选项(
     endpoint: input.tusEndpoint,
     limit: 媒体Tus文件并发上限,
     retryDelays: [...媒体Tus重试延迟毫秒数组],
-    uploadDataDuringCreation: true,
+    chunkSize: 媒体Tus单请求体分块字节数,
+    uploadDataDuringCreation: false,
     addRequestId: true,
   };
   if (input.profile === "large-video") {

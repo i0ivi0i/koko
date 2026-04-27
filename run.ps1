@@ -1072,7 +1072,11 @@ try {
     }
     $tusdHost = [Environment]::GetEnvironmentVariable("TUSD_HOST")
     if ([string]::IsNullOrWhiteSpace($tusdHost)) {
-        $tusdHost = "0.0.0.0"
+        $tusdHost = "127.0.0.1"
+    }
+    $mediaTusPublicEndpoint = [Environment]::GetEnvironmentVariable("MEDIA_TUS_PUBLIC_ENDPOINT")
+    if ([string]::IsNullOrWhiteSpace($mediaTusPublicEndpoint)) {
+        $mediaTusPublicEndpoint = $mediaTusBasePath
     }
     $tusdMaxSize = [Environment]::GetEnvironmentVariable("TUSD_MAX_SIZE")
     if ([string]::IsNullOrWhiteSpace($tusdMaxSize)) {
@@ -1101,6 +1105,7 @@ try {
     # launcher 在这里把双方最终解析后的值写回同一批环境变量，避免“准备返回的 tus_endpoint”和真正监听的 tusd 参数各自漂一套。
     [Environment]::SetEnvironmentVariable("MEDIA_TUS_SERVER_PORT", $tusdPort)
     [Environment]::SetEnvironmentVariable("MEDIA_TUS_BASE_PATH", $mediaTusBasePath)
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_PUBLIC_ENDPOINT", $mediaTusPublicEndpoint)
     [Environment]::SetEnvironmentVariable("MEDIA_TUS_UPLOAD_DIR", $mediaTusUploadDir)
     [Environment]::SetEnvironmentVariable("MEDIA_TUS_INTERNAL_BASE_URL", $mediaTusInternalBaseUrl)
     [Environment]::SetEnvironmentVariable("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN", $mediaTusInternalTerminationToken)
@@ -1114,7 +1119,7 @@ try {
     }
     $trackerPublicUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL")
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
-        $trackerPublicUrl = "ws://127.0.0.1:$appPort/api/swarm/announce"
+        $trackerPublicUrl = "/api/swarm/announce"
     }
     $trackerUpstreamUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_UPSTREAM_URL")
     if ([string]::IsNullOrWhiteSpace($trackerUpstreamUrl)) {
@@ -1166,10 +1171,11 @@ try {
     )
     $localAccessUrl = "http://127.0.0.1:$appPort/"
     Write-HighlightedAccessBlock `
-        -Title "本机访问入口（日志再多也先看这里）" `
+        -Title "后端明文调试入口（不要拿它模拟公网用户）" `
         -Url $localAccessUrl
-    Write-Host "访问入口: $localAccessUrl"
-    Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
+    Write-Host "后端明文调试入口: $localAccessUrl"
+    Write-Host "浏览器 Tus 公开 contract: $mediaTusPublicEndpoint"
+    Write-Host "tusd 内部监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
     Write-Host "WebTorrent tracker upstream: $trackerUpstreamUrl"
     Write-Host "WebTorrent tracker 浏览器公开 announce: $trackerPublicUrl"
     Write-Host "WebTorrent tracker stats: http://127.0.0.1:$trackerPort/stats"
@@ -1186,7 +1192,11 @@ try {
         -ArgumentList @("run", "--target-dir", $backendTargetDir) `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
-    Wait-ManagedProcessPortReady -ManagedProcess $backendProcess -Port ([int]$appPort) -TimeoutSeconds 30 -RequireNonLoopback
+    # 后端首轮冷编译可能明显超过 30 秒：
+    # 1. launcher 目标目录与默认 target 隔离后，第一次运行本来就会重新编译；
+    # 2. 这里如果仍然只给 30 秒，会把“只是还在编译”的正常首启误判成启动失败；
+    # 3. 把等待窗拉长到 180 秒，比让用户反复重跑脚本或误判网络问题更省心。
+    Wait-ManagedProcessPortReady -ManagedProcess $backendProcess -Port ([int]$appPort) -TimeoutSeconds 180 -RequireNonLoopback
 
     # tusd 只负责官方 resumable upload / concatenation / termination / local disk：
     # 1. `-base-path` 明确固定前端真正要打的 Tus 路径；

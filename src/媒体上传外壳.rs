@@ -11,7 +11,10 @@ use axum::{
     Json,
     body::Body,
     extract::{Path, Request, State},
-    http::{HeaderMap, StatusCode, uri::Authority},
+    http::{
+        HeaderMap, StatusCode, header,
+        uri::{Authority, Uri},
+    },
     response::{IntoResponse, Response},
 };
 use memmap2::{Mmap, MmapOptions};
@@ -102,7 +105,6 @@ async fn 回滚prepare失败留下的预备附件(
 pub(super) async fn prepare_media_upload(
     Path(raw_kind): Path<String>,
     State(state): State<应用状态>,
-    headers: HeaderMap,
     Json(body): Json<PrepareMediaUploadBody>,
 ) -> impl IntoResponse {
     let media_kind = match 解析媒体类型(raw_kind.as_str()) {
@@ -295,7 +297,7 @@ pub(super) async fn prepare_media_upload(
     let response_kind = super::媒体资产外壳::媒体类型转标签(&snapshot.种类);
     let response_mime_type = snapshot.mime_type.clone();
     let response_byte_size = snapshot.字节大小;
-    let tus_public_endpoint = 读取媒体_tus对外地址(&state, &headers);
+    let tus_public_endpoint = 读取媒体_tus对外地址(&state);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -1449,6 +1451,19 @@ pub(super) async fn proxy_tus_upload_transport(
         {
             continue;
         }
+        if name == header::LOCATION {
+            let rewritten_location = value.to_str().ok().and_then(|raw_location| {
+                改写媒体_tus_location到浏览器入口(
+                    raw_location,
+                    &parts.headers,
+                    normalized_tus_base_path.as_str(),
+                )
+            });
+            if let Some(rewritten_location) = rewritten_location {
+                response_builder = response_builder.header(name, rewritten_location);
+                continue;
+            }
+        }
         response_builder = response_builder.header(name, value);
     }
     let body = match upstream_response.bytes().await {
@@ -1656,15 +1671,37 @@ fn 包装url主机(host: &str) -> String {
     }
 }
 
-/// `MEDIA_TUS_PUBLIC_ENDPOINT` 没显式配置时，这里按当前 HTTP 请求 Host 推导一个 LAN 可达的地址。
-///
-/// 边界约束：
-/// 1. 显式配置永远优先，生产反向代理场景仍应直接给出权威 public endpoint；
-/// 2. 这里只作为本机/局域网开发兜底，避免 prepare 默认把 `127.0.0.1` 塞给异机浏览器；
-/// 3. 推导结果仍然只描述“Tus sidecar 暴露在哪”，不改变业务真相归属。
-fn 推导媒体tus对外入口(
+fn 是回环媒体_tus公开地址(url: &str) -> bool {
+    let Ok(uri) = url.parse::<Uri>() else {
+        return false;
+    };
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+    matches!(authority.host(), "127.0.0.1" | "localhost" | "::1")
+}
+
+fn 裁决媒体_tus显式公开地址(
+    raw_endpoint: &str,
+    normalized_tus_base_path: &str,
+) -> String {
+    let trimmed = raw_endpoint.trim();
+    if trimmed.is_empty() {
+        return normalized_tus_base_path.to_string();
+    }
+    if trimmed.starts_with('/') {
+        return 标准化媒体_tus基础路径(trimmed);
+    }
+    if 是回环媒体_tus公开地址(trimmed) {
+        return normalized_tus_base_path.to_string();
+    }
+    trimmed.trim_end_matches('/').to_string()
+}
+
+/// 浏览器真正进入的是“当前请求这条 `/files` 公共入口”，而不是内部 tusd 监听端口。
+/// 这里统一按当前请求头推导出浏览器可见的绝对 `/files` 入口，只给代理层改写 `Location` 使用。
+fn 推导媒体tus浏览器公开入口(
     headers: &HeaderMap,
-    tus_server_port: u16,
     tus_base_path: &str,
 ) -> Option<String> {
     let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
@@ -1682,10 +1719,6 @@ fn 推导媒体tus对外入口(
     let hostname = authority.host();
     let host_for_url = 包装url主机(hostname);
 
-    // 端口推导要区分“公网 authority”与“内部 Tus sidecar 监听端口”：
-    // 1. 开发/LAN 直连时，Host 通常只是应用入口端口（例如 8080），Tus 仍应落到单独的 sidecar 端口；
-    // 2. 反向代理场景若已经通过 forwarded 头给出公网端口/authority，就应该优先沿用公网信息，
-    //    不能再把内部 1081 一类监听端口泄漏给浏览器。
     let should_trust_authority_port =
         forwarded_host.is_some() || forwarded_proto.is_some() || forwarded_port.is_some();
     let inferred_proxy_default_port = if should_trust_authority_port {
@@ -1698,41 +1731,56 @@ fn 推导媒体tus对外入口(
         None
     };
     let public_port = forwarded_port
-        .or_else(|| {
-            should_trust_authority_port
-                .then(|| authority.port_u16())
-                .flatten()
-        })
-        .or(inferred_proxy_default_port)
-        .unwrap_or(tus_server_port);
-    let should_omit_port =
-        (scheme == "http" && public_port == 80) || (scheme == "https" && public_port == 443);
+        .or_else(|| authority.port_u16())
+        .or(inferred_proxy_default_port);
+    let should_omit_port = public_port.is_none()
+        || (scheme == "http" && public_port == Some(80))
+        || (scheme == "https" && public_port == Some(443));
     let authority_for_url = if should_omit_port {
         host_for_url
     } else {
-        format!("{host_for_url}:{public_port}")
+        format!("{host_for_url}:{}", public_port.unwrap_or_default())
     };
     Some(format!("{scheme}://{authority_for_url}{tus_base_path}"))
 }
 
-fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> String {
+fn 提取媒体_tus资源尾(location: &str, normalized_tus_base_path: &str) -> Option<String> {
+    let trimmed = location.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(resource_tail) = trimmed.strip_prefix(normalized_tus_base_path) {
+        return Some(resource_tail.to_string());
+    }
+    let path_and_query = trimmed
+        .parse::<Uri>()
+        .ok()
+        .and_then(|uri| uri.path_and_query().map(|value| value.as_str().to_string()))
+        .unwrap_or_else(|| trimmed.to_string());
+    path_and_query
+        .strip_prefix(normalized_tus_base_path)
+        .map(|value| value.to_string())
+}
+
+fn 改写媒体_tus_location到浏览器入口(
+    location: &str,
+    headers: &HeaderMap,
+    normalized_tus_base_path: &str,
+) -> Option<String> {
+    let browser_entry = 推导媒体tus浏览器公开入口(headers, normalized_tus_base_path)?
+        .trim_end_matches('/')
+        .to_string();
+    let resource_tail = 提取媒体_tus资源尾(location, normalized_tus_base_path)?;
+    Some(format!("{browser_entry}{resource_tail}"))
+}
+
+fn 读取媒体_tus对外地址(state: &应用状态) -> String {
     let normalized_tus_base_path = 标准化媒体_tus基础路径(state.tus_base_path.as_str());
     state
         .tus_public_endpoint
-        .clone()
-        .or_else(|| {
-            推导媒体tus对外入口(
-                headers,
-                state.tus_server_port,
-                normalized_tus_base_path.as_str(),
-            )
-        })
-        .unwrap_or_else(|| {
-            format!(
-                "http://127.0.0.1:{}{}",
-                state.tus_server_port, normalized_tus_base_path
-            )
-        })
+        .as_deref()
+        .map(|value| 裁决媒体_tus显式公开地址(value, normalized_tus_base_path.as_str()))
+        .unwrap_or(normalized_tus_base_path)
 }
 
 fn 校验媒体准备请求(

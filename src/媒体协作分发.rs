@@ -1,9 +1,9 @@
 use crate::usecase;
-use axum::http::{uri::Authority, HeaderMap, Uri};
+use axum::http::{HeaderMap, Uri};
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use sha2::{Digest, Sha256};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// 第一版保底窗口固定 24 小时。
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
@@ -87,68 +87,12 @@ fn 拼接公开地址(public_endpoint: Option<&str>, path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-fn 读取首个非空请求头(headers: &HeaderMap, name: &'static str) -> Option<String> {
-    headers
-        .get(name)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| {
-            value
-                .split(',')
-                .map(str::trim)
-                .find(|part| !part.is_empty())
-                .map(|part| part.to_string())
-        })
-}
-
-fn 包装url主机(host: &str) -> String {
-    if host.contains(':') && !host.starts_with('[') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
+fn 标准化协作分发同源announce路径(raw_path: &str) -> String {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() || trimmed == "/" {
+        return 同源协作分发ANNOUNCE路径.to_string();
     }
-}
-
-fn 推导协作分发tracker对外地址(headers: &HeaderMap) -> Option<String> {
-    let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
-    let raw_host = forwarded_host
-        .clone()
-        .or_else(|| 读取首个非空请求头(headers, "host"))?;
-    let authority = raw_host.parse::<Authority>().ok()?;
-    let forwarded_proto = 读取首个非空请求头(headers, "x-forwarded-proto")
-        .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"));
-    let forwarded_port =
-        读取首个非空请求头(headers, "x-forwarded-port").and_then(|value| value.parse::<u16>().ok());
-    let ws_scheme = match forwarded_proto.as_deref() {
-        Some("https") => "wss",
-        _ => "ws",
-    };
-    let host_for_url = 包装url主机(authority.host());
-    let should_trust_forwarded = forwarded_host.is_some() || forwarded_proto.is_some();
-    let inferred_proxy_default_port = if should_trust_forwarded {
-        match ws_scheme {
-            "wss" => Some(443),
-            "ws" => Some(80),
-            _ => None,
-        }
-    } else {
-        None
-    };
-    let public_port = forwarded_port
-        .or_else(|| authority.port_u16())
-        .or(inferred_proxy_default_port);
-    let should_omit_port =
-        public_port.is_none()
-            || (ws_scheme == "ws" && public_port == Some(80))
-            || (ws_scheme == "wss" && public_port == Some(443));
-    let authority_for_url = if should_omit_port {
-        host_for_url
-    } else {
-        format!("{host_for_url}:{}", public_port.unwrap_or_default())
-    };
-    Some(format!(
-        "{ws_scheme}://{authority_for_url}{}",
-        同源协作分发ANNOUNCE路径
-    ))
+    format!("/{}", trimmed.trim_matches('/'))
 }
 
 fn 是回环tracker公开地址(url: &str) -> bool {
@@ -161,17 +105,22 @@ fn 是回环tracker公开地址(url: &str) -> bool {
     matches!(authority.host(), "127.0.0.1" | "localhost" | "::1")
 }
 
-/// tracker 公网地址显式配置时永远优先；只有沿用本机回环默认值时，
-/// 才按本次请求头推导一个 LAN/反向代理可达的 announce 地址。
+/// 浏览器 contract 优先只认同源 announce 路径：
+/// 1. 默认值直接收口成 `/api/swarm/announce`，不再把 `ws://127.0.0.1:7072` 之类的内部地址塞给浏览器；
+/// 2. 显式配置如果仍是回环绝对地址，也必须降级回同源路径，禁止内部 tracker upstream 泄漏；
+/// 3. 只有显式给出非回环绝对公网地址时，才允许继续沿用该公开地址。
 pub(crate) fn 读取协作分发tracker对外地址(
     configured_tracker_public_url: &str,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
 ) -> String {
-    if !是回环tracker公开地址(configured_tracker_public_url) {
-        return configured_tracker_public_url.to_string();
+    let trimmed = configured_tracker_public_url.trim();
+    if trimmed.is_empty() || trimmed.starts_with('/') {
+        return 标准化协作分发同源announce路径(trimmed);
     }
-    推导协作分发tracker对外地址(headers)
-        .unwrap_or_else(|| configured_tracker_public_url.to_string())
+    if 是回环tracker公开地址(trimmed) {
+        return 同源协作分发ANNOUNCE路径.to_string();
+    }
+    trimmed.trim_end_matches('/').to_string()
 }
 
 pub(crate) fn 裁决协作分发可用性(
@@ -180,10 +129,16 @@ pub(crate) fn 裁决协作分发可用性(
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> &'static str {
-    let 有新鲜完整peer =
-        来源仍算活跃(snapshot.最近完整peer存活时间戳秒, now_epoch秒, stale_seconds);
-    let 有新鲜后端强种子 =
-        来源仍算活跃(snapshot.最近后端强种子存活时间戳秒, now_epoch秒, stale_seconds);
+    let 有新鲜完整peer = 来源仍算活跃(
+        snapshot.最近完整peer存活时间戳秒,
+        now_epoch秒,
+        stale_seconds,
+    );
+    let 有新鲜后端强种子 = 来源仍算活跃(
+        snapshot.最近后端强种子存活时间戳秒,
+        now_epoch秒,
+        stale_seconds,
+    );
 
     if web_seed仍可用 || 有新鲜完整peer || 有新鲜后端强种子 {
         "available"
@@ -206,14 +161,18 @@ fn 裁决协作分发媒体状态码(
     if 附件已删除 {
         return 媒体状态已删除;
     }
-    let availability = 裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
+    let availability =
+        裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
     if availability == "available" {
         return 媒体状态已就绪;
     }
 
     // partial_peer 说明群友侧已经真实进入 swarm，只是还没补齐成 ready 来源。
-    let 有新鲜片段peer =
-        来源仍算活跃(snapshot.最近片段peer存活时间戳秒, now_epoch秒, stale_seconds);
+    let 有新鲜片段peer = 来源仍算活跃(
+        snapshot.最近片段peer存活时间戳秒,
+        now_epoch秒,
+        stale_seconds,
+    );
     if 有新鲜片段peer || now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒)
     {
         return 媒体状态连接群友中;
@@ -222,7 +181,9 @@ fn 裁决协作分发媒体状态码(
 }
 
 /// 协作分发来源的新鲜度必须统一裁决，避免不同入口各自拍脑袋理解“最近还活着”。
-fn 来源仍算活跃(最近存活时间戳秒: Option<i64>, now_epoch秒: i64, stale_seconds: i64) -> bool {
+fn 来源仍算活跃(
+    最近存活时间戳秒: Option<i64>, now_epoch秒: i64, stale_seconds: i64
+) -> bool {
     最近存活时间戳秒
         .map(|ts| now_epoch秒 - ts <= stale_seconds)
         .unwrap_or(false)
@@ -429,7 +390,12 @@ pub(crate) fn 协作分发快照转响应值(
 mod tests {
     use super::*;
 
-    fn 签发测试join_ticket(secret: &str, session_id: &str, attachment_id: &str, info_hash: &str) -> String {
+    fn 签发测试join_ticket(
+        secret: &str,
+        session_id: &str,
+        attachment_id: &str,
+        info_hash: &str,
+    ) -> String {
         let claims = 协作分发入群票据声明 {
             sub: session_id,
             aid: attachment_id,
@@ -464,5 +430,4 @@ mod tests {
             }
         );
     }
-
 }

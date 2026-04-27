@@ -959,7 +959,7 @@ async fn locator会返回announce_web_seed与短时join_ticket() {
 
 #[tokio::test]
 #[serial]
-async fn 未显式配置tracker公网地址时locator会按请求host推导可达announce地址() {
+async fn 未显式配置tracker公网地址时locator会优先返回同源相对announce路径() {
     let backup = 备份并清空环境变量(&[
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_TRACKER_PORT",
@@ -1067,14 +1067,14 @@ async fn 未显式配置tracker公网地址时locator会按请求host推导可�
     assert_eq!(lan_status, StatusCode::OK);
     assert_eq!(
         lan_body["distribution"]["announce_urls"][0].as_str(),
-        Some("ws://192.168.31.50:8080/api/swarm/announce"),
-        "未显式配置 SWARM_TRACKER_PUBLIC_URL 时，应回推同源 announce 代理入口，不能继续把侧车端口裸露给浏览器"
+        Some("/api/swarm/announce"),
+        "未显式配置 SWARM_TRACKER_PUBLIC_URL 时，浏览器 contract 应优先收口成同源相对 announce 路径"
     );
     assert_eq!(proxy_status, StatusCode::OK);
     assert_eq!(
         proxy_body["distribution"]["announce_urls"][0].as_str(),
-        Some("wss://im.example.com/api/swarm/announce"),
-        "反向代理透传 https host 时，应回推同源 wss announce 代理入口，而不是继续返回裸域名"
+        Some("/api/swarm/announce"),
+        "即使当前请求已经处在公网 HTTPS 代理后，locator 仍应返回同源路径，禁止再给浏览器第二套 announce 绝对地址"
     );
 }
 

@@ -1,13 +1,14 @@
+use crate::media_distribution::同源协作分发ANNOUNCE路径;
 use sqlx::{
-    postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions,
+    postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::{
     env, io, panic,
     sync::{Once, OnceLock},
     time::Duration,
 };
-use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::time::OffsetTime};
 
 static PANIC_HOOK_INIT: Once = Once::new();
 static LOG_INIT_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
@@ -437,17 +438,14 @@ fn 推导默认shaka_packager命令() -> String {
     "packager".to_string()
 }
 
-/// 媒体 Tus 侧车配置默认保持“本机可跑 + 对外地址可推导”：
-/// 1. 未显式配置 `MEDIA_TUS_PUBLIC_ENDPOINT` 时，不抢先把 `127.0.0.1` 写死进 prepare 契约；
+/// 媒体 Tus 侧车配置默认保持“浏览器同源 + sidecar 内收”：
+/// 1. 未显式配置 `MEDIA_TUS_PUBLIC_ENDPOINT` 时，浏览器公开 contract 默认直接收口成 `/files`；
 /// 2. 上传字节继续落到一处稳定共享目录，给 hook / complete / 清理主链复用；
-/// 3. `server_port/base_path` 继续保留，给 prepare 在 LAN / 调试场景下按当前请求 Host 推导可达地址。
+/// 3. `server_port/base_path` 继续保留，给主服务 -> tusd 内部通信与本地调试复用；
 /// 4. `internal_*` 只服务主服务 -> tus sidecar 的官方 termination 调用；
 ///    没配置时继续保留“业务放弃 + 本地残留清理”兜底，不让取消主链退化。
 pub fn 读取媒体_tus侧车配置() -> io::Result<媒体Tus侧车配置> {
     let server_port = 读取可选端口("MEDIA_TUS_SERVER_PORT", 1081)?;
-    let public_endpoint = 读取可选环境变量("MEDIA_TUS_PUBLIC_ENDPOINT")
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
     let raw_base_path =
         读取可选环境变量("MEDIA_TUS_BASE_PATH").unwrap_or_else(|| "/files".to_string());
     let base_path = if raw_base_path.starts_with('/') {
@@ -455,6 +453,10 @@ pub fn 读取媒体_tus侧车配置() -> io::Result<媒体Tus侧车配置> {
     } else {
         format!("/{raw_base_path}")
     };
+    let public_endpoint = 读取可选环境变量("MEDIA_TUS_PUBLIC_ENDPOINT")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| Some(base_path.clone()));
     let upload_dir =
         读取可选环境变量("MEDIA_TUS_UPLOAD_DIR").unwrap_or_else(|| "data/tus".to_string());
     let internal_base_url = 读取可选环境变量("MEDIA_TUS_INTERNAL_BASE_URL")
@@ -490,7 +492,7 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("MEDIA_STORAGE_DRIVER 非法: {raw_driver}"),
-            ))
+            ));
         }
     };
     let endpoint = 读取可选环境变量("MEDIA_STORAGE_ENDPOINT");
@@ -538,8 +540,8 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
     })
 }
 
-/// 协作分发运行参数默认保持“本机直接能跑”：
-/// 1. tracker 默认落在本机 `7072`；
+/// 协作分发运行参数默认保持“浏览器同源 + tracker 内收”：
+/// 1. 浏览器 public announce 默认直接收口成同源 `/api/swarm/announce`；
 /// 2. web seed public endpoint 为空时，后端继续下发同源相对地址；
 /// 3. ticket secret 允许为空，此时 locator/complete 会显式不签发门禁令牌；
 /// 4. ticket TTL 默认 120 秒，保证浏览器不会长期复用旧门票；
@@ -554,7 +556,7 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let seeder_port = 读取可选端口("SWARM_SEEDER_PORT", 7073)?;
     let app_port = 读取可选端口("APP_PORT", 8080)?;
     let tracker_public_url = 读取可选环境变量("SWARM_TRACKER_PUBLIC_URL")
-        .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
+        .unwrap_or_else(|| 同源协作分发ANNOUNCE路径.to_string());
     let tracker_upstream_url = 读取可选环境变量("SWARM_TRACKER_UPSTREAM_URL")
         .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
     let tracker_upstream_url = tracker_upstream_url.trim().to_string();
@@ -806,7 +808,7 @@ mod tests {
 
         let config = 读取媒体_tus侧车配置().expect("默认媒体 Tus 侧车配置应可读");
 
-        assert_eq!(config.public_endpoint, None);
+        assert_eq!(config.public_endpoint, Some("/files".to_string()));
         assert_eq!(config.server_port, 1081);
         assert_eq!(config.base_path, "/files");
         assert_eq!(config.upload_dir, "data/tus");
@@ -910,8 +912,7 @@ mod tests {
         let config = 读取协作分发配置().expect("应能读取协作分发配置");
 
         assert_eq!(
-            config.tracker_public_url,
-            "wss://im.example.com/api/swarm/announce",
+            config.tracker_public_url, "wss://im.example.com/api/swarm/announce",
             "public announce 继续服务浏览器 contract"
         );
         assert_eq!(
@@ -940,8 +941,7 @@ mod tests {
         let config = 读取协作分发配置().expect("应能读取协作分发配置");
 
         assert_eq!(
-            config.seeder_tracker_url,
-            "ws://tracker.internal:7072",
+            config.seeder_tracker_url, "ws://tracker.internal:7072",
             "部署环境可以把 sidecar 指向内网 tracker，但这个值不能污染浏览器 locator"
         );
 
@@ -952,24 +952,24 @@ mod tests {
     #[serial]
     fn 读取协作分发配置会给出冷源清理默认值并尊重显式环境变量() {
         let old_cleanup_interval = env::var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS").ok();
+        let old_public_url = env::var("SWARM_TRACKER_PUBLIC_URL").ok();
         let old_seeder_port = env::var("SWARM_SEEDER_PORT").ok();
         let old_seeder_control_base_url = env::var("SWARM_SEEDER_CONTROL_BASE_URL").ok();
         env::remove_var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS");
+        env::remove_var("SWARM_TRACKER_PUBLIC_URL");
         env::set_var("SWARM_SEEDER_PORT", "17073");
         env::remove_var("SWARM_SEEDER_CONTROL_BASE_URL");
 
         let default_config = 读取协作分发配置().expect("默认协作分发配置应可读");
         assert_eq!(default_config.media_origin_cleanup_interval_seconds, 60);
+        assert_eq!(default_config.tracker_public_url, "/api/swarm/announce");
         assert_eq!(
             default_config.seeder_control_base_url,
             "http://127.0.0.1:17073"
         );
 
         env::set_var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS", "15");
-        env::set_var(
-            "SWARM_SEEDER_CONTROL_BASE_URL",
-            "http://127.0.0.1:27073/",
-        );
+        env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", "http://127.0.0.1:27073/");
         let explicit_config = 读取协作分发配置().expect("显式冷源清理间隔应可读");
         assert_eq!(explicit_config.media_origin_cleanup_interval_seconds, 15);
         assert_eq!(
@@ -981,11 +981,9 @@ mod tests {
             "MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS",
             old_cleanup_interval,
         );
+        恢复环境变量("SWARM_TRACKER_PUBLIC_URL", old_public_url);
         恢复环境变量("SWARM_SEEDER_PORT", old_seeder_port);
-        恢复环境变量(
-            "SWARM_SEEDER_CONTROL_BASE_URL",
-            old_seeder_control_base_url,
-        );
+        恢复环境变量("SWARM_SEEDER_CONTROL_BASE_URL", old_seeder_control_base_url);
     }
 
     #[test]
