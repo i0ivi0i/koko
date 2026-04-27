@@ -1,6 +1,7 @@
 import type {
   媒体会话快照,
   媒体会话端口,
+  媒体播放结果,
   媒体查看器打开请求,
   视频预览状态,
 } from "../index.js";
@@ -10,6 +11,7 @@ type 查看器会话协作依赖 = {
   读取查看器是否已打开(): boolean;
   读取媒体会话快照(attachmentId: string): 媒体会话快照 | null;
   读取媒体会话(attachmentId: string): 媒体会话端口 | null;
+  读取自动播播放结果?(attachmentId: string): 媒体播放结果 | null;
   读取视频预览状态(attachmentId: string): 视频预览状态 | null;
   更新当前查看器请求(request: 媒体查看器打开请求): void;
   确认查看器已打开(): void;
@@ -18,6 +20,18 @@ type 查看器会话协作依赖 = {
   登记程序滚动来源(source: "media_viewer_open"): void;
   清除程序滚动来源(source: "media_viewer_open"): void;
 };
+
+type 可投影媒体播放结果 = Extract<
+  媒体播放结果,
+  { mode: "swarm" | "anchor" | "manifest" }
+>;
+
+type 自动播查看器交接缓存 = {
+  playback: 可投影媒体播放结果;
+  updatedAt: number;
+};
+
+const 自动播查看器交接缓存有效毫秒 = 2_000;
 
 export interface 查看器会话协作端口 {
   投影查看器请求到当前播放真相(request: 媒体查看器打开请求): 媒体查看器打开请求;
@@ -39,9 +53,88 @@ export function 创建查看器会话协作(
 ): 查看器会话协作端口 {
   let 待重裁决的本地完整视频附件标识: string | null = null;
   let 上次已交付查看器请求摘要: string | null = null;
+  const 自动播查看器交接播放结果 = new Map<string, 自动播查看器交接缓存>();
 
   const 序列化查看器请求 = (request: 媒体查看器打开请求): string =>
     JSON.stringify(request);
+
+  const 是否可投影播放结果 = (
+    playback: 媒体播放结果 | null | undefined
+  ): playback is 可投影媒体播放结果 =>
+    playback?.mode === "swarm" ||
+    playback?.mode === "anchor" ||
+    playback?.mode === "manifest";
+
+  const 读取未过期自动播交接播放结果 = (
+    attachmentId: string
+  ): 可投影媒体播放结果 | null => {
+    const cached = 自动播查看器交接播放结果.get(attachmentId);
+    if (!cached) {
+      return null;
+    }
+    if (Date.now() - cached.updatedAt > 自动播查看器交接缓存有效毫秒) {
+      自动播查看器交接播放结果.delete(attachmentId);
+      return null;
+    }
+    return cached.playback;
+  };
+
+  const 读取可投影播放结果 = (
+    attachmentId: string,
+    sessionPlayback: 媒体播放结果 | null | undefined
+  ): 可投影媒体播放结果 | null => {
+    if (是否可投影播放结果(sessionPlayback)) {
+      return sessionPlayback;
+    }
+    const autoplayPlayback = deps.读取自动播播放结果?.(attachmentId) ?? null;
+    if (是否可投影播放结果(autoplayPlayback)) {
+      /**
+       * 自动播 owner 打开查看器时，runtime 会在同一拍把 inline owner 清空。
+       * 这里短暂缓存的只是已经裁决过的播放源字符串，用来完成 viewer 交接；
+       * 它不是第二播放器 owner，也不保留新的 reader / swarm consumer。
+       */
+      自动播查看器交接播放结果.set(attachmentId, {
+        playback: autoplayPlayback,
+        updatedAt: Date.now(),
+      });
+      return autoplayPlayback;
+    }
+    return 读取未过期自动播交接播放结果(attachmentId);
+  };
+
+  const 投影播放结果到查看器项目 = (
+    item: 媒体查看器打开请求["items"][number],
+    playback: 可投影媒体播放结果
+  ): 媒体查看器打开请求["items"][number] => {
+    if (item.kind === "video") {
+      return {
+        ...item,
+        src: playback.src,
+        ...(playback.mode === "manifest" && playback.fallbackSrc
+          ? {
+              fallbackSrc: playback.fallbackSrc,
+            }
+          : {}),
+        posterSrc: playback.thumbnailUrl ?? item.posterSrc,
+        ...(playback.mode === "manifest" && playback.streamingDistribution
+          ? {
+              streamingDistribution: playback.streamingDistribution,
+            }
+          : {}),
+      };
+    }
+    return {
+      ...item,
+      src: playback.src,
+      ...((playback.mode === "anchor" || playback.mode === "swarm") &&
+      ("contentHash" in playback || "distribution" in playback)
+        ? {
+            contentHash: playback.contentHash ?? null,
+            distribution: playback.distribution ?? null,
+          }
+        : {}),
+    };
+  };
 
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
@@ -62,39 +155,9 @@ export function 创建查看器会话协作(
           posterSrc: preview?.phase === "ready" ? preview.src : item.posterSrc,
         };
       }
-      if (
-        playback?.mode === "swarm" ||
-        playback?.mode === "anchor" ||
-        playback?.mode === "manifest"
-      ) {
-        if (item.kind === "video") {
-          return {
-            ...item,
-            src: playback.src,
-            ...(playback.mode === "manifest" && playback.fallbackSrc
-              ? {
-                  fallbackSrc: playback.fallbackSrc,
-                }
-              : {}),
-            posterSrc: playback.thumbnailUrl ?? item.posterSrc,
-            ...(playback.mode === "manifest" && playback.streamingDistribution
-              ? {
-                  streamingDistribution: playback.streamingDistribution,
-                }
-              : {}),
-          };
-        }
-        return {
-          ...item,
-          src: playback.src,
-          ...((playback.mode === "anchor" || playback.mode === "swarm") &&
-          ("contentHash" in playback || "distribution" in playback)
-            ? {
-                contentHash: playback.contentHash ?? null,
-                distribution: playback.distribution ?? null,
-              }
-            : {}),
-        };
+      const 可投影播放结果 = 读取可投影播放结果(item.attachmentId, playback);
+      if (可投影播放结果) {
+        return 投影播放结果到查看器项目(item, 可投影播放结果);
       }
       if (item.kind === "video") {
         const preview = deps.读取视频预览状态(item.attachmentId);
@@ -140,6 +203,17 @@ export function 创建查看器会话协作(
     }
     const session = deps.读取媒体会话(startItem.attachmentId);
     const sessionSnapshot = session?.snapshot();
+    if (
+      startItem.src.length > 0 &&
+      读取未过期自动播交接播放结果(startItem.attachmentId)
+    ) {
+      /**
+       * 当前自动播视频被点开时，viewer 已拿到同一条热播放源。
+       * 此时再等待“查看器会话 playback”只会把真全屏入口卡死成没反应。
+       */
+      待重裁决的本地完整视频附件标识 = null;
+      return false;
+    }
     if (!sessionSnapshot?.playback) {
       return true;
     }
@@ -225,12 +299,17 @@ export function 创建查看器会话协作(
     处理查看器请求已清空(): void {
       待重裁决的本地完整视频附件标识 = null;
       上次已交付查看器请求摘要 = null;
+      /**
+       * 返回群聊后用户可能立刻再点同一个自动播视频。
+       * 这段极短窗口只保留源字符串，不保留重媒体对象；过期后自然失效。
+       */
       deps.清除程序滚动来源("media_viewer_open");
     },
 
     重置(): void {
       待重裁决的本地完整视频附件标识 = null;
       上次已交付查看器请求摘要 = null;
+      自动播查看器交接播放结果.clear();
     },
   };
 }

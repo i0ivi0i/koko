@@ -417,6 +417,15 @@ describe("聊天媒体编排", () => {
       }),
     } as unknown as 前端传输端口;
 
+    const swarmPlayback: 媒体播放结果 = {
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: swarmSrc,
+      thumbnailUrl: null,
+      hint: null,
+    };
+    let 已完成的查看器正式会话解析次数 = 0;
     const 解析播放结果 = vi.fn<
       (
         input: {
@@ -426,13 +435,18 @@ describe("聊天媒体编排", () => {
           consumerId?: string;
         }
       ) => Promise<媒体播放结果>
-    >().mockResolvedValue({
-      mode: "swarm",
-      attachmentId,
-      kind: "video",
-      src: swarmSrc,
-      thumbnailUrl: null,
-      hint: null,
+    >(async (input) => {
+      if (input.consumerId === `inline_autoplay:${attachmentId}`) {
+        return swarmPlayback;
+      }
+      if (
+        input.consumerId === `session:${attachmentId}` &&
+        已完成的查看器正式会话解析次数 === 0
+      ) {
+        已完成的查看器正式会话解析次数 += 1;
+        return swarmPlayback;
+      }
+      return new Promise<媒体播放结果>(() => undefined);
     });
 
     const viewerOpenCalls: Array<{ startAttachmentId: string; items: unknown[] }> = [];
@@ -536,16 +550,79 @@ describe("聊天媒体编排", () => {
     }
 
     /**
-     * 当前自动播 owner 已经握着同一条 swarm 会话；显式放大只能继续复用热会话，
-     * 不能再触发一轮 recovering，把查看器 request 暂时投成 `src: ""`。
+     * 当前自动播 owner 已经握着同一条 swarm 会话；显式放大必须先用这条热源打开 viewer，
+     * 同时给 viewer 正式会话补一条自己的 `session:*` consumer。
+     *
+     * 这样返回群聊再点同一条视频时，不会因为 inline autoplay consumer 已释放，
+     * 又临时重解析成“附件当前不可获取”。
      *
      * 但如果同一附件的 preview 仍卡在 `missing_source`，打开查看器时允许顺手重试一次抓帧：
-     * - 这不会改写当前 playback owner；
-     * - 也不会让 viewer request 先退回空 src；
-     * - 只是利用当前已经热起来的 swarm 源再补一次 preview 真相。
+     * - viewer request 不能先退回空 src；
+     * - 预览只利用当前已经热起来的 swarm 源再补一次 preview 真相。
      */
-    expect(解析播放结果).toHaveBeenCalledTimes(打开前解析次数);
-    expect(抓取视频预览).toHaveBeenCalledTimes(打开前预览抓取次数 + 1);
+    expect(解析播放结果).toHaveBeenCalledTimes(打开前解析次数 + 1);
+    expect(解析播放结果).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        attachmentId,
+        kind: "video",
+        consumerId: `session:${attachmentId}`,
+      })
+    );
+    expect(抓取视频预览.mock.calls.length).toBeGreaterThanOrEqual(
+      打开前预览抓取次数 + 1
+    );
+    expect(抓取视频预览.mock.calls.slice(打开前预览抓取次数)).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            src: swarmSrc,
+            signal: expect.any(AbortSignal),
+          }),
+        ],
+      ])
+    );
+    expect(viewerOpenCalls).toHaveLength(1);
+    expect(viewerOpenCalls[0]?.items).toEqual([
+      expect.objectContaining({
+        attachmentId,
+        kind: "video",
+        src: swarmSrc,
+      }),
+    ]);
+    expect(viewerSyncCalls).toHaveLength(0);
+
+    (
+      编排 as unknown as {
+        关闭媒体查看器供测试(): void;
+      }
+    ).关闭媒体查看器供测试();
+    await 刷新异步队列();
+
+    编排.打开查看器({
+      startAttachmentId: attachmentId,
+      items: [
+        {
+          kind: "video" as const,
+          attachmentId,
+          src: `http://media.local/original-${attachmentId}`,
+          posterSrc: null,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await 刷新异步队列();
+    }
+
+    expect(viewerOpenCalls).toHaveLength(2);
+    expect(viewerOpenCalls[1]?.items).toEqual([
+      expect.objectContaining({
+        attachmentId,
+        kind: "video",
+        src: swarmSrc,
+      }),
+    ]);
     编排.销毁();
   });
 

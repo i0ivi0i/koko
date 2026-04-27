@@ -751,6 +751,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     读取查看器是否已打开: () => 读取媒体运行时上下文().viewerOpen,
     读取媒体会话快照: (attachmentId) => 媒体会话表.get(attachmentId)?.snapshot() ?? null,
     读取媒体会话: (attachmentId) => 媒体会话表.get(attachmentId) ?? null,
+    读取自动播播放结果: (attachmentId) => {
+      const context = 读取媒体运行时上下文();
+      const playback = context.inlineAutoplayPlayback;
+      if (context.inlineAutoplayOwnerAttachmentId !== attachmentId) {
+        return null;
+      }
+      return playback?.attachmentId === attachmentId ? playback : null;
+    },
     读取视频预览状态: (attachmentId) => 视频预览协作.读取视频预览状态(attachmentId),
     更新当前查看器请求: (request) => {
       接收媒体运行时事实({
@@ -893,6 +901,23 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 3. 只对显式 viewer open 生效，不把消息流常态渲染放大成持续重解析。
      */
     session.send({ type: "ENTER_RECOVERING" });
+  };
+
+  const 补启动查看器正式会话Consumer = (request: 媒体查看器打开请求): void => {
+    const startAttachment = 读取附件条目(request.startAttachmentId);
+    if (!startAttachment || startAttachment.kind !== "video") {
+      return;
+    }
+    const session = 读取或创建媒体会话(startAttachment);
+    if (session.snapshot().playback) {
+      return;
+    }
+    /**
+     * 自动播热源可以让 viewer 立刻打开，但 viewer 仍必须拿到自己的正式 consumer。
+     * 否则 inline autoplay owner 被 runtime 清空后，底层 WebTorrent route/reader 可能只剩短暂 drain，
+     * 返回后再点同一条视频就会重新走降级链，表现成“附件当前不可获取”。
+     */
+    void session.启动();
   };
 
   const 当前请求命中热自动播会话 = (request: 媒体查看器打开请求): boolean => {
@@ -1129,8 +1154,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
       };
-      if (!当前请求命中热自动播会话(baseRequest)) {
+      const 命中热自动播会话 = 当前请求命中热自动播会话(baseRequest);
+      if (!命中热自动播会话) {
         启动查看器起始附件会话(baseRequest);
+      } else {
+        补启动查看器正式会话Consumer(baseRequest);
       }
       const nextRequest = 查看器会话协作.投影查看器请求到当前播放真相(baseRequest);
       if (读取附件条目(request.startAttachmentId)?.kind === "video") {
