@@ -626,6 +626,50 @@ describe("资产协作分发运行时", () => {
     expect(destroy).not.toHaveBeenCalled();
   });
 
+  it("底层 file 已失效时，退出整附件补齐不能让 deselect 异常打断释放链", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-release-stale-file"
+    );
+    const brokenDeselect = vi.fn(() => {
+      throw new TypeError("Cannot read properties of null (reading 'deselect')");
+    });
+    (
+      torrent as unknown as {
+        files: Array<{ deselect: () => void }>;
+      }
+    ).files[0]!.deselect = brokenDeselect;
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-release-stale-file",
+      kind: "video",
+      locator: 准备好的定位结果("att-release-stale-file"),
+      consumerId: "session:att-release-stale-file",
+      eagerCompleting: true,
+    });
+
+    expect(() =>
+      释放协作分发消费者({
+        attachmentId: "att-release-stale-file",
+        consumerId: "session:att-release-stale-file",
+      })
+    ).not.toThrow();
+
+    expect(brokenDeselect).toHaveBeenCalledTimes(1);
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 0,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+  });
+
   it("locallyComplete 的资源可被同页重开直接复用，不需要重新冷启动", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const torrentHandle = 创建可观测假Torrent(

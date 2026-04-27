@@ -624,6 +624,71 @@ describe("媒体协作分发", () => {
     expect(trackerSocketSetMaxListeners).toHaveBeenCalledWith(listenerBudget);
   });
 
+  it("WebTorrent 运行时会把 RTCDataChannel 的预期关闭错误降噪，但不吞真实错误", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    class FakeRTCDataChannel extends EventTarget {
+      onerror: ((event: Event) => void) | null = null;
+    }
+    class FakeRTCPeerConnection extends EventTarget {
+      declare ondatachannel: ((event: { channel: FakeRTCDataChannel }) => void) | null;
+
+      createDataChannel(): FakeRTCDataChannel {
+        return new FakeRTCDataChannel();
+      }
+    }
+    vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+    const { ctor } = 创建假WebTorrent构造器(
+      vi.fn(((_torrentId, _options, onTorrent) => {
+        const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-rtc-close");
+        onTorrent(torrent);
+        return torrent;
+      }) as WebTorrent浏览器客户端["add"])
+    );
+
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const pc = new FakeRTCPeerConnection();
+    const outboundChannel = pc.createDataChannel();
+    let expectedCloseDeliveredToPeer = false;
+    outboundChannel.addEventListener("error", () => {
+      expectedCloseDeliveredToPeer = true;
+    });
+    const expectedClose = new Event("error", { cancelable: true });
+    Object.defineProperty(expectedClose, "error", {
+      value: new Error("User-Initiated Abort, reason=Close called"),
+    });
+
+    outboundChannel.dispatchEvent(expectedClose);
+
+    expect(expectedClose.defaultPrevented).toBe(true);
+    expect(expectedCloseDeliveredToPeer).toBe(false);
+
+    let realErrorDeliveredToPeer = false;
+    outboundChannel.addEventListener("error", () => {
+      realErrorDeliveredToPeer = true;
+    });
+    const realError = new Event("error", { cancelable: true });
+    Object.defineProperty(realError, "error", {
+      value: new Error("data channel failed for another reason"),
+    });
+    outboundChannel.dispatchEvent(realError);
+
+    expect(realError.defaultPrevented).toBe(false);
+    expect(realErrorDeliveredToPeer).toBe(true);
+
+    const inboundChannel = new FakeRTCDataChannel();
+    pc.ondatachannel = () => undefined;
+    pc.ondatachannel?.({ channel: inboundChannel });
+    const inboundExpectedClose = new Event("error", { cancelable: true });
+    Object.defineProperty(inboundExpectedClose, "error", {
+      value: new Error("User-Initiated Abort, reason=Close called"),
+    });
+
+    inboundChannel.dispatchEvent(inboundExpectedClose);
+
+    expect(inboundExpectedClose.defaultPrevented).toBe(true);
+  });
+
   it("locator 给出 media_state.retry_after_ms 时，会透传给 noPeersIntervalTime 统一探测节奏", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(
@@ -1243,6 +1308,71 @@ describe("媒体协作分发", () => {
     ).rejects.toThrow(/404/);
 
     expect(读取协作分发会话状态("swarm-att-stream-probe-1")).toBeNull();
+  });
+
+  it("已解析的 streamURL 后续不可读时，会丢弃旧 swarm 而不是继续返回坏播放源", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    let streamReadable = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-stale-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-stale-1.mp4")) {
+          return streamReadable
+            ? {
+                ok: true,
+                status: 206,
+              }
+            : {
+                ok: false,
+                status: 404,
+              };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent("/webtorrent/stream-stale-1.mp4");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstSource = await 解析协作分发源({
+      attachmentId: "att-stream-stale-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-stream-stale-1"),
+    });
+    streamReadable = false;
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-stream-stale-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-stream-stale-1"),
+      })
+    ).rejects.toThrow(/404/);
+
+    expect(firstSource).toEqual({
+      src: "/webtorrent/stream-stale-1.mp4",
+      hint: null,
+      locallyComplete: false,
+    });
+    expect(读取协作分发会话状态("swarm-att-stream-stale-1")).toBeNull();
   });
 
   it("streamURL 首次探测 404 但短时间后可读时，会在同一轮解析内继续返回 swarm 源", async () => {

@@ -58,6 +58,11 @@ type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings
   joinTicketRefreshTimerId: ReturnType<typeof setTimeout> | null;
   joinTicketRefreshInFlight: boolean;
   refreshJoinTicket: 协作分发JoinTicket刷新器 | null;
+  /**
+   * `sourcePromise` 只覆盖首次挂载；播放源交给查看器后，WebTorrent stream route 仍可能被底层退掉。
+   * 后续复用必须重新确认，不能把已经 404 的本地地址继续交给播放器制造错误风暴。
+   */
+  播放源已交付过: boolean;
 };
 
 export type 资产协作分发会话快照 = {
@@ -563,7 +568,11 @@ const 退掉整附件重补齐 = (session: 底层协作分发会话): void => {
     return;
   }
   session.wholeFileSelectApplied = false;
-  session.file?.deselect?.();
+  try {
+    session.file?.deselect?.();
+  } catch {
+    // WebTorrent file 可能已经被底层 remove/destroy 置为失效；释放链不能被第三方清理异常打断。
+  }
 };
 
 const 让零引用会话降到轻帮助态 = (session: 底层协作分发会话): void => {
@@ -1010,6 +1019,7 @@ async function 确保协作分发会话(
     joinTicketRefreshTimerId: null,
     joinTicketRefreshInFlight: false,
     refreshJoinTicket: input.refreshJoinTicket ?? null,
+    播放源已交付过: false,
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
   安排协作分发会话票据续租(runtime, session, input.distribution);
@@ -1210,6 +1220,23 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       if (!source) {
         return null;
       }
+      if (session.播放源已交付过) {
+        try {
+          await 探测协作分发媒体源可读性(source.src, {
+            读取终止错误: () => session.terminalError,
+          });
+        } catch (error) {
+          删除底层协作分发会话(runtime, session.swarmId, session);
+          if (!runtime.已销毁) {
+            runtime.actor.send({
+              type: "SESSION_DROPPED",
+              swarmId: session.swarmId,
+            });
+          }
+          throw error;
+        }
+      }
+      session.播放源已交付过 = true;
       return {
         src: source.src,
         hint: 推导协作分发提示(session),
