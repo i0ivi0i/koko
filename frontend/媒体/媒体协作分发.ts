@@ -220,6 +220,13 @@ export type 协作分发底层会话 = {
   locallyComplete: boolean;
   hint: 协作分发媒体源["hint"];
   /**
+   * “正式帮助资格”必须独立于 peer 连接事实存在：
+   * 1. 只有真正进入 autoplay/viewer/backfill 帮助链的会话，才允许把 peer 事实翻译成帮助者 presence；
+   * 2. `preview / session` 这类轻会话即便短暂连上 peer，也不能因此冒充“我已经正式在帮别人”；
+   * 3. 资格一旦建立，后续完成补齐、零引用保留、页面重开恢复都继续沿用这条真相。
+   */
+  已获得帮助资格: boolean;
+  /**
    * 同一条会话上的 presence 心跳只允许存在一个当前来源类型：
    * 1. 只有真实 peer（不是 webSeed）建立后，才允许进入 `partial_peer`；
    * 2. `done` 只在“已完整且已证实连上真实 peer”时升级成 `complete_peer`；

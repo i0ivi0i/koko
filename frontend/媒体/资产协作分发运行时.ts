@@ -25,6 +25,7 @@ type 协作分发消费者模式 =
   | "viewer"
   | "inline_autoplay"
   | "backfill"
+  | "preview"
   | "session";
 
 type 协作分发消费者绑定 = {
@@ -447,12 +448,12 @@ const 推导协作分发提示 = (session: 底层协作分发会话): 协作分�
     return session.hint;
   }
   /**
-   * 默认轻会话在没有真实群友证据前必须保持静默：
-   * 1. 可读只说明当前有源，不说明已进入 swarm；
-   * 2. 否则 UI 会把“webSeed/冷源兜底”误说成“正在协作分发”；
-   * 3. 只有显式补块或真实 peer 建立后，提示文案才允许抬起来。
+   * 默认提示也要服从“正式帮助资格”：
+   * 1. 只有已经进入帮助链的会话，才允许把“当前正在补块”抬成对外可见提示；
+   * 2. 纯 `preview / session` 轻会话即便正在为自己取源，也不能被 UI 误解成“我已经开始协作分发”；
+   * 3. 这样 hint 真相就和帮助资格真相保持同一条 owner 链。
    */
-  return session.eagerCompleting ? "正在补块" : null;
+  return session.已获得帮助资格 && session.eagerCompleting ? "正在补块" : null;
 };
 
 const 推导消费者模式 = (input: {
@@ -462,6 +463,9 @@ const 推导消费者模式 = (input: {
   if (input.eagerCompleting) {
     return "backfill";
   }
+  if (input.consumerId?.startsWith("preview:")) {
+    return "preview";
+  }
   if (input.consumerId?.startsWith("inline_autoplay:")) {
     return "inline_autoplay";
   }
@@ -470,6 +474,12 @@ const 推导消费者模式 = (input: {
   }
   return "session";
 };
+
+const 消费者拥有正式帮助资格 = (mode: 协作分发消费者模式): boolean =>
+  mode === "viewer" || mode === "inline_autoplay" || mode === "backfill";
+
+const 会话允许对外上报帮助真相 = (session: 底层协作分发会话): boolean =>
+  session.已获得帮助资格 && session.曾连上真实群友;
 
 function 归一化协作分发消费者(input: {
   attachmentId: string;
@@ -650,32 +660,38 @@ function 绑定协作分发会话事件(
        * 2. 因此不能触发 SWARM_ACTIVE，也不能上报 partial/complete_peer；
        * 3. 这里最多把提示降成“正在补块”，提醒当前仍在靠冷源兜底。
        */
-      session.hint = "正在补块";
+      session.hint = session.已获得帮助资格 ? "正在补块" : null;
       恢复整附件补齐(session);
       return;
     }
     session.曾连上真实群友 = true;
-    session.hint = "正在协作分发";
-    启动协作分发存活上报(
-      session,
-      distribution,
-      session.locallyComplete ? "complete_peer" : "partial_peer"
-    );
+    session.hint = session.已获得帮助资格 ? "正在协作分发" : null;
+    if (会话允许对外上报帮助真相(session)) {
+      启动协作分发存活上报(
+        session,
+        distribution,
+        session.locallyComplete ? "complete_peer" : "partial_peer"
+      );
+    }
     恢复整附件补齐(session);
-    发送事件(runtime, {
-      type: "SWARM_ACTIVE",
-      swarmId: session.swarmId,
-      hint: session.hint,
-    });
-    发布协作分发会话事件(session, "SWARM_ACTIVE");
+    if (session.已获得帮助资格) {
+      发送事件(runtime, {
+        type: "SWARM_ACTIVE",
+        swarmId: session.swarmId,
+        hint: session.hint ?? "正在协作分发",
+      });
+      发布协作分发会话事件(session, "SWARM_ACTIVE");
+    }
   });
   torrent.on("noPeers", () => {
-    session.hint = "正在补块";
-    发送事件(runtime, {
-      type: "SWARM_NO_PEERS",
-      swarmId: session.swarmId,
-    });
-    发布协作分发会话事件(session, "SWARM_NO_PEERS");
+    session.hint = session.已获得帮助资格 ? "正在补块" : null;
+    if (session.已获得帮助资格) {
+      发送事件(runtime, {
+        type: "SWARM_NO_PEERS",
+        swarmId: session.swarmId,
+      });
+      发布协作分发会话事件(session, "SWARM_NO_PEERS");
+    }
   });
   torrent.on("done", () => {
     session.eagerCompleting = false;
@@ -687,8 +703,8 @@ function 绑定协作分发会话事件(
      * 2. 如果从头到尾只靠 webSeed / 冷源补齐，就必须保持静默，禁止吹成协作分发成功；
      * 3. 这样 `ASSET_COMPLETE` 继续只代表本地完整，不反向污染 swarm 真相。
      */
-    session.hint = session.曾连上真实群友 ? "正在协作分发" : null;
-    if (session.曾连上真实群友) {
+    session.hint = 会话允许对外上报帮助真相(session) ? "正在协作分发" : null;
+    if (会话允许对外上报帮助真相(session)) {
       启动协作分发存活上报(session, distribution, "complete_peer");
     } else {
       停止协作分发存活上报(session);
@@ -920,9 +936,7 @@ async function 确保协作分发会话(
   const consumerBinding = 归一化协作分发消费者(input);
   const 应默认进入整附件补齐 =
     input.eagerCompleting ??
-    (consumerBinding.mode === "viewer" ||
-      consumerBinding.mode === "inline_autoplay" ||
-      consumerBinding.mode === "backfill");
+    消费者拥有正式帮助资格(consumerBinding.mode);
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
     更新协作分发会话票据刷新器(session, input.refreshJoinTicket);
@@ -931,6 +945,10 @@ async function 确保协作分发会话(
     刷新协作分发会话票据(session, input.distribution);
     安排协作分发会话票据续租(runtime, session, input.distribution);
     session.consumerBindings.set(consumerBinding.consumerId, consumerBinding);
+    const 刚获得帮助资格 = 应默认进入整附件补齐 && !session.已获得帮助资格;
+    if (应默认进入整附件补齐) {
+      session.已获得帮助资格 = true;
+    }
     发送事件(runtime, {
       type: "ACQUIRE_REQUESTED",
       attachmentId: consumerBinding.attachmentId,
@@ -944,8 +962,24 @@ async function 确保协作分发会话(
       激活整附件补齐(runtime, session);
     }
     更新协作分发会话主附件(session);
-    if (session.locallyComplete && session.曾连上真实群友) {
+    if (session.locallyComplete && 会话允许对外上报帮助真相(session)) {
+      session.hint = "正在协作分发";
       启动协作分发存活上报(session, input.distribution, "complete_peer");
+    } else if (刚获得帮助资格 && 会话允许对外上报帮助真相(session)) {
+      session.hint = "正在协作分发";
+      启动协作分发存活上报(
+        session,
+        input.distribution,
+        session.locallyComplete ? "complete_peer" : "partial_peer"
+      );
+      if (!session.locallyComplete) {
+        发送事件(runtime, {
+          type: "SWARM_ACTIVE",
+          swarmId: session.swarmId,
+          hint: "正在协作分发",
+        });
+        发布协作分发会话事件(session, "SWARM_ACTIVE");
+      }
     }
     return session;
   }
@@ -962,6 +996,7 @@ async function 确保协作分发会话(
     wholeFileSelectApplied: false,
     locallyComplete: false,
     hint: null,
+    已获得帮助资格: 应默认进入整附件补齐,
     presencePeerKind: null,
     presenceIntervalId: null,
     torrent: null,

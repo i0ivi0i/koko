@@ -326,6 +326,20 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       查看器会话协作.同步当前查看器请求();
     }
 
+    if (
+      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback &&
+      afterContext.inlineAutoplayPlayback?.kind === "video" &&
+      afterContext.inlineAutoplayPlayback.mode === "swarm"
+    ) {
+      /**
+       * autoplay 的正式 swarm 播放真相一旦到位，preview 也必须立刻获知：
+       * 1. 先前处于 `missing_source` 的 poster 可以借这条热链立即补齐；
+       * 2. 这里复用同一条 autoplay 播放源，不额外重建第二条冷源或第二个 owner；
+       * 3. 这样“自动播已热、预览还在缺源”的断层就能被同一次 runtime 变更收口。
+       */
+      触发视频预览收敛(afterContext.inlineAutoplayPlayback.attachmentId);
+    }
+
     if (自动播消息流投影已变化) {
       /**
        * 自动播 owner / playback / position 真相已经改了，但它们不走聊天基础状态那条 patch 链；
@@ -546,12 +560,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 读取视频预览候选播放源 = (
     attachmentId: string
   ): { src: string; contentHash: string | null } | null => {
-    const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
+    const 会话播放 = 媒体会话表.get(attachmentId)?.snapshot().playback ?? null;
+    const 运行时自动播播放 =
+      读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId === attachmentId
+        ? 读取媒体运行时上下文().inlineAutoplayPlayback
+        : null;
+    const playback = 会话播放 ?? 运行时自动播播放;
     /**
-     * 视频预览只允许复用 swarm 主链：
-     * 1. `anchor` 属于冷源/降级面，不能再反向喂回预览 owner；
-     * 2. 否则即便播放层已经说真话，预览层也会偷偷把第二字节路径 resurrect 回来；
-     * 3. 这里宁可回到 missing_source，也不能让预览再次吃冷源。
+     * 视频预览只允许复用当前已经成立的 swarm 主链：
+     * 1. 优先复用正式媒体会话的 playback；
+     * 2. 如果正式会话还没热起来，但 runtime 的 autoplay owner 已经握住 swarm 真相，也允许直接复用；
+     * 3. `anchor/degraded/expired` 仍属于冷源或降级面，不能再反向喂回预览 owner。
      */
     if (!playback || playback.kind !== "video" || playback.mode !== "swarm") {
       return null;
@@ -848,12 +867,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const session = 读取或创建媒体会话(startAttachment);
     const snapshot = session.snapshot();
     /**
-     * 当前自动播 owner 已经握着同一条正式播放真相时，点击放大只是“迁移宿主表面”：
-     * 1. 不该再先打回 recovering，把热会话暂时清空成 `src: ""`；
-     * 2. 也不该为了统一入口重复触发一轮播放结果解析，制造第二条恢复链；
-     * 3. 只有当前 owner + 当前 playback + 当前会话快照同时对齐时，才允许跳过这次重裁。
+     * 当前自动播 owner 已经握着同一条 swarm 主链时，点击放大只是“迁移宿主表面”：
+     * 1. 去掉 visible 预热正式会话后，真正的热真相可能先出现在 runtime 的 autoplay overlay；
+     * 2. 只要 overlay 已经握住这条 swarm 播放真相，viewer 就应直接复用，不能再先打回 recovering；
+     * 3. 但如果媒体会话自己已经有 playback，且和当前 autoplay 真相冲突，仍要回到正常重裁，避免抱着旧源误判命中热链。
      */
-    return Boolean(snapshot.playback);
+    if (!snapshot.playback) {
+      return 当前自动播播放.mode === "swarm";
+    }
+    return (
+      snapshot.playback.mode === 当前自动播播放.mode &&
+      snapshot.playback.src === 当前自动播播放.src
+    );
   };
 
   const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
@@ -862,37 +887,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       if (!attachment || attachment.kind !== "video") {
         continue;
       }
-      const session = 读取或创建媒体会话(attachment);
-      const snapshot = session.snapshot();
       /**
-       * 可见自动播候选需要提前拿到正式播放源：
-       * 1. 房间消息窗只认 `playbackByAttachmentId` 这条正式播放真相；
-       * 2. 如果等它真正成为 owner 才第一次 `session.启动()`，列表层只能先渲染 poster，再切成 `<video>`；
-       * 3. 这里仅对“还没 bootstrapping、也还没拿到 playback”的可见候选做一次预热，不额外造第二预览源状态机。
-       */
-      if (snapshot.playback || snapshot.lastSignal === "BOOTSTRAP_REQUESTED") {
-        触发视频预览收敛(attachment.attachmentId, {
-          trigger: "visible_candidate",
-        });
-        continue;
-      }
-      /**
-       * 可见/预热窗口的候选不允许继续躺在 `missing_source`：
-       * 1. 这里不是等它真的成为 owner，而是把“用户马上会看到它”上升成正式重试信号；
-       * 2. 预览协作内部仍保留同版缺源冷却，避免滚动时每帧 locator 风暴；
-       * 3. 因此外层只负责发出高价值信号，不复制缺源阻断细节。
+       * 可见自动播候选只允许停留在“高价值预热信号”这一层：
+       * 1. 真正的正式播放 bootstrap 只能等它真的成为 autoplay owner 或 viewer owner；
+       * 2. 否则“只是可见”就会被误抬成正式播放，再继续串味成帮助资格与 peer presence；
+       * 3. 这里因此只保留 preview 收敛信号，不再提前 `session.启动()`。
        */
       触发视频预览收敛(attachment.attachmentId, {
         trigger: "visible_candidate",
       });
-      /**
-       * `session.启动()` 可能同步打出 `BOOTSTRAP_REQUESTED` 快照：
-       * - 如果把它放在 visible-candidate 重试前面，preview 会先被抢成 `loading`，
-       *   后面的高价值重试信号反而会被“当前正在 loading”短路掉；
-       * - 先发 preview 重试，再启动正式会话，才能保证 newcomer/旧用户可见卡片先争取预览 ready，
-       *   同时保留后续 playback 到位时的更强补位机会。
-       */
-      void session.启动();
     }
   };
 

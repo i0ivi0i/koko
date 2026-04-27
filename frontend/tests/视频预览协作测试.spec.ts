@@ -278,6 +278,7 @@ describe("视频预览协作", () => {
     });
     expect(获取媒体定位).toHaveBeenCalledTimes(1);
     expect(解析协作分发预览源).not.toHaveBeenCalled();
+    expect(抓取视频预览).not.toHaveBeenCalled();
 
     // 默认路径在同一 sourceVersion + 无当前 swarm 播放源时仍会阻断，避免空转风暴。
     协作.解析视频预览(attachmentId);

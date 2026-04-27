@@ -1718,6 +1718,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-5",
       kind: "video",
       locator: 准备好的定位结果("att-5"),
+      eagerCompleting: true,
       onSessionEvent: (event) => {
         事件记录.push(event);
       },
@@ -1732,7 +1733,7 @@ describe("媒体协作分发", () => {
     });
   });
 
-  it("会话首次连上群友后会先上报 partial_peer，而不是等到 done 才有来源心跳", async () => {
+  it("真正进入帮助链的 backfill 会话首次连上群友后会先上报 partial_peer", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-3");
@@ -1769,6 +1770,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-3",
       kind: "video",
       locator,
+      eagerCompleting: true,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -1780,6 +1782,119 @@ describe("媒体协作分发", () => {
     expect(presenceBodies).toEqual([
       expect.stringContaining("partial_peer"),
       expect.stringContaining("partial_peer"),
+    ]);
+  });
+
+  it("preview consumer 就算连上真实群友，也不能冒充帮助者上报 partial_peer", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-preview-silent");
+    const presenceBodies: string[] = [];
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-preview-silent")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-preview-silent/presence");
+      expect(init?.method).toBe("POST");
+      presenceBodies.push(String(init?.body ?? ""));
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-preview-silent");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url =
+      "/api/media/att-preview-silent/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-preview-silent",
+      kind: "video",
+      locator,
+      consumerId: "preview:att-preview-silent",
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    emit("wire", { type: "peer" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(presenceBodies).toEqual([]);
+    expect(事件记录).toEqual([]);
+  });
+
+  it("普通 session consumer 就算连上真实群友，也不能在真正自动播前晋升帮助资格", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-session-silent");
+    const presenceBodies: string[] = [];
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-session-silent")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-session-silent/presence");
+      expect(init?.method).toBe("POST");
+      presenceBodies.push(String(init?.body ?? ""));
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-session-silent");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url =
+      "/api/media/att-session-silent/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-session-silent",
+      kind: "video",
+      locator,
+      consumerId: "session:att-session-silent",
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    emit("wire", { type: "peer" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    emit("done");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(presenceBodies).toEqual([]);
+    expect(事件记录).toEqual([
+      {
+        type: "ASSET_COMPLETE",
+        attachmentId: "att-session-silent",
+        swarmId: "swarm-att-session-silent",
+        contentHash: "hash-att-session-silent",
+      },
     ]);
   });
 
@@ -1834,11 +1949,11 @@ describe("媒体协作分发", () => {
     expect(事件记录).toEqual([]);
     expect(读取协作分发会话状态("swarm-att-webseed-only")).toMatchObject({
       locallyComplete: false,
-      hint: "正在补块",
+      hint: null,
     });
   });
 
-  it("torrent done 后会把 presence 从 partial_peer 升级为 complete_peer", async () => {
+  it("真正进入帮助链的 backfill 会话在 done 后会把 presence 从 partial_peer 升级为 complete_peer", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-presence-upgrade");
@@ -1876,6 +1991,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-presence-upgrade",
       kind: "video",
       locator,
+      eagerCompleting: true,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -1896,7 +2012,7 @@ describe("媒体协作分发", () => {
     ]);
   });
 
-  it("没有真实 peer 证据时，done 只代表本地完整，不能升级成 complete_peer", async () => {
+  it("帮助链会话在没有真实 peer 证据时，done 也只代表本地完整，不能升级成 complete_peer", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-done-without-peer");
@@ -1934,7 +2050,8 @@ describe("媒体协作分发", () => {
       attachmentId: "att-done-without-peer",
       kind: "video",
       locator,
-      consumerId: "viewer:att-done-without-peer",
+      consumerId: "session:att-done-without-peer",
+      eagerCompleting: true,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

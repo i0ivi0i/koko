@@ -435,7 +435,7 @@ describe("聊天应用内核", () => {
     });
 
     expect(kernel.snapshot().media.sessionByAttachmentId["att-video-1"]).toMatchObject({
-      status: "recovering",
+      status: "bootstrapping",
     });
   });
 
@@ -2063,7 +2063,7 @@ describe("聊天应用内核", () => {
     });
   });
 
-  it("打开正式查看器前会先预热正式媒体会话，owner 成立后再通过 inline_autoplay surface 解析轻量播放源", async () => {
+  it("打开正式查看器前不会再预热正式媒体会话；owner 成立后才通过 inline_autoplay surface 解析轻量播放源", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
     transport.joinQueue = [
@@ -2134,21 +2134,14 @@ describe("聊天应用内核", () => {
         },
       ],
     });
-    expect(解析播放结果).toHaveBeenCalledTimes(1);
-    expect(解析播放结果).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-inline-1",
-        kind: "video",
-        consumerId: "session:att-video-inline-1",
-      })
-    );
+    expect(解析播放结果).toHaveBeenCalledTimes(0);
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
 
     try {
       await vi.advanceTimersByTimeAsync(121);
 
-      expect(解析播放结果).toHaveBeenCalledTimes(2);
-      expect(解析播放结果).toHaveBeenLastCalledWith({
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+      expect(解析播放结果).toHaveBeenCalledWith({
         attachmentId: "att-video-inline-1",
         kind: "video",
         consumerId: "inline_autoplay:att-video-inline-1",
@@ -2261,7 +2254,7 @@ describe("聊天应用内核", () => {
       expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe(
         "att-video-inline-restore"
       );
-      expect(解析播放结果).toHaveBeenCalledTimes(2);
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
 
       await kernel.dispatch({
         type: "MEDIA_OPEN_REQUESTED",
@@ -2307,7 +2300,7 @@ describe("聊天应用内核", () => {
     }
   });
 
-  it("单个视频已经完整进入视口时，会在旧 120ms 稳定窗之前启动自动播解析", async () => {
+  it("单个视频已经完整进入视口时，真正自动播 owner 仍会在旧 120ms 稳定窗之前启动解析", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
     transport.joinQueue = [
@@ -2370,20 +2363,13 @@ describe("聊天应用内核", () => {
         },
       ],
     });
-    expect(解析播放结果).toHaveBeenCalledTimes(1);
-    expect(解析播放结果).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-inline-fast",
-        kind: "video",
-        consumerId: "session:att-video-inline-fast",
-      })
-    );
+    expect(解析播放结果).toHaveBeenCalledTimes(0);
 
     try {
       await vi.advanceTimersByTimeAsync(81);
 
-      expect(解析播放结果).toHaveBeenCalledTimes(2);
-      expect(解析播放结果).toHaveBeenLastCalledWith({
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+      expect(解析播放结果).toHaveBeenCalledWith({
         attachmentId: "att-video-inline-fast",
         kind: "video",
         consumerId: "inline_autoplay:att-video-inline-fast",
@@ -2518,36 +2504,13 @@ describe("聊天应用内核", () => {
       ],
     });
 
-    expect(解析播放结果).toHaveBeenCalledTimes(3);
-    expect(解析播放结果.mock.calls.slice(0, 3)).toEqual([
-      [
-        expect.objectContaining({
-          attachmentId: "att-video-inline-1",
-          kind: "video",
-          consumerId: "session:att-video-inline-1",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          attachmentId: "att-video-inline-2",
-          kind: "video",
-          consumerId: "session:att-video-inline-2",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          attachmentId: "att-video-inline-3",
-          kind: "video",
-          consumerId: "session:att-video-inline-3",
-        }),
-      ],
-    ]);
+    expect(解析播放结果).toHaveBeenCalledTimes(0);
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
 
     try {
       await vi.advanceTimersByTimeAsync(121);
 
-      expect(解析播放结果).toHaveBeenCalledTimes(4);
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
       expect(解析播放结果).toHaveBeenLastCalledWith({
         attachmentId: "att-video-inline-3",
         kind: "video",

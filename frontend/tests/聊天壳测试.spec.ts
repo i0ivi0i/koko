@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../存储";
 import {
   createFakeStorage,
@@ -38,6 +38,7 @@ import {
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 匿名身份引导结果 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
+import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
 
 const 当前测试文件目录 = dirname(fileURLToPath(import.meta.url));
 const 读取前端源码 = (relativePath: string): string =>
@@ -78,6 +79,50 @@ const 安装聊天壳直达全屏模拟 = () => {
   return { requestFullscreen, restore };
 };
 
+const 安装聊天壳测试唯一播放器桩 = (): void => {
+  const 全局唯一播放器 = 读取默认全局唯一播放器();
+  全局唯一播放器.销毁();
+  全局唯一播放器.配置壳工厂((initialSource, deps = {}) => {
+    const video = document.createElement("video");
+    const container = document.createElement("div");
+    const 挂载到宿主 = (mountTarget: HTMLElement): void => {
+      mountTarget.append(container);
+      if (!container.contains(video)) {
+        container.append(video);
+      }
+    };
+    /**
+     * 聊天壳集成只需要一颗“会真实进 DOM、会跟着宿主迁移”的测试播放器：
+     * 1. 这里不复刻 Video.js，只保留 source/pointer 的最小真相；
+     * 2. 这样失败时就能区分是“壳层没把 canonical owner 投影出来”，还是“测试壳太空心”；
+     * 3. 同时继续避免把集成测试绑死到真实播放器内部实现。
+     */
+    const 同步源 = (source = initialSource): void => {
+      video.src = source.src;
+      if (source.posterSrc) {
+        video.poster = source.posterSrc;
+      } else {
+        video.removeAttribute("poster");
+      }
+    };
+    if (deps.mountTarget) {
+      挂载到宿主(deps.mountTarget);
+    }
+    同步源(initialSource);
+    return {
+      destroy() {
+        video.pause();
+        container.remove();
+      },
+      同步: 同步源,
+      挂载到宿主,
+      进入全屏: async () => "standard",
+      读取视频元素: () => video,
+      读取容器元素: () => container,
+    };
+  });
+};
+
 describe("聊天壳集成 / 首页与控制台", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -85,6 +130,11 @@ describe("聊天壳集成 / 首页与控制台", () => {
       configurable: true,
     });
     vi.restoreAllMocks();
+    安装聊天壳测试唯一播放器桩();
+  });
+
+  afterEach(() => {
+    读取默认全局唯一播放器().销毁();
   });
 
   const 创建假媒体发布器 = () => ({
@@ -1258,8 +1308,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("可见自动播候选一旦预热出正式播放结果，就会立刻投影回消息流视频卡片并复用同一颗 video 节点", async () => {
+  it("可见自动播候选在真正成为 owner 前仍保持 poster，owner 成立后才切进正式 video 节点", async () => {
     const transport = new 假传输();
+    const intersectionObserverDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "IntersectionObserver"
+    );
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
         snapshot_messages: [
@@ -1284,6 +1338,15 @@ describe("聊天壳集成 / 首页与控制台", () => {
         ],
       }),
     ];
+    /**
+     * 这条集成要验证的是“消息窗几何 -> 候选 -> owner -> canonical 节点”整条业务链，
+     * 不是 happy-dom 自带 IntersectionObserver 的空壳实现。
+     * 因此这里显式切回同步量测 fallback，让测试几何真相来自我们手动 mock 的矩形。
+     */
+    Object.defineProperty(globalThis, "IntersectionObserver", {
+      configurable: true,
+      value: undefined,
+    });
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
     注入媒体播放器供测试(el, {
@@ -1305,32 +1368,29 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
     try {
-      const kernel = (el as unknown as {
-        kernel: {
-          dispatch(command: {
-            type: "MEDIA_INLINE_AUTOPLAY_OBSERVED";
-            candidates: Array<{
-              attachmentId: string;
-              visibilityRatio: number;
-              distanceToViewportCenter: number;
-            }>;
-          }): Promise<void>;
-        };
-      }).kernel;
-
-      await kernel.dispatch({
-        type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
-        candidates: [
-          {
-            attachmentId: "att-video-inline-shell",
-            visibilityRatio: 1,
-            distanceToViewportCenter: 0,
-          },
-        ],
-      });
       const pane = el.shadowRoot!.querySelector(
         "koko-room-message-pane"
       ) as HTMLElement & { updateComplete?: Promise<unknown> };
+      const scrollContainer = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement | null;
+      const previewButton = el.shadowRoot!.querySelector(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-inline-shell"]'
+      ) as HTMLButtonElement | null;
+      expect(scrollContainer).not.toBeNull();
+      expect(previewButton).not.toBeNull();
+      /**
+       * 这条集成用例必须走“消息窗自己量测可见候选 -> 壳层回抛 -> 内核裁决 owner”真实入口，
+       * 不能再直接手塞 `MEDIA_INLINE_AUTOPLAY_OBSERVED`：
+       * 1. 否则后续消息窗按默认 0 尺寸重新量测时，会立刻把候选清空，测出来的只是 happy-dom 几何缺省值；
+       * 2. 这里显式模拟可见视口与按钮矩形，让候选事实继续来自 RoomPane，而不是测试越级改内核；
+       * 3. 这样才能真正覆盖“未观看仅可见只做预热，正式自动播 owner 仍由可见候选稳定裁决”。
+       */
+      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 320, 300)
+      );
+      vi.spyOn(previewButton!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 320, 180)
+      );
+      scrollContainer!.dispatchEvent(new Event("scroll"));
       await Promise.resolve();
       await Promise.resolve();
       await el.updateComplete;
@@ -1339,13 +1399,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
       const beforeOwnerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
-      expect(beforeOwnerVideo).not.toBeNull();
-      expect(beforeOwnerVideo?.autoplay).toBe(false);
+      expect(beforeOwnerVideo).toBeNull();
       expect(
         el.shadowRoot!.querySelector(
           'img.message-video-poster[data-attachment-id="att-video-inline-shell"]'
         )
-      ).toBeNull();
+      ).not.toBeNull();
 
       /**
        * 壳层先建好再切 fake timer 时，自动播协作已经持有真实定时链；
@@ -1361,13 +1420,17 @@ describe("聊天壳集成 / 首页与控制台", () => {
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
       expect(ownerVideo).not.toBeNull();
-      expect(ownerVideo).toBe(beforeOwnerVideo);
       expect(
         el.shadowRoot!.querySelector(
           'img.message-video-poster[data-attachment-id="att-video-inline-shell"]'
         )
       ).toBeNull();
     } finally {
+      if (intersectionObserverDescriptor) {
+        Object.defineProperty(globalThis, "IntersectionObserver", intersectionObserverDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "IntersectionObserver");
+      }
       el.remove();
     }
   });

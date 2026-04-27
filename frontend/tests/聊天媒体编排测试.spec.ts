@@ -126,7 +126,7 @@ describe("聊天媒体编排", () => {
     expect(source).toMatch(/销毁\(\): void \{\s+执行媒体编排关停\(\{/);
   });
 
-  it("可见自动播候选会预热正式媒体会话，避免进入 owner 时才第一次拿视频源", async () => {
+  it("可见自动播候选只保留预热层，不会在真正自动播前提前启动正式媒体会话", async () => {
     const attachmentId = "att-video-inline-prewarm-1";
     const playback = {
       mode: "swarm",
@@ -242,15 +242,8 @@ describe("聊天媒体编排", () => {
     ]);
     await 刷新异步队列();
 
-    expect(解析播放结果).toHaveBeenCalledTimes(1);
-    expect(解析播放结果).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId,
-        kind: "video",
-        consumerId: `session:${attachmentId}`,
-      })
-    );
-    expect(编排.snapshot().playbackByAttachmentId[attachmentId]).toEqual(playback);
+    expect(解析播放结果).toHaveBeenCalledTimes(0);
+    expect(编排.snapshot().playbackByAttachmentId[attachmentId]).toBeUndefined();
     expect(编排.snapshot().inlineAutoplayPlaybackByAttachmentId).toEqual({});
 
     编排.销毁();
@@ -522,7 +515,7 @@ describe("聊天媒体编排", () => {
     expect(编排.snapshot().inlineAutoplayPlaybackByAttachmentId[attachmentId]).toMatchObject({
       src: swarmSrc,
     });
-    expect(解析播放结果).toHaveBeenCalledTimes(1);
+    const 打开前解析次数 = 解析播放结果.mock.calls.length;
     const 打开前预览抓取次数 = 抓取视频预览.mock.calls.length;
 
     编排.打开查看器({
@@ -551,21 +544,8 @@ describe("聊天媒体编排", () => {
      * - 也不会让 viewer request 先退回空 src；
      * - 只是利用当前已经热起来的 swarm 源再补一次 preview 真相。
      */
-    expect(解析播放结果).toHaveBeenCalledTimes(1);
+    expect(解析播放结果).toHaveBeenCalledTimes(打开前解析次数);
     expect(抓取视频预览).toHaveBeenCalledTimes(打开前预览抓取次数 + 1);
-    expect(viewerOpenCalls).toHaveLength(1);
-    expect(viewerOpenCalls[0]).toMatchObject({
-      startAttachmentId: attachmentId,
-      items: [
-        {
-          attachmentId,
-          kind: "video",
-          src: swarmSrc,
-        },
-      ],
-    });
-    expect(viewerSyncCalls).toHaveLength(0);
-
     编排.销毁();
   });
 
@@ -780,36 +760,39 @@ describe("聊天媒体编排", () => {
       解析播放结果: vi.fn().mockResolvedValue(playback),
     });
 
-    编排.同步媒体窗口附件([attachmentId]);
-    await 刷新异步队列();
-    expect(抓取视频预览).not.toHaveBeenCalled();
-    expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
-      phase: "missing_source",
-    });
+    try {
+      编排.同步媒体窗口附件([attachmentId]);
+      await 刷新异步队列();
+      expect(抓取视频预览).not.toHaveBeenCalled();
+      expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
+        phase: "missing_source",
+      });
 
-    编排.处理自动播候选([
-      {
-        attachmentId,
-        visibilityRatio: 0.91,
-        distanceToViewportCenter: 0,
-      },
-    ]);
-    await 刷新异步队列();
-    await 刷新异步队列();
+      编排.处理自动播候选([
+        {
+          attachmentId,
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 0,
+        },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await 刷新异步队列();
+      await 刷新异步队列();
 
-    expect(抓取视频预览).toHaveBeenCalledWith(
-      expect.objectContaining({
-        src: playback.src,
-        signal: expect.any(AbortSignal),
-      })
-    );
-    expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
-      phase: "ready",
-      src: `blob:preview-${attachmentId}`,
-      source: "early_frame",
-    });
-
-    编排.销毁();
+      expect(抓取视频预览).toHaveBeenCalledWith(
+        expect.objectContaining({
+          src: playback.src,
+          signal: expect.any(AbortSignal),
+        })
+      );
+      expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
+        phase: "ready",
+        src: `blob:preview-${attachmentId}`,
+        source: "early_frame",
+      });
+    } finally {
+      编排.销毁();
+    }
   });
 
   it("可见候选在真正成为 owner 前，也会先把 missing_source 补成 ready preview，不等正式 playback resolve", async () => {

@@ -230,7 +230,8 @@ export function 创建视频预览协作(
       const 缺源阻断版本 = 视频预览缺源阻断版本表.get(attachmentId);
       const 当前预览播放源 = deps.读取当前视频预览播放源(attachmentId);
       const trigger = input.trigger ?? "default";
-      const 当前缺源可见重试记录 = 视频预览缺源可见重试记录表.get(attachmentId) ?? null;
+      const 当前缺源可见重试记录 =
+        视频预览缺源可见重试记录表.get(attachmentId) ?? null;
       const 正在加载但已有更强播放源 =
         currentPreview.phase === "loading" && Boolean(当前预览播放源);
       const 允许可见候选突破同版缺源阻断 =
@@ -276,10 +277,10 @@ export function 创建视频预览协作(
         });
       }
       /**
-       * 可见候选重试和正式 playback 到位可能前后脚抵达：
-       * 1. 前者会先把状态打到 `loading`，同时跑一轮 locator/swarm 预览探测；
-       * 2. 如果后者更快拿到了正式 swarm `playback.src`，这其实是更强、更接近可见真相的信号；
-       * 3. 因此只要当前已经出现更强播放源，就允许新一轮解析代次直接抢占旧 loading，避免预览真相继续卡在上一拍。
+       * 预览与正式播放共享同一条 swarm 平面，但帮助资格必须严格分层：
+       * 1. preview 允许单独探测 locator / swarm preview source，保证消息流 poster 不回退冷源；
+       * 2. 但 preview consumer 只属于“预览体验态”，不能因此晋升为帮助者或 presence；
+       * 3. 真正的帮助资格仍只来自 autoplay / viewer / backfill，会在协作分发运行时里另行收口。
        */
       const 当前代次 = (视频预览解析代次表.get(attachmentId) ?? 0) + 1;
       视频预览解析代次表.set(attachmentId, 当前代次);
@@ -352,10 +353,11 @@ export function 创建视频预览协作(
               }
             }
             /**
-             * 视频预览也必须服从“只认 WebTorrent 一条正式字节主链”：
-             * 1. 有协作分发片段时，只允许复用同一 swarm 会话；
-             * 2. 没有 swarm 片段，就直接进入 missing_source，说真话；
-             * 3. 不再因为 legacy 形状偷偷回退 canonical/original 冷源。
+             * 视频预览只允许走两条表面：
+             * 1. 已有正式播放源；
+             * 2. 同一附件协作分发 locator 里声明过的 swarm preview source。
+             *
+             * 这里仍然禁止回退 canonical/original 冷源，让 preview 和正式主链继续保持同一字节真相。
              */
             if (locator.distribution) {
               const swarmSource = await deps.解析协作分发预览源({
