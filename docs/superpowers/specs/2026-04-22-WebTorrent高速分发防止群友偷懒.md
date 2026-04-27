@@ -1,7 +1,7 @@
 # WebTorrent 高速分发防止群友偷懒
 
 日期：2026-04-22  
-状态：Implemented（2026-04-22，已完成并验收）  
+状态：Implemented（2026-04-27，按真实服务器退字节真相复核后彻底完成）
 适用范围：`koko` 的图片、视频、时间线媒体预览、自动播放、查看器、全屏、`WebTorrent` 协作分发、后端冷启动强 seed、`24 小时` 字节退场。  
 替代文档：`docs/superpowers/specs/2026-04-21-高清视频自动播放加速.md`
 
@@ -711,3 +711,40 @@
 5. seeder 能力核验：
    - `frontend/dev-seeder.mjs` 受管控制面已落地（`/seed/start` `/seed/stop` `/seed/reconcile`）；
    - 通过修复 `node-datachannel` 依赖构建，sidecar 健康检查已从 `mock` 切换为 `capability=webtorrent`。
+
+## 15. 服务器退字节真相补齐与最终完工（2026-04-27）
+
+`2026-04-22` 那轮把主链、失败态和 swarm 强参与大体做成了，但今天按真实 API 路径重新深挖后，发现还有最后一个会让 spec 结论失真的底层断层：
+
+**`locator`/协作分发表已经按 `attachment_distribution_metadata.web_seed_until` 裁服务器退场，而原图内容端点仍直接按 `attachments.origin_expires_at` 放字节。**
+
+这会导致同一附件在 `24 小时` 之后出现双真相：
+
+1. `locator` 可以已经进入 `MEDIA_CONNECTING_TO_PEERS / MEDIA_NO_ONLINE_SEED`；
+2. `/api/attachments/{attachment}/content?variant=original` 却还能继续返回 `206`；
+3. 前端即使不再正式消费第二主链，后端 contract 本身也已经偷偷长回第二套“服务器还能发字节”的判断。
+
+本轮真正补上的，就是这条底层读取链路：
+
+1. `src/媒体附件适配.rs` 的 `查询附件快照_异步` 现已把 app-facing 冷备窗口投影成单一真相：有协作分发表时优先认 `web_seed_until`，没有分发表的历史附件才回退 `attachments.origin_expires_at`。
+2. `src/用例.rs` 的 `读取附件内容`、`查询媒体定位`、以及壳层 `origin` 描述因此自动共享同一条服务器退字节时间，不再各看各表。
+3. `origin_deleted_at` 继续只表达物理删除终态；它可以让冷源更早失效，但不能再把服务器字节主链的权威时间重新定义成另一套。
+4. 新主链附件的 complete 回归测试已额外钉死：`attachments.origin_expires_at` 与 `attachment_distribution_metadata.web_seed_until` 写入时必须一致，防止以后再把两张表写散。
+5. 由此，`24 小时` 后服务器对新主链附件的正式媒体字节供给已经变成“自然退场”：业务读取面先按 `web_seed_until` 退字节，物理对象删除只是后续清理，不再参与前端正式字节主链裁决。
+
+本轮新增并通过的关键验证：
+
+- `cargo test --test 协作分发测试 新主链附件在web_seed窗口结束后原图内容接口不再继续直供媒体字节 -- --nocapture`
+- `cargo test --test 协作分发测试 web_seed过期后的locator与原图端点共享同一条服务器退字节真相 -- --nocapture`
+- `cargo test --test 协作分发测试 -- --nocapture`
+- `cargo test --test 媒体上传测试 complete图片上传会把prepared附件升级成ready并写入canonical资产 -- --nocapture`
+- `cargo test --test 媒体上传测试 complete视频上传会写入canonical并返回file_asset -- --nocapture`
+- `cargo test --test 媒体上传测试 -- --nocapture`
+
+因此，这份 spec 到今天才可以更精确地写成：
+
+1. 前端正式媒体字节继续只认 `WebTorrent` 分发平面；
+2. 前 `24 小时` 服务器继续作为 swarm 内强 seed，而不是第二正式播放主链；
+3. `24 小时` 后服务器对新主链附件的正式媒体字节供给会先按 `web_seed_until` 自然退场；
+4. 退场后的长期可用性只由 peer 平面决定；没人能发时，系统必须说真话；
+5. 物理删除只是后续清理动作，不再与“服务器是否仍可对外发正式媒体字节”并行形成第二套权威判断。

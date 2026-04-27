@@ -141,9 +141,12 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
                 thumbnail_storage_key,
                 full_storage_key,
                 asset_original_storage_key,
-                EXTRACT(EPOCH FROM origin_expires_at)::BIGINT AS origin_expires_at_epoch
-         FROM attachments
-         WHERE attachment_id = $1",
+                EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+                EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch
+         FROM attachments a
+         LEFT JOIN attachment_distribution_metadata dm
+           ON dm.attachment_id = a.attachment_id
+         WHERE a.attachment_id = $1",
     )
     .bind(&attachment_id)
     .fetch_one(&pool)
@@ -157,6 +160,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     let full_storage_key: Option<String> = row.get("full_storage_key");
     let asset_original_storage_key: Option<String> = row.get("asset_original_storage_key");
     let origin_expires_at_epoch: Option<i64> = row.get("origin_expires_at_epoch");
+    let web_seed_until_epoch: Option<i64> = row.get("web_seed_until_epoch");
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1));
     assert_eq!(height_in_db, Some(1));
@@ -170,6 +174,11 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     assert!(
         origin_expires_at_epoch.is_some(),
         "原始冷源必须在 complete 时写入明确到期时间，后续 24 小时清理才能有权威锚点"
+    );
+    assert_eq!(
+        web_seed_until_epoch,
+        origin_expires_at_epoch,
+        "图片 complete 写入的协作分发表窗口和原图冷备窗口必须先天一致，避免后续又长出两套服务器退场时间"
     );
 
     let asset_row = sqlx::query(
@@ -837,10 +846,13 @@ async fn complete视频上传会写入canonical并返回file_asset() {
                 thumbnail_storage_key,
                 storage_key,
                 mezzanine_storage_key,
-                EXTRACT(EPOCH FROM origin_expires_at)::BIGINT AS origin_expires_at_epoch,
-                EXTRACT(EPOCH FROM origin_deleted_at)::BIGINT AS origin_deleted_at_epoch
-         FROM attachments
-         WHERE attachment_id = $1",
+                EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+                EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch,
+                EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch
+         FROM attachments a
+         LEFT JOIN attachment_distribution_metadata dm
+           ON dm.attachment_id = a.attachment_id
+         WHERE a.attachment_id = $1",
     )
     .bind(&attachment_id)
     .fetch_one(&pool)
@@ -855,6 +867,7 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     let mezzanine_storage_key: Option<String> = row.get("mezzanine_storage_key");
     let origin_expires_at_epoch: Option<i64> = row.get("origin_expires_at_epoch");
     let origin_deleted_at_epoch: Option<i64> = row.get("origin_deleted_at_epoch");
+    let web_seed_until_epoch: Option<i64> = row.get("web_seed_until_epoch");
     assert_eq!(kind_in_db, "video");
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1080));
@@ -874,6 +887,11 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     assert!(
         origin_expires_at_epoch.is_some(),
         "视频 complete 后必须写入 24 小时 canonical 冷备窗口，供清理任务按权威时间退场"
+    );
+    assert_eq!(
+        web_seed_until_epoch,
+        origin_expires_at_epoch,
+        "视频 complete 写入的协作分发表窗口和 canonical 冷备窗口必须先天一致，避免 locator 与原图端点以后再分裂"
     );
     assert!(
         origin_deleted_at_epoch.is_none(),

@@ -23,7 +23,7 @@ pub enum 附件状态读取结果 {
 }
 
 /// 上传链已经形成的最小附件事实。
-/// 这里继续保持“应用层稳定字段”，但允许把图片真实资产和冷源生命周期
+/// 这里继续保持“应用层稳定字段”，但允许把图片真实资产和受控冷备窗口
 /// 这种已经进入业务协议面的事实一起带出，避免它们只留在 adapter 私货里。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 附件读取结果 {
@@ -40,6 +40,9 @@ pub struct 附件读取结果 {
     pub 允许缩略图: bool,
     pub 资产原图存储键: Option<String>,
     pub 完整图存储键: Option<String>,
+    /// app-facing 冷备窗口已经在仓储投影层收口：
+    /// 1. 新主链附件优先认协作分发表里的 `web_seed_until`；
+    /// 2. 没有分发表的历史附件才回退 `attachments.origin_expires_at`。
     pub 原始冷源到期时间戳秒: Option<i64>,
     pub 原始冷源删除时间戳秒: Option<i64>,
 }

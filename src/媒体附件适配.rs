@@ -94,13 +94,17 @@ async fn 查询匿名身份数据库主键_异步(
 }
 
 /// 统一消息用例和 realtime 查询都会拿这条权威附件快照。
+/// 这里顺手把 app-facing 冷备窗口投影成单一真相：
+/// 1. 已进入协作分发表的新主链附件优先认 `web_seed_until`；
+/// 2. 没有分发表的历史附件才继续回退 `attachments.origin_expires_at`；
+/// 3. `origin_deleted_at` 仍然只表达物理删除终态，优先级高于上面两种到期时间。
+/// 这样 `locator / 原图内容读取 / origin 描述` 都围绕同一条服务器退字节裁决工作，
+/// 不会再出现“定位说该退场，但原图端点还在偷发 206”的双真相。
 /// 所以这里直接暴露异步版本，避免再回到 `src/适配.rs` 偷走旧 SQL。
 pub(super) async fn 查询附件快照_异步(
     pool: &PgPool,
     附件标识: &str,
 ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
-    // 单文件视频主链的生命周期真相已经收口到 origin_*；
-    // app-facing 读取层不再把 mezzanine_* 回退当成业务真相，避免继续并行两套生命周期。
     let row = sqlx::query(
         "SELECT a.attachment_id,
                 ai.identity_uuid::text AS owner_identity_text,
@@ -112,10 +116,15 @@ pub(super) async fn 查询附件快照_异步(
                 a.thumbnail_storage_key IS NOT NULL AS has_thumbnail,
                 a.asset_original_storage_key,
                 a.full_storage_key,
-                EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+                COALESCE(
+                    EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT,
+                    EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT
+                ) AS origin_expires_at_epoch,
                 EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch \
          FROM attachments a \
          JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
+         LEFT JOIN attachment_distribution_metadata dm
+           ON dm.attachment_id = a.attachment_id \
          WHERE a.attachment_id = $1",
     )
     .bind(附件标识)
