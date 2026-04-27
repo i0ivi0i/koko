@@ -198,7 +198,7 @@ describe("媒体协作分发", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://media.local/torrent-1",
         torrent_info_hash: "torrent-info-hash-1",
-        announce_urls: ["http://media.local/announce"],
+        announce_urls: ["wss://tracker.media.local/announce"],
         web_seed_url: "http://media.local/web-seed-1",
         join_ticket: null,
         ticket_expires_at: null,
@@ -217,7 +217,7 @@ describe("媒体协作分发", () => {
       web_seed_until: "1775942400",
       torrent_url: "http://media.local/torrent-1",
       torrent_info_hash: "torrent-info-hash-1",
-      announce_urls: ["http://media.local/announce"],
+      announce_urls: ["wss://tracker.media.local/announce"],
       web_seed_url: "http://media.local/web-seed-1",
       join_ticket: null,
       ticket_expires_at: null,
@@ -535,6 +535,44 @@ describe("媒体协作分发", () => {
     expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
     ticketRef.value = "ticket-new";
     expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+  });
+
+  it("接入协作分发种子时会把已经收口好的 websocket announce 原样交给 WebTorrent", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-announce-forward"
+    );
+    let announceUrls: string[] | undefined;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      announceUrls = options.announce;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-announce-forward");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.announce_urls = [
+      "wss://localhost/api/swarm/announce",
+      "wss://tracker.koko.local/announce",
+    ];
+
+    await 接入协作分发种子(
+      {
+        client: new ctor(),
+        streamServer: { close: vi.fn() },
+      },
+      locator.distribution
+    );
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(announceUrls).toEqual([
+      "wss://localhost/api/swarm/announce",
+      "wss://tracker.koko.local/announce",
+    ]);
   });
 
   it("接入 WebTorrent 种子时会同时调高 torrent 与共享 tracker socket 监听器预算，避免高并发 swarm 冷启动被误报成泄漏", async () => {

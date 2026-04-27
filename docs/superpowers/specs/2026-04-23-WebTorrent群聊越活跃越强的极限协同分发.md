@@ -126,6 +126,71 @@
 3. 恢复帮助任务、恢复 locator、恢复 `.torrent` 都不再跨 session / 跨房间偷拿旧真相。
 4. 高活跃协作分发的行为门禁、架构门禁和后端对账门禁都已补齐，可将本文视为真正完成态。
 
+## announce seam 彻底复核与真实完工（2026-04-27）
+
+`2026-04-24` 那轮结论在“页面 owner / 生命周期 / session-aware 缓存”这些点上已经成立，但 `2026-04-27` 重新按多人真实烟测深挖后，发现还有最后一个会直接掐死真实浏览器 peer 平面的根因没有被当场看穿：
+
+**后端 contract 明明已经把浏览器公开 announce 收口成同源 `/api/swarm/announce`，前端 adapter 却把它继续当普通 HTTP 资源地址处理，导致 runtime 实际吃到的是 `http/https` announce，而不是浏览器 WebTorrent 真正能用的 `ws/wss` tracker transport。**
+
+这意味着此前“看起来都在拉 torrent / content / original”的现象，并不能单独证明浏览器 peer 平面真的建立；它最多只能证明冷源和前端主链在跑。
+本轮彻底收口的，就是这条 `contract -> adapter -> runtime -> presence -> smoke evidence` 的真实断层。
+
+本轮新增事实如下：
+
+1. `frontend/媒体/适配/媒体HTTP接口.ts` 已新增专用 announce resolver；相对 `/api/swarm/announce` 会基于当前页面 origin 收口成 `ws/wss`，不再和普通媒体资源地址共用同一套 HTTP 绝对地址解析。
+2. `frontend/媒体/媒体协作分发.ts` 已明确只消费 adapter 收口后的 websocket announce，不再在 runtime 层二次猜协议。
+3. `frontend/契约.ts` 已补上正式注释：`announce_urls` 属于 tracker transport surface，不是普通 HTTP fetch surface。
+4. `frontend/媒体/资产协作分发运行时.ts` 与 `frontend/媒体/媒体协作分发.ts` 的 `hint` 真相已再次收口：`webSeed`-only / light session 可以合法回到 `null`，不会再因为类型不一致而把非 peer 状态硬抬成“正在协作分发”。
+5. 前端测试已把这条 seam 钉成门禁：相对 announce 必须收口为 `ws/wss`；runtime 不允许把 `http/https` announce 继续当作可用 swarm 入口。
+
+本轮针对性验证已执行并通过：
+
+- `pnpm --dir frontend test -- "tests/传输测试.spec.ts" "tests/媒体定位测试.spec.ts" "tests/媒体协作分发测试.spec.ts"`
+- `pnpm --dir frontend test -- "tests/资产协作分发运行时测试.spec.ts" "tests/媒体播放测试.spec.ts"`
+- `pnpm --dir frontend test -- "tests/媒体共享契约测试.spec.ts"`
+- `pnpm --dir frontend test`
+- `pnpm --dir frontend typecheck`
+- `pnpm --dir frontend build`
+- `cargo test -j 1`
+- `pwsh -File tests/启动器脚本检查.ps1`
+- `pwsh -File tests/powershell/https-script.tests.ps1`
+
+本轮真实多人浏览器烟测（`2026-04-27`）：
+
+- 环境：`https://127.0.0.1`
+- 房间：`1234b`
+- 会话：`sender / A / B / C / D / E` 多隔离上下文
+- 素材：`D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230823_122115_920.mp4`
+- 新附件：`att-36c15bc2f8f5`
+
+本轮真实烟测抓到的关键证据：
+
+1. 新鲜会话 `E` 点开新附件后，浏览器真实发起：
+   - `GET /api/media/att-36c15bc2f8f5/locator?... => 200`
+   - `GET /api/media/att-36c15bc2f8f5/torrent?... => 200`
+   - `GET /webtorrent/ad8631c829da038443a7dcd6d51117eb28409562/content-f4d4dd03213afad734c6a04f44d7d5ca18d8fc5c4ffecd361a38eeed9a8692ae.mp4 => 206`
+   - `GET /api/attachments/att-36c15bc2f8f5/content?variant=original => 206`
+2. 同一 fresh session `E` 在打开新附件后，前端真实上报：
+   - `POST /api/media/att-36c15bc2f8f5/presence?session_id=s-1ac8f6ab9ff3 => 204`
+3. tracker `http://127.0.0.1:7072/stats` 真实显示：
+   - `2 torrents (2 active)`
+   - `Connected Peers: 4`
+   - `Peers Seeding Only: 4`
+   - `Clients: WebTorrent 2.8 : 4`
+4. PostgreSQL 表 `swarm_peer_presence` 对新附件 `att-36c15bc2f8f5` 的真实落库为：
+   - `backend_strong_seed = 1`
+   - `complete_peer = 4`
+   - `partial_peer = 2`
+5. fresh session `s-1ac8f6ab9ff3` 自己也真实留下了：
+   - `att-36c15bc2f8f5, complete_peer, s-1ac8f6ab9ff3`
+
+因此，本轮最终结论需要比 `2026-04-24` 更精确地写成：
+
+1. 生命周期、缓存恢复、`reuseOnly`、视频预览冷源旁路这些旧尾巴已经在 `2026-04-24` 收口。
+2. `2026-04-27` 真正补上的最后一刀，是 announce transport seam；它修完之前，浏览器 peer 平面并不算被真实证明。
+3. announce seam 修完后，`1234b` 多人房间里已经能够真实观察到浏览器 `partial_peer / complete_peer`、tracker peer 数增长、以及 `presence` 上报和 swarm 字节请求同时成立。
+4. 因此，截至 `2026-04-27`，这份 spec 才可以被视为“经过真实多人复核后的彻底完成态”，而不是只靠局部现象推断出来的完成态。
+
 ---
 
 ## 0. 为什么还要补这一份设计

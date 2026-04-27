@@ -80,7 +80,13 @@ export interface 协作分发浏览器运行时 {
 
 export interface 协作分发媒体源 {
   src: string;
-  hint: "正在协作分发" | "正在补块";
+  /**
+   * 可播放 src 与“必须给用户展示协作提示”不是同一回事：
+   * 1. 轻会话/普通 session consumer 可以拿到可播放 src，但不必强挂提示；
+   * 2. 只靠 webSeed 冷源补齐完成时，也不能伪造“正在协作分发”；
+   * 3. 因此 `null` 是正式真相的一部分，不是过渡兼容字段。
+   */
+  hint: "正在协作分发" | "正在补块" | null;
   locallyComplete: boolean;
 }
 
@@ -212,7 +218,7 @@ export type 协作分发底层会话 = {
   sourcePromise: Promise<{ src: string } | null>;
   eagerCompleting: boolean;
   locallyComplete: boolean;
-  hint: 协作分发媒体源["hint"] | null;
+  hint: 协作分发媒体源["hint"];
   /**
    * 同一条会话上的 presence 心跳只允许存在一个当前来源类型：
    * 1. 只有真实 peer（不是 webSeed）建立后，才允许进入 `partial_peer`；
@@ -693,6 +699,12 @@ export async function 接入协作分发种子(
     const torrent = runtime.client.add(
       torrentBytes,
       {
+        /**
+         * announce 真相 owner 已经在 HTTP adapter 收口：
+         * 1. 这里应只收到浏览器可直接使用的 `ws/wss` tracker 地址；
+         * 2. runtime 不再二次把 `http/https` 猜成 tracker 协议；
+         * 3. 这样 contract / adapter / runtime 的职责才不会再次重叠。
+         */
         announce: distribution.announce_urls,
         urlList: distribution.web_seed_url ? [distribution.web_seed_url] : [],
         private: true,

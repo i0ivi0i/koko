@@ -69,7 +69,7 @@ export type 资产协作分发会话快照 = {
   consumerModes: Record<string, 协作分发消费者模式>;
   eagerCompleting: boolean;
   locallyComplete: boolean;
-  hint: 协作分发媒体源["hint"] | null;
+  hint: 协作分发媒体源["hint"];
 };
 
 interface 资产协作分发上下文 {
@@ -94,7 +94,7 @@ export type 资产协作分发事件 =
   | {
       type: "SWARM_ACTIVE";
       swarmId: string;
-      hint: 协作分发媒体源["hint"];
+      hint: NonNullable<协作分发媒体源["hint"]>;
     }
   | {
       type: "SWARM_NO_PEERS";

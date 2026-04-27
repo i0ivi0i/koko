@@ -233,6 +233,49 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("只靠 webSeed 补齐完成时不会伪装成真实群友协作完成", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-webseed-only-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+    const 事件记录: string[] = [];
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-webseed-only-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-webseed-only-1"),
+      consumerId: "viewer:att-webseed-only-1",
+      eagerCompleting: true,
+      onSessionEvent: (event) => {
+        事件记录.push(event.type);
+      },
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-webseed-only-1",
+      hint: "正在补块",
+      locallyComplete: false,
+    });
+
+    torrentHandle.emit("wire", { type: "webSeed" });
+    torrentHandle.emit("done");
+
+    expect(读取协作分发会话状态("swarm-att-webseed-only-1")).toMatchObject({
+      refs: 1,
+      eagerCompleting: false,
+      locallyComplete: true,
+      hint: null,
+    });
+    expect(事件记录).not.toContain("SWARM_ACTIVE");
+    expect(事件记录).toContain("ASSET_COMPLETE");
+  });
+
   it("同一 swarm 复用已有会话时会刷新 join_ticket 而不是继续拿旧票 announce", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(

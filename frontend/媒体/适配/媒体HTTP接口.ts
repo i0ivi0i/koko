@@ -41,6 +41,29 @@ export interface 媒体HTTP接口依赖 {
 export class 媒体HTTP接口 {
   constructor(private readonly deps: 媒体HTTP接口依赖) {}
 
+  /**
+   * announce 不是普通 HTTP 内容地址，而是交给 WebTorrent tracker client 的 transport 入口：
+   * 1. 后端 contract 允许继续下发同源相对 `/api/swarm/announce`；
+   * 2. 浏览器真正可用的是 `ws/wss` tracker，而不是 `http/https` 页面地址；
+   * 3. 因此前端必须在 HTTP adapter 就把它收口成 websocket announce，不能等 runtime 再猜。
+   */
+  private 解析协作分发Announce地址(pathOrUrl: string): string {
+    const absoluteUrl = this.deps.解析绝对地址(pathOrUrl);
+    const url = new URL(absoluteUrl);
+    if (url.protocol === "ws:" || url.protocol === "wss:") {
+      return url.href;
+    }
+    if (url.protocol === "http:") {
+      url.protocol = "ws:";
+      return url.href;
+    }
+    if (url.protocol === "https:") {
+      url.protocol = "wss:";
+      return url.href;
+    }
+    return absoluteUrl;
+  }
+
   async prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
@@ -162,7 +185,7 @@ export class 媒体HTTP接口 {
         ? {
             ...locator.distribution,
             announce_urls: locator.distribution.announce_urls.map((url) =>
-              this.deps.解析绝对地址(url)
+              this.解析协作分发Announce地址(url)
             ),
             torrent_url: locator.distribution.torrent_url
               ? this.deps.解析绝对地址(locator.distribution.torrent_url)
@@ -268,7 +291,7 @@ export class 媒体HTTP接口 {
     return {
       ...distribution,
       announce_urls: distribution.announce_urls.map((url) =>
-        this.deps.解析绝对地址(url)
+        this.解析协作分发Announce地址(url)
       ),
       web_seed_url: distribution.web_seed_url
         ? this.deps.解析绝对地址(distribution.web_seed_url)

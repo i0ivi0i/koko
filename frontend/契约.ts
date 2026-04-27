@@ -203,7 +203,12 @@ export interface 媒体协作分发定位片段 {
   web_seed_until: string;
   torrent_url: string | null;
   torrent_info_hash: string | null;
-  /** announce 线索属于 runtime transport，不属于业务真相。 */
+  /**
+   * announce 线索属于 runtime transport，不属于业务真相：
+   * 1. 后端可以下发同源相对 `/api/swarm/announce`；
+   * 2. 前端 adapter 必须把它收口成浏览器可用的 `ws/wss` tracker 地址；
+   * 3. 这里禁止把 announce 当普通 HTTP fetch URL 继续往下传。
+   */
   announce_urls: string[];
   /** web seed 是 24 小时保底源地址；前端可以继续把相对地址收口成绝对地址。 */
   web_seed_url: string | null;

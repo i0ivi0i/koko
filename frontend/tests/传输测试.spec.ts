@@ -14,6 +14,7 @@ import { 创建前端传输 } from "../传输";
 import type { 匿名身份快照 } from "../契约";
 
 const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
+const 创建HTTPS测试传输 = () => 创建前端传输("https://localhost");
 
 describe("传输", () => {
   beforeEach(() => {
@@ -754,7 +755,7 @@ describe("传输", () => {
       lifecycle: null,
       distribution: {
         swarm_id: "swarm-hash-att-ready-1",
-        announce_urls: ["http://localhost:3000/api/swarm/announce"],
+        announce_urls: ["ws://localhost:3000/api/swarm/announce"],
         web_seed_url:
           "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
         join_ticket: null,
@@ -875,7 +876,7 @@ describe("传输", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://localhost:3000/api/media/att-locator-1/torrent?session_id=s-1",
         torrent_info_hash: "torrent-info-hash-1",
-        announce_urls: ["http://localhost:3000/api/swarm/announce"],
+        announce_urls: ["ws://localhost:3000/api/swarm/announce"],
         web_seed_url:
           "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
         presence_url: null,
@@ -897,7 +898,7 @@ describe("传输", () => {
         },
         distribution: {
           swarm_id: "swarm-hash-att-locator-1",
-          announce_urls: ["http://localhost:3000/api/swarm/announce"],
+          announce_urls: ["ws://localhost:3000/api/swarm/announce"],
           web_seed_url:
             "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
           join_ticket: null,
@@ -912,6 +913,59 @@ describe("传输", () => {
       },
       blob_asset: null,
     });
+  });
+
+  it("loadMediaLocator 会把同源与 https announce 收口成浏览器可用的 wss tracker 地址", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-locator-https-1",
+          kind: "video",
+          status: "ready",
+          thumbnail_url: null,
+          preview_asset: null,
+          distribution: {
+            content_id: "content_att-locator-https-1",
+            content_hash: "hash-att-locator-https-1",
+            swarm_id: "swarm-hash-att-locator-https-1",
+            web_seed_until: "1775942400",
+            torrent_url: "/api/media/att-locator-https-1/torrent?session_id=s-1",
+            torrent_info_hash: "torrent-info-hash-https-1",
+            announce_urls: [
+              "/api/swarm/announce",
+              "https://tracker.koko.local/announce",
+              "wss://tracker-2.koko.local/announce",
+            ],
+            web_seed_url: null,
+            join_ticket: null,
+            ticket_expires_at: null,
+            media_state: {
+              code: "MEDIA_READY" as const,
+              retry_after_ms: null,
+            },
+          },
+          streaming_asset: null,
+          file_asset: null,
+          blob_asset: null,
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = 创建HTTPS测试传输();
+
+    const locator = await transport.loadMediaLocator("s-1", "att-locator-https-1");
+
+    expect(locator.distribution?.announce_urls).toEqual([
+      "wss://localhost/api/swarm/announce",
+      "wss://tracker.koko.local/announce",
+      "wss://tracker-2.koko.local/announce",
+    ]);
+    expect(locator.distribution?.torrent_url).toBe(
+      "https://localhost/api/media/att-locator-https-1/torrent?session_id=s-1"
+    );
   });
 
   it("loadMediaLocator 会把 abort signal 透传给 locator fetch，允许上层真正取消旧请求", async () => {

@@ -19,7 +19,7 @@ const 创建流媒体播放结果 = (attachmentId: string): 媒体播放结果 =
   thumbnailUrl: `http://media.local/poster-${attachmentId}`,
   streamingDistribution: {
     swarm_id: `swarm-${attachmentId}`,
-    announce_urls: ["http://media.local/announce"],
+    announce_urls: ["wss://tracker.media.local/announce"],
     web_seed_url: "http://media.local/web-seed",
     join_ticket: null,
     ticket_expires_at: null,
