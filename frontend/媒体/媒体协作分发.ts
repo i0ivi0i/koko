@@ -215,8 +215,8 @@ export type 协作分发底层会话 = {
   hint: 协作分发媒体源["hint"] | null;
   /**
    * 同一条会话上的 presence 心跳只允许存在一个当前来源类型：
-   * 1. `wire` 后先报 `partial_peer`；
-   * 2. `done` 后升级成 `complete_peer`；
+   * 1. 只有真实 peer（不是 webSeed）建立后，才允许进入 `partial_peer`；
+   * 2. `done` 只在“已完整且已证实连上真实 peer”时升级成 `complete_peer`；
    * 3. stop 时统一清空，避免旧类型泄漏到下一轮。
    */
   presencePeerKind: 协作分发存活类型 | null;
@@ -225,7 +225,13 @@ export type 协作分发底层会话 = {
   file: WebTorrent文件 | null;
   terminalError: unknown | null;
   cleanupStarted: boolean;
-  曾连上群友: boolean;
+  /**
+   * 这里只记录“是否连上过真实 swarm peer”：
+   * 1. `webSeed` 只能证明冷源可读，不能证明群友协作已经成立；
+   * 2. `done` 也只证明本地拿全了字节，不能反向伪造 peer 证据；
+   * 3. 后续 hint / presence / SWARM_ACTIVE 都要以这条真相为准。
+   */
+  曾连上真实群友: boolean;
   consumerBindings: Map<
     string,
     {

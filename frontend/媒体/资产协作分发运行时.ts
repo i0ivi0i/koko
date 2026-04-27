@@ -104,6 +104,7 @@ export type 资产协作分发事件 =
       type: "TORRENT_DONE";
       swarmId: string;
       contentHash: string;
+      hint: 协作分发媒体源["hint"];
     }
   | {
       type: "CONSUMER_RELEASED";
@@ -357,7 +358,7 @@ const 资产协作分发机 = createMachine(
               contentHash: event.contentHash,
               eagerCompleting: false,
               locallyComplete: true,
-              hint: "正在协作分发",
+              hint: event.hint,
             },
           },
         };
@@ -445,7 +446,13 @@ const 推导协作分发提示 = (session: 底层协作分发会话): 协作分�
   if (session.hint) {
     return session.hint;
   }
-  return session.eagerCompleting ? "正在补块" : "正在协作分发";
+  /**
+   * 默认轻会话在没有真实群友证据前必须保持静默：
+   * 1. 可读只说明当前有源，不说明已进入 swarm；
+   * 2. 否则 UI 会把“webSeed/冷源兜底”误说成“正在协作分发”；
+   * 3. 只有显式补块或真实 peer 建立后，提示文案才允许抬起来。
+   */
+  return session.eagerCompleting ? "正在补块" : null;
 };
 
 const 推导消费者模式 = (input: {
@@ -594,10 +601,10 @@ function 绑定协作分发会话事件(
     if (!是否为协作分发JoinTicket失效错误(error)) {
       return;
     }
-    if (options.来自warning && session.曾连上群友) {
+    if (options.来自warning && session.曾连上真实群友) {
       /**
        * warning 语义是“可恢复噪声”，不是“会话必死”：
-       * 1. 会话一旦已经连上群友，单条 warning 不该立刻触发全链路 teardown；
+       * 1. 会话一旦已经连上真实群友，单条 warning 不该立刻触发全链路 teardown；
        * 2. 直接销毁会话会把前端推入 locator/torrent 高频重建风暴；
        * 3. 真正不可恢复时仍由 error 或后续探测失败兜底收敛成终态。
        */
@@ -636,11 +643,24 @@ function 绑定协作分发会话事件(
   };
 
   torrent.on("wire", (wire) => {
-    session.曾连上群友 = true;
-    session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
-    if (!session.locallyComplete) {
-      启动协作分发存活上报(session, distribution, "partial_peer");
+    if (wire.type === "webSeed") {
+      /**
+       * webSeed 只能证明“当前还能从冷源补到字节”：
+       * 1. 它不代表真实 peer 已建立；
+       * 2. 因此不能触发 SWARM_ACTIVE，也不能上报 partial/complete_peer；
+       * 3. 这里最多把提示降成“正在补块”，提醒当前仍在靠冷源兜底。
+       */
+      session.hint = "正在补块";
+      恢复整附件补齐(session);
+      return;
     }
+    session.曾连上真实群友 = true;
+    session.hint = "正在协作分发";
+    启动协作分发存活上报(
+      session,
+      distribution,
+      session.locallyComplete ? "complete_peer" : "partial_peer"
+    );
     恢复整附件补齐(session);
     发送事件(runtime, {
       type: "SWARM_ACTIVE",
@@ -661,12 +681,23 @@ function 绑定协作分发会话事件(
     session.eagerCompleting = false;
     session.locallyComplete = true;
     退掉整附件重补齐(session);
-    session.hint = "正在协作分发";
-    启动协作分发存活上报(session, distribution, "complete_peer");
+    /**
+     * `done` 只证明“本地完整”：
+     * 1. 如果此前已经连上真实群友，这里才允许升级成 complete_peer；
+     * 2. 如果从头到尾只靠 webSeed / 冷源补齐，就必须保持静默，禁止吹成协作分发成功；
+     * 3. 这样 `ASSET_COMPLETE` 继续只代表本地完整，不反向污染 swarm 真相。
+     */
+    session.hint = session.曾连上真实群友 ? "正在协作分发" : null;
+    if (session.曾连上真实群友) {
+      启动协作分发存活上报(session, distribution, "complete_peer");
+    } else {
+      停止协作分发存活上报(session);
+    }
     发送事件(runtime, {
       type: "TORRENT_DONE",
       swarmId: session.swarmId,
       contentHash: session.contentHash,
+      hint: session.hint,
     });
     发布协作分发会话事件(session, "ASSET_COMPLETE");
   });
@@ -913,7 +944,7 @@ async function 确保协作分发会话(
       激活整附件补齐(runtime, session);
     }
     更新协作分发会话主附件(session);
-    if (session.locallyComplete) {
+    if (session.locallyComplete && session.曾连上真实群友) {
       启动协作分发存活上报(session, input.distribution, "complete_peer");
     }
     return session;
@@ -937,7 +968,7 @@ async function 确保协作分发会话(
     file: null,
     terminalError: null,
     cleanupStarted: false,
-    曾连上群友: false,
+    曾连上真实群友: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
     joinTicketRef: { value: input.distribution.join_ticket ?? null },
     joinTicketAttachmentId: input.attachmentId,
@@ -1018,18 +1049,18 @@ const 读取会话状态 = (
   runtime: 资产协作分发运行时内部,
   swarmId: string
 ) => {
-  const session = runtime.actor.getSnapshot().context.sessions[swarmId];
+  const session = runtime.底层会话表.get(swarmId);
   if (!session) {
     return null;
   }
   return {
     attachmentId: session.attachmentId,
     swarmId: session.swarmId,
-    refs: session.consumers.length,
-    consumers: session.consumers,
+    refs: session.consumerBindings.size,
+    consumers: Array.from(session.consumerBindings.keys()),
     eagerCompleting: session.eagerCompleting,
     locallyComplete: session.locallyComplete,
-    hint: session.hint ?? (session.eagerCompleting ? "正在补块" : "正在协作分发"),
+    hint: session.hint ?? (session.eagerCompleting ? "正在补块" : null),
   };
 };
 

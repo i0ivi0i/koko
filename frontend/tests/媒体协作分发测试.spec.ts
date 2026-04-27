@@ -496,7 +496,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-ticket-opts",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(add).toHaveBeenCalledTimes(1);
@@ -1000,7 +1000,7 @@ describe("媒体协作分发", () => {
     expect(add).toHaveBeenCalledTimes(1);
     expect(sessionSource).toEqual({
       src: "blob:http://media.local/swarm-att-multi-1",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(autoplaySource).toEqual({
@@ -1075,7 +1075,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-image-1",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(select).not.toHaveBeenCalled();
@@ -1083,7 +1083,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-image-1",
       refs: 1,
       eagerCompleting: false,
-      hint: "正在协作分发",
+      hint: null,
     });
   });
 
@@ -1150,13 +1150,13 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-lazy-backfill-1",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-lazy-backfill-1")).toMatchObject({
       eagerCompleting: false,
-      hint: "正在协作分发",
+      hint: null,
     });
   });
 
@@ -1259,7 +1259,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "/webtorrent/stream-probe-retry-1.mp4",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(probeCount).toBe(2);
@@ -1320,7 +1320,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "/webtorrent/stream-probe-retry-long-1.mp4",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(probeCount).toBe(11);
@@ -1553,7 +1553,7 @@ describe("媒体协作分发", () => {
 
     expect(firstSource).toEqual({
       src: "/webtorrent/offline-reopen.mp4",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(firstAdd).toHaveBeenCalledWith(
@@ -1623,7 +1623,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-persist",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(add).toHaveBeenCalledTimes(1);
@@ -1745,6 +1745,61 @@ describe("媒体协作分发", () => {
     ]);
   });
 
+  it("webSeed 只说明冷源可读，不会上报 partial_peer 或触发 SWARM_ACTIVE", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-webseed-only");
+    const presenceBodies: string[] = [];
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-webseed-only")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-webseed-only/presence");
+      expect(init?.method).toBe("POST");
+      presenceBodies.push(String(init?.body ?? ""));
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-webseed-only");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url =
+      "/api/media/att-webseed-only/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-webseed-only",
+      kind: "video",
+      locator,
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    emit("wire", { type: "webSeed" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(presenceBodies).toEqual([]);
+    expect(事件记录).toEqual([]);
+    expect(读取协作分发会话状态("swarm-att-webseed-only")).toMatchObject({
+      locallyComplete: false,
+      hint: "正在补块",
+    });
+  });
+
   it("torrent done 后会把 presence 从 partial_peer 升级为 complete_peer", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
@@ -1801,6 +1856,60 @@ describe("媒体协作分发", () => {
       expect.stringContaining("complete_peer"),
       expect.stringContaining("complete_peer"),
     ]);
+  });
+
+  it("没有真实 peer 证据时，done 只代表本地完整，不能升级成 complete_peer", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-done-without-peer");
+    const presenceBodies: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-done-without-peer")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-done-without-peer/presence");
+      expect(init?.method).toBe("POST");
+      presenceBodies.push(String(init?.body ?? ""));
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-done-without-peer");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url =
+      "/api/media/att-done-without-peer/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-done-without-peer",
+      kind: "video",
+      locator,
+      consumerId: "viewer:att-done-without-peer",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    emit("wire", { type: "webSeed" });
+    emit("done");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(presenceBodies).toEqual([]);
+    expect(读取协作分发会话状态("swarm-att-done-without-peer")).toMatchObject({
+      locallyComplete: true,
+      hint: null,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("释放最后一个协作分发消费者后，补齐中的 swarm 会话会继续保留并维持 partial_peer heartbeat", async () => {
@@ -1909,8 +2018,10 @@ describe("媒体协作分发", () => {
       consumerId: "viewer:att-retain-complete",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    emit("done");
+    emit("wire", { type: "peer" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    emit("done");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     释放协作分发消费者({
       attachmentId: "att-retain-complete",
@@ -1924,7 +2035,7 @@ describe("媒体协作分发", () => {
       eagerCompleting: false,
       hint: "正在协作分发",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(remove).not.toHaveBeenCalled();
 
     await 解析协作分发源({

@@ -102,6 +102,29 @@ function Invoke-WorkspaceStorageReclaim {
     }
 }
 
+function Test-InteractiveConsoleHost {
+    <#
+        启动器菜单只该在真正可交互的控制台宿主里出现：
+        1. Codex/CI/后台 pwsh 这类无交互宿主没有稳定的 RawUI 句柄；
+        2. 如果这里还硬调 Clear-Host / ReadKey，会在启动前直接炸掉；
+        3. 无交互时自动回到默认轻清理，保持 run.ps1 仍是唯一启动入口。
+    #>
+    if ($null -eq $Host -or $null -eq $Host.UI -or $null -eq $Host.UI.RawUI) {
+        return $false
+    }
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected -or [Console]::IsErrorRedirected) {
+        return $false
+    }
+
+    try {
+        $null = $Host.UI.RawUI.KeyAvailable
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 function Show-StartupCleanupMenu {
     $choices = @(
         [pscustomobject]@{
@@ -117,6 +140,11 @@ function Show-StartupCleanupMenu {
             Label = "取消"
         }
     )
+
+    if (-not (Test-InteractiveConsoleHost)) {
+        Write-Host "当前宿主不支持交互式清理菜单；自动继续默认轻清理。"
+        return "optimize"
+    }
 
     $selectedIndex = 0
 

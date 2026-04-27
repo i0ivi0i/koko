@@ -218,7 +218,7 @@ describe("资产协作分发运行时", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-session-light-1",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
     expect(读取协作分发会话状态("swarm-att-session-light-1")).toMatchObject({
@@ -655,7 +655,7 @@ describe("资产协作分发运行时", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-ticket-invalid",
-      hint: "正在协作分发",
+      hint: null,
       locallyComplete: false,
     });
 
