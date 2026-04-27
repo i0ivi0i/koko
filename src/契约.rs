@@ -246,27 +246,6 @@ pub struct 媒体冷源描述 {
     pub 角色: 媒体冷源角色,
 }
 
-/// 流媒体生命周期只描述服务端标准流媒体冷备窗口。
-/// 它不表达 swarm 是否还活着，因为那是另一条分发生存语义。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 流媒体生命周期描述 {
-    pub streaming到期时间戳秒: Option<String>,
-    pub streaming删除时间戳秒: Option<String>,
-}
-
-/// 流媒体资产描述是视频/音频主链的共享入口。
-/// 它把 manifest、分发和平滑退化所需的冷源窗口一次收口，避免后续继续回到“单个 src 真相”。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 流媒体资产描述 {
-    pub 资产标识: String,
-    pub 内容哈希: String,
-    pub 种类: 媒体资产种类,
-    pub 清单: 媒体清单描述,
-    pub 生命周期: 流媒体生命周期描述,
-    pub 分发: 媒体分发描述,
-    pub 冷源: 媒体冷源描述,
-}
-
 /// Blob 资产描述是图片/GIF/静态大图的统一表面。
 /// canonical 是客户端预制后的唯一正式对象；preview/full/original 只保留为旧协议字段，
 /// 响应投影必须显式退成空值，避免壳层继续把服务端派生图当作主链真相。

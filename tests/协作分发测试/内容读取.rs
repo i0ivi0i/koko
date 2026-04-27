@@ -1,5 +1,5 @@
 use super::*;
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
+use object_store::{ObjectStoreExt, path::Path as ObjectPath};
 
 /// 内容读取测试只守受控媒体读路径：
 /// 1. original 变体仍要支持标准 HTTP range；
@@ -393,8 +393,12 @@ async fn legacy附件没有分发表时原图内容读取仍按origin窗口工�
         .connect(&cfg.database_url)
         .await
         .expect("应能直连数据库插入 legacy 附件");
-    插入ready图片附件记录(&pool, &bootstrap["session_id"].as_str().expect("session_id"), &attachment_id)
-        .await;
+    插入ready图片附件记录(
+        &pool,
+        &bootstrap["session_id"].as_str().expect("session_id"),
+        &attachment_id,
+    )
+    .await;
     pool.close().await;
 
     写入测试对象(
@@ -448,7 +452,7 @@ async fn legacy附件没有分发表时原图内容读取仍按origin窗口工�
 
 #[tokio::test]
 #[serial]
-async fn 流媒体清单删除后hls和dash受控内容读取会返回not_found() {
+async fn 流媒体第二链路由已退场() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -463,71 +467,24 @@ async fn 流媒体清单删除后hls和dash受控内容读取会返回not_found(
         .expect("clock")
         .as_millis();
 
-    let (_, bootstrap) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/session/bootstrap",
-        Some(
-            serde_json::json!({"device_anonymous_token": format!("streaming-deleted-read-{uniq}")}),
-        ),
-        &[],
-    )
-    .await;
-    let session_id = bootstrap["session_id"].as_str().expect("session_id");
     let attachment_id = format!("att-streaming-read-deleted-{uniq}");
 
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&cfg.database_url)
-        .await
-        .expect("应能直连数据库插入附件");
-    插入ready视频附件记录(&pool, session_id, &attachment_id).await;
-    插入附件协作分发元数据记录(&pool, &attachment_id).await;
-    插入流媒体清单元数据记录(&pool, &attachment_id).await;
-    sqlx::query(
-        "UPDATE attachment_streaming_manifests
-         SET streaming_expires_at = NOW() - INTERVAL '25 hours',
-             streaming_deleted_at = NOW() - INTERVAL '1 minute'
-         WHERE attachment_id = $1",
-    )
-    .bind(&attachment_id)
-    .execute(&pool)
-    .await
-    .expect("应能把 streaming_deleted_at 写成已退场");
-    pool.close().await;
-
-    写入测试对象(
-        &state,
-        format!("streams/{attachment_id}/hls/master.m3u8").as_str(),
-        b"#EXTM3U\n".to_vec(),
-    )
-    .await;
-    写入测试对象(
-        &state,
-        format!("streams/{attachment_id}/dash/stream.mpd").as_str(),
-        br#"<?xml version="1.0" encoding="UTF-8"?><MPD />"#.to_vec(),
-    )
-    .await;
-
-    let (hls_status, hls_body) = send_json(
+    // 第二链路由应直接从路由表退场，因此这里不需要再伪造 manifest 真相。
+    let (hls_status, _, _) = send_bytes(
         app.clone(),
         Method::GET,
-        &format!("/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}"),
-        None,
+        &format!("/api/media/{attachment_id}/stream/hls/master.m3u8?session_id=session-1"),
         &[],
     )
     .await;
-    assert_eq!(hls_status, StatusCode::NOT_FOUND, "{hls_body:?}");
-    assert_eq!(hls_body["code"].as_str(), Some("attachment_not_ready"));
+    assert_eq!(hls_status, StatusCode::NOT_FOUND);
 
-    let (dash_status, dash_body) = send_json(
+    let (dash_status, _, _) = send_bytes(
         app,
         Method::GET,
-        &format!("/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}"),
-        None,
+        &format!("/api/media/{attachment_id}/stream/dash/stream.mpd?session_id=session-1"),
         &[],
     )
     .await;
-    assert_eq!(dash_status, StatusCode::NOT_FOUND, "{dash_body:?}");
-    assert_eq!(dash_body["code"].as_str(), Some("attachment_not_ready"));
+    assert_eq!(dash_status, StatusCode::NOT_FOUND);
 }

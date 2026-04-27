@@ -1,13 +1,13 @@
-use super::{err_resp, map_domain_err_tuple, 应用状态, 构建共享仓储, 流媒体打包};
+use super::{err_resp, map_domain_err_tuple, 应用状态, 构建共享仓储};
 use crate::{contract, media_distribution, usecase};
 use axum::{
+    Json,
     body::Bytes,
     extract::{Path, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
-    Json,
 };
-use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectMeta, ObjectStoreExt};
+use object_store::{GetOptions, GetRange, ObjectStoreExt, path::Path as ObjectPath};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
@@ -20,8 +20,8 @@ struct ParsedAttachmentContentQuery {
     variant: usecase::附件内容变体,
 }
 
-/// 流媒体资源 query 的内部稳定形状。
-struct ParsedStreamingAssetQuery {
+/// 只需要 session_id 的媒体资源 query 内部稳定形状。
+struct ParsedSessionQuery {
     session_id: String,
 }
 
@@ -41,7 +41,6 @@ struct 标准字节范围 {
 pub(super) struct 媒体资产响应上下文<'a> {
     pub 运行态分发: Option<&'a serde_json::Value>,
     pub 分发快照: Option<&'a usecase::协作分发元数据快照>,
-    pub 流媒体清单: Option<&'a usecase::流媒体清单快照>,
     pub 原始地址: String,
     pub 原始冷源到期时间戳秒: Option<i64>,
     pub 原始冷源删除时间戳秒: Option<i64>,
@@ -53,19 +52,6 @@ pub(super) struct 媒体资产响应上下文<'a> {
 struct 定位媒体资产响应上下文<'a> {
     运行态分发: Option<&'a serde_json::Value>,
     原始地址: String,
-    会话标识: &'a str,
-    当前时间戳秒: i64,
-}
-
-/// 流媒体资产的协议拼装参数。
-struct 流媒体资产响应参数<'a> {
-    附件标识: &'a str,
-    运行态分发: &'a serde_json::Value,
-    分发快照: &'a usecase::协作分发元数据快照,
-    流媒体清单: Option<&'a usecase::流媒体清单快照>,
-    原始地址: String,
-    原始冷源到期时间戳秒: Option<i64>,
-    原始冷源删除时间戳秒: Option<i64>,
     会话标识: &'a str,
     当前时间戳秒: i64,
 }
@@ -125,7 +111,7 @@ fn parse_attachment_content_query(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "variant 必须是 original 或 thumbnail",
-            ))
+            ));
         }
     };
     Ok(ParsedAttachmentContentQuery {
@@ -134,9 +120,9 @@ fn parse_attachment_content_query(
     })
 }
 
-fn parse_streaming_asset_query(
+fn parse_session_query(
     raw_query: HashMap<String, String>,
-) -> Result<ParsedStreamingAssetQuery, (StatusCode, &'static str, &'static str)> {
+) -> Result<ParsedSessionQuery, (StatusCode, &'static str, &'static str)> {
     let Some(session_id) = raw_query
         .get("session_id")
         .map(|value| value.trim())
@@ -148,7 +134,7 @@ fn parse_streaming_asset_query(
             "缺少 session_id",
         ));
     };
-    Ok(ParsedStreamingAssetQuery {
+    Ok(ParsedSessionQuery {
         session_id: session_id.to_string(),
     })
 }
@@ -288,86 +274,6 @@ fn 构造content_range值(range: &标准字节范围, 总字节数: u64) -> Stri
     )
 }
 
-fn 流媒体清单缓存控制值() -> &'static str {
-    // manifest 是“当前标准流媒体平面是否仍然成立”的入口真相。
-    // 即使正文可被本地缓存，也必须每次先回源重验证，避免沿用已退场清单。
-    "private, no-cache"
-}
-
-fn 流媒体分段缓存控制值() -> &'static str {
-    // segment 在服务端 24 小时标准流媒体窗口内属于稳定对象：
-    // 1. 允许浏览器在当前会话内强复用，降低重复观看时的源站压力；
-    // 2. 标成 private，避免带 session_id 的受控 URL 被共享缓存误存；
-    // 3. 生命周期由服务端清理任务兜底，窗口内可以安全 immutable。
-    "private, max-age=86400, immutable"
-}
-
-fn 构造流媒体对象etag(meta: &ObjectMeta, asset_path: &str) -> String {
-    if let Some(raw) = meta
-        .e_tag
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        if raw.starts_with("W/\"") || (raw.starts_with('"') && raw.ends_with('"')) {
-            return raw.to_string();
-        }
-        return format!("\"{raw}\"");
-    }
-    // 本地文件对象存储未必原生提供 e_tag，这里退回到“路径 + 长度 + 最后修改时间”组成的弱校验值。
-    // 对当前受控清单读取来说，这已经足够支撑浏览器条件请求，而不用额外读取正文做哈希。
-    let normalized_path = asset_path.replace(['/', '\\', ':', '.'], "_");
-    format!(
-        "W/\"{}-{}-{normalized_path}\"",
-        meta.size,
-        meta.last_modified.timestamp_millis(),
-    )
-}
-
-fn 构造流媒体对象最后修改时间(meta: &ObjectMeta) -> String {
-    let last_modified: SystemTime = meta.last_modified.into();
-    httpdate::fmt_http_date(last_modified)
-}
-
-fn 请求命中if_none_match(headers: &HeaderMap, etag: &str) -> bool {
-    headers
-        .get(header::IF_NONE_MATCH)
-        .and_then(|value| value.to_str().ok())
-        .map(|value| {
-            value
-                .split(',')
-                .map(str::trim)
-                .any(|candidate| candidate == "*" || candidate == etag)
-        })
-        .unwrap_or(false)
-}
-
-fn 请求命中if_modified_since(headers: &HeaderMap, meta: &ObjectMeta) -> bool {
-    let Some(raw) = headers
-        .get(header::IF_MODIFIED_SINCE)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return false;
-    };
-    let Ok(since) = httpdate::parse_http_date(raw) else {
-        return false;
-    };
-    let last_modified: SystemTime = meta.last_modified.into();
-    // HTTP-date 只有秒级精度；这里按秒对齐，避免对象存储里的毫秒时间把本可命中的条件请求误判成未命中。
-    let since_epoch_secs = since
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|value| value.as_secs());
-    let last_modified_epoch_secs = last_modified
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|value| value.as_secs());
-    match (since_epoch_secs, last_modified_epoch_secs) {
-        (Some(since), Some(last_modified)) => since >= last_modified,
-        _ => false,
-    }
-}
-
 /// 下面这组 helper 的 owner 已经跟着“媒体资产外壳”一起迁移。
 /// 原因是它们表达的是媒体资产 HTTP 协议面，而不是房间查询协议面；
 /// 继续留在房间壳只会让兄弟模块反向依赖一个并不拥有该真相的文件。
@@ -419,22 +325,6 @@ fn 变体描述转响应体(variant: &contract::变体描述) -> serde_json::Val
         "url": variant.地址,
         "width": variant.宽,
         "height": variant.高,
-    })
-}
-
-fn 媒体清单描述转响应体(manifest: &contract::媒体清单描述) -> serde_json::Value {
-    serde_json::json!({
-        "hls_master_url": manifest.hls主清单地址,
-        "dash_mpd_url": manifest.dash主清单地址,
-    })
-}
-
-fn 流媒体生命周期描述转响应体(
-    lifecycle: &contract::流媒体生命周期描述,
-) -> serde_json::Value {
-    serde_json::json!({
-        "streaming_expires_at": lifecycle.streaming到期时间戳秒,
-        "streaming_deleted_at": lifecycle.streaming删除时间戳秒,
     })
 }
 
@@ -525,18 +415,6 @@ fn 构造blob受控地址(attachment_id: &str, session_id: &str, variant: &str) 
     format!("/api/media/{attachment_id}/blob/{variant}?session_id={session_id}")
 }
 
-fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) -> serde_json::Value {
-    serde_json::json!({
-        "asset_id": asset.资产标识,
-        "content_hash": asset.内容哈希,
-        "kind": 媒体资产种类转标签(&asset.种类),
-        "manifest": 媒体清单描述转响应体(&asset.清单),
-        "lifecycle": 流媒体生命周期描述转响应体(&asset.生命周期),
-        "distribution": 媒体分发描述转响应体(&asset.分发),
-        "origin": 媒体冷源描述转响应体(&asset.冷源),
-    })
-}
-
 fn blob媒体资产描述转响应体(
     asset: &contract::Blob媒体资产描述
 ) -> serde_json::Value {
@@ -550,75 +428,6 @@ fn blob媒体资产描述转响应体(
         "distribution": asset.分发.as_ref().map(媒体分发描述转响应体),
         "origin": 媒体冷源描述转响应体(&asset.冷源),
     })
-}
-
-fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> serde_json::Value {
-    // `streaming_deleted_at` 是服务端流媒体入口的退场事实。
-    // 事实一旦写入，locator/complete 仍可继续告知生命周期与 peer-only 分发，
-    // 但不能再把 HLS/DASH manifest 地址投影给前端，避免服务器冷备悄悄复活成长期主链。
-    let 流媒体入口仍可暴露 = 参数
-        .流媒体清单
-        .is_some_and(|manifest| manifest.streaming删除时间戳秒.is_none());
-    let asset = contract::流媒体资产描述 {
-        // 真实独立 media_asset_id 还没落表前，先显式复用 attachment_id 当稳定资产锚点；
-        // 这样能把共享协议面立起来，但不会伪造第二个尚不存在的权威主键。
-        资产标识: 参数.附件标识.to_string(),
-        内容哈希: 参数.分发快照.content_hash.clone(),
-        种类: contract::媒体资产种类::流媒体视频,
-        清单: contract::媒体清单描述 {
-            hls主清单地址: if 流媒体入口仍可暴露 {
-                参数.流媒体清单.map(|manifest| {
-                    流媒体打包::构造流媒体受控地址(
-                        参数.附件标识,
-                        参数.会话标识,
-                        流媒体打包::流媒体存储键转受控路径(
-                            参数.附件标识,
-                            manifest.hls主清单存储键.as_str(),
-                        ),
-                    )
-                })
-            } else {
-                None
-            },
-            dash主清单地址: if 流媒体入口仍可暴露 {
-                参数.流媒体清单.map(|manifest| {
-                    流媒体打包::构造流媒体受控地址(
-                        参数.附件标识,
-                        参数.会话标识,
-                        流媒体打包::流媒体存储键转受控路径(
-                            参数.附件标识,
-                            manifest.dash主清单存储键.as_str(),
-                        ),
-                    )
-                })
-            } else {
-                None
-            },
-        },
-        生命周期: contract::流媒体生命周期描述 {
-            streaming到期时间戳秒: 参数.流媒体清单.and_then(|manifest| {
-                manifest
-                    .streaming到期时间戳秒
-                    .map(|value| value.to_string())
-            }),
-            streaming删除时间戳秒: 参数.流媒体清单.and_then(|manifest| {
-                manifest
-                    .streaming删除时间戳秒
-                    .map(|value| value.to_string())
-            }),
-        },
-        分发: 从运行态协作分发响应提取共享分发表面(
-            参数.分发快照,
-            参数.运行态分发,
-        ),
-        冷源: usecase::构造媒体冷源描述(
-            Some(参数.原始地址),
-            参数.原始冷源到期时间戳秒,
-            参数.原始冷源删除时间戳秒,
-            参数.当前时间戳秒,
-        ),
-    };
-    流媒体资产描述转响应体(&asset)
 }
 
 fn 构造单文件视频资产响应体(
@@ -694,35 +503,20 @@ pub(super) fn 构造媒体资产响应体(
     上下文: 媒体资产响应上下文<'_>,
 ) -> Option<serde_json::Value> {
     match &snapshot.种类 {
-        usecase::媒体附件类型::视频 => {
-            if 上下文.流媒体清单.is_some() {
-                return Some(构造流媒体资产响应体(流媒体资产响应参数 {
-                    附件标识: snapshot.附件标识.as_str(),
-                    运行态分发: 上下文.运行态分发?,
-                    分发快照: 上下文.分发快照?,
-                    流媒体清单: 上下文.流媒体清单,
-                    原始地址: 上下文.原始地址,
-                    原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
-                    原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
-                    会话标识: 上下文.会话标识,
-                    当前时间戳秒: 上下文.当前时间戳秒,
-                }));
-            }
-            Some(构造单文件视频资产响应体(
-                单文件视频资产响应参数 {
-                    附件标识: snapshot.附件标识.as_str(),
-                    运行态分发: 上下文.运行态分发?,
-                    分发快照: 上下文.分发快照?,
-                    canonical地址: 上下文.原始地址,
-                    mime_type: snapshot.mime_type.as_str(),
-                    宽: Some(snapshot.宽),
-                    高: Some(snapshot.高),
-                    原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
-                    原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
-                    当前时间戳秒: 上下文.当前时间戳秒,
-                },
-            ))
-        }
+        usecase::媒体附件类型::视频 => Some(构造单文件视频资产响应体(
+            单文件视频资产响应参数 {
+                附件标识: snapshot.附件标识.as_str(),
+                运行态分发: 上下文.运行态分发?,
+                分发快照: 上下文.分发快照?,
+                canonical地址: 上下文.原始地址,
+                mime_type: snapshot.mime_type.as_str(),
+                宽: Some(snapshot.宽),
+                高: Some(snapshot.高),
+                原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
+                原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
+                当前时间戳秒: 上下文.当前时间戳秒,
+            },
+        )),
         usecase::媒体附件类型::图片 => {
             Some(构造blob媒体资产响应体(Blob媒体资产响应参数 {
                 附件标识: snapshot.附件标识.as_str(),
@@ -746,39 +540,21 @@ fn 构造定位媒体资产响应体(
     上下文: 定位媒体资产响应上下文<'_>,
 ) -> Option<(&'static str, serde_json::Value)> {
     match &locator.种类 {
-        usecase::媒体附件类型::视频 => {
-            if locator.流媒体清单.is_some() {
-                return Some((
-                    "streaming_asset",
-                    构造流媒体资产响应体(流媒体资产响应参数 {
-                        附件标识: locator.附件标识.as_str(),
-                        运行态分发: 上下文.运行态分发?,
-                        分发快照: locator.协作分发.as_ref()?,
-                        流媒体清单: locator.流媒体清单.as_ref(),
-                        原始地址: 上下文.原始地址,
-                        原始冷源到期时间戳秒: locator.原始冷源到期时间戳秒,
-                        原始冷源删除时间戳秒: locator.原始冷源删除时间戳秒,
-                        会话标识: 上下文.会话标识,
-                        当前时间戳秒: 上下文.当前时间戳秒,
-                    }),
-                ));
-            }
-            Some((
-                "file_asset",
-                构造单文件视频资产响应体(单文件视频资产响应参数 {
-                    附件标识: locator.附件标识.as_str(),
-                    运行态分发: 上下文.运行态分发?,
-                    分发快照: locator.协作分发.as_ref()?,
-                    canonical地址: 上下文.原始地址,
-                    mime_type: locator.mime_type.as_str(),
-                    宽: locator.宽,
-                    高: locator.高,
-                    原始冷源到期时间戳秒: locator.原始冷源到期时间戳秒,
-                    原始冷源删除时间戳秒: locator.原始冷源删除时间戳秒,
-                    当前时间戳秒: 上下文.当前时间戳秒,
-                }),
-            ))
-        }
+        usecase::媒体附件类型::视频 => Some((
+            "file_asset",
+            构造单文件视频资产响应体(单文件视频资产响应参数 {
+                附件标识: locator.附件标识.as_str(),
+                运行态分发: 上下文.运行态分发?,
+                分发快照: locator.协作分发.as_ref()?,
+                canonical地址: 上下文.原始地址,
+                mime_type: locator.mime_type.as_str(),
+                宽: locator.宽,
+                高: locator.高,
+                原始冷源到期时间戳秒: locator.原始冷源到期时间戳秒,
+                原始冷源删除时间戳秒: locator.原始冷源删除时间戳秒,
+                当前时间戳秒: 上下文.当前时间戳秒,
+            }),
+        )),
         usecase::媒体附件类型::图片 => Some((
             "blob_asset",
             构造blob媒体资产响应体(Blob媒体资产响应参数 {
@@ -957,7 +733,7 @@ pub(super) async fn load_media_locator(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("locator 任务执行失败: {err}"),
-            )
+            );
         }
     };
     let original_url = 构造附件受控地址(
@@ -1052,7 +828,7 @@ pub(super) async fn load_blob_asset_content(
     Query(raw_query): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let query = match parse_streaming_asset_query(raw_query) {
+    let query = match parse_session_query(raw_query) {
         Ok(query) => query,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
@@ -1063,7 +839,7 @@ pub(super) async fn load_blob_asset_content(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "blob variant 必须是 canonical",
-            )
+            );
         }
     };
     读取受控附件内容响应(
@@ -1267,257 +1043,6 @@ async fn 读取受控附件内容响应(
     }
 }
 
-/// 冷路径：受控读取流媒体主链产物。
-/// manifest 会被动态重写成带 session_id 的受控 URL，避免浏览器顺着相对路径绕过成员校验。
-pub(super) async fn load_streaming_asset_content(
-    State(state): State<应用状态>,
-    Path((attachment_id, asset_path)): Path<(String, String)>,
-    Query(raw_query): Query<HashMap<String, String>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let query = match parse_streaming_asset_query(raw_query) {
-        Ok(query) => query,
-        Err((status, code, message)) => return err_resp(status, code, message),
-    };
-    let asset_path = asset_path.trim().trim_start_matches('/').to_string();
-    if asset_path.is_empty()
-        || asset_path
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
-        || !(asset_path.starts_with("hls/") || asset_path.starts_with("dash/"))
-    {
-        return err_resp(
-            StatusCode::BAD_REQUEST,
-            "invalid_argument",
-            "流媒体资源路径非法",
-        );
-    }
-
-    let state_for_usecase = state.clone();
-    let attachment_id_for_usecase = attachment_id.clone();
-    let session_id_for_usecase = query.session_id.clone();
-    let locator = match task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state_for_usecase);
-        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
-            .map_err(map_domain_err_tuple)
-    })
-    .await
-    {
-        Ok(Ok(locator)) => locator,
-        Ok(Err((status, code, message))) => return err_resp(status, code, message),
-        Err(err) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("流媒体资产读取任务执行失败: {err}"),
-            )
-        }
-    };
-    if !matches!(locator.种类, usecase::媒体附件类型::视频) {
-        return err_resp(
-            StatusCode::BAD_REQUEST,
-            "attachment_type_not_supported",
-            "当前附件不是流媒体视频",
-        );
-    }
-    if locator.流媒体清单.is_none() {
-        return err_resp(
-            StatusCode::CONFLICT,
-            "attachment_not_ready",
-            "流媒体清单尚未准备完成",
-        );
-    }
-    if locator
-        .流媒体清单
-        .as_ref()
-        .and_then(|manifest| manifest.streaming删除时间戳秒)
-        .is_some()
-    {
-        // 这里直接拦住对象存储读取，避免已退场的服务端流媒体平面被旧 URL 或缓存路径继续命中。
-        return err_resp(
-            StatusCode::NOT_FOUND,
-            "attachment_not_ready",
-            "流媒体冷备窗口已结束",
-        );
-    }
-
-    let object_path = ObjectPath::from(流媒体打包::推导流媒体对象存储键(
-        attachment_id.as_str(),
-        asset_path.as_str(),
-    ));
-    if asset_path.ends_with(".m3u8") || asset_path.ends_with(".mpd") {
-        let head_result = match state.attachment_store.head(&object_path).await {
-            Ok(meta) => meta,
-            Err(err) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("读取流媒体清单元数据失败: {err}"),
-                )
-            }
-        };
-        let etag = 构造流媒体对象etag(&head_result, asset_path.as_str());
-        let last_modified = 构造流媒体对象最后修改时间(&head_result);
-        if 请求命中if_none_match(&headers, etag.as_str())
-            || 请求命中if_modified_since(&headers, &head_result)
-        {
-            return (
-                StatusCode::NOT_MODIFIED,
-                [
-                    (header::CACHE_CONTROL, 流媒体清单缓存控制值().to_string()),
-                    (header::ETAG, etag),
-                    (header::LAST_MODIFIED, last_modified),
-                ],
-            )
-                .into_response();
-        }
-        let get_result = match state.attachment_store.get(&object_path).await {
-            Ok(result) => result,
-            Err(err) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("读取流媒体清单失败: {err}"),
-                )
-            }
-        };
-        let body = match get_result.bytes().await {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("读取流媒体清单内容失败: {err}"),
-                )
-            }
-        };
-        let text = match String::from_utf8(body.to_vec()) {
-            Ok(text) => text,
-            Err(_) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "流媒体清单不是合法 UTF-8",
-                )
-            }
-        };
-        let rewritten = if asset_path.ends_with(".m3u8") {
-            流媒体打包::重写_hls清单内容(
-                attachment_id.as_str(),
-                query.session_id.as_str(),
-                asset_path.as_str(),
-                text.as_str(),
-            )
-        } else {
-            流媒体打包::重写_dash清单内容(
-                attachment_id.as_str(),
-                query.session_id.as_str(),
-                asset_path.as_str(),
-                text.as_str(),
-            )
-        };
-        return (
-            [
-                (
-                    header::CONTENT_TYPE,
-                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
-                ),
-                (header::CACHE_CONTROL, 流媒体清单缓存控制值().to_string()),
-                (header::ETAG, etag),
-                (header::LAST_MODIFIED, last_modified),
-            ],
-            rewritten,
-        )
-            .into_response();
-    }
-
-    let range = if headers.contains_key(header::RANGE) {
-        let head_result = match state.attachment_store.head(&object_path).await {
-            Ok(meta) => meta,
-            Err(err) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("读取流媒体对象元数据失败: {err}"),
-                )
-            }
-        };
-        match 解析标准字节范围(headers.get(header::RANGE), head_result.size) {
-            Ok(range) => range,
-            Err((status, code, message)) => return err_resp(status, code, message),
-        }
-    } else {
-        None
-    };
-    let get_result = match range.as_ref() {
-        Some(range) => {
-            state
-                .attachment_store
-                .get_opts(
-                    &object_path,
-                    GetOptions::new().with_range(Some(range.请求.clone())),
-                )
-                .await
-        }
-        None => state.attachment_store.get(&object_path).await,
-    };
-    let get_result = match get_result {
-        Ok(result) => result,
-        Err(err) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("读取流媒体对象失败: {err}"),
-            )
-        }
-    };
-    let object_last_modified = 构造流媒体对象最后修改时间(&get_result.meta);
-    let object_size = get_result.meta.size;
-    let body = match get_result.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("读取流媒体对象内容失败: {err}"),
-            )
-        }
-    };
-    match range {
-        Some(range) => (
-            StatusCode::PARTIAL_CONTENT,
-            [
-                (
-                    header::CONTENT_TYPE,
-                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
-                ),
-                (header::CACHE_CONTROL, 流媒体分段缓存控制值().to_string()),
-                (header::ACCEPT_RANGES, "bytes".to_string()),
-                (
-                    header::CONTENT_RANGE,
-                    构造content_range值(&range, object_size),
-                ),
-                (header::LAST_MODIFIED, object_last_modified.clone()),
-            ],
-            body,
-        )
-            .into_response(),
-        None => (
-            [
-                (
-                    header::CONTENT_TYPE,
-                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
-                ),
-                (header::CACHE_CONTROL, 流媒体分段缓存控制值().to_string()),
-                (header::ACCEPT_RANGES, "bytes".to_string()),
-                (header::LAST_MODIFIED, object_last_modified),
-            ],
-            body,
-        )
-            .into_response(),
-    }
-}
-
 /// 冷路径：受控读取附件对应的 torrent metainfo。
 /// 它先复用 locator 的成员资格与 ready 校验，再返回稳定 metainfo 字节。
 pub(super) async fn load_media_torrent(
@@ -1548,7 +1073,7 @@ pub(super) async fn load_media_torrent(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("torrent 任务执行失败: {err}"),
-            )
+            );
         }
     };
     let Some(torrent) = torrent_result else {
@@ -1610,7 +1135,7 @@ pub(super) async fn update_media_distribution_presence(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("presence 任务执行失败: {err}"),
-            )
+            );
         }
     };
     StatusCode::NO_CONTENT.into_response()

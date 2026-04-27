@@ -5,12 +5,11 @@ use crate::usecase;
 #[cfg(test)]
 use axum::http::StatusCode;
 #[cfg(test)]
-use object_store::{buffered::BufWriter, path::Path as ObjectPath, ObjectStore};
+use object_store::{ObjectStore, buffered::BufWriter, path::Path as ObjectPath};
 #[cfg(test)]
 use serde::Deserialize;
-use std::path::Path as StdPath;
 #[cfg(test)]
-use std::{path::PathBuf, process::Command, sync::Arc};
+use std::{path::Path as StdPath, path::PathBuf, process::Command, sync::Arc};
 #[cfg(test)]
 use tokio::{
     fs,
@@ -113,44 +112,14 @@ struct 待上传本地资产 {
     资产标签: &'static str,
 }
 
-/// 受控流媒体地址是浏览器唯一允许看到的正式播放入口。
-pub(super) fn 构造流媒体受控地址(
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-) -> String {
-    format!("/api/media/{attachment_id}/stream/{asset_path}?session_id={session_id}")
-}
-
+#[cfg(test)]
 pub(super) fn 推导流媒体对象前缀(attachment_id: &str) -> String {
     format!("streams/{attachment_id}/")
 }
 
-pub(super) fn 流媒体存储键转受控路径<'a>(
-    attachment_id: &str,
-    storage_key: &'a str,
-) -> &'a str {
-    storage_key
-        .strip_prefix(推导流媒体对象前缀(attachment_id).as_str())
-        .unwrap_or(storage_key)
-}
-
+#[cfg(test)]
 pub(super) fn 推导流媒体对象存储键(attachment_id: &str, asset_path: &str) -> String {
-    format!("streams/{attachment_id}/{asset_path}")
-}
-
-pub(super) fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
-    match StdPath::new(asset_path)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-    {
-        "m3u8" => "application/vnd.apple.mpegurl",
-        "mpd" => "application/dash+xml",
-        "m4s" => "video/iso.segment",
-        "mp4" => "video/mp4",
-        _ => "application/octet-stream",
-    }
+    format!("{}{}", 推导流媒体对象前缀(attachment_id), asset_path)
 }
 
 /// Shell 层统一负责“本地文件 -> 附件对象存储”的 IO 搬运，
@@ -735,114 +704,6 @@ pub(super) async fn 上传流媒体打包产物(
     })
 }
 
-fn 解析流媒体相对路径(base_asset_path: &str, referenced_path: &str) -> String {
-    if referenced_path.starts_with("http://") || referenced_path.starts_with("https://") {
-        return referenced_path.to_string();
-    }
-    let mut parts = base_asset_path
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    if !parts.is_empty() {
-        parts.pop();
-    }
-    for part in referenced_path.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop();
-            }
-            _ => parts.push(part.to_string()),
-        }
-    }
-    parts.join("/")
-}
-
-pub(super) fn 重写_hls清单内容(
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-    content: &str,
-) -> String {
-    content
-        .lines()
-        .map(|line| {
-            if let Some(prefix) = line.split("URI=\"").next() {
-                if prefix.len() != line.len() {
-                    let mut rewritten = line.to_string();
-                    if let Some(start) = line.find("URI=\"") {
-                        let value_start = start + 5;
-                        if let Some(end_rel) = line[value_start..].find('"') {
-                            let value_end = value_start + end_rel;
-                            let raw = &line[value_start..value_end];
-                            let resolved = 解析流媒体相对路径(asset_path, raw);
-                            let absolute = 构造流媒体受控地址(
-                                attachment_id,
-                                session_id,
-                                resolved.as_str(),
-                            );
-                            rewritten.replace_range(value_start..value_end, absolute.as_str());
-                            return rewritten;
-                        }
-                    }
-                }
-            }
-            if line.starts_with('#') || line.trim().is_empty() {
-                return line.to_string();
-            }
-            let resolved = 解析流媒体相对路径(asset_path, line.trim());
-            构造流媒体受控地址(attachment_id, session_id, resolved.as_str())
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
-}
-
-fn 重写_xml属性路径(
-    content: String,
-    attribute_name: &str,
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-) -> String {
-    let needle = format!(r#"{attribute_name}=""#);
-    let mut current = content;
-    let mut search_from = 0;
-    while let Some(start_rel) = current[search_from..].find(needle.as_str()) {
-        let start = search_from + start_rel;
-        let value_start = start + needle.len();
-        let Some(end_rel) = current[value_start..].find('"') else {
-            break;
-        };
-        let value_end = value_start + end_rel;
-        let raw = current[value_start..value_end].to_string();
-        let resolved = 解析流媒体相对路径(asset_path, raw.as_str());
-        let absolute = 构造流媒体受控地址(attachment_id, session_id, resolved.as_str());
-        current.replace_range(value_start..value_end, absolute.as_str());
-        // 必须把扫描游标推进到本次替换之后；
-        // 否则下一轮又会命中同一个属性，MPD 重写会在原地自旋。
-        search_from = value_start + absolute.len();
-    }
-    current
-}
-
-pub(super) fn 重写_dash清单内容(
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-    content: &str,
-) -> String {
-    let rewritten = 重写_xml属性路径(
-        content.to_string(),
-        "initialization",
-        attachment_id,
-        session_id,
-        asset_path,
-    );
-    重写_xml属性路径(rewritten, "media", attachment_id, session_id, asset_path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -850,8 +711,8 @@ mod tests {
         生成流媒体打包产物, 视频打包策略, 解析ffprobe视频打包策略,
     };
     use object_store::{
-        memory::InMemory, path::Path as ObjectPath, throttle::ThrottleConfig,
-        throttle::ThrottledStore, ObjectStore, ObjectStoreExt,
+        ObjectStore, ObjectStoreExt, memory::InMemory, path::Path as ObjectPath,
+        throttle::ThrottleConfig, throttle::ThrottledStore,
     };
     use std::{path::PathBuf, sync::Arc, time::Duration};
     use tokio::time::Instant;

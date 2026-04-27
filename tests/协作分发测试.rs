@@ -240,40 +240,42 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
     assert_eq!(body["kind"].as_str(), Some("video"));
     assert_eq!(body["status"].as_str(), Some("ready"));
     assert_eq!(
-        body["streaming_asset"]["kind"].as_str(),
-        Some("streaming_video"),
-        "视频 locator 必须开始返回流媒体资产过渡面，不能继续只给一次性原始附件地址"
+        body["file_asset"]["kind"].as_str(),
+        Some("file_video"),
+        "唯一 WebTorrent 正式链下，视频 locator 只能返回 file_asset 正式表面"
     );
     assert_eq!(
-        body["streaming_asset"]["asset_id"].as_str(),
+        body["file_asset"]["asset_id"].as_str(),
         Some(attachment_id.as_str())
     );
     assert_eq!(
-        body["streaming_asset"]["manifest"]["hls_master_url"].as_str(),
+        body["file_asset"]["variants"]["canonical"]["url"].as_str(),
         Some(
-            format!("/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}")
-                .as_str()
+            format!(
+                "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+            )
+            .as_str()
         ),
-        "视频 locator 应返回正式 HLS 主清单入口，而不是继续留空"
+        "视频 locator 的 canonical 必须直接指向受控附件内容入口"
+    );
+    assert!(
+        body["file_asset"]["manifest"].is_null(),
+        "正式视频资产不再暴露 HLS/DASH manifest 第二链"
+    );
+    assert!(
+        body["file_asset"]["lifecycle"].is_null(),
+        "正式视频资产不再携带 streaming 生命周期第二真相"
     );
     assert_eq!(
-        body["streaming_asset"]["manifest"]["dash_mpd_url"].as_str(),
-        Some(
-            format!("/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}")
-                .as_str()
-        ),
-        "视频 locator 也应返回正式 DASH 主清单入口"
-    );
-    assert_eq!(
-        body["streaming_asset"]["origin"]["role"].as_str(),
+        body["file_asset"]["origin"]["role"].as_str(),
         Some("cold_backup_only")
     );
     assert!(
         body.get("original_url").is_none(),
-        "locator 顶层 original_url 已退场，冷源只允许留在 streaming_asset.origin"
+        "locator 顶层 original_url 已退场，冷源只允许留在 file_asset.origin"
     );
     assert_eq!(
-        body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
+        body["file_asset"]["distribution"]["swarm_id"].as_str(),
         body["distribution"]["swarm_id"].as_str(),
         "asset 分发表面与顶层 runtime distribution 必须继续引用同一份 swarm 真相"
     );
@@ -388,14 +390,14 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
     assert_eq!(sender_status, StatusCode::OK);
     assert_eq!(peer_status, StatusCode::OK);
     assert_eq!(
-        sender_body["streaming_asset"]["asset_id"].as_str(),
-        peer_body["streaming_asset"]["asset_id"].as_str(),
+        sender_body["file_asset"]["asset_id"].as_str(),
+        peer_body["file_asset"]["asset_id"].as_str(),
         "同一视频对发送者和群友必须锚到同一个稳定 asset_id"
     );
     assert_eq!(
-        sender_body["streaming_asset"]["kind"].as_str(),
-        peer_body["streaming_asset"]["kind"].as_str(),
-        "流媒体资产种类不应随着查看成员变化"
+        sender_body["file_asset"]["kind"].as_str(),
+        peer_body["file_asset"]["kind"].as_str(),
+        "正式视频资产种类不应随着查看成员变化"
     );
     assert_eq!(
         sender_body["distribution"]["swarm_id"].as_str(),
@@ -403,39 +405,28 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
         "协作分发 swarm 真相必须对房间成员一致"
     );
     assert_eq!(
-        sender_body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
-        peer_body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
-        "新流媒体资产面和顶层 distribution 兼容面都必须对齐到同一份 swarm 真相"
+        sender_body["file_asset"]["distribution"]["swarm_id"].as_str(),
+        peer_body["file_asset"]["distribution"]["swarm_id"].as_str(),
+        "file_asset 和顶层 distribution 兼容面都必须对齐到同一份 swarm 真相"
     );
 
-    let sender_hls = sender_body["streaming_asset"]["manifest"]["hls_master_url"]
+    let sender_canonical = sender_body["file_asset"]["variants"]["canonical"]["url"]
         .as_str()
-        .expect("发送者 locator 应返回 HLS 主清单入口");
-    let peer_hls = peer_body["streaming_asset"]["manifest"]["hls_master_url"]
+        .expect("发送者 locator 应返回 canonical 受控入口");
+    let peer_canonical = peer_body["file_asset"]["variants"]["canonical"]["url"]
         .as_str()
-        .expect("群友 locator 也应返回 HLS 主清单入口");
-    let sender_dash = sender_body["streaming_asset"]["manifest"]["dash_mpd_url"]
-        .as_str()
-        .expect("发送者 locator 应返回 DASH 主清单入口");
-    let peer_dash = peer_body["streaming_asset"]["manifest"]["dash_mpd_url"]
-        .as_str()
-        .expect("群友 locator 也应返回 DASH 主清单入口");
-    let sender_origin = sender_body["streaming_asset"]["origin"]["original_url"]
+        .expect("群友 locator 也应返回 canonical 受控入口");
+    let sender_origin = sender_body["file_asset"]["origin"]["original_url"]
         .as_str()
         .expect("发送者 locator 应返回冷备原图入口");
-    let peer_origin = peer_body["streaming_asset"]["origin"]["original_url"]
+    let peer_origin = peer_body["file_asset"]["origin"]["original_url"]
         .as_str()
         .expect("群友 locator 也应返回冷备原图入口");
 
     assert!(
-        sender_hls.contains(sender_session_id.as_str())
-            && peer_hls.contains(peer_session_id.as_str()),
-        "受控 HLS 地址必须带各自会话，用来保持成员可见性裁决"
-    );
-    assert!(
-        sender_dash.contains(sender_session_id.as_str())
-            && peer_dash.contains(peer_session_id.as_str()),
-        "受控 DASH 地址同样必须带各自会话"
+        sender_canonical.contains(sender_session_id.as_str())
+            && peer_canonical.contains(peer_session_id.as_str()),
+        "canonical 受控地址必须带各自会话，用来保持成员可见性裁决"
     );
     assert!(
         sender_origin.contains(sender_session_id.as_str())
@@ -443,14 +434,9 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
         "冷备原图地址也必须继续走各自会话的受控读路径"
     );
     assert_eq!(
-        归一化受控地址(sender_hls),
-        归一化受控地址(peer_hls),
-        "去掉 session_id 之后，发送者和群友看到的应该是同一条 HLS 主链"
-    );
-    assert_eq!(
-        归一化受控地址(sender_dash),
-        归一化受控地址(peer_dash),
-        "去掉 session_id 之后，发送者和群友看到的应该是同一条 DASH 主链"
+        归一化受控地址(sender_canonical),
+        归一化受控地址(peer_canonical),
+        "去掉 session_id 之后，发送者和群友看到的应该是同一条 canonical 主链"
     );
     assert_eq!(
         归一化受控地址(sender_origin),
@@ -458,8 +444,8 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
         "去掉 session_id 之后，发送者和群友看到的应该是同一条冷备入口"
     );
     assert_eq!(
-        sender_body["streaming_asset"]["origin"]["role"].as_str(),
-        peer_body["streaming_asset"]["origin"]["role"].as_str(),
+        sender_body["file_asset"]["origin"]["role"].as_str(),
+        peer_body["file_asset"]["origin"]["role"].as_str(),
         "冷备角色语义必须对所有成员一致"
     );
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");

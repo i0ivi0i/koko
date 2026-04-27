@@ -1156,7 +1156,9 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
     let (content_status, _, content_body) = send_bytes(
         app.clone(),
         Method::GET,
-        &format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"),
+        &format!(
+            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+        ),
         &[],
     )
     .await;
@@ -1189,7 +1191,9 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
     let (content_status, _, _) = send_bytes(
         app,
         Method::GET,
-        &format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"),
+        &format!(
+            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+        ),
         &[],
     )
     .await;
@@ -1395,18 +1399,17 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
         "web_seed 已过期时，locator 顶层分发表面必须明确退场"
     );
     assert!(
-        body["streaming_asset"]["manifest"]["hls_master_url"].is_null(),
-        "streaming_deleted_at 已写入后，locator 不能继续投影 HLS manifest 地址"
+        body["file_asset"]["manifest"].is_null(),
+        "唯一 WebTorrent 正式链下，locator 不能继续投影 HLS/DASH manifest 第二链"
     );
     assert!(
-        body["streaming_asset"]["manifest"]["dash_mpd_url"].is_null(),
-        "streaming_deleted_at 已写入后，locator 不能继续投影 DASH manifest 地址"
+        body["file_asset"]["lifecycle"].is_null(),
+        "正式视频资产不再对外暴露 streaming 生命周期第二真相"
     );
-    assert!(
-        body["streaming_asset"]["lifecycle"]["streaming_deleted_at"]
-            .as_str()
-            .is_some(),
-        "peer-only 存活语义必须和流媒体退场事实同时出现，不能让前端自己猜 manifest 是否已删"
+    assert_eq!(
+        body["file_asset"]["origin"]["role"].as_str(),
+        Some("cold_backup_only"),
+        "peer-only 之后仍只允许通过 file_asset.origin 表达冷备语义"
     );
 }
 

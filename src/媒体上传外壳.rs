@@ -384,7 +384,6 @@ async fn 构造ready媒体附件响应并触发做种(
         super::媒体资产外壳::媒体资产响应上下文 {
             运行态分发: Some(&runtime_distribution),
             分发快照: Some(协作分发),
-            流媒体清单: None,
             原始地址: original_url,
             原始冷源到期时间戳秒: Some(协作分发.web_seed_until秒),
             原始冷源删除时间戳秒: None,
@@ -1202,22 +1201,11 @@ pub(super) async fn complete_media_upload(
                     );
                 }
             }
-            let streaming_manifest_snapshot =
-                streaming_manifest_request
-                    .as_ref()
-                    .map(|request| usecase::流媒体清单快照 {
-                        附件标识: request.附件标识.clone(),
-                        hls主清单存储键: request.hls主清单存储键.clone(),
-                        dash主清单存储键: request.dash主清单存储键.clone(),
-                        streaming到期时间戳秒: Some(request.streaming到期时间戳秒),
-                        streaming删除时间戳秒: request.streaming删除时间戳秒,
-                    });
             let media_asset = super::媒体资产外壳::构造媒体资产响应体(
                 &snapshot,
                 super::媒体资产外壳::媒体资产响应上下文 {
                     运行态分发: Some(&runtime_distribution),
                     分发快照: Some(&distribution_snapshot),
-                    流媒体清单: streaming_manifest_snapshot.as_ref(),
                     原始地址: original_url,
                     原始冷源到期时间戳秒: 冷备层到期时间戳秒,
                     原始冷源删除时间戳秒: 冷备层删除时间戳秒,

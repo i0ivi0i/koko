@@ -744,8 +744,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         let Some(启动命令) = 从协作分发响应构造做种启动命令(
             &runtime_distribution,
             state.swarm_seeder_tracker_url.as_str(),
-        )
-        else {
+        ) else {
             continue;
         };
         active_info_hashes.insert(启动命令.info_hash.clone());
@@ -1165,10 +1164,6 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_id}/blob/{asset_variant}",
             get(媒体资产外壳::load_blob_asset_content),
-        )
-        .route(
-            "/api/media/{attachment_id}/stream/{*asset_path}",
-            get(媒体资产外壳::load_streaming_asset_content),
         )
         .route(
             "/api/media/{attachment_id}/torrent",

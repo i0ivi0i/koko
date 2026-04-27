@@ -1,10 +1,10 @@
 use super::{err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
 use crate::{contract, usecase};
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -934,34 +934,4 @@ mod 媒体内容解析迁移测试 {
 }
 
 #[cfg(test)]
-mod 流媒体打包迁移测试 {
-    use crate::shell::流媒体打包;
-
-    #[test]
-    fn 新模块会把_hls_相对路径重写成受控地址() {
-        let rewritten = 流媒体打包::重写_hls清单内容(
-            "att-1",
-            "session-1",
-            "hls/master.m3u8",
-            "#EXTM3U\nvideo/main.m3u8\n",
-        );
-        assert!(
-            rewritten.contains("/api/media/att-1/stream/hls/video/main.m3u8?session_id=session-1")
-        );
-    }
-
-    #[test]
-    fn 新模块会把_dash_模板重写成受控地址() {
-        let rewritten = 流媒体打包::重写_dash清单内容(
-            "att-1",
-            "session-1",
-            "dash/stream.mpd",
-            r#"<SegmentTemplate initialization="video/init.mp4" media="video/$Number$.m4s" />"#,
-        );
-        assert!(
-            rewritten.contains("/api/media/att-1/stream/dash/video/init.mp4?session_id=session-1")
-        );
-        assert!(rewritten
-            .contains("/api/media/att-1/stream/dash/video/$Number$.m4s?session_id=session-1"));
-    }
-}
+mod 流媒体打包迁移测试 {}
