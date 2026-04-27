@@ -11,6 +11,8 @@
     把 PWA、生命周期、Service Worker、WebSocket、Actor model 和前端应用化的官方依据收成一张判断表。
   - [浏览器应用化官方实践补充-Safari-Chrome-P2P-2026.md](./浏览器应用化官方实践补充-Safari-Chrome-P2P-2026.md)
     继续补强 Safari / Chrome / WebTorrent / WebRTC / p2p-media-loader / Video.js 的官方边界，专门回答“浏览器中的应用”在多人群聊里该怎么落。
+  - [短视频信息流丝滑播放与媒体预算模型-2026-04-27.md](./短视频信息流丝滑播放与媒体预算模型-2026-04-27.md)
+    把 X / TikTok / Dashlet / XGPlayer 的公开模型收成 `koko` 可施工的媒体预算规则：当前项重播放、邻近项轻预热、远处项冷表达。
   - [Rust-集成测试与TDD组织实践笔记.md](./Rust-集成测试与TDD组织实践笔记.md)
     回答 Rust 官方和一线项目到底怎么组织集成测试，以及 `koko` 该怎么拆当前 5k 行测试热点。
   - [群聊-im实践对齐清单.md](./群聊-im实践对齐清单.md)
