@@ -231,6 +231,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let 自动播协作!: 自动播协作端口;
   let 视频预览协作!: 视频预览协作端口;
   let 协作补齐协作!: 协作补齐协作端口;
+  const 跳过查看器同步的播放释放附件 = new Set<string>();
   const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
     // 编排层只在附件会话退场时通知播放器释放底层占用；
     // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
@@ -280,6 +281,40 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     return true;
   };
+  const 释放查看器正式播放占用 = (attachmentId: string | null | undefined): boolean => {
+    const normalizedAttachmentId = attachmentId?.trim() ?? "";
+    if (!normalizedAttachmentId) {
+      return false;
+    }
+    const session = 媒体会话表.get(normalizedAttachmentId);
+    if (!session?.snapshot().playback) {
+      return false;
+    }
+    /**
+     * viewer 退场时只释放正式播放 consumer，不销毁时间线会话壳：
+     * 1. 预览状态仍由视频预览协作保留；
+     * 2. WebTorrent 未完成补齐可由运行时降成零引用轻帮助态；
+     * 3. playback 必须从会话快照清掉，避免看过的视频长期回灌成真实卡片 `<video>`。
+     */
+    释放附件播放资源({
+      attachmentId: normalizedAttachmentId,
+      consumerId: 构造媒体会话ConsumerId(normalizedAttachmentId),
+    });
+    const 当前查看器请求 = 读取媒体运行时上下文().currentViewerRequest;
+    if (
+      当前查看器请求 &&
+      当前查看器请求.startAttachmentId !== normalizedAttachmentId &&
+      当前查看器请求.items.some((item) => item.attachmentId === normalizedAttachmentId)
+    ) {
+      /**
+       * 查看器切到下一条视频后，旧附件 playback 清理只服务于时间线减负；
+       * 已交付给 viewer 的新 request 不应因为旧附件降重又被反向同步成空 src。
+       */
+      跳过查看器同步的播放释放附件.add(normalizedAttachmentId);
+    }
+    session.send({ type: "PLAYBACK_RELEASED" });
+    return true;
+  };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
     const before = 媒体运行时.getSnapshot();
     媒体运行时.send(event);
@@ -291,6 +326,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const after = 媒体运行时.getSnapshot();
     const beforeContext = before.context;
     const afterContext = after.context;
+    const 旧查看器附件标识 = beforeContext.currentViewerRequest?.startAttachmentId ?? null;
+    const 当前查看器附件标识 = afterContext.currentViewerRequest?.startAttachmentId ?? null;
     const 自动播位置已变化 =
       beforeContext.inlineAutoplayPositionByAttachmentId !==
       afterContext.inlineAutoplayPositionByAttachmentId;
@@ -316,14 +353,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       /**
        * 关闭 viewer 只代表“查看器 owner 退场”，不代表附件生命周期结束：
        * 1. 同一附件可能仍在当前时间线里，需要立刻回到 inline preview / autoplay 候选；
-       * 2. 一旦已经进入帮助链，也不能因为退出全屏就把共享会话、补齐任务和预览状态一起清掉；
-       * 3. 真正的释放仍交给“当前时间线集合 + 帮助链 + clear/destroy”那条统一裁决链，避免 viewer 变成第二套生命周期真相。
+       * 2. 前台正式播放 consumer 会在本轮同步末尾退场，这里只清 viewer 会话本身；
+       * 3. 时间线会话壳、预览状态和轻帮助态仍交给当前窗口/帮助链统一裁决，避免 viewer 变成第二套附件生命周期真相。
        */
       查看器会话协作.处理查看器请求已清空();
     }
 
     if (afterContext.currentViewerRequest) {
       查看器会话协作.同步当前查看器请求();
+    }
+
+    if (旧查看器附件标识 && 旧查看器附件标识 !== 当前查看器附件标识) {
+      释放查看器正式播放占用(旧查看器附件标识);
     }
 
     if (
@@ -799,6 +840,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         }),
       onSnapshotChange: () => {
         deps.请求重渲染();
+        if (跳过查看器同步的播放释放附件.delete(attachment.attachmentId)) {
+          return;
+        }
         查看器会话协作.同步当前查看器请求();
         触发视频预览收敛(attachment.attachmentId);
       },

@@ -466,16 +466,26 @@ const 启动同会话全屏策略 = (
    * viewer 这里只维护聊天应用需要的会话、history、显示阶段和回收顺序。
    */
   const 标准全屏可能挂起 = typeof container.requestFullscreen === "function";
+  const 当前明确缺少用户激活 = globalThis.navigator?.userActivation?.isActive === false;
+  /**
+   * 自动化脚本触发的 click 没有浏览器瞬时激活，继续 requestFullscreen 只会制造控制台噪音；
+   * 真实用户点击和不支持 userActivation 的运行时仍按原全屏链路执行。
+   */
   同步沉浸查看器显示阶段(
-    标准全屏可能挂起 && !本会话已接管系统全屏 && !本会话正在原生视频全屏
+    标准全屏可能挂起 &&
+      !当前明确缺少用户激活 &&
+      !本会话已接管系统全屏 &&
+      !本会话正在原生视频全屏
       ? "pending"
       : "active"
   );
-  void 请求播放器壳进入全屏()
-    .then(处理播放器壳进入全屏结果)
-    .catch(() => {
-      同步沉浸查看器显示阶段("active");
-    });
+  if (!当前明确缺少用户激活) {
+    void 请求播放器壳进入全屏()
+      .then(处理播放器壳进入全屏结果)
+      .catch(() => {
+        同步沉浸查看器显示阶段("active");
+      });
+  }
 
   return {
     清理: cleanup,

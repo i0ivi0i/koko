@@ -21,6 +21,7 @@ export type 媒体会话信号 =
   | { type: "PLAYER_STALLED" }
   | { type: "PLAYER_ERROR" }
   | { type: "ENTER_RECOVERING" }
+  | { type: "PLAYBACK_RELEASED" }
   | { type: "SWARM_ACTIVE" }
   | { type: "SWARM_NO_PEERS" }
   | { type: "SWARM_TICKET_INVALID" }
@@ -283,6 +284,27 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           播放器恢复窗口已触发 = false;
           写入快照({
             status: "bootstrapping",
+          });
+          return;
+        case "PLAYBACK_RELEASED":
+          清理降级恢复重试定时器();
+          解析代次 += 1;
+          正在恢复 = false;
+          缺少群友 = false;
+          冷源不可用 = false;
+          播放器恢复窗口已触发 = false;
+          if (!current.playback) {
+            return;
+          }
+          /**
+           * 关闭 viewer 只释放“前台正式播放源”，不等于附件业务退场：
+           * 会话壳和 locallyComplete 仍可保留，但 playback 必须清空，
+           * 否则时间线会把看过的视频继续渲染成真实 `<video>`。
+           */
+          写入快照({
+            playback: null,
+            status: current.locallyComplete ? "locally_complete" : "bootstrapping",
+            sourceVersion: current.sourceVersion + 1,
           });
           return;
         case "PLAYER_PLAYING":

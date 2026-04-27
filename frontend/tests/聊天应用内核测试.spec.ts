@@ -3114,7 +3114,7 @@ describe("聊天应用内核", () => {
         {
           kind: "video",
           attachmentId: "att-video-switch-1",
-          src: "http://media.local/original-att-video-switch-1",
+          src: "",
           posterSrc: "http://media.local/poster-att-video-switch-1",
           width: 1280,
           height: 720,
@@ -3131,7 +3131,7 @@ describe("聊天应用内核", () => {
     });
   });
 
-  it("正式查看器关闭时会释放播放 consumer，并丢弃未完成的整附件补齐", async () => {
+  it("正式查看器关闭时会释放播放 consumer，并把时间线会话降回无 playback 状态", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -3228,21 +3228,19 @@ describe("聊天应用内核", () => {
 
     读取媒体编排供测试(kernel).关闭媒体查看器供测试();
 
-    expect(释放附件播放资源).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-viewer-close-1",
-        consumerId: "session:att-video-viewer-close-1",
-      })
-    );
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-viewer-close-1",
+      consumerId: "session:att-video-viewer-close-1",
+    });
     expect(
       kernel.snapshot().media.sessionByAttachmentId["att-video-viewer-close-1"]
     ).toMatchObject({
       attachmentId: "att-video-viewer-close-1",
-      playback: expect.objectContaining({
-        mode: "manifest",
-        src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",
-      }),
+      playback: null,
     });
+    expect(
+      kernel.snapshot().media.playbackByAttachmentId["att-video-viewer-close-1"]
+    ).toBeUndefined();
   });
 
   it("frozen/page_hidden 会把重型工作意图降到 suspended，并投影到运行时快照", async () => {

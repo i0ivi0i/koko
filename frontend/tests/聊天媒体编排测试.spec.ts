@@ -1532,7 +1532,7 @@ describe("聊天媒体编排", () => {
     vi.resetModules();
   });
 
-  it("视频查看器关闭后，当前时间线里的附件仍保留共享会话与预览状态，不会把帮助链误当成 viewer 临时资源", async () => {
+  it("视频查看器关闭后，当前时间线只保留预览状态，不再把正式播放源长期挂回卡片", async () => {
     vi.resetModules();
     const attachmentId = "att-video-viewer-close-keep-preview-1";
     const previewSrc = `blob:preview-${attachmentId}`;
@@ -1727,20 +1727,16 @@ describe("聊天媒体编排", () => {
     ).关闭媒体查看器供测试();
     await 刷新异步队列();
 
-    expect(释放附件播放资源).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId,
-        consumerId: `session:${attachmentId}`,
-      })
-    );
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId,
+      consumerId: `session:${attachmentId}`,
+    });
     expect(释放协作分发消费者).toHaveBeenCalledTimes(关闭查看器前预览释放次数);
     expect(编排.snapshot().sessionByAttachmentId[attachmentId]).toMatchObject({
       attachmentId,
-      playback: expect.objectContaining({
-        mode: "swarm",
-        src: swarmSrc,
-      }),
+      playback: null,
     });
+    expect(编排.snapshot().playbackByAttachmentId[attachmentId]).toBeUndefined();
     expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
       phase: "ready",
       src: previewSrc,
@@ -1750,6 +1746,124 @@ describe("聊天媒体编排", () => {
     编排.销毁();
     vi.doUnmock("../媒体/资产协作分发运行时.js");
     vi.resetModules();
+  });
+
+  it("连续观看多个可见视频再关闭查看器后，正式播放结果不会按观看次数累积", async () => {
+    const 消息列表 = 生成连续视频消息(6);
+    const 释放附件播放资源 = vi.fn();
+    const 编排 = 创建聊天媒体编排({
+      transport: () =>
+        ({
+          loadMediaLocator: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          buildAttachmentContentUrl: vi.fn(
+            (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+              `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+          ),
+          prepareMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          abandonMediaUpload: vi.fn(async () => {}),
+          completeMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+        }) as unknown as 前端传输端口,
+      读取会话编号: () => "s-video-stress",
+      读取消息: () => 消息列表,
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: null,
+        source: "none" as const,
+        width: null,
+        height: null,
+      })),
+    });
+
+    (
+      编排 as unknown as {
+        设置媒体播放器供测试(player: {
+          解析播放结果(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            surface?: "viewer" | "inline_autoplay";
+            consumerId?: string;
+          }): Promise<媒体播放结果>;
+          释放附件播放资源?(input: {
+            attachmentId: string;
+            consumerId?: string;
+            丢弃未完成补齐?: boolean;
+          }): void;
+        }): void;
+        设置媒体查看器供测试(viewer: {
+          打开(input: { startAttachmentId: string; items: unknown[] }): void;
+          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
+          销毁(): void;
+        }): void;
+        关闭媒体查看器供测试(): void;
+      }
+    ).设置媒体播放器供测试({
+      解析播放结果: vi.fn(
+        async ({ attachmentId, kind }: { attachmentId: string; kind: "image" | "video" }) =>
+          ({
+            mode: "swarm",
+            attachmentId,
+            kind,
+            src: `blob:http://media.local/swarm-${attachmentId}`,
+            thumbnailUrl: null,
+            contentHash: `hash-${attachmentId}`,
+            hint: null,
+          }) satisfies 媒体播放结果
+      ),
+      释放附件播放资源,
+    });
+    (
+      编排 as unknown as {
+        设置媒体查看器供测试(viewer: {
+          打开(input: { startAttachmentId: string; items: unknown[] }): void;
+          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
+          销毁(): void;
+        }): void;
+      }
+    ).设置媒体查看器供测试({
+      打开: () => undefined,
+      同步: () => undefined,
+      销毁: () => undefined,
+    });
+
+    const attachmentIds = Array.from({ length: 6 }, (_, index) => `att-video-window-${index + 1}`);
+    编排.同步媒体窗口附件(attachmentIds);
+    for (const attachmentId of attachmentIds) {
+      编排.打开查看器({
+        startAttachmentId: attachmentId,
+        items: attachmentIds.map((itemId) => ({
+          kind: "video" as const,
+          attachmentId: itemId,
+          src: `http://media.local/original-${itemId}`,
+          posterSrc: null,
+          width: 1280,
+          height: 720,
+        })),
+      });
+      await 刷新异步队列();
+      (
+        编排 as unknown as {
+          关闭媒体查看器供测试(): void;
+        }
+      ).关闭媒体查看器供测试();
+      await 刷新异步队列();
+    }
+
+    expect(Object.keys(编排.snapshot().playbackByAttachmentId)).toHaveLength(0);
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toHaveLength(6);
+    expect(释放附件播放资源).toHaveBeenCalledTimes(6);
+
+    编排.销毁();
   });
 
   it("显式销毁编排时，已保留的帮助任务仍会被正确释放", async () => {
