@@ -612,7 +612,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("viewer 首次打开仍在转流的大视频时，会先强制刷新 locator，但主链不再回到 manifest", async () => {
+  it("viewer 首次打开命中旧 manifest locator 时，仍会强制刷新 locator，主链不再回到 manifest", async () => {
     const locate = vi
       .fn()
       .mockResolvedValueOnce({
@@ -643,8 +643,8 @@ describe("媒体播放器", () => {
           content_hash: "hash-video-viewer-race",
           kind: "streaming_video" as const,
           manifest: {
-            hls_master_url: null,
-            dash_mpd_url: null,
+            hls_master_url: "http://media.local/stream/att-video-viewer-race/stale-master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-viewer-race/stale-stream.mpd",
           },
           lifecycle: {
             streaming_expires_at: "1775942400",
@@ -1012,7 +1012,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("viewer 抢 swarm 时如果 join_ticket 已失效，会强制刷新 locator 一次并重试同一条主链", async () => {
+  it("inline_autoplay 抢 swarm 时如果 join_ticket 已失效，会强制刷新 locator 一次并重试同一条主链", async () => {
     const 初始定位结果 = {
       attachment_id: "att-video-ticket-refresh",
       kind: "video" as const,
@@ -1110,8 +1110,8 @@ describe("媒体播放器", () => {
     const result = await 播放器.解析播放结果({
       attachmentId: "att-video-ticket-refresh",
       kind: "video",
-      surface: "viewer",
-      consumerId: "session:att-video-ticket-refresh",
+      surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-ticket-refresh",
     });
 
     expect(locate).toHaveBeenNthCalledWith(1, "att-video-ticket-refresh");

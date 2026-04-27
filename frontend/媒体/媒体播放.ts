@@ -286,17 +286,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator.preview_asset?.still_url ?? (locator.kind === "video" ? locator.thumbnail_url : null);
 
   /**
-   * streaming_asset 现在是“服务端 24 小时标准冷备窗口”的明确信号。
-   * 播放裁决不直接返回 HLS/DASH 主链；新单文件视频走 file_asset，命不中 swarm 时回到受控冷源。
-   */
-  const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null => {
-    if (locator.kind !== "video" || 流媒体冷备窗口已退场(locator)) {
-      return null;
-    }
-    return locator.streaming_asset?.manifest.hls_master_url ?? null;
-  };
-
-  /**
    * 图片资产不再默认回到原始附件直链：
    * 1. canonical 是唯一正式图片对象，列表卡片和查看器共用同一份真相；
    * 2. 缩略图只允许退回 message/locator 明确给出的 preview_asset；
@@ -335,12 +324,11 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (input.kind !== "video" || (input.surface ?? "viewer") !== "viewer") {
       return false;
     }
-    if (读取流媒体主链地址(locator)) {
-      return false;
-    }
     /**
      * 只有已经进入流媒体/协作过渡面的 video，才值得在首开前多问一次 locator。
-     * 纯旧式冷源附件继续直接走 anchor，避免给不相关的视频平白增加一次请求。
+     * 1. 旧 locator 就算还带着 HLS manifest，也不能阻止 WebTorrent / join_ticket 的刷新；
+     * 2. 纯旧式冷源附件继续直接走 anchor，避免给不相关的视频平白增加一次请求；
+     * 3. 真正的强刷节流继续由下面的冷却窗口兜住，不靠旧 manifest 语义短路。
      */
     return Boolean(locator.streaming_asset || locator.distribution);
   };
