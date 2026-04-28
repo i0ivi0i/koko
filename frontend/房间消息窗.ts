@@ -393,7 +393,10 @@ export class 房间消息窗 extends LitElement {
           budget.previewVideoSrc ??
           (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
         if (
-          budget.allowPreviewVideo &&
+          this.读取时间线预览视频是否允许渲染(budget, {
+            previewVideoSrc: timelinePreviewVideoSrc,
+            shouldReuseSavedTimelineFrameAsPreview,
+          }) &&
           timelinePreviewVideoSrc &&
           可渲染真实预览视频附件.has(attachment.attachmentId)
         ) {
@@ -1524,6 +1527,28 @@ export class 房间消息窗 extends LitElement {
     });
   }
 
+  private 读取时间线预览视频是否允许渲染(
+    budget: 信息流视频预算投影,
+    input: {
+      previewVideoSrc: string | null;
+      shouldReuseSavedTimelineFrameAsPreview: boolean;
+    }
+  ): boolean {
+    if (budget.allowPreviewVideo) {
+      return true;
+    }
+    if (!input.previewVideoSrc || !input.shouldReuseSavedTimelineFrameAsPreview) {
+      return false;
+    }
+    /**
+     * 统一预算快照有时会比消息窗本地续播帧慢一拍：
+     * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二播放链；
+     * 2. 它只负责在 owner 交接/退场窗口兜住暂停画面，避免 DOM 退回 poster/play 占位；
+     * 3. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止续帧桥被滥用成绕主链入口。
+     */
+    return budget.formalByteSource !== "non_webtorrent_bypass";
+  }
+
   private 读取保存续帧是否允许承接时间线预览底板(attachmentId: string): boolean {
     /**
      * 保存续帧只允许服务两种场景：
@@ -1913,9 +1938,18 @@ export class 房间消息窗 extends LitElement {
               attachment.attachmentId,
               previewVideoSrc
             );
+            /**
+             * 续播暂停帧是时间线自动播的视觉连续性底板，不是“等待用户点击播放”的静态封面。
+             * 如果这里继续叠播放图标，owner 交接第一拍会先露一个中心图标再切成播放画面，
+             * 肉眼看到的就是滑入/滑出时的闪一下。
+             */
+            const shouldShowTimelinePlayIndicator = !shouldRenderInlineVideo && !restorableTimelineFrame;
             const shouldRenderPreviewVideo =
               Boolean(previewVideoSrc) &&
-              videoBudget.allowPreviewVideo &&
+              this.读取时间线预览视频是否允许渲染(videoBudget, {
+                previewVideoSrc,
+                shouldReuseSavedTimelineFrameAsPreview,
+              }) &&
               可渲染真实预览视频附件.has(attachment.attachmentId);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
@@ -2130,9 +2164,11 @@ export class 房间消息窗 extends LitElement {
                           : null}
                         ${shouldRenderInlineVideo
                           ? null
-                          : html`
-                              <span class="message-video-play-indicator" aria-hidden="true">▶</span>
-                            `}
+                          : shouldShowTimelinePlayIndicator
+                            ? html`
+                                <span class="message-video-play-indicator" aria-hidden="true">▶</span>
+                              `
+                            : null}
                       `
                     : html`
                         <img

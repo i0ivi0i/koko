@@ -4404,6 +4404,87 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("统一预算暂时降成冷态时，也不能删除同源 WebTorrent 续播暂停帧底板", async () => {
+    const pane = 创建媒体消息窗();
+    const swarmSrc =
+      "/webtorrent/2fac1903a210aa9d28426a0d6dad1b8acd431336/content-video.mp4";
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+    ];
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: swarmSrc,
+        currentTime: 27.75,
+        updatedAt: 1_777_399_000_000,
+      },
+    };
+    (
+      pane as unknown as {
+        mediaVideoBudgetByAttachmentId: Record<
+          string,
+          {
+            attachmentId: string;
+            tier: string;
+            reason: string;
+            canonicalVideoSrc: string | null;
+            previewVideoSrc: string | null;
+            allowInlineCanonical: boolean;
+            allowPreviewVideo: boolean;
+            formalByteSource: string;
+          }
+        >;
+      }
+    ).mediaVideoBudgetByAttachmentId = {
+      "att-video-1": {
+        attachmentId: "att-video-1",
+        tier: "cold_expression",
+        reason: "inactive",
+        canonicalVideoSrc: null,
+        previewVideoSrc: null,
+        allowInlineCanonical: false,
+        allowPreviewVideo: false,
+        formalByteSource: "none",
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+    expect(preview).not.toBeNull();
+    expect(preview?.getAttribute("src")).toBe(swarmSrc);
+    preview!.dispatchEvent(new Event("loadedmetadata"));
+    expect(preview?.currentTime).toBeCloseTo(27.75, 2);
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(
+      pane.querySelector(
+        '.message-video-card[data-attachment-id="att-video-1"] .message-video-play-indicator'
+      )
+    ).toBeNull();
+
+    pane.remove();
+  });
+
   it("点击非自动播 owner 视频时，仍然继续走查看器冷开请求", async () => {
     const { requestFullscreen, restore } = 安装消息窗直达全屏模拟();
     const pane = 创建媒体消息窗();
