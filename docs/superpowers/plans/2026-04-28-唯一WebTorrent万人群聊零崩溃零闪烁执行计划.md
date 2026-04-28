@@ -60,6 +60,10 @@
   - 聚合 `媒体运行时`、`资产协作分发运行时`、媒体会话和附件级预算，输出唯一 `budgetSnapshot`。
   - 统一裁决窗口附件、自动播候选、viewer owner、help window，避免房间组件局部重算。
 
+- Modify: `frontend/聊天壳.ts`
+  - 只把 `聊天媒体编排.ts` 已经聚合好的 `budgetSnapshot` 暴露给真实浏览器烟测。
+  - 不在 shell 层重算 WebTorrent ready、播放器 ready 或业务预算真相。
+
 - Modify: `frontend/房间消息窗.ts`
   - 只消费 `聊天媒体编排.ts` 给出的预算投影。
   - 继续使用 Lit + `@tanstack/lit-virtual`，只上报滚动、可见性、点击、宿主槽位事实。
@@ -79,8 +83,12 @@
 - Modify: `frontend/tests/媒体运行时测试.spec.ts`
 - Create or Modify: `frontend/tests/信息流视频预算测试.spec.ts`
 - Modify: `frontend/tests/聊天媒体编排测试.spec.ts`
+- Modify: `frontend/tests/聊天壳测试.spec.ts`
 - Modify: `frontend/tests/房间消息窗媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/媒体查看器测试.spec.ts`
+- Modify: `frontend/tests/媒体播放测试.spec.ts`
+- Modify: `frontend/tests/视频预览协作测试.spec.ts`
+- Modify: `frontend/tests/聊天应用内核测试.spec.ts`
 - Modify: `frontend/tests/媒体服务工作线程测试.spec.ts`
 - Modify: `frontend/tests/媒体共享契约测试.spec.ts`
 
@@ -91,6 +99,27 @@
 - 禁止新增浏览器临时脚本作为烟测替代品。
 - 禁止把 `media-sw.ts` 变成新主链字节缓存。
 - 禁止让 `房间消息窗.ts` 重新拥有业务预算真相。
+
+---
+
+## 2. WebTorrent 官方对齐结论
+
+本计划执行时按 WebTorrent 官方 API 对齐，不自造媒体分发轮子：
+
+- 依据：WebTorrent 官方 `docs` / `intro` / `FAQ`，实现时以这些文档和当前安装版本源码为准。
+- 浏览器正式播放链路是 `navigator.serviceWorker.ready -> client.createServer({ controller }) -> torrent.files[*] -> file.streamTo(video)` 或 `file.streamURL`。
+- `file.streamTo(elem)` 官方说明依赖 `client.createServer`，并支持浏览器原生 `<video>/<audio>/<img>`、seek 和浏览器 codec/container 能力。
+- `file.streamURL` 也是 `client.createServer` 之后由 WebTorrent HTTP server 识别的 file URL；它是 WebTorrent file 对象的产物，不是业务层拼出来的地址。
+- 官方 range/按需读取是 `file.createReadStream({ start, end })` 或 `file.stream({ start, end })`，需要的 pieces 会被优先从 swarm 拉取；项目里的“有限 range”只能指这个官方 file API 内部能力。
+- 下载 torrent 会自动 seed 给其他 peers；因此滑走后的补齐、做种、轻帮助态不能被“节省资源”误停。
+- `webSeeds` / `addWebSeed()` 只能作为 swarm peer/补源成员参与，不得变成前端返回给 `<video>` 的第二内容字节入口。
+- 浏览器 WebTorrent 只能和 WebRTC-capable peers 互通；tracker 必须沿用 WebTorrent 兼容的 WSS 路径，不能用普通 HTTP 下载替代 swarm。
+
+执行禁令：
+
+- 禁止用 URL 文本、路径、域名或 `blob:` 名称判断“是不是 WebTorrent”。
+- 禁止把项目 `media-sw.ts` 扩成私有 streaming engine；如需 Service Worker，只能服务于 WebTorrent 官方 `createServer({ controller })` 链路或既有非正式图片缓存职责。
+- 禁止为了“可播”把 `file.blob()` / `URL.createObjectURL(blob)` 当成视频主链；全量 Blob 适合下载/图片/离线产物，不是无限消息流里的正式视频秒开主链。
 
 ---
 
@@ -120,6 +149,7 @@ it("新主链正式内容字节只能来自 WebTorrent createServer/streamURL �
   const source = await 解析测试协作分发源({ ctor, attachmentId: "att-only-channel" });
 
   expect(source.src).toBe(streamUrl);
+  expect(source.formalByteSource).toBe("webtorrent_official_stream");
   expect(source.hint).not.toContain("HLS");
   expect(source.hint).not.toContain("CDN");
 });
@@ -150,18 +180,25 @@ Expected: 新增 WebTorrent-only 断言失败，证明当前测试确实覆盖�
 
 - [ ] **步骤 3：最小实现主链来源证明**
 
-在 `frontend/媒体/媒体协作分发.ts` 里新增小而专的内部判断，不创建新 runtime：
+在 `frontend/媒体/媒体协作分发.ts` 里新增小而专的来源标记，不创建新 runtime；来源只能在 `接入协作分发种子 -> 读取首个可播放文件 -> file.streamURL 探测通过` 这一条 WebTorrent 官方产源链上盖章，不能靠 URL 字符串猜：
 
 ```ts
 type 协作分发内容字节入口 = "webtorrent_official_stream" | "non_webtorrent_bypass";
 
-const 判定协作分发内容字节入口 = (src: string | null): 协作分发内容字节入口 =>
-  src && /\/webtorrent\//.test(src) ? "webtorrent_official_stream" : "non_webtorrent_bypass";
+type 带正式字节来源<T> = T & {
+  formalByteSource: 协作分发内容字节入口;
+};
+
+const 标记WebTorrent官方播放源 = <T extends { src: string }>(source: T): 带正式字节来源<T> => ({
+  ...source,
+  formalByteSource: "webtorrent_official_stream",
+});
 ```
 
 实现要求：
 
-- `streamURL` / `createServer` / `streamTo` 产出的受控 URL 才能返回正式播放源。
+- 只有 WebTorrent `file.streamURL` / `createServer` / `streamTo` 产源点返回的受控 source 才能标记为正式播放源。
+- 禁止用 `src.includes("/webtorrent/")`、`blob:` 命名、域名、路径片段或测试 fixture 字符串判断来源；现有合法 swarm source 可能是 `blob:http://media.local/swarm-*`，误判会直接破坏自动播放、viewer、fullscreen 和续播。
 - 原文件 URL、CDN URL、HLS/DASH manifest/segment、临时 range URL、service worker 私有 cache、本地文件 URL 都不能进入新主链成功态。
 - WebSeed 只能作为 swarm 内成员参与，不能作为前端直链返回。
 
@@ -270,6 +307,7 @@ export type 信息流视频预算投影 = {
 
 实现规则：
 
+- 执行本任务前必须先更新所有 caller：现有 `媒体播放结果.mode === "swarm"`、`资产协作分发运行时` 从 WebTorrent file 对象返回的 source，以及测试 fixture 里的合法 swarm source，都要显式映射为 `webtorrent_official_stream`；禁止因字段缺失把旧的满血 swarm 播放误当成 `none`。
 - `formalByteSource !== "webtorrent_official_stream"` 时，不能返回 `heavy_playback` 或允许 canonical inline 接管。
 - `warm_preview` 只能表示 WebTorrent 官方 stream/range 内的轻预热，不表示 HTTP 直链预热成功。
 - `light_help` 不持有前台内容字节 reader。
@@ -299,9 +337,11 @@ git commit -m "前端: 扩展信息流媒体预算字节来源证明"
 - Modify: `frontend/媒体运行时.ts`
 - Modify: `frontend/媒体/资产协作分发运行时.ts`
 - Modify: `frontend/聊天媒体编排.ts`
+- Modify: `frontend/聊天壳.ts`
 - Modify: `frontend/tests/媒体运行时测试.spec.ts`
 - Modify: `frontend/tests/资产协作分发运行时测试.spec.ts`
 - Modify: `frontend/tests/聊天媒体编排测试.spec.ts`
+- Modify: `frontend/tests/聊天壳测试.spec.ts`
 
 - [ ] **步骤 1：写失败测试，预算快照必须能解释每个重对象**
 
@@ -329,6 +369,26 @@ it("budgetSnapshot 会同时解释正式播放器、轻预热、轻帮助和 Web
 });
 ```
 
+在 `frontend/tests/聊天壳测试.spec.ts` 增加只读浏览器烟测探针断言：
+
+```ts
+it("聊天壳只暴露编排层 budgetSnapshot 给真实浏览器烟测", async () => {
+  const shell = 创建测试聊天壳WithBudgetSnapshot({
+    activeFormalPlayerCount: 1,
+    activeSwarmCount: 1,
+    focusedVideoBudget: [{ attachmentId: "att-shell", formalByteSource: "webtorrent_official_stream" }],
+  });
+
+  document.body.appendChild(shell);
+  await shell.updateComplete;
+
+  expect(window.__kokoBudgetSnapshot?.()).toMatchObject({
+    activeFormalPlayerCount: 1,
+    activeSwarmCount: 1,
+  });
+});
+```
+
 在 `frontend/tests/资产协作分发运行时测试.spec.ts` 增加：
 
 ```ts
@@ -348,7 +408,7 @@ it("零引用会话保留轻帮助态时不再占 whole-file heavy reader 预算
 Run:
 
 ```powershell
-pnpm --dir frontend test -- "tests/媒体运行时测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/聊天媒体编排测试.spec.ts"
+pnpm --dir frontend test -- "tests/媒体运行时测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/聊天媒体编排测试.spec.ts" "tests/聊天壳测试.spec.ts"
 ```
 
 Expected: 新增字段或聚合逻辑失败。
@@ -374,6 +434,8 @@ Expected: 新增字段或聚合逻辑失败。
 }
 ```
 
+- `聊天壳.ts` 只能把 `聊天媒体编排.读取预算()` 或 `聊天快照.media.budget` 暴露为 `window.__kokoBudgetSnapshot()`，给 `chrome-devtools-cli` / `playwright-cli` 真实烟测读取；壳层不得重算 ready、owner、WebTorrent source 或播放器状态。
+
 禁止：
 
 - `房间消息窗.ts` 局部重算 owner 级预算。
@@ -385,7 +447,7 @@ Expected: 新增字段或聚合逻辑失败。
 Run:
 
 ```powershell
-pnpm --dir frontend test -- "tests/媒体运行时测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/聊天媒体编排测试.spec.ts"
+pnpm --dir frontend test -- "tests/媒体运行时测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/聊天媒体编排测试.spec.ts" "tests/聊天壳测试.spec.ts"
 ```
 
 Expected: all tests pass.
@@ -393,7 +455,7 @@ Expected: all tests pass.
 Commit:
 
 ```powershell
-git add frontend/媒体运行时.ts frontend/媒体/资产协作分发运行时.ts frontend/聊天媒体编排.ts frontend/tests/媒体运行时测试.spec.ts frontend/tests/资产协作分发运行时测试.spec.ts frontend/tests/聊天媒体编排测试.spec.ts
+git add frontend/媒体运行时.ts frontend/媒体/资产协作分发运行时.ts frontend/聊天媒体编排.ts frontend/聊天壳.ts frontend/tests/媒体运行时测试.spec.ts frontend/tests/资产协作分发运行时测试.spec.ts frontend/tests/聊天媒体编排测试.spec.ts frontend/tests/聊天壳测试.spec.ts
 git commit -m "前端: 收口信息流媒体预算快照owner"
 ```
 
@@ -493,6 +555,9 @@ git commit -m "前端: 让房间消息窗只消费媒体预算投影"
 - Modify: `frontend/媒体/媒体查看器.ts`
 - Modify: `frontend/tests/媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/房间消息窗媒体查看器测试.spec.ts`
+- Modify: `frontend/tests/媒体播放测试.spec.ts`
+- Modify: `frontend/tests/视频预览协作测试.spec.ts`
+- Modify: `frontend/tests/聊天应用内核测试.spec.ts`
 
 - [ ] **步骤 1：写失败测试，viewer/fullscreen 不能重建第二播放器**
 
@@ -509,12 +574,19 @@ it("自动播 owner 进入 viewer/fullscreen 后仍复用同一颗全局播放�
 });
 ```
 
+同时补齐既有满血体验保护测试，避免“零崩溃”实现破坏原业务：
+
+- `frontend/tests/媒体播放测试.spec.ts`：自动播放 owner 切换、离屏自动暂停、恢复同一 attachment 时续播 currentTime 不倒退。
+- `frontend/tests/视频预览协作测试.spec.ts`：预览探针释放后不打断正式 swarm source，不制造黑屏/闪烁占位。
+- `frontend/tests/聊天应用内核测试.spec.ts`：打开 viewer、进入 fullscreen、退出归位后不出现“附件当前不可获取”，同一视频不产生第二主链 source generation。
+- `frontend/tests/房间消息窗媒体查看器测试.spec.ts`：滚动长列表时非当前 owner 只降到轻态或冷表达，不抢占唯一播放器。
+
 - [ ] **步骤 2：运行测试确认失败**
 
 Run:
 
 ```powershell
-pnpm --dir frontend test -- "tests/媒体查看器测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts"
+pnpm --dir frontend test -- "tests/媒体查看器测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts" "tests/媒体播放测试.spec.ts" "tests/视频预览协作测试.spec.ts" "tests/聊天应用内核测试.spec.ts"
 ```
 
 Expected: 缺失 rVFC/currentTime/fullscreen 上报或重建路径会失败。
@@ -533,7 +605,7 @@ Expected: 缺失 rVFC/currentTime/fullscreen 上报或重建路径会失败。
 Run:
 
 ```powershell
-pnpm --dir frontend test -- "tests/媒体查看器测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts"
+pnpm --dir frontend test -- "tests/媒体查看器测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts" "tests/媒体播放测试.spec.ts" "tests/视频预览协作测试.spec.ts" "tests/聊天应用内核测试.spec.ts"
 ```
 
 Expected: all tests pass.
@@ -541,7 +613,7 @@ Expected: all tests pass.
 Commit:
 
 ```powershell
-git add frontend/媒体/全局唯一播放器.ts frontend/媒体/媒体查看器.ts frontend/tests/媒体查看器测试.spec.ts frontend/tests/房间消息窗媒体查看器测试.spec.ts
+git add frontend/媒体/全局唯一播放器.ts frontend/媒体/媒体查看器.ts frontend/tests/媒体查看器测试.spec.ts frontend/tests/房间消息窗媒体查看器测试.spec.ts frontend/tests/媒体播放测试.spec.ts frontend/tests/视频预览协作测试.spec.ts frontend/tests/聊天应用内核测试.spec.ts
 git commit -m "前端: 巩固唯一播放器查看器全屏连续性"
 ```
 
@@ -638,10 +710,12 @@ git commit -m "前端: 增加浏览器应用媒体预算门禁"
 Run:
 
 ```powershell
-pnpm --dir frontend test -- "tests/媒体协作分发测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/媒体运行时测试.spec.ts" "tests/信息流视频预算测试.spec.ts" "tests/聊天媒体编排测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts" "tests/媒体查看器测试.spec.ts" "tests/媒体服务工作线程测试.spec.ts" "tests/媒体共享契约测试.spec.ts"
+pnpm --dir frontend test -- "tests/媒体协作分发测试.spec.ts" "tests/资产协作分发运行时测试.spec.ts" "tests/媒体运行时测试.spec.ts" "tests/信息流视频预算测试.spec.ts" "tests/聊天媒体编排测试.spec.ts" "tests/聊天壳测试.spec.ts" "tests/房间消息窗媒体查看器测试.spec.ts" "tests/媒体查看器测试.spec.ts" "tests/媒体播放测试.spec.ts" "tests/视频预览协作测试.spec.ts" "tests/聊天应用内核测试.spec.ts" "tests/端到端测试.spec.ts" "tests/媒体服务工作线程测试.spec.ts" "tests/媒体共享契约测试.spec.ts"
 ```
 
 Expected: all selected tests pass.
+
+这些回归测试不是可选项；它们专门证明计划执行后仍保留丝滑自动播放、离屏自动暂停、全屏复用、退出归位续播、预览协作不抢正式播放、长列表不闪烁掉帧，以及 WebTorrent 唯一主链不被替换。
 
 - [ ] **步骤 2：运行全量前端测试**
 
