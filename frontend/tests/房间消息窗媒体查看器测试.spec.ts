@@ -4310,6 +4310,75 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("时间线视频卡片会优先消费统一预算投影，而不是自己重算 owner 级 canonical 露出", async () => {
+    const pane = 创建媒体消息窗();
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-att-video-1",
+        thumbnailUrl: "http://media.local/poster-att-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/inline-owner-att-video-1",
+        thumbnailUrl: "http://media.local/poster-att-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    (
+      pane as unknown as {
+        mediaVideoBudgetByAttachmentId: Record<
+          string,
+          {
+            attachmentId: string;
+            tier: string;
+            reason: string;
+            canonicalVideoSrc: string | null;
+            previewVideoSrc: string | null;
+            allowInlineCanonical: boolean;
+            allowPreviewVideo: boolean;
+          }
+        >;
+      }
+    ).mediaVideoBudgetByAttachmentId = {
+      "att-video-1": {
+        attachmentId: "att-video-1",
+        tier: "warm_preview",
+        reason: "window_preview",
+        canonicalVideoSrc: null,
+        previewVideoSrc: "blob:http://media.local/swarm-att-video-1",
+        allowInlineCanonical: false,
+        allowPreviewVideo: true,
+      },
+    };
+    try {
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const videoCard = pane.querySelector<HTMLElement>(
+        '.message-video-card[data-attachment-id="att-video-1"]'
+      );
+      expect(videoCard?.dataset.budgetTier).toBe("warm_preview");
+      expect(videoCard?.dataset.budgetReason).toBe("window_preview");
+      expect(
+        pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+      ).toBeNull();
+      expect(
+        pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+      ).not.toBeNull();
+    } finally {
+      pane.remove();
+    }
+  });
+
   it("点击非自动播 owner 视频时，仍然继续走查看器冷开请求", async () => {
     const { requestFullscreen, restore } = 安装消息窗直达全屏模拟();
     const pane = 创建媒体消息窗();

@@ -491,6 +491,7 @@ const 创建默认VideoJs播放器层 = async (
   const overlay = document.createElement("div") as 可原生全屏容器元素;
   const mount = document.createElement("div");
   const closeButton = document.createElement("button");
+  let 关闭按钮宿主: HTMLElement = overlay;
   let 关闭按钮已挂载 = false;
   const 使用沉浸查看器布局 = options.shouldAutoEnterFullscreen;
   const 沉浸查看器可见样式 =
@@ -500,10 +501,12 @@ const 创建默认VideoJs播放器层 = async (
   const 对话查看器样式 =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
   const 挂载关闭按钮 = (): void => {
-    if (关闭按钮已挂载) {
+    if (closeButton.parentElement === 关闭按钮宿主) {
+      关闭按钮已挂载 = true;
       return;
     }
-    overlay.append(closeButton);
+    closeButton.remove();
+    关闭按钮宿主.append(closeButton);
     关闭按钮已挂载 = true;
   };
   const 卸载关闭按钮 = (): void => {
@@ -512,6 +515,21 @@ const 创建默认VideoJs播放器层 = async (
     }
     closeButton.remove();
     关闭按钮已挂载 = false;
+  };
+  const 切换关闭按钮宿主 = (host: HTMLElement): void => {
+    if (关闭按钮宿主 === host) {
+      return;
+    }
+    /**
+     * 关闭按钮必须跟着真正的 fullscreen owner 走：
+     * 1. 真实浏览器的命中测试只认 top layer，不认“视觉上像在上面”的 document.body 叠层；
+     * 2. 但 viewer 退场前又必须先把按钮从容器摘掉，不能跟着 canonical player 迁回时间线；
+     * 3. 因此这里单独维护宿主切换，而不是把按钮永远钉死在 body overlay。
+     */
+    关闭按钮宿主 = host;
+    if (关闭按钮已挂载) {
+      挂载关闭按钮();
+    }
   };
   const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
     if (!使用沉浸查看器布局) {
@@ -565,7 +583,7 @@ const 创建默认VideoJs播放器层 = async (
   closeButton.textContent = "关闭";
   closeButton.setAttribute("aria-label", "关闭视频查看器");
   closeButton.style.cssText =
-    "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
+    "position:fixed;top:16px;right:16px;z-index:2147483647;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
   同步沉浸查看器显示阶段(使用沉浸查看器布局 ? "pending" : "active");
 
   overlay.append(mount);
@@ -622,6 +640,9 @@ const 创建默认VideoJs播放器层 = async (
     if (!video || !container) {
       throw new Error("全局唯一播放器未能返回可用的 Video.js 宿主表面");
     }
+    if (使用沉浸查看器布局) {
+      切换关闭按钮宿主(container);
+    }
 
     const cleanup = (): void => {
       if (cleaned) {
@@ -638,6 +659,8 @@ const 创建默认VideoJs播放器层 = async (
       overlay.removeEventListener("click", closeWhenClickingBackdrop);
       document.removeEventListener("keydown", closeWhenPressingEscape);
       清理全屏策略.清理();
+      卸载关闭按钮();
+      切换关闭按钮宿主(overlay);
       当前查看器会话?.关闭();
       video.pause();
       overlay.remove();

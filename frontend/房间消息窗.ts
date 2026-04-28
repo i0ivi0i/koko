@@ -4,6 +4,10 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
+  投影信息流视频预算,
+  type 信息流视频预算投影,
+} from "./媒体/信息流视频预算.js";
+import {
   视频地址属于旧流媒体清单,
   type 媒体播放结果,
   type 媒体播放位置,
@@ -71,6 +75,7 @@ export class 房间消息窗 extends LitElement {
     jumpToLatestLabel: { type: String },
     mediaPlaybackByAttachmentId: { attribute: false },
     mediaPreviewByAttachmentId: { attribute: false },
+    mediaVideoBudgetByAttachmentId: { attribute: false },
     inlineAutoplayOwnerAttachmentId: { type: String },
     inlineAutoplayPlaybackByAttachmentId: { attribute: false },
     inlineAutoplayPositionByAttachmentId: { attribute: false },
@@ -81,6 +86,7 @@ export class 房间消息窗 extends LitElement {
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
   declare mediaPreviewByAttachmentId: Record<string, 视频预览状态>;
+  declare mediaVideoBudgetByAttachmentId: Record<string, 信息流视频预算投影>;
   declare inlineAutoplayOwnerAttachmentId: string | null;
   declare inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
   declare inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
@@ -162,6 +168,7 @@ export class 房间消息窗 extends LitElement {
     this.jumpToLatestLabel = "";
     this.mediaPlaybackByAttachmentId = {};
     this.mediaPreviewByAttachmentId = {};
+    this.mediaVideoBudgetByAttachmentId = {};
     this.inlineAutoplayOwnerAttachmentId = null;
     this.inlineAutoplayPlaybackByAttachmentId = {};
     this.inlineAutoplayPositionByAttachmentId = {};
@@ -371,29 +378,25 @@ export class 房间消息窗 extends LitElement {
         const shouldReuseSavedTimelineFrameAsPreview =
           Boolean(savedTimelineFrameSrc) &&
           (!playback || this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId));
-        const timelinePreviewVideoSrc =
+        const timelinePreviewVideoSrcCandidate =
           playbackTimelineVideoSrc ??
           (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+        const budget = this.读取时间线视频预算投影(
+          attachment,
+          timelinePreviewVideoSrcCandidate
+        );
+        const timelinePreviewVideoSrc =
+          budget.previewVideoSrc ??
+          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
         if (
+          budget.allowPreviewVideo &&
           timelinePreviewVideoSrc &&
           可渲染真实预览视频附件.has(attachment.attachmentId)
         ) {
           previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
         }
-        const inlineAutoplayPlayback =
-          this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-        const inlineAutoplayPreviewSrc =
-          inlineAutoplayPlayback && inlineAutoplayPlayback.mode === "swarm"
-            ? inlineAutoplayPlayback.src
-            : null;
-        const playbackCanonicalVideoSrc = playback?.mode === "swarm" ? playback.src : null;
-        const ownerCanonicalVideoSrc =
-          inlineAutoplayPreviewSrc ?? playbackCanonicalVideoSrc ?? timelinePreviewVideoSrc;
-        if (
-          this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
-          ownerCanonicalVideoSrc
-        ) {
-          canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, ownerCanonicalVideoSrc);
+        if (budget.allowInlineCanonical && budget.canonicalVideoSrc) {
+          canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, budget.canonicalVideoSrc);
         }
       }
     }
@@ -1472,6 +1475,38 @@ export class 房间消息窗 extends LitElement {
     return preview?.phase === "ready" ? preview : null;
   }
 
+  private 读取时间线视频预算投影(
+    attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
+    previewVideoSrcCandidate: string | null
+  ): 信息流视频预算投影 {
+    const fromSnapshot = this.mediaVideoBudgetByAttachmentId[attachment.attachmentId];
+    if (fromSnapshot) {
+      return fromSnapshot;
+    }
+    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+    const inlineAutoplayPlayback =
+      this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+    /**
+     * 这里的 fallback 只服务直连组件测试和极少数独立挂载场景：
+     * 1. 真实应用路径会由聊天媒体编排先给出统一预算投影；
+     * 2. 即便需要兜底，也继续复用同一个投影原语，不再在消息窗里手搓第二套 owner 判断；
+     * 3. 这样可以兼顾测试稳定性，同时守住“预算逻辑只有一份”的约束。
+     */
+    return 投影信息流视频预算({
+      attachmentId: attachment.attachmentId,
+      playback,
+      inlineAutoplayPlayback,
+      viewerCanonicalVideoSrc: null,
+      previewVideoSrc: previewVideoSrcCandidate,
+      inMediaWindow: true,
+      isAutoplayCandidate: false,
+      isInlineAutoplayOwner: this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId,
+      isViewerOwner: false,
+      sessionStatus: playback?.mode === "swarm" ? "backfilling" : null,
+      locallyComplete: false,
+    });
+  }
+
   private 读取保存续帧是否允许承接时间线预览底板(attachmentId: string): boolean {
     /**
      * 保存续帧只允许服务两种场景：
@@ -1794,12 +1829,6 @@ export class 房间消息窗 extends LitElement {
               !hasSourcePoster && runtimePreview
                 ? runtimePreview.src
                 : this.读取时间线视频封面地址(attachment, playback);
-            const inlineAutoplayPlayback =
-              this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-            const inlineAutoplayPreviewSrc =
-              inlineAutoplayPlayback && inlineAutoplayPlayback.mode === "swarm"
-                ? inlineAutoplayPlayback.src
-                : null;
             const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(
               attachment,
               playback,
@@ -1831,33 +1860,25 @@ export class 房间消息窗 extends LitElement {
                 !playback ||
                 this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId)
               );
-            /**
-             * 时间线视频一旦拿到正式 swarm 播放源，就继续复用同一颗 `<video>` 作为唯一视觉壳，
-             * 且优先保留 playback 给出的 canonical src：
-             * 1. 有 poster 也只允许挂在这颗 `<video>` 上等待首帧，不能退回独立 `<img>`；
-             * 2. 这样下一个可见视频从“静态预览 -> 自动播 owner”时，只切 autoplay，不切主节点；
-             * 3. `savedTimelineFrameSrc` 只在 playback 暂缺时兜住释放帧，不允许反过来改写已有的 canonical playback 源；
-             * 4. 否则同一资源会在相对/绝对 URL 间来回赋值，Chrome 会把它当成一次新 load，自动播切换就会闪。
-             */
-            const timelinePreviewVideoSrc =
+            const timelinePreviewVideoSrcCandidate =
               playbackTimelineVideoSrc ??
               (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
-            const playbackCanonicalVideoSrc =
-              playback?.mode === "swarm" ? playback.src : null;
+            const videoBudget = this.读取时间线视频预算投影(
+              attachment,
+              timelinePreviewVideoSrcCandidate
+            );
             /**
-             * 自动播 owner 交接时，新的 swarm autoplay playback 结果不一定与 owner 切换同拍到达：
-             * 1. 如果这里硬等 `inlineAutoplayPlayback`，旧 host 会先撤掉，而新 host 要晚一拍才出现；
-             * 2. 但如果直接把 canonical host 暴露到可见卡片上，唯一播放器又会在用户眼前现场切源 / seek；
-             * 3. 因此这里先收口“owner 需要的 canonical source”，再由 reveal gate 决定它是进隐藏预热宿主还是可见宿主；
-             * 4. 后续更正式的 autoplay swarm 源到达时，只允许同一颗壳继续 `同步(source)`，不允许再换主节点。
+             * 时间线真正消费的是“统一预算投影 + 本地连续性桥”：
+             * 1. canonical / preview 谁能露、谁该藏，先看编排层收口后的预算裁决；
+             * 2. `savedTimelineFrameSrc` 只在预算没有 preview src 时兜住刚退场 owner 的同源续帧；
+             * 3. 这样消息窗就不再自己重算第二套 owner 逻辑，只负责把预算真相投影成 DOM。
              */
-            const ownerCanonicalVideoSrc =
-              inlineAutoplayPreviewSrc ??
-              playbackCanonicalVideoSrc ??
-              timelinePreviewVideoSrc;
+            const timelinePreviewVideoSrc =
+              videoBudget.previewVideoSrc ??
+              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+            const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
             const shouldRenderInlineVideo =
-              this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
-              Boolean(ownerCanonicalVideoSrc);
+              videoBudget.allowInlineCanonical && Boolean(ownerCanonicalVideoSrc);
             const shouldRevealCanonicalHost =
               shouldRenderInlineVideo &&
               this.读取时间线唯一播放器是否可见接管就绪(
@@ -1877,6 +1898,7 @@ export class 房间消息窗 extends LitElement {
             );
             const shouldRenderPreviewVideo =
               Boolean(previewVideoSrc) &&
+              videoBudget.allowPreviewVideo &&
               可渲染真实预览视频附件.has(attachment.attachmentId);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
@@ -2052,6 +2074,8 @@ export class 房间消息窗 extends LitElement {
               <div
                 class="message-attachment-card message-video-card"
                 data-attachment-id=${attachment.attachmentId}
+                data-budget-tier=${videoBudget.tier}
+                data-budget-reason=${videoBudget.reason}
                 data-grid-column-start=${attachment.gridColumnStart ?? ""}
                 data-grid-column-span=${attachment.gridColumnSpan ?? ""}
                 data-grid-row-start=${attachment.gridRowStart ?? ""}

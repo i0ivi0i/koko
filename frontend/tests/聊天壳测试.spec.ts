@@ -38,6 +38,25 @@ import {
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 匿名身份引导结果 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
+
+const 查询查看器关闭按钮 = (): HTMLButtonElement | null => {
+  const directButton = document.body.querySelector<HTMLButtonElement>(
+    'button[aria-label="关闭视频查看器"]'
+  );
+  if (directButton) {
+    return directButton;
+  }
+  const skins = document.body.querySelectorAll("koko-video-skin, video-skin");
+  for (const skin of skins) {
+    const button = skin.shadowRoot?.querySelector<HTMLButtonElement>(
+      'button[aria-label="关闭视频查看器"]'
+    );
+    if (button) {
+      return button;
+    }
+  }
+  return null;
+};
 import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
 
 const 当前测试文件目录 = dirname(fileURLToPath(import.meta.url));
@@ -933,6 +952,32 @@ describe("聊天壳集成 / 首页与控制台", () => {
           hint: null,
         },
       };
+      (
+        pane as unknown as {
+          mediaVideoBudgetByAttachmentId: Record<
+            string,
+            {
+              attachmentId: string;
+              tier: string;
+              reason: string;
+              canonicalVideoSrc: string | null;
+              previewVideoSrc: string | null;
+              allowInlineCanonical: boolean;
+              allowPreviewVideo: boolean;
+            }
+          >;
+        }
+      ).mediaVideoBudgetByAttachmentId = {
+        "att-video-inline-direct-fullscreen": {
+          attachmentId: "att-video-inline-direct-fullscreen",
+          tier: "heavy_playback",
+          reason: "inline_autoplay_owner",
+          canonicalVideoSrc: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+          previewVideoSrc: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+          allowInlineCanonical: true,
+          allowPreviewVideo: true,
+        },
+      };
       pane!.inlineAutoplayOwnerAttachmentId = "att-video-inline-direct-fullscreen";
       await pane!.updateComplete;
 
@@ -1216,9 +1261,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     expect(await 等待查看器壳出现()).not.toBeNull();
 
-    document.body
-      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
-      ?.click();
+    查询查看器关闭按钮()?.click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
     await 等待查看器壳消失();

@@ -1,6 +1,7 @@
 import type { 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 媒体附件草稿 } from "./媒体/媒体草稿.js";
+import type { 信息流视频预算投影 } from "./媒体/信息流视频预算.js";
 
 /** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
 export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
@@ -111,6 +112,7 @@ export interface 聊天运行时预算状态 {
   zeroRefLightHelpSessionCount: number;
   zeroRefWholeFileReaderCount: number;
   longTaskCount: number;
+  focusedVideoBudget: 信息流视频预算投影[];
   updatePendingDurationMs: number;
 }
 
@@ -200,6 +202,7 @@ export const 初始聊天运行时预算状态: 聊天运行时预算状态 = {
   zeroRefLightHelpSessionCount: 0,
   zeroRefWholeFileReaderCount: 0,
   longTaskCount: 0,
+  focusedVideoBudget: [],
   updatePendingDurationMs: 0,
 };
 

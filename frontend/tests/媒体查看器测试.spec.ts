@@ -286,6 +286,43 @@ const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
 };
 
+const 查询查看器关闭按钮 = (): HTMLButtonElement | null => {
+  const directButton = document.body.querySelector<HTMLButtonElement>(
+    'button[aria-label="关闭视频查看器"]'
+  );
+  if (directButton) {
+    return directButton;
+  }
+  const fullscreenButton = document.fullscreenElement?.querySelector<HTMLButtonElement>(
+    'button[aria-label="关闭视频查看器"]'
+  );
+  if (fullscreenButton) {
+    return fullscreenButton;
+  }
+  const skins = document.body.querySelectorAll("koko-video-skin, video-skin");
+  for (const skin of skins) {
+    const button = skin.shadowRoot?.querySelector<HTMLButtonElement>(
+      'button[aria-label="关闭视频查看器"]'
+    );
+    if (button) {
+      return button;
+    }
+  }
+  return null;
+};
+
+const 等待查询查看器关闭按钮 = async (maxTurns = 40): Promise<HTMLButtonElement | null> => {
+  for (let turn = 0; turn < maxTurns; turn += 1) {
+    const button = 查询查看器关闭按钮();
+    if (button) {
+      return button;
+    }
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return null;
+};
+
 const 创建测试VideoJs进入全屏 = (container: HTMLElement) =>
   vi.fn(async () => {
     if (typeof container.requestFullscreen === "function") {
@@ -617,12 +654,15 @@ describe("媒体查看器适配器", () => {
     const overlay = document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]');
     const mount = document.body.querySelector<HTMLElement>("[data-media-viewer-mount='video']");
     const mediaContainer = 读取VideoJs媒体容器();
+    const closeButton = await 等待查询查看器关闭按钮();
 
     expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
     expect(mediaContainer).not.toBeNull();
+    expect(closeButton).not.toBeNull();
     expect(document.fullscreenElement).toBe(mediaContainer);
     expect(document.fullscreenElement).not.toBe(overlay);
+    expect(document.fullscreenElement?.contains(closeButton!)).toBe(true);
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
     expect(requestFullscreen.mock.instances.at(0)).toBe(mediaContainer);
     expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
@@ -767,9 +807,7 @@ describe("媒体查看器适配器", () => {
     });
     await 等待查看器任务完成(6);
 
-    const closeButton = await 等待查询元素<HTMLButtonElement>(
-      'button[aria-label="关闭视频查看器"]'
-    );
+    const closeButton = await 等待查询查看器关闭按钮();
     const viewerVideo = document.body.querySelector<HTMLVideoElement>("video");
     expect(closeButton).not.toBeNull();
     expect(viewerVideo).not.toBeNull();
@@ -1993,9 +2031,7 @@ describe("媒体查看器适配器", () => {
     await 等待查询元素("video-player[data-player-shell='videojs']");
     await 等待查看器任务完成();
 
-    document.body
-      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
-      ?.click();
+    ;(await 等待查询查看器关闭按钮())?.click();
     await Promise.resolve();
 
     expect(webkitExitFullscreen).toHaveBeenCalledTimes(1);
@@ -2170,9 +2206,7 @@ describe("媒体查看器适配器", () => {
     await 等待查看器任务完成();
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
-    const closeButton = await 等待查询元素<HTMLButtonElement>(
-      'button[aria-label="关闭视频查看器"]'
-    );
+    const closeButton = await 等待查询查看器关闭按钮();
     closeButton?.click();
     await 等待查看器任务完成(6);
 
@@ -2461,6 +2495,7 @@ describe("媒体查看器适配器", () => {
   });
 
   it("关闭视频查看器后，再打开另一条视频时会重新创建同一套查看器壳，而不是复用已销毁实例", async () => {
+    安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
     });
@@ -2481,12 +2516,7 @@ describe("媒体查看器适配器", () => {
     await 等待查询元素("video-player[data-player-shell='videojs']");
     await 等待查看器任务完成();
 
-    const closeButton = await 等待查询元素<HTMLButtonElement>(
-      'button[aria-label="关闭视频查看器"]'
-    );
-    expect(closeButton).not.toBeNull();
-
-    closeButton?.click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await 等待查看器任务完成();
 
     expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
