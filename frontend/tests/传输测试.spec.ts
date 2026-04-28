@@ -544,8 +544,6 @@ describe("传输", () => {
                   height: 720,
                 },
               },
-              manifest: null,
-              lifecycle: null,
               distribution: {
                 swarm_id: "swarm-hash-source-hit-1",
                 announce_urls: ["/api/swarm/announce"],
@@ -702,8 +700,6 @@ describe("传输", () => {
                 height: 1920,
               },
             },
-            manifest: null,
-            lifecycle: null,
             distribution: {
               swarm_id: "swarm-hash-att-ready-1",
               announce_urls: ["/api/swarm/announce"],
@@ -751,8 +747,6 @@ describe("传输", () => {
           height: 1920,
         },
       },
-      manifest: null,
-      lifecycle: null,
       distribution: {
         swarm_id: "swarm-hash-att-ready-1",
         announce_urls: ["ws://localhost:3000/api/swarm/announce"],
@@ -825,7 +819,6 @@ describe("传输", () => {
               retry_after_ms: null,
             },
           },
-          streaming_asset: null,
           file_asset: {
             asset_id: "att-locator-1",
             content_hash: "hash-att-locator-1",
@@ -839,8 +832,6 @@ describe("传输", () => {
                 height: 720,
               },
             },
-            manifest: null,
-            lifecycle: null,
             distribution: {
               swarm_id: "swarm-hash-att-locator-1",
               announce_urls: ["/api/swarm/announce"],
@@ -895,7 +886,6 @@ describe("传输", () => {
           retry_after_ms: null,
         },
       },
-      streaming_asset: null,
       file_asset: {
         asset_id: "att-locator-1",
         content_hash: "hash-att-locator-1",
@@ -909,8 +899,6 @@ describe("传输", () => {
             height: 720,
           },
         },
-        manifest: null,
-        lifecycle: null,
         distribution: {
           swarm_id: "swarm-hash-att-locator-1",
           announce_urls: ["ws://localhost:3000/api/swarm/announce"],
@@ -959,7 +947,6 @@ describe("传输", () => {
               retry_after_ms: null,
             },
           },
-          streaming_asset: null,
           file_asset: null,
           blob_asset: null,
         }),
@@ -993,7 +980,6 @@ describe("传输", () => {
           thumbnail_url: null,
           preview_asset: null,
           distribution: null,
-          streaming_asset: null,
           file_asset: null,
           blob_asset: null,
         }),
@@ -1042,8 +1028,6 @@ describe("传输", () => {
                   height: 1920,
                 },
               },
-              manifest: null,
-              lifecycle: null,
               distribution: {
                 swarm_id: "swarm-hash-att-ready-2",
                 announce_urls: ["/api/swarm/announce"],
@@ -1097,7 +1081,6 @@ describe("传输", () => {
               },
               survival_mode: "peer_only_after_expiry",
             },
-            streaming_asset: null,
             file_asset: {
               asset_id: "att-ready-2",
               content_hash: "hash-att-ready-2",
@@ -1111,8 +1094,6 @@ describe("传输", () => {
                   height: 1920,
                 },
               },
-              manifest: null,
-              lifecycle: null,
               distribution: {
                 swarm_id: "swarm-hash-att-ready-2",
                 announce_urls: ["/api/swarm/announce"],
@@ -1211,7 +1192,6 @@ describe("传输", () => {
             },
             survival_mode: "peer_only_after_expiry",
           },
-          streaming_asset: null,
           file_asset: {
             asset_id: "att-connecting-peer-1",
             content_hash: "hash-att-connecting-peer-1",

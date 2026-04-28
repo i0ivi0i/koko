@@ -8,9 +8,9 @@ import {
 import { Http接口错误 } from "../传输";
 
 describe("媒体播放器", () => {
-  it("媒体播放模块不应继续保留旧 streaming_asset 兼容叙事", () => {
+  it("媒体播放模块不应继续保留第二链兼容叙事", () => {
     const source = readFileSync(new URL("../媒体/媒体播放.ts", import.meta.url), "utf-8");
-    expect(source.includes("旧 streaming_asset 只继续作为")).toBe(false);
+    expect(source.includes("streaming_asset")).toBe(false);
   });
 
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
@@ -56,8 +56,6 @@ describe("媒体播放器", () => {
             height: 720,
           },
         },
-        manifest: null,
-        lifecycle: null,
         distribution: {
           swarm_id: "swarm-hash-file-video-1",
           announce_urls: ["wss://tracker.media.local/announce"],
@@ -74,7 +72,6 @@ describe("媒体播放器", () => {
         },
       },
       blob_asset: null,
-      streaming_asset: null,
     };
     const 播放器 = 创建媒体播放器({
       locate: async () => locator,
@@ -168,7 +165,6 @@ describe("媒体播放器", () => {
             role: "cold_backup_only" as const,
           },
         },
-        streaming_asset: null,
       }),
       resolveSwarmSource,
       probeAnchor,
@@ -264,7 +260,6 @@ describe("媒体播放器", () => {
             role: "cold_backup_only" as const,
           },
         },
-        streaming_asset: null,
       }),
       resolveSwarmSource,
     });
@@ -468,7 +463,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: null,
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -552,208 +546,6 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("streaming_asset 只有冷源过渡面时，若 swarm 不可用则保持降级态，不回退 origin", async () => {
-    const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
-      locate: async () => ({
-        attachment_id: "att-video-transition",
-        kind: "video" as const,
-        status: "ready" as const,
-        original_url: "http://media.local/legacy-original",
-        thumbnail_url: null,
-        distribution: null,
-        streaming_asset: {
-          asset_id: "att-video-transition",
-          content_hash: "hash-video-transition",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: null,
-            dash_mpd_url: null,
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-transition",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-transition",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-transition",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
-        blob_asset: null,
-      }),
-      resolveSwarmSource: async () => null,
-      probeAnchor,
-    });
-
-    const result = await 播放器.解析播放结果({
-      attachmentId: "att-video-transition",
-      kind: "video",
-    });
-
-    expect(probeAnchor).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      mode: "degraded",
-      attachmentId: "att-video-transition",
-      kind: "video",
-      src: "",
-      thumbnailUrl: null,
-      reason: "anchor_unavailable",
-      hint: "附件当前不可获取",
-    });
-  });
-
-  it("viewer 首次打开命中旧 manifest locator 时，仍会强制刷新 locator，主链不再回到 manifest", async () => {
-    const locate = vi
-      .fn()
-      .mockResolvedValueOnce({
-        attachment_id: "att-video-viewer-race",
-        kind: "video" as const,
-        status: "ready" as const,
-        original_url: "http://media.local/legacy-original-viewer-race",
-        thumbnail_url: "http://media.local/poster-viewer-race",
-        distribution: {
-          content_id: "content_att-video-viewer-race",
-          content_hash: "hash-video-viewer-race",
-          swarm_id: "swarm-hash-video-viewer-race",
-          web_seed_until: "1775942400",
-          torrent_url: "http://media.local/torrent-viewer-race",
-          torrent_info_hash: "torrent-info-hash-viewer-race",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-viewer-race",
-          join_ticket: null,
-          ticket_expires_at: null,
-          media_state: {
-            code: "MEDIA_READY" as const,
-            retry_after_ms: null,
-          },
-          survival_mode: "server_assisted" as const,
-        },
-        streaming_asset: {
-          asset_id: "att-video-viewer-race",
-          content_hash: "hash-video-viewer-race",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-viewer-race/stale-master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-viewer-race/stale-stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-viewer-race",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-viewer-race",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-viewer-race",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
-        blob_asset: null,
-      })
-      .mockResolvedValueOnce({
-        attachment_id: "att-video-viewer-race",
-        kind: "video" as const,
-        status: "ready" as const,
-        original_url: "http://media.local/legacy-original-viewer-race",
-        thumbnail_url: "http://media.local/poster-viewer-race",
-        distribution: {
-          content_id: "content_att-video-viewer-race",
-          content_hash: "hash-video-viewer-race",
-          swarm_id: "swarm-hash-video-viewer-race",
-          web_seed_until: "1775942400",
-          torrent_url: "http://media.local/torrent-viewer-race",
-          torrent_info_hash: "torrent-info-hash-viewer-race",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-viewer-race",
-          join_ticket: null,
-          ticket_expires_at: null,
-          media_state: {
-            code: "MEDIA_READY" as const,
-            retry_after_ms: null,
-          },
-          survival_mode: "server_assisted" as const,
-        },
-        streaming_asset: {
-          asset_id: "att-video-viewer-race",
-          content_hash: "hash-video-viewer-race",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-viewer-race/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-viewer-race/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-viewer-race",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-viewer-race",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-viewer-race",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
-        blob_asset: null,
-      });
-    const resolveSwarmSource = vi.fn(async () => null);
-    const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
-      locate,
-      resolveSwarmSource,
-      probeAnchor,
-    });
-
-    const result = await 播放器.解析播放结果({
-      attachmentId: "att-video-viewer-race",
-      kind: "video",
-      surface: "viewer",
-      consumerId: "session:att-video-viewer-race",
-    });
-
-    expect(locate).toHaveBeenNthCalledWith(1, "att-video-viewer-race");
-    expect(locate).toHaveBeenNthCalledWith(2, "att-video-viewer-race", { forceRefresh: true });
-    expect(result).toEqual({
-      mode: "degraded",
-      attachmentId: "att-video-viewer-race",
-      kind: "video",
-      src: "",
-      thumbnailUrl: "http://media.local/poster-viewer-race",
-      reason: "anchor_unavailable",
-      hint: "附件当前不可获取",
-    });
-    expect(resolveSwarmSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-viewer-race",
-        consumerId: "session:att-video-viewer-race",
-      })
-    );
-    expect(probeAnchor).not.toHaveBeenCalled();
-  });
-
   it("viewer 短时间内重复打开同一视频时，不会每次都 forceRefresh locator", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-viewer-refresh-budget",
@@ -777,33 +569,6 @@ describe("媒体播放器", () => {
           retry_after_ms: null,
         },
         survival_mode: "server_assisted" as const,
-      },
-      streaming_asset: {
-        asset_id: "att-video-viewer-refresh-budget",
-        content_hash: "hash-video-viewer-refresh-budget",
-        kind: "streaming_video" as const,
-        manifest: {
-          hls_master_url: null,
-          dash_mpd_url: null,
-        },
-        lifecycle: {
-          streaming_expires_at: "1775942400",
-          streaming_deleted_at: null,
-        },
-        distribution: {
-          swarm_id: "swarm-hash-video-viewer-refresh-budget",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-viewer-refresh-budget",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
-        origin: {
-          original_url: "http://media.local/cold-origin-viewer-refresh-budget",
-          expires_at_epoch_seconds: 1775942400,
-          available: true,
-          role: "cold_backup_only" as const,
-        },
       },
       file_asset: null,
       blob_asset: null,
@@ -868,33 +633,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-hls",
-          content_hash: "hash-video-hls",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-hls",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-hls",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-hls",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -955,33 +693,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-hls-incomplete",
-          content_hash: "hash-video-hls-incomplete",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-hls-incomplete/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-hls-incomplete/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-hls-incomplete",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-hls-incomplete",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1036,33 +747,6 @@ describe("媒体播放器", () => {
         },
         survival_mode: "server_assisted" as const,
       },
-      streaming_asset: {
-        asset_id: "att-video-ticket-refresh",
-        content_hash: "hash-video-ticket-refresh",
-        kind: "streaming_video" as const,
-        manifest: {
-          hls_master_url: "http://media.local/stream/att-video-ticket-refresh/master.m3u8",
-          dash_mpd_url: "http://media.local/stream/att-video-ticket-refresh/stream.mpd",
-        },
-        lifecycle: {
-          streaming_expires_at: "1775942400",
-          streaming_deleted_at: null,
-        },
-        distribution: {
-          swarm_id: "swarm-hash-video-ticket-refresh",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-ticket-stale",
-          join_ticket: "ticket-stale",
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
-        origin: {
-          original_url: "http://media.local/cold-origin-ticket-stale",
-          expires_at_epoch_seconds: 1775942400,
-          available: true,
-          role: "cold_backup_only" as const,
-        },
-      },
       blob_asset: null,
     };
     const 刷新后定位结果 = {
@@ -1074,18 +758,6 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-ticket-refresh",
         join_ticket: "ticket-refresh",
         ticket_expires_at: "2026-04-18T10:02:00Z",
-      },
-      streaming_asset: {
-        ...初始定位结果.streaming_asset,
-        distribution: {
-          ...初始定位结果.streaming_asset.distribution,
-          web_seed_url: "http://media.local/web-seed-ticket-refresh",
-          join_ticket: "ticket-refresh",
-        },
-        origin: {
-          ...初始定位结果.streaming_asset.origin,
-          original_url: "http://media.local/cold-origin-ticket-refresh",
-        },
       },
     };
     const locate = vi
@@ -1177,33 +849,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-hls",
-          content_hash: "hash-video-hls",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-hls",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-hls",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-hls",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1264,33 +909,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-shared-truth",
-          content_hash: "hash-video-shared-truth",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-shared-truth/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-shared-truth/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-shared-truth",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-shared-truth",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-shared-truth",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1340,107 +958,6 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("视频查看器已经稳定在 HLS 时，激活协作补齐会允许冷启动协作分发，而不是强制 reuseOnly", async () => {
-    const resolveSwarmSource = vi.fn<
-      (input: {
-        attachmentId: string;
-        kind: "image" | "video";
-        locator: unknown;
-        consumerId?: string;
-        onSessionEvent?: unknown;
-        eagerCompleting?: boolean;
-      }) => Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>
-    >(async () => ({
-      src: "blob:http://media.local/swarm-video-hls-backfill",
-      hint: "正在补块" as const,
-    }));
-    const 播放器 = 创建媒体播放器({
-      locate: async () => ({
-        attachment_id: "att-video-hls-backfill",
-        kind: "video" as const,
-        status: "ready" as const,
-        original_url: "http://media.local/legacy-original-video-hls-backfill",
-        thumbnail_url: "http://media.local/poster-video-hls-backfill",
-        distribution: {
-          content_id: "content_att-video-hls-backfill",
-          content_hash: "hash-video-hls-backfill",
-          swarm_id: "swarm-hash-video-hls-backfill",
-          web_seed_until: "1775942400",
-          torrent_url: "http://media.local/torrent-video-hls-backfill",
-          torrent_info_hash: "torrent-info-hash-video-hls-backfill",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-hls-backfill",
-          join_ticket: null,
-          ticket_expires_at: null,
-          media_state: {
-            code: "MEDIA_READY" as const,
-            retry_after_ms: null,
-          },
-          survival_mode: "server_assisted" as const,
-        },
-        streaming_asset: {
-          asset_id: "att-video-hls-backfill",
-          content_hash: "hash-video-hls-backfill",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-hls-backfill/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-hls-backfill/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-hls-backfill",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-hls-backfill",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-hls-backfill",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
-        blob_asset: null,
-      }),
-      resolveSwarmSource,
-    });
-
-    await 播放器.激活协作补齐({
-      attachmentId: "att-video-hls-backfill",
-      kind: "video",
-      consumerId: "session:att-video-hls-backfill",
-      onSessionEvent: vi.fn(),
-    });
-
-    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
-    const 调用参数 = resolveSwarmSource.mock.calls[0]![0] as {
-      attachmentId: string;
-      kind: "video";
-      consumerId?: string;
-      eagerCompleting?: boolean;
-      locator: {
-        attachment_id: string;
-      };
-      onSessionEvent?: unknown;
-    };
-    expect(调用参数).toMatchObject({
-      attachmentId: "att-video-hls-backfill",
-      kind: "video",
-      consumerId: "session:att-video-hls-backfill",
-      eagerCompleting: true,
-    });
-    expect(调用参数).not.toHaveProperty("reuseOnly");
-    expect(调用参数?.locator).toMatchObject({
-      attachment_id: "att-video-hls-backfill",
-    });
-    expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
-  });
-
   it("单文件 canonical 视频进入查看器后，激活协作补齐也会允许冷启动 swarm，而不是继续强制 reuseOnly", async () => {
     const resolveSwarmSource = vi.fn<
       (input: {
@@ -1479,8 +996,7 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        // 单文件主链场景不再提供 streaming_asset manifest。
-        streaming_asset: null,
+        // 单文件主链场景不再带任何第二链兼容字段。
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1548,33 +1064,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-inline-hls",
-          content_hash: "hash-video-inline-hls",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-inline-hls/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-inline-hls/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-inline-hls",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-video-inline-hls",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-video-inline-hls",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1636,33 +1125,6 @@ describe("媒体播放器", () => {
           },
           survival_mode: "server_assisted" as const,
         },
-        streaming_asset: {
-          asset_id: "att-video-inline-partial",
-          content_hash: "hash-video-inline-partial",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-inline-partial/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-inline-partial/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-inline-partial",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-inline-partial",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-inline-partial",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
-        },
         blob_asset: null,
       }),
       resolveSwarmSource,
@@ -1717,33 +1179,6 @@ describe("媒体播放器", () => {
             retry_after_ms: null,
           },
           survival_mode: "server_assisted" as const,
-        },
-        streaming_asset: {
-          asset_id: "att-video-inline-fallback",
-          content_hash: "hash-video-inline-fallback",
-          kind: "streaming_video" as const,
-          manifest: {
-            hls_master_url: "http://media.local/stream/att-video-inline-fallback/master.m3u8",
-            dash_mpd_url: "http://media.local/stream/att-video-inline-fallback/stream.mpd",
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: "swarm-hash-video-inline-fallback",
-            announce_urls: ["wss://tracker.media.local/announce"],
-            web_seed_url: "http://media.local/web-seed-inline-fallback",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
-          origin: {
-            original_url: "http://media.local/cold-origin-inline-fallback",
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only" as const,
-          },
         },
         blob_asset: null,
       }),
@@ -2143,7 +1578,6 @@ describe("媒体播放器", () => {
       preview_asset: null,
       file_asset: null,
       blob_asset: null,
-      streaming_asset: null,
     }));
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
@@ -2227,91 +1661,6 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("24 小时后就算旧 locator 还带着 manifest，也不会偷偷继续走 HLS 主链", async () => {
-    const locate = vi.fn(async () => ({
-      attachment_id: "att-video-streaming-expired",
-      kind: "video" as const,
-      status: "ready" as const,
-      original_url: "http://media.local/original-video-streaming-expired",
-      thumbnail_url: "http://media.local/poster-video-streaming-expired",
-      distribution: {
-        content_id: "content_att-video-streaming-expired",
-        content_hash: "hash-video-streaming-expired",
-        swarm_id: "swarm-hash-video-streaming-expired",
-        web_seed_until: "1775942400",
-        torrent_url: "http://media.local/torrent-video-streaming-expired",
-        torrent_info_hash: "torrent-info-hash-video-streaming-expired",
-        announce_urls: ["wss://tracker.media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-streaming-expired",
-        join_ticket: null,
-        ticket_expires_at: null,
-        media_state: {
-          code: "MEDIA_READY" as const,
-          retry_after_ms: null,
-        },
-        survival_mode: "peer_only_after_expiry" as const,
-      },
-      streaming_asset: {
-        asset_id: "att-video-streaming-expired",
-        content_hash: "hash-video-streaming-expired",
-        kind: "streaming_video" as const,
-        manifest: {
-          hls_master_url:
-            "http://media.local/stream/att-video-streaming-expired/master.m3u8",
-          dash_mpd_url: "http://media.local/stream/att-video-streaming-expired/stream.mpd",
-        },
-        lifecycle: {
-          streaming_expires_at: "1",
-          streaming_deleted_at: "2",
-        },
-        distribution: {
-          swarm_id: "swarm-hash-video-streaming-expired",
-          announce_urls: ["wss://tracker.media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-streaming-expired",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "peer_only_after_expiry" as const,
-        },
-        origin: {
-          original_url: "http://media.local/original-video-streaming-expired",
-          expires_at_epoch_seconds: 1,
-          available: false,
-          role: "cold_backup_only" as const,
-        },
-      },
-      blob_asset: null,
-    }));
-    const resolveSwarmSource = vi.fn();
-    const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
-      locate,
-      resolveSwarmSource,
-      probeAnchor,
-    });
-
-    const result = await 播放器.解析播放结果({
-      attachmentId: "att-video-streaming-expired",
-      kind: "video",
-    });
-
-    expect(result).toEqual({
-      mode: "degraded",
-      attachmentId: "att-video-streaming-expired",
-      kind: "video",
-      src: "",
-      thumbnailUrl: "http://media.local/poster-video-streaming-expired",
-      reason: "anchor_unavailable",
-      hint: "附件当前不可获取",
-    });
-    expect(resolveSwarmSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-streaming-expired",
-        kind: "video",
-      })
-    );
-    expect(probeAnchor).not.toHaveBeenCalled();
-  });
-
   it("peer_only_after_expiry 且 swarm 暂不可用时，viewer 不会回退锚点冷源，而是保持协作分发唯一主链语义", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-peer-only-viewer",
@@ -2336,7 +1685,6 @@ describe("媒体播放器", () => {
         },
         survival_mode: "peer_only_after_expiry" as const,
       },
-      streaming_asset: null,
       blob_asset: null,
     }));
     const resolveSwarmSource = vi.fn(async () => null);
@@ -2402,7 +1750,6 @@ describe("媒体播放器", () => {
         },
         survival_mode: "peer_only_after_expiry" as const,
       },
-      streaming_asset: null,
       blob_asset: null,
     }));
     const resolveSwarmSource = vi.fn(async () => {
@@ -2470,7 +1817,6 @@ describe("媒体播放器", () => {
         },
         survival_mode: "peer_only_after_expiry" as const,
       },
-      streaming_asset: null,
       blob_asset: null,
     }));
     const resolveSwarmSource = vi.fn(async () => null);

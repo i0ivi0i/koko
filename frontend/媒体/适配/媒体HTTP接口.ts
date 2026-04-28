@@ -205,11 +205,6 @@ export class 媒体HTTP接口 {
               : null,
           }
         : null,
-      /**
-       * 后端正式视频主链已经只暴露 file_asset。
-       * 即使旧数据还带着 streaming_asset，这里也不再把它升格成前端共享真相。
-       */
-      streaming_asset: null,
       file_asset,
       blob_asset,
     };
@@ -237,14 +232,9 @@ export class 媒体HTTP接口 {
         media_asset: this.解析单文件视频资产(result.media_asset),
       };
     }
-    /**
-     * streaming_video 是已经退场的第二链残留。
-     * 前端上传/完成响应不再把它继续暴露给上层，避免旧 contract 倒灌回正式播放链。
-     */
     return {
       ...result,
       preview_asset,
-      media_asset: null,
     };
   }
 

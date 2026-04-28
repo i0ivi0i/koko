@@ -176,14 +176,11 @@ pub enum 附件快照 {
 /// 统一媒体资产种类：
 /// 1. 图片走 blob 资产主链；
 /// 2. 新视频走单文件 canonical 主链；
-/// 3. 流媒体视频/音频是 24 小时标准冷备与秒开支路；
-/// 4. 这里只描述稳定共享语义，不携带某个壳专属的播放器状态。
+/// 3. 这里只描述稳定共享语义，不携带某个壳专属的播放器状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum 媒体资产种类 {
     图片Blob,
     单文件视频,
-    流媒体视频,
-    流媒体音频,
 }
 
 /// 变体描述是 blob 资产的稳定读取面。
@@ -195,14 +192,6 @@ pub struct 变体描述 {
     pub 地址: String,
     pub 宽: Option<i32>,
     pub 高: Option<i32>,
-}
-
-/// 流媒体清单描述只表达标准主入口。
-/// HLS/DASH 哪一条被某个端优先消费，是 adapter/runtime 的职责，不是共享 contract 的职责。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 媒体清单描述 {
-    pub hls主清单地址: Option<String>,
-    pub dash主清单地址: Option<String>,
 }
 
 /// 分发表面只暴露跨端共享所需的 swarm 线索。

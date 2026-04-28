@@ -56,8 +56,6 @@ describe("媒体共享契约", () => {
                 height: 720,
               },
             },
-            manifest: null,
-            lifecycle: null,
             distribution: {
               swarm_id: "swarm-hash-att-shared-video-1",
               announce_urls: ["/api/swarm/announce"],
@@ -144,8 +142,6 @@ describe("媒体共享契约", () => {
           height: 720,
         },
       },
-      manifest: null,
-      lifecycle: null,
       distribution: {
         swarm_id: "swarm-hash-att-shared-video-1",
         announce_urls: ["ws://localhost:3000/api/swarm/announce"],
@@ -258,5 +254,23 @@ describe("媒体共享契约", () => {
   it("共享契约实现不应继续出现迁移期兼容表面叙事", () => {
     const source = readFileSync(new URL("../../src/契约.rs", import.meta.url), "utf-8");
     expect(source.includes("迁移期兼容表面")).toBe(false);
+    expect(source.includes("流媒体视频")).toBe(false);
+    expect(source.includes("流媒体音频")).toBe(false);
+    expect(source.includes("媒体清单描述")).toBe(false);
+  });
+
+  it("前端共享契约与依赖清单不再保留第二链空壳", () => {
+    const contractSource = readFileSync(new URL("../契约.ts", import.meta.url), "utf-8");
+    const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf-8");
+
+    expect(contractSource.includes("streaming_asset")).toBe(false);
+    expect(contractSource.includes("streaming_video")).toBe(false);
+    expect(contractSource.includes("hls_master_url")).toBe(false);
+    expect(contractSource.includes("dash_mpd_url")).toBe(false);
+    expect(contractSource.includes("manifest: null")).toBe(false);
+    expect(contractSource.includes("lifecycle: null")).toBe(false);
+    expect(packageSource.includes('"hls.js"')).toBe(false);
+    expect(packageSource.includes('"p2p-media-loader-hlsjs"')).toBe(false);
+    expect(packageSource.includes('"workbox-range-requests"')).toBe(false);
   });
 });

@@ -309,8 +309,6 @@ describe("媒体协作分发", () => {
             height: 720,
           },
         },
-        manifest: null,
-        lifecycle: null,
         distribution: {
           swarm_id: "swarm-att-presence-base",
           announce_urls: ["ws://127.0.0.1:7072"],
@@ -326,7 +324,6 @@ describe("媒体协作分发", () => {
           role: "cold_backup_only" as const,
         },
       },
-      streaming_asset: null,
       blob_asset: null,
     } as 媒体定位结果;
 

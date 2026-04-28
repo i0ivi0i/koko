@@ -52,9 +52,6 @@ mod 媒体资产外壳;
 mod 实时外壳;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
-#[path = "流媒体打包.rs"]
-mod 流媒体打包;
-
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";

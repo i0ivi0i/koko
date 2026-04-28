@@ -199,8 +199,6 @@ describe("视频预览协作", () => {
               height: 720,
             },
           },
-          manifest: null,
-          lifecycle: null,
           origin: {
             original_url: `http://media.local/original-${attachmentId}`,
             expires_at_epoch_seconds: 1775942400,
@@ -339,8 +337,6 @@ describe("视频预览协作", () => {
             height: number;
           };
         };
-        manifest: null;
-        lifecycle: null;
         origin: {
           original_url: string;
           expires_at_epoch_seconds: number;
@@ -422,8 +418,6 @@ describe("视频预览协作", () => {
             height: 720,
           },
         },
-        manifest: null,
-        lifecycle: null,
         origin: {
           original_url: `http://media.local/original-${attachmentId}`,
           expires_at_epoch_seconds: 1775942400,
@@ -514,8 +508,6 @@ describe("视频预览协作", () => {
               height: 720,
             },
           },
-          manifest: null,
-          lifecycle: null,
           origin: {
             original_url: `http://media.local/original-${attachmentId}`,
             expires_at_epoch_seconds: 1775942400,

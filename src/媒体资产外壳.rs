@@ -299,8 +299,6 @@ fn 媒体资产种类转标签(kind: &contract::媒体资产种类) -> &'static 
     match kind {
         contract::媒体资产种类::图片Blob => "blob_image",
         contract::媒体资产种类::单文件视频 => "file_video",
-        contract::媒体资产种类::流媒体视频 => "streaming_video",
-        contract::媒体资产种类::流媒体音频 => "streaming_audio",
     }
 }
 
@@ -451,8 +449,6 @@ fn 构造单文件视频资产响应体(
         "variants": {
             "canonical": 变体描述转响应体(&canonical),
         },
-        "manifest": serde_json::Value::Null,
-        "lifecycle": serde_json::Value::Null,
         "distribution": 媒体分发描述转响应体(&distribution),
         "origin": 媒体冷源描述转响应体(&usecase::构造媒体冷源描述(
             Some(参数.canonical地址.clone()),

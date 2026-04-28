@@ -12,7 +12,6 @@ describe("Blob 媒体资产", () => {
         original_url: "http://media.local/legacy-original-image-blob-1",
         thumbnail_url: "http://media.local/legacy-thumb-image-blob-1",
         distribution: null,
-        streaming_asset: null,
         blob_asset: {
           asset_id: "att-image-blob-1",
           content_hash: "hash-image-blob-1",
@@ -97,7 +96,6 @@ describe("Blob 媒体资产", () => {
         },
         survival_mode: "server_assisted" as const,
       },
-      streaming_asset: null,
       blob_asset: {
         asset_id: "att-image-blob-2",
         content_hash: "hash-image-blob-2",

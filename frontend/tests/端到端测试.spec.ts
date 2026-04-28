@@ -243,7 +243,7 @@ class 端到端假传输 implements 前端传输端口 {
           torrent_url: `http://test.local/api/media/${attachmentId}/torrent?session_id=s-e2e`,
           torrent_info_hash: `torrent-hash-${attachmentId}`,
           announce_urls: ["wss://tracker.test.local/announce"],
-          web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
+          web_seed_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
           join_ticket: null,
           ticket_expires_at: null,
           media_state: {
@@ -251,33 +251,6 @@ class 端到端假传输 implements 前端传输端口 {
             retry_after_ms: null,
           },
           survival_mode: "server_assisted",
-        },
-        streaming_asset: {
-          asset_id: attachmentId,
-          content_hash: `hash-${attachmentId}`,
-          kind: "streaming_video",
-          manifest: {
-            hls_master_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "hls"),
-            dash_mpd_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "dash"),
-          },
-          lifecycle: {
-            streaming_expires_at: "1775942400",
-            streaming_deleted_at: null,
-          },
-          distribution: {
-            swarm_id: `swarm-hash-${attachmentId}`,
-            announce_urls: ["wss://tracker.test.local/announce"],
-            web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted",
-          },
-          origin: {
-            original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
-            expires_at_epoch_seconds: 1775942400,
-            available: true,
-            role: "cold_backup_only",
-          },
         },
         blob_asset: null,
       };
@@ -341,16 +314,6 @@ class 端到端假传输 implements 前端传输端口 {
     variant: "original" | "thumbnail" = "original"
   ): string {
     return `http://test.local/api/attachments/${attachmentId}/content?session_id=${sessionId}&variant=${variant}`;
-  }
-  buildStreamingAssetUrl(
-    attachmentId: string,
-    sessionId: string,
-    variant: "hls" | "dash"
-  ): string {
-    if (variant === "hls") {
-      return `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=${sessionId}`;
-    }
-    return `http://test.local/api/media/${attachmentId}/stream/dash/stream.mpd?session_id=${sessionId}`;
   }
   async loadRoomHistory(): Promise<房间历史页> {
     return { room_id: "r-e2e", messages: [] };

@@ -427,8 +427,6 @@ export class 假传输 implements 前端传输端口 {
             height: 720,
           },
         },
-        manifest: null,
-        lifecycle: null,
         distribution: {
           swarm_id: `swarm-${attachmentId}`,
           announce_urls: [],

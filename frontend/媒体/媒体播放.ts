@@ -261,7 +261,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    * 播放锚点只认 nested asset 自己声明的冷源 / canonical：
    * 1. file_video 优先 canonical，再退到 origin；
    * 2. blob_image 只读 canonical，不再回到顶层 original_url 兼容别名；
-   * 3. 旧 streaming_asset 即使还在 locator 里，也不能再参与正式锚点裁决。
+   * 3. 正式读取面只允许来自当前共享契约明示的 asset 字段。
    */
   const 读取锚点地址 = (locator: 媒体定位结果): string | null =>
     locator.file_asset?.variants.canonical?.url ??
@@ -325,8 +325,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     /**
      * viewer 首开前值不值得强刷，只看“正式 WebTorrent 相关事实是否已经存在”：
      * 1. distribution / file_asset.distribution 说明这条视频已经有唯一主链线索；
-     * 2. 旧 streaming_asset 不再触发额外刷新，避免把冷备字段重新抬回正式选路；
-     * 3. 真正的强刷节流继续由下面的冷却窗口兜住。
+     * 2. 真正的强刷节流继续由下面的冷却窗口兜住。
      */
     return Boolean(locator.distribution || locator.file_asset?.distribution);
   };
@@ -672,7 +671,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     /**
      * 视频补齐现在默认允许冷启动同一条 swarm 主链：
      * 1. PLAYER_PLAYING 代表“我已经看了这条视频，尽量把自己养成帮助者”；
-     * 2. 无论是 single-file 还是带 streaming_asset 的过渡面，后台补齐都继续只走 resolveSwarmSource；
+     * 2. 后台补齐都继续只走 resolveSwarmSource；
      * 3. 这里去掉的是旧保守门槛，不是重新引入第二条 raw/HLS 正式主链。
      */
     if (locator.kind === "video") {

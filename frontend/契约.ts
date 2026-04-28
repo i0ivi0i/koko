@@ -120,7 +120,7 @@ export interface 媒体附件上传结果 {
   height: number;
   status: "ready";
   preview_asset?: 预览资源描述 | null;
-  media_asset?: 流媒体资产描述 | 单文件视频资产描述 | Blob媒体资产描述 | null;
+  media_asset?: 单文件视频资产描述 | Blob媒体资产描述 | null;
 }
 
 export type 图片附件上传结果 = 媒体附件上传结果;
@@ -240,24 +240,6 @@ export interface 媒体冷源描述 {
 }
 
 /**
- * 流媒体清单描述只表达标准主入口。
- * 过渡阶段允许两个字段都是 null，但不允许前端擅自脑补成“manifest 已经存在”。
- */
-export interface 流媒体清单描述 {
-  hls_master_url: string | null;
-  dash_mpd_url: string | null;
-}
-
-/**
- * 流媒体生命周期只回答服务端标准流媒体冷备窗口。
- * 它不表达 swarm 当前热不热，因为那是另一条分发生存语义。
- */
-export interface 流媒体生命周期描述 {
-  streaming_expires_at: string | null;
-  streaming_deleted_at: string | null;
-}
-
-/**
  * 资产级分发表面比旧 locator.runtime 分发片段更克制：
  * 这里只保留共享协议需要的 swarm 线索，不把 Web 专属 presence/torrent 运行态混进来。
  */
@@ -270,16 +252,6 @@ export interface 媒体资产分发表面 {
   survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 
-export interface 流媒体资产描述 {
-  asset_id: string;
-  content_hash: string;
-  kind: "streaming_video" | "streaming_audio";
-  manifest: 流媒体清单描述;
-  lifecycle: 流媒体生命周期描述;
-  distribution: 媒体资产分发表面;
-  origin: 媒体冷源描述;
-}
-
 export interface 单文件视频资产描述 {
   asset_id: string;
   content_hash: string;
@@ -287,8 +259,6 @@ export interface 单文件视频资产描述 {
   variants: {
     canonical: Blob媒体变体描述 | null;
   };
-  manifest: null;
-  lifecycle: null;
   distribution: 媒体资产分发表面;
   origin: 媒体冷源描述;
 }
@@ -325,7 +295,6 @@ export interface 媒体定位结果 {
   preview_asset?: 预览资源描述 | null;
   thumbnail_url: string | null;
   distribution: 媒体协作分发定位片段 | null;
-  streaming_asset?: 流媒体资产描述 | null;
   file_asset?: 单文件视频资产描述 | null;
   blob_asset?: Blob媒体资产描述 | null;
 }

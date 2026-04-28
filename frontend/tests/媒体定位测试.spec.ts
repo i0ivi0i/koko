@@ -35,8 +35,6 @@ describe("媒体定位器", () => {
               height: 720,
             },
           },
-          manifest: null,
-          lifecycle: null,
           distribution: {
             swarm_id: "swarm-hash-nested-only-1",
             announce_urls: ["wss://tracker.media.local/announce"],
@@ -52,7 +50,6 @@ describe("媒体定位器", () => {
             role: "cold_backup_only",
           },
         },
-        streaming_asset: null,
         blob_asset: null,
       } as never,
     });
