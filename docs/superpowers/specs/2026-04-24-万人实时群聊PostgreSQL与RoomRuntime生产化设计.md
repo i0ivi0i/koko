@@ -7,7 +7,7 @@
 
 关联文档：
 
-- `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
 - `docs/superpowers/specs/2026-04-23-万人实时群聊去屎山长期约束.md`
 - `学习/整理笔记/单节点多房间主通道实践清单.md`
 - `学习/整理笔记/恢复门禁与单节点性能补充.md`

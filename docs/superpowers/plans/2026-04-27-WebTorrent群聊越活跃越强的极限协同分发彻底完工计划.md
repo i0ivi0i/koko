@@ -1,8 +1,8 @@
-# WebTorrent群聊越活跃越强的极限协同分发彻底完工 Implementation Plan
+# WebTorrent announce seam 彻底完工 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 彻底收口 `2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md` 的真实完工缺口，让浏览器 peer 平面在真实多人房间里真正建立，且前端不再把 tracker announce 当普通 HTTP 资源处理，也不再保留 `hint` 类型与真实运行态不一致的半收口状态。
+**Goal:** 彻底收口 `2026-04-23-WebTorrent满血协同分发要求.md` 的真实完工缺口，让浏览器 peer 平面在真实多人房间里真正建立，且前端不再把 tracker announce 当普通 HTTP 资源处理，也不再保留 `hint` 类型与真实运行态不一致的半收口状态。
 
 **Architecture:** 本轮不做“哪里坏了补哪里”的表面修补，而是一次性修复 `contract -> HTTP adapter -> WebTorrent runtime -> presence truth -> smoke verification` 这条链的语义断层。核心原则是：`announce_urls` 属于 tracker transport 线索，不属于普通 fetch URL；`webSeed` 与真实 peer 继续严格分治；所有回归测试都围绕这条真实语义展开，而不是继续让不同测试层各自假设不同的 announce 真相。
 
@@ -32,7 +32,7 @@
   - 用于锁定 `接入协作分发种子` 只吃正确 announce 协议，并覆盖 adapter/runtime 接缝。
 - `frontend/tests/资产协作分发运行时测试.spec.ts`
   - 为 `hint: null`、`webSeed` 静默、真实 peer 才升级 presence 的行为补定向回归。
-- `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
   - 代码全绿且真实烟测通过后，再把 spec 的“已实现/已验收”段落修正为新的真实证据，删除已经被本轮推翻的旧说法。
 
 ## Task 1: 先把错误 seam 用失败测试钉死
@@ -206,7 +206,7 @@ Expected:
 ## Task 5: 真实多人烟测、spec 证据回写、全链路最终验收
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- Modify: `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
 
 - [ ] **Step 1: 启动本地栈**
 

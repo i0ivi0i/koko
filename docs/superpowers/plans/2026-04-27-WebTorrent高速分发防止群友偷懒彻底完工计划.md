@@ -1,8 +1,8 @@
-# WebTorrent高速分发防止群友偷懒彻底完工 Implementation Plan
+# WebTorrent 服务器退字节真相彻底完工 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 彻底收口 `docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md` 仍未闭合的底层真相，让“`24 小时` 后服务器退出媒体字节供给”在后端 locator、原始字节端点、自动化验证和真实烟测里都只剩一条权威语义。
+**Goal:** 彻底收口 `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md` 里的服务器退字节底层真相，让“`24 小时` 后服务器退出媒体字节供给”在后端 locator、原始字节端点、自动化验证和真实烟测里都只剩一条权威语义。
 
 **Architecture:** 本轮不再做表层播放器补丁，而是直接修复 `complete/upload 写库 -> 附件快照 -> 原图内容读取 -> locator/失败态 -> 烟测证据` 这条链上的双时钟问题。核心原则有两条：第一，新主链附件的服务器字节供给资格只认同一条 `24 小时` 权威窗口；第二，验收只能证明“真实来源资格”和“真实字节退场”，不能再用表面网络流量代替业务完成态。
 
@@ -26,7 +26,7 @@
   - locator / no-seed / deleted 契约测试 owner。本轮要补跨端点一致性断言，证明 locator 与原始字节端点不再各说各话。
 - `tests/媒体上传测试/complete.rs`
   - 新附件写库后的字段一致性回归 owner。本轮要补“新链附件 `origin_expires_at` 与 `web_seed_until` 初始同步写入”的门禁，防止 writer 再制造新漂移。
-- `docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md`
+- `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
   - 这份 spec 目前的“已彻底完成”结论不成立。本轮代码与烟测通过后，必须把实现/验收记录改写成新的真实证据。
 
 ## Task 1: 先用失败测试把真正的未闭合点钉死
@@ -157,7 +157,7 @@ Expected:
 
 **Files:**
 - Modify: `tests/协作分发测试/可用性裁决.rs`
-- Modify: `docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md`
+- Modify: `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
 
 - [ ] **Step 1: 给自动化测试补“证据类型”约束**
 
@@ -167,7 +167,7 @@ Expected:
 
 - [ ] **Step 2: 回写 spec 的未完成根因与最终验收记录**
 
-只有代码和烟测通过后，才修改 `docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md`：
+只有代码和烟测通过后，才修改 `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`：
 - 把当前“2026-04-22 已彻底完成”的结论改成更精确的新结论；
 - 明写 `2026-04-27` 补上的真正最后一刀，是“原始字节端点与 locator 共用同一条 `24 小时` 服务器退字节真相”；
 - 删掉或改写任何会让人误以为“有流量就等于主链完成态”的旧表述。
@@ -248,7 +248,7 @@ Expected:
 
 Run:
 ```powershell
-git add src/用例.rs src/媒体附件适配.rs src/媒体上传外壳.rs tests/协作分发测试/内容读取.rs tests/协作分发测试/可用性裁决.rs tests/媒体上传测试/complete.rs docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md docs/superpowers/plans/2026-04-27-WebTorrent高速分发防止群友偷懒彻底完工计划.md
+git add src/用例.rs src/媒体附件适配.rs src/媒体上传外壳.rs tests/协作分发测试/内容读取.rs tests/协作分发测试/可用性裁决.rs tests/媒体上传测试/complete.rs docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md docs/superpowers/plans/2026-04-27-WebTorrent高速分发防止群友偷懒彻底完工计划.md
 git commit -m "修复 WebTorrent 24 小时退字节双真相并补齐验收门禁"
 ```
 

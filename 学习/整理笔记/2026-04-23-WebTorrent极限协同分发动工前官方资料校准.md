@@ -1,6 +1,6 @@
 # 2026-04-23 WebTorrent 极限协同分发动工前官方资料校准
 
-适用范围：`docs/superpowers/plans/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md` 的 Task 1-4，重点覆盖 `partial_peer / complete_peer` 语义、`WebTorrent` 浏览器事件面、`webtorrent-hybrid` 边界、`XState v5` actor owner 与刷新恢复。  
+适用范围：`docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md` 关联的极限协同分发任务，重点覆盖 `partial_peer / complete_peer` 语义、`WebTorrent` 浏览器事件面、`webtorrent-hybrid` 边界、`XState v5` actor owner 与刷新恢复。
 目标：在动代码前，把这次真正会碰到的官方 API、成熟轮子边界和高性能分发心智钉死，避免边改边猜、手搓第二套 runtime、或把 UI 意图误判成 swarm 真相。
 
 关联旧笔记：

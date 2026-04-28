@@ -6,7 +6,7 @@
 
 关联资料：
 
-- `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
 - `学习/整理笔记/2026-04-23-WebTorrent极限协同分发动工前官方资料校准.md`
 - `学习/整理笔记/Web大视频秒开播放与P2P协同主链官方实践清单-2026.md`
 - `学习/整理笔记/WebTorrent最新版官方建议与高性能设计补充-2026-04.md`

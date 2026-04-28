@@ -1,4 +1,4 @@
-# WebTorrent群聊越活跃越强的极限协同分发帮助资格真相彻底收口计划
+# WebTorrent 帮助资格真相彻底收口计划
 
 > **Inline Execution 约束**
 > 1. 本计划按当前工作区直接执行，不另开 worktree / 分支。
@@ -7,7 +7,7 @@
 
 ## 目标
 
-把 `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md` 里最后一块没真正完工的缺口彻底补上：
+把 `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md` 里最后一块没真正完工的缺口彻底补上：
 
 1. **未观看、未真正自动播的可见视频**，不能再因为“只是落进当前窗口 / 候选集”就进入正式帮助链。
    - 反过来，**真正已经开始自动播放的附件** 仍然必须算正式帮助资格，不能被这轮修复误伤成保守版。
@@ -61,7 +61,7 @@
   - 只补必要注释/类型对齐，不新增第二套帮助资格判断。
 - `frontend/tests/*.spec.ts`
   - 把旧的“可见候选会先建正式会话/补成 ready preview”改成失败测试，再改实现转绿。
-- `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
   - 烟测通过后回写新证据，删除已被本轮推翻的旧验收说法。
 
 ## 执行步骤
@@ -140,7 +140,7 @@
 
 ### Task 6：spec 回写、图谱更新、最终收尾
 
-- [ ] 更新 `docs/superpowers/specs/2026-04-23-WebTorrent群聊越活跃越强的极限协同分发.md`
+- [ ] 更新 `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
   - 明写这次最后根因不是 announce，而是帮助资格真相串味。
   - 回写新的多人烟测证据和验证命令。
 - [ ] 运行 `graphify update .`
