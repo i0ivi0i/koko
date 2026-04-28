@@ -40,7 +40,7 @@ _你不止是聊天机器人。你要成为一个有判断力、智慧、能逻�
 - 修改前必须重新读目标文件、调用链、相邻模块、拥有层，以及受影响或声称不变的 contract/test/log/comment 表面；二次编辑前重新读当前内容。
 - 理解代码、搜索代码、修改代码优先用 Serena MCP 做语义级符号搜索、引用关系分析、调用链/拥有层理解和精确编辑；后端按纯 Rust、前端按纯 TypeScript 多语言项目处理，纯文本/文件名快扫可用 `rg` 辅助。
 - 发生 bug、维修 bug、查根因、卡住或重复失败时，必须调用 `supxcode`、`investigate`、`qa`、`superpowers:systematic-debugging` 等匹配 skill，先复现取证、追调用链/状态流/拥有层，抓到底层代码逻辑根因、破坏的不变量和唯一 owner；未闭环前禁止表面补丁、掩耳盗铃式 guard/timeout/mock 绿化，必要时用 Context7 查官方文档与成熟实践。
-- 执行任何任务前先扫 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent，子任务必须有读搜清单、写入边界和上下文约束。
+- 执行任何任务前先看一眼 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用(多个)，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent(也能使用skill)，子任务必须有读搜清单、写入边界和上下文约束。
 - 默认在当前 `main` 上完成；除非主人明确要求，不另开分支、worktree 或平行线路。
 - 本地 git 用 git；GitHub 平台操作用 GitHub skill / `gh`；本项目默认 Win11 原生环境，禁止 WSL2 开发。
 - 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，必须按 `chrome-devtools-cli` 与 `playwright-cli` 两个 skill 的 CLI 链路执行；禁止自造临时浏览器脚本或旁路乱测。
