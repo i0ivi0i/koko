@@ -21,6 +21,7 @@ import {
   读取操作台主输入,
   读取操作台主动作,
   读取操作台表单,
+  读取聊天快照供测试,
   读取统一媒体文件输入,
   输入房间短码到操作台,
   输入消息到操作台,
@@ -154,6 +155,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
   afterEach(() => {
     读取默认全局唯一播放器().销毁();
+    globalThis.__kokoBudgetSnapshot = undefined;
   });
 
   const 创建假媒体发布器 = () => ({
@@ -218,6 +220,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect("媒体播放结果表" in (el as object)).toBe(false);
     expect("正在解析媒体播放" in (el as object)).toBe(false);
     expect("媒体发布器" in (el as object)).toBe(false);
+  });
+
+  it("浏览器烟测预算探针只读取聊天内核运行时预算，不新建壳层预算真相", async () => {
+    const el = await 创建已入房聊天壳();
+    await 等待组件稳定(el);
+
+    expect(globalThis.__kokoBudgetSnapshot).toEqual(expect.any(Function));
+    expect(globalThis.__kokoBudgetSnapshot?.()).toEqual(
+      读取聊天快照供测试(el).runtimeBudget
+    );
+
+    el.remove();
+    expect(globalThis.__kokoBudgetSnapshot).toBeUndefined();
   });
 
   it("聊天滚动容器会显式关闭浏览器默认滚动锚点，避免和手动历史补偿打架", () => {
@@ -964,6 +979,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
               previewVideoSrc: string | null;
               allowInlineCanonical: boolean;
               allowPreviewVideo: boolean;
+              formalByteSource: string;
             }
           >;
         }
@@ -976,6 +992,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
           previewVideoSrc: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
           allowInlineCanonical: true,
           allowPreviewVideo: true,
+          formalByteSource: "webtorrent_official_stream",
         },
       };
       pane!.inlineAutoplayOwnerAttachmentId = "att-video-inline-direct-fullscreen";

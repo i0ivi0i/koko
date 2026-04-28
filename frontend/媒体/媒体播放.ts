@@ -4,6 +4,7 @@ import {
   是否为协作分发运行时环境不支持错误,
   读取协作分发定位片段,
   type 协作分发会话事件,
+  type 协作分发内容字节入口,
 } from "./媒体协作分发.js";
 
 type 播放表面 = "viewer" | "inline_autoplay";
@@ -25,6 +26,7 @@ type 媒体播放结果 =
       thumbnailUrl: string | null;
       contentHash?: string | null;
       distribution?: 媒体资产分发表面 | null;
+      formalByteSource?: 协作分发内容字节入口;
       hint: "正在协作分发" | null;
     }
   | {
@@ -73,7 +75,12 @@ type 媒体播放器依赖 = {
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
   }): Promise<
-    { src: string; hint: "正在协作分发" | "正在补块" | null; locallyComplete?: boolean } | null
+    {
+      src: string;
+      hint: "正在协作分发" | "正在补块" | null;
+      locallyComplete?: boolean;
+      formalByteSource?: 协作分发内容字节入口;
+    } | null
   >;
   releaseSwarmSource?(input: {
     attachmentId: string;
@@ -598,6 +605,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           src: swarmSource.src,
           thumbnailUrl: 读取预览缩略图地址(locator),
           ...(读取播放内容哈希(locator) ? { contentHash: 读取播放内容哈希(locator) } : {}),
+          formalByteSource: swarmSource.formalByteSource ?? "webtorrent_official_stream",
           ...(locator.file_asset?.distribution || locator.blob_asset?.distribution
             ? { distribution: locator.file_asset?.distribution ?? locator.blob_asset?.distribution ?? null }
             : {}),

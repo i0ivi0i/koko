@@ -495,6 +495,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-ticket-opts",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(add).toHaveBeenCalledTimes(1);
   });
@@ -1102,11 +1103,13 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-multi-1",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(autoplaySource).toEqual({
       src: "blob:http://media.local/swarm-att-multi-1",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(读取协作分发会话状态("swarm-att-multi-1")).toMatchObject({
       refs: 2,
@@ -1146,6 +1149,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-autoplay-cold",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(add).toHaveBeenCalledTimes(1);
     expect(读取协作分发会话状态("swarm-att-autoplay-cold")).toMatchObject({
@@ -1177,6 +1181,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-image-1",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-image-1")).toMatchObject({
@@ -1210,6 +1215,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-2",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(select).toHaveBeenCalledWith(1);
     expect(读取协作分发会话状态("swarm-att-2")).toMatchObject({
@@ -1252,6 +1258,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-lazy-backfill-1",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-lazy-backfill-1")).toMatchObject({
@@ -1368,6 +1375,7 @@ describe("媒体协作分发", () => {
       src: "/webtorrent/stream-stale-1.mp4",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(读取协作分发会话状态("swarm-att-stream-stale-1")).toBeNull();
   });
@@ -1426,6 +1434,7 @@ describe("媒体协作分发", () => {
       src: "/webtorrent/stream-probe-retry-1.mp4",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(probeCount).toBe(2);
     expect(读取协作分发会话状态("swarm-att-stream-probe-retry-1")).toMatchObject({
@@ -1487,6 +1496,7 @@ describe("媒体协作分发", () => {
       src: "/webtorrent/stream-probe-retry-long-1.mp4",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(probeCount).toBe(11);
     expect(读取协作分发会话状态("swarm-att-stream-probe-retry-long-1")).toMatchObject({
@@ -1720,6 +1730,7 @@ describe("媒体协作分发", () => {
       src: "/webtorrent/offline-reopen.mp4",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(firstAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -1753,6 +1764,7 @@ describe("媒体协作分发", () => {
       src: "/webtorrent/offline-reopen.mp4",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(secondAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -1790,6 +1802,7 @@ describe("媒体协作分发", () => {
       src: "blob:http://media.local/swarm-att-persist",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(add).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledTimes(1);

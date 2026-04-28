@@ -4345,6 +4345,7 @@ describe("房间消息窗媒体查看器", () => {
             previewVideoSrc: string | null;
             allowInlineCanonical: boolean;
             allowPreviewVideo: boolean;
+            formalByteSource: string;
           }
         >;
       }
@@ -4357,6 +4358,7 @@ describe("房间消息窗媒体查看器", () => {
         previewVideoSrc: "blob:http://media.local/swarm-att-video-1",
         allowInlineCanonical: false,
         allowPreviewVideo: true,
+        formalByteSource: "webtorrent_official_stream",
       },
     };
     try {
@@ -4368,6 +4370,7 @@ describe("房间消息窗媒体查看器", () => {
       );
       expect(videoCard?.dataset.budgetTier).toBe("warm_preview");
       expect(videoCard?.dataset.budgetReason).toBe("window_preview");
+      expect(videoCard?.dataset.formalByteSource).toBe("webtorrent_official_stream");
       expect(
         pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
       ).toBeNull();

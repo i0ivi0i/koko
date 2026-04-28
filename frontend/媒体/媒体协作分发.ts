@@ -107,8 +107,21 @@ export interface 协作分发浏览器运行时 {
   streamServer: WebTorrent流服务;
 }
 
+export type 协作分发内容字节入口 =
+  | "webtorrent_official_stream"
+  | "non_webtorrent_bypass";
+
 export interface 协作分发媒体源 {
   src: string;
+  /**
+   * 正式字节来源只能由 WebTorrent 产源点盖章。
+   *
+   * 这里刻意不让上层靠 URL、blob 名称或路径片段反推来源：
+   * - 合法 swarm source 可能是 `blob:http://.../swarm-*`；
+   * - WebTorrent createServer 也可能暴露本地 HTTP 路径；
+   * - 只有“从 torrent file.streamURL 探测通过后返回”这件事本身才是来源证明。
+   */
+  formalByteSource: 协作分发内容字节入口;
   /**
    * 可播放 src 与“必须给用户展示协作提示”不是同一回事：
    * 1. 轻会话/普通 session consumer 可以拿到可播放 src，但不必强挂提示；
@@ -118,6 +131,13 @@ export interface 协作分发媒体源 {
   hint: "正在协作分发" | "正在补块" | null;
   locallyComplete: boolean;
 }
+
+export const 标记WebTorrent官方媒体源 = <T extends { src: string }>(
+  source: T
+): T & { formalByteSource: "webtorrent_official_stream" } => ({
+  ...source,
+  formalByteSource: "webtorrent_official_stream",
+});
 
 export type 协作分发会话事件 =
   | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
@@ -359,7 +379,7 @@ export type 协作分发底层会话 = {
   swarmId: string;
   torrentInfoHash: string;
   contentHash: string;
-  sourcePromise: Promise<{ src: string } | null>;
+  sourcePromise: Promise<Pick<协作分发媒体源, "src" | "formalByteSource"> | null>;
   eagerCompleting: boolean;
   locallyComplete: boolean;
   hint: 协作分发媒体源["hint"];

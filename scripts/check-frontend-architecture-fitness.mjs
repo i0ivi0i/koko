@@ -55,6 +55,11 @@ const 前端禁回流片段规则 = [
     path: "frontend/媒体/资产协作分发运行时.ts",
     pattern: /\breuseOnly\b/g,
   },
+  {
+    label: "room message pane WebTorrent byte owner barrier",
+    path: "frontend/房间消息窗.ts",
+    pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b/g,
+  },
 ];
 
 const 热点文件行数上限 = [

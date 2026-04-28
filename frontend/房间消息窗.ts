@@ -6,6 +6,7 @@ import { repeat } from "lit/directives/repeat.js";
 import {
   投影信息流视频预算,
   type 信息流视频预算投影,
+  type 正式媒体字节来源,
 } from "./媒体/信息流视频预算.js";
 import {
   视频地址属于旧流媒体清单,
@@ -1487,6 +1488,18 @@ export class 房间消息窗 extends LitElement {
     const inlineAutoplayPlayback =
       this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
     /**
+     * fallback 里的 preview 候选只可能来自两条受控事实：
+     * 1. `playback.mode === "swarm"` 的正式 WebTorrent 播放源；
+     * 2. 刚退场 owner 留下的同源续帧桥。
+     * 这里认的是上游事实来源，不用 URL 文本猜 `src`，避免把合法续帧误压成冷表达。
+     */
+    const formalByteSource: 正式媒体字节来源 =
+      playback?.mode === "swarm" ||
+      inlineAutoplayPlayback?.mode === "swarm" ||
+      Boolean(previewVideoSrcCandidate)
+        ? "webtorrent_official_stream"
+        : "none";
+    /**
      * 这里的 fallback 只服务直连组件测试和极少数独立挂载场景：
      * 1. 真实应用路径会由聊天媒体编排先给出统一预算投影；
      * 2. 即便需要兜底，也继续复用同一个投影原语，不再在消息窗里手搓第二套 owner 判断；
@@ -1504,6 +1517,7 @@ export class 房间消息窗 extends LitElement {
       isViewerOwner: false,
       sessionStatus: playback?.mode === "swarm" ? "backfilling" : null,
       locallyComplete: false,
+      formalByteSource,
     });
   }
 
@@ -2076,6 +2090,7 @@ export class 房间消息窗 extends LitElement {
                 data-attachment-id=${attachment.attachmentId}
                 data-budget-tier=${videoBudget.tier}
                 data-budget-reason=${videoBudget.reason}
+                data-formal-byte-source=${videoBudget.formalByteSource}
                 data-grid-column-start=${attachment.gridColumnStart ?? ""}
                 data-grid-column-span=${attachment.gridColumnSpan ?? ""}
                 data-grid-row-start=${attachment.gridRowStart ?? ""}

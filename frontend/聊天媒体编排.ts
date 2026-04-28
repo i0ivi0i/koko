@@ -10,6 +10,7 @@ import {
   提取重点信息流视频预算,
   投影信息流视频预算,
   type 信息流视频预算投影,
+  type 正式媒体字节来源,
 } from "./媒体/信息流视频预算.js";
 import {
   创建媒体运行时Actor,
@@ -708,6 +709,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       const attachmentId = attachment.attachmentId;
       const session = 媒体会话表.get(attachmentId)?.snapshot() ?? null;
       const previewCandidate = 读取视频预览候选播放源(attachmentId);
+      const runtimeAutoplayPlayback =
+        context.inlineAutoplayOwnerAttachmentId === attachmentId
+          ? context.inlineAutoplayPlayback
+          : null;
+      const formalByteSource: 正式媒体字节来源 =
+        session?.playback?.mode === "swarm" ||
+        runtimeAutoplayPlayback?.mode === "swarm" ||
+        previewCandidate
+          ? "webtorrent_official_stream"
+          : "none";
       const viewerCanonicalVideoSrc =
         viewerAttachmentId === attachmentId
           ? context.currentViewerRequest?.items.find(
@@ -717,10 +728,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       budgets[attachmentId] = 投影信息流视频预算({
         attachmentId,
         playback: session?.playback ?? null,
-        inlineAutoplayPlayback:
-          context.inlineAutoplayOwnerAttachmentId === attachmentId
-            ? context.inlineAutoplayPlayback
-            : null,
+        inlineAutoplayPlayback: runtimeAutoplayPlayback,
         viewerCanonicalVideoSrc,
         previewVideoSrc: previewCandidate?.src ?? null,
         inMediaWindow: 当前媒体窗口附件Id集合.has(attachmentId),
@@ -730,6 +738,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         sessionStatus: session?.status ?? null,
         locallyComplete:
           Boolean(session?.locallyComplete) || Boolean(媒体缓存.snapshot()[attachmentId]?.complete),
+        formalByteSource,
       });
     }
     return budgets;
@@ -745,7 +754,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     left.canonicalVideoSrc === right.canonicalVideoSrc &&
     left.previewVideoSrc === right.previewVideoSrc &&
     left.allowInlineCanonical === right.allowInlineCanonical &&
-    left.allowPreviewVideo === right.allowPreviewVideo;
+    left.allowPreviewVideo === right.allowPreviewVideo &&
+    left.formalByteSource === right.formalByteSource;
   const 缓存重点信息流视频预算 = (
     nextBudgets: Record<string, 信息流视频预算投影>
   ): 信息流视频预算投影[] => {

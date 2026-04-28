@@ -3,6 +3,7 @@ import { 创建应用运行时, type 应用运行时端口 } from "./应用运�
 import { 创建聊天应用内核, type 聊天应用快照 } from "./聊天应用内核.js";
 import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import "./房间消息窗.js";
+import type { 聊天运行时预算状态 } from "./状态.js";
 import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
@@ -100,6 +101,10 @@ function 附件内容地址表相同(
       leftEntry.thumbnailSrc === rightEntry.thumbnailSrc
     );
   });
+}
+
+declare global {
+  var __kokoBudgetSnapshot: (() => 聊天运行时预算状态) | undefined;
 }
 
 export class 聊天壳 extends LitElement {
@@ -1013,6 +1018,18 @@ export class 聊天壳 extends LitElement {
   private 读取聊天快照() {
     return this.kernel.snapshot();
   }
+
+  /**
+   * 真实浏览器烟测只读取内核预算快照，不在壳层派生第二套运行时真相。
+   * 这个探针只服务验证：自动播放、查看器、swarm 与重任务预算仍以聊天内核为唯一来源。
+   */
+  private readonly 读取预算烟测快照 = (): 聊天运行时预算状态 =>
+    this.读取聊天快照().runtimeBudget;
+
+  private 同步预算烟测探针(): void {
+    globalThis.__kokoBudgetSnapshot = this.读取预算烟测快照;
+  }
+
   private _应用运行时: 应用运行时端口 | null = null;
 
   /**
@@ -1074,6 +1091,7 @@ export class 聊天壳 extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener("resize", this.handleViewportResize);
+    this.同步预算烟测探针();
     /**
      * 聊天壳只负责启动应用运行时并触发统一 bootstrap 命令。
      * 会话恢复、房间恢复、snapshot reload 全都留在内核与恢复编排里。
@@ -1084,10 +1102,14 @@ export class 聊天壳 extends LitElement {
 
   override updated(): void {
     this.同步房间宽度观察();
+    this.同步预算烟测探针();
   }
 
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
+    if (globalThis.__kokoBudgetSnapshot === this.读取预算烟测快照) {
+      globalThis.__kokoBudgetSnapshot = undefined;
+    }
     this.清理房间宽度观察();
     this._应用运行时?.dispose();
     this.kernel.dispose();

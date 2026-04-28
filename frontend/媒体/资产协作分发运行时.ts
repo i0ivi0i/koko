@@ -7,6 +7,7 @@ import {
   探测协作分发媒体源可读性,
   接入协作分发种子,
   清理协作分发底层会话,
+  标记WebTorrent官方媒体源,
   读取协作分发定位片段,
   读取可用协作分发片段,
   读取首个可播放文件,
@@ -1069,9 +1070,9 @@ async function 确保协作分发会话(
       清理协作分发底层会话(session, browserRuntime);
       return null;
     }
-    return {
+    return 标记WebTorrent官方媒体源({
       src: file.streamURL,
-    };
+    });
   })().catch((error) => {
     停止协作分发存活上报(session);
     if (runtime.底层会话表.get(input.distribution.swarm_id) === session) {
@@ -1241,6 +1242,7 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         src: source.src,
         hint: 推导协作分发提示(session),
         locallyComplete: session.locallyComplete,
+        formalByteSource: source.formalByteSource,
       };
     },
 

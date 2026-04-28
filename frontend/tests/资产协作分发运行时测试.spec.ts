@@ -190,6 +190,7 @@ describe("资产协作分发运行时", () => {
       src: "blob:http://media.local/swarm-att-inline-1",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(add).toHaveBeenCalledTimes(1);
     expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toMatchObject({
@@ -220,6 +221,7 @@ describe("资产协作分发运行时", () => {
       src: "blob:http://media.local/swarm-att-session-light-1",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(读取协作分发会话状态("swarm-att-session-light-1")).toMatchObject({
       refs: 1,
@@ -261,6 +263,7 @@ describe("资产协作分发运行时", () => {
       src: "blob:http://media.local/swarm-att-webseed-only-1",
       hint: "正在补块",
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
 
     torrentHandle.emit("wire", { type: "webSeed" });
@@ -744,6 +747,7 @@ describe("资产协作分发运行时", () => {
       src: "blob:http://media.local/swarm-att-ticket-invalid",
       hint: null,
       locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
     });
 
     emit("error", new Error("join_ticket_invalid"));

@@ -192,6 +192,7 @@ describe("媒体播放器", () => {
         survival_mode: "peer_only_after_expiry" as const,
       },
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(probeAnchor).not.toHaveBeenCalled();
@@ -377,6 +378,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-3",
       thumbnailUrl: null,
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(probeAnchor).not.toHaveBeenCalled();
     expect(释放协作分发源).not.toHaveBeenCalled();
@@ -484,6 +486,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-consumer-incomplete",
       thumbnailUrl: "http://media.local/poster-video-consumer-incomplete",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -652,6 +655,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-hls-fast",
       thumbnailUrl: "http://media.local/poster-video-hls",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -713,6 +717,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-hls-incomplete",
       thumbnailUrl: "http://media.local/poster-video-hls-incomplete",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -811,6 +816,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-ticket-refresh",
       thumbnailUrl: "http://media.local/poster-ticket-refresh",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(probeAnchor).not.toHaveBeenCalled();
   });
@@ -935,6 +941,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-shared-truth",
       thumbnailUrl: "http://media.local/poster-shared-truth",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(inlineResult).toEqual({
       mode: "swarm",
@@ -943,6 +950,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-shared-truth",
       thumbnailUrl: "http://media.local/poster-shared-truth",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
     const calls = resolveSwarmSource.mock.calls as unknown as Array<
@@ -1084,6 +1092,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-inline-hls",
       thumbnailUrl: "http://media.local/poster-video-inline-hls",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1150,6 +1159,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-inline-partial",
       thumbnailUrl: "http://media.local/poster-inline-partial",
       hint: "正在协作分发",
+      formalByteSource: "webtorrent_official_stream",
     });
   });
 
@@ -1256,6 +1266,7 @@ describe("媒体播放器", () => {
       src: "blob:http://media.local/swarm-video-4",
       thumbnailUrl: null,
       hint: null,
+      formalByteSource: "webtorrent_official_stream",
     });
   });
 

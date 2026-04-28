@@ -13,7 +13,13 @@ export type 信息流视频预算原因 =
   | "window_preview"
   | "autoplay_candidate"
   | "retained_media_session"
+  | "non_webtorrent_bypass"
   | "inactive";
+
+export type 正式媒体字节来源 =
+  | "webtorrent_official_stream"
+  | "non_webtorrent_bypass"
+  | "none";
 
 export type 信息流视频预算事实 = {
   attachmentId: string;
@@ -27,6 +33,7 @@ export type 信息流视频预算事实 = {
   isViewerOwner: boolean;
   sessionStatus: 媒体会话状态 | null;
   locallyComplete: boolean;
+  formalByteSource: 正式媒体字节来源;
 };
 
 export type 信息流视频预算投影 = {
@@ -37,6 +44,7 @@ export type 信息流视频预算投影 = {
   previewVideoSrc: string | null;
   allowInlineCanonical: boolean;
   allowPreviewVideo: boolean;
+  formalByteSource: 正式媒体字节来源;
 };
 
 const 读取视频正式播放源 = (playback: 媒体播放结果 | null): string | null =>
@@ -73,8 +81,24 @@ export const 投影信息流视频预算 = (
   const inlineAutoplayCanonicalSrc = 读取视频正式播放源(facts.inlineAutoplayPlayback);
   const sessionCanonicalSrc = 读取视频正式播放源(facts.playback);
   const viewerCanonicalSrc = facts.viewerCanonicalVideoSrc?.trim() || null;
+  const formalByteSource = facts.formalByteSource;
 
-  if (facts.isViewerOwner) {
+  if (formalByteSource === "non_webtorrent_bypass") {
+    return {
+      attachmentId: facts.attachmentId,
+      tier: "cold_expression",
+      reason: "non_webtorrent_bypass",
+      canonicalVideoSrc: null,
+      previewVideoSrc: null,
+      allowInlineCanonical: false,
+      allowPreviewVideo: false,
+      formalByteSource,
+    };
+  }
+
+  const 拥有WebTorrent正式字节 = formalByteSource === "webtorrent_official_stream";
+
+  if (facts.isViewerOwner && 拥有WebTorrent正式字节) {
     const canonicalVideoSrc =
       viewerCanonicalSrc ??
       inlineAutoplayCanonicalSrc ??
@@ -88,10 +112,11 @@ export const 投影信息流视频预算 = (
       previewVideoSrc,
       allowInlineCanonical: false,
       allowPreviewVideo: false,
+      formalByteSource,
     };
   }
 
-  if (facts.isInlineAutoplayOwner) {
+  if (facts.isInlineAutoplayOwner && 拥有WebTorrent正式字节) {
     const canonicalVideoSrc =
       inlineAutoplayCanonicalSrc ?? sessionCanonicalSrc ?? previewVideoSrc;
     return {
@@ -108,10 +133,11 @@ export const 投影信息流视频预算 = (
        * 3. 但它只是 bridge，不再自己声明第二颗正式 player。
        */
       allowPreviewVideo: Boolean(previewVideoSrc),
+      formalByteSource,
     };
   }
 
-  if (previewVideoSrc && facts.inMediaWindow) {
+  if (previewVideoSrc && facts.inMediaWindow && 拥有WebTorrent正式字节) {
     return {
       attachmentId: facts.attachmentId,
       tier: "warm_preview",
@@ -120,10 +146,11 @@ export const 投影信息流视频预算 = (
       previewVideoSrc,
       allowInlineCanonical: false,
       allowPreviewVideo: true,
+      formalByteSource,
     };
   }
 
-  if (previewVideoSrc && facts.isAutoplayCandidate) {
+  if (previewVideoSrc && facts.isAutoplayCandidate && 拥有WebTorrent正式字节) {
     return {
       attachmentId: facts.attachmentId,
       tier: "warm_preview",
@@ -132,6 +159,7 @@ export const 投影信息流视频预算 = (
       previewVideoSrc,
       allowInlineCanonical: false,
       allowPreviewVideo: true,
+      formalByteSource,
     };
   }
 
@@ -144,6 +172,7 @@ export const 投影信息流视频预算 = (
       previewVideoSrc: null,
       allowInlineCanonical: false,
       allowPreviewVideo: false,
+      formalByteSource,
     };
   }
 
@@ -155,6 +184,7 @@ export const 投影信息流视频预算 = (
     previewVideoSrc: null,
     allowInlineCanonical: false,
     allowPreviewVideo: false,
+    formalByteSource,
   };
 };
 
