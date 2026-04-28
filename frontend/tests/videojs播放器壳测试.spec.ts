@@ -38,6 +38,7 @@ describe("Video.js 播放器壳", () => {
     expect(source).not.toContain("hls.js");
     expect(source).not.toContain("fallbackSrc");
     expect(source).not.toContain("挂接P2PHls增强层");
+    expect(source).not.toContain("@videojs/html");
   });
 
   it("file/blob 首播不会请求第二播放器实现，也不会尝试加载 HLS provider", async () => {

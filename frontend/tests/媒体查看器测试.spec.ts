@@ -612,6 +612,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     const provider = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
     const video = document.body.querySelector("video");
     const overlay = document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]');
     const mount = document.body.querySelector<HTMLElement>("[data-media-viewer-mount='video']");

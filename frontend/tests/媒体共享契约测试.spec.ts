@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建前端传输 } from "../传输";
 
@@ -262,6 +262,7 @@ describe("媒体共享契约", () => {
   it("前端共享契约与依赖清单不再保留第二链空壳", () => {
     const contractSource = readFileSync(new URL("../契约.ts", import.meta.url), "utf-8");
     const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf-8");
+    const entrySource = readFileSync(new URL("../入口.ts", import.meta.url), "utf-8");
 
     expect(contractSource.includes("streaming_asset")).toBe(false);
     expect(contractSource.includes("streaming_video")).toBe(false);
@@ -272,5 +273,19 @@ describe("媒体共享契约", () => {
     expect(packageSource.includes('"hls.js"')).toBe(false);
     expect(packageSource.includes('"p2p-media-loader-hlsjs"')).toBe(false);
     expect(packageSource.includes('"workbox-range-requests"')).toBe(false);
+    expect(packageSource.includes('"@videojs/html"')).toBe(false);
+    expect(entrySource.includes("@videojs/html/video/skin.css")).toBe(false);
+  });
+
+  it("仓库清理后不再保留死模块、跟踪日志和未完成计划态", () => {
+    const shellSource = readFileSync(new URL("../../src/房间外壳.rs", import.meta.url), "utf-8");
+    const planSource = readFileSync(
+      new URL("../../docs/superpowers/plans/2026-04-28-唯一WebTorrent万人群聊零崩溃零闪烁执行计划.md", import.meta.url),
+      "utf-8"
+    );
+    expect(shellSource.includes("mod 流媒体打包迁移测试 {}")).toBe(false);
+    expect(existsSync(new URL("../../tmp/launcher.out.log", import.meta.url))).toBe(false);
+    expect(existsSync(new URL("../../tmp/launcher.err.log", import.meta.url))).toBe(false);
+    expect(planSource.includes("- [ ] **Step")).toBe(false);
   });
 });

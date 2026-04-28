@@ -22,8 +22,8 @@ type 可原生全屏视频元素 = HTMLVideoElement & {
 };
 export type VideoJs全屏进入结果 = "standard" | "native" | "unsupported";
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
+const VideoJs播放器Provider标签 = "video-player";
 const KokoVideoSkinTagName = "koko-video-skin";
-let 默认VideoJs元素注册Promise: Promise<void> | null = null;
 
 type 可兼容远端播放对象 = {
   watchAvailability?: (...args: unknown[]) => unknown;
@@ -49,10 +49,10 @@ export interface VideoJs播放器壳实例 {
 
 export type VideoJs播放器壳依赖 = {
   /**
-   * 隔离 Video.js v10 beta 的 custom elements 注册。
+   * 隔离默认播放器元素注册。
    *
-   * Task 2 先让壳层接口站住，不把 beta 依赖直接灌进主链；Task 4 再在这里接官方
-   * `@videojs/html/video/player` 注册逻辑。
+   * 正式链已经退到“原生 video + 本地薄壳控件”，这里仍保留可注入入口，
+   * 让测试或后续平台适配可以替换默认注册逻辑，而不会把第二套播放器真相灌回主链。
    */
   registerVideoJsElements?: () => void | Promise<void>;
   /**
@@ -154,8 +154,8 @@ const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolea
   return false;
 };
 
-// 播放与音量图标沿用 @videojs/html minimal skin 的官方 SVG 形状，
-// 本壳只负责删减控件与布局，不再用文本符号另造按钮语义。
+// 播放与音量图标沿用此前播放器壳的既有视觉语义，
+// 本壳只负责控件行为和布局，不再让第二链依赖决定 UI 真相。
 const KokoVideoSkinIcons = {
   play: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="m13.473 10.476-6.845 4.256a1.697 1.697 0 0 1-2.364-.547 1.77 1.77 0 0 1-.264-.93v-8.51C4 3.78 4.768 3 5.714 3c.324 0 .64.093.914.268l6.845 4.255a1.763 1.763 0 0 1 0 2.953"/></svg>`,
   pause: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><rect width="4" height="12" x="3" y="3" fill="currentColor" rx="1.75"/><rect width="4" height="12" x="11" y="3" fill="currentColor" rx="1.75"/></svg>`,
@@ -367,6 +367,293 @@ const KokoVideoSkinTemplate = `
   </media-container>
 `;
 
+const 格式化媒体时间 = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
+  const rounded = Math.floor(seconds);
+  const hours = Math.floor(rounded / 3600);
+  const minutes = Math.floor((rounded % 3600) / 60);
+  const remainSeconds = rounded % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainSeconds.toString().padStart(2, "0")}`;
+  }
+  return `${minutes}:${remainSeconds.toString().padStart(2, "0")}`;
+};
+
+const 约束百分比字符串 = (ratio: number): string => {
+  const clamped = Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0));
+  return `${clamped * 100}%`;
+};
+
+const 读取视频缓冲比例 = (video: 可原生全屏视频元素): number => {
+  if (!Number.isFinite(video.duration) || video.duration <= 0) {
+    return 0;
+  }
+  try {
+    if ((video.buffered?.length ?? 0) <= 0) {
+      return 0;
+    }
+    const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    for (let index = 0; index < video.buffered.length; index += 1) {
+      const start = video.buffered.start(index);
+      const end = video.buffered.end(index);
+      if (currentTime >= start && currentTime <= end) {
+        return end / video.duration;
+      }
+    }
+    return video.buffered.end(video.buffered.length - 1) / video.duration;
+  } catch {
+    return 0;
+  }
+};
+
+const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (() => void) => {
+  const 媒体插槽 = shadowRoot.querySelector('slot[name="media"]') as HTMLSlotElement | null;
+  const 播放按钮 = shadowRoot.querySelector("media-play-button") as HTMLElement | null;
+  const 静音按钮 = shadowRoot.querySelector("media-mute-button") as HTMLElement | null;
+  const 当前时间标签 = shadowRoot.querySelector('media-time[type="current"]') as HTMLElement | null;
+  const 总时长标签 = shadowRoot.querySelector('media-time[type="duration"]') as HTMLElement | null;
+  const 时间滑杆 = shadowRoot.querySelector("media-time-slider") as HTMLElement | null;
+  const 加载指示层 = shadowRoot.querySelector("media-buffering-indicator") as HTMLElement | null;
+  const 热键节点列表 = Array.from(shadowRoot.querySelectorAll("media-hotkey")) as HTMLElement[];
+
+  let 当前视频: 可原生全屏视频元素 | null = null;
+  let 解绑当前视频监听 = (): void => undefined;
+
+  const 同步控件展示 = (): void => {
+    if (!播放按钮 || !静音按钮 || !当前时间标签 || !总时长标签 || !时间滑杆 || !加载指示层) {
+      return;
+    }
+    const video = 当前视频;
+    if (!video) {
+      播放按钮.setAttribute("data-paused", "");
+      播放按钮.removeAttribute("data-ended");
+      静音按钮.setAttribute("data-muted", "");
+      静音按钮.setAttribute("data-volume-level", "low");
+      当前时间标签.textContent = "0:00";
+      总时长标签.textContent = "0:00";
+      时间滑杆.style.setProperty("--media-slider-fill", "0%");
+      时间滑杆.style.setProperty("--media-slider-buffer", "0%");
+      加载指示层.removeAttribute("data-visible");
+      return;
+    }
+
+    if (video.ended) {
+      播放按钮.setAttribute("data-ended", "");
+      播放按钮.removeAttribute("data-paused");
+    } else if (video.paused) {
+      播放按钮.setAttribute("data-paused", "");
+      播放按钮.removeAttribute("data-ended");
+    } else {
+      播放按钮.removeAttribute("data-paused");
+      播放按钮.removeAttribute("data-ended");
+    }
+
+    const muted = video.muted || video.volume <= 0;
+    if (muted) {
+      静音按钮.setAttribute("data-muted", "");
+    } else {
+      静音按钮.removeAttribute("data-muted");
+    }
+    静音按钮.setAttribute("data-volume-level", muted || video.volume < 0.5 ? "low" : "high");
+
+    当前时间标签.textContent = 格式化媒体时间(video.currentTime);
+    总时长标签.textContent = 格式化媒体时间(video.duration);
+    时间滑杆.style.setProperty(
+      "--media-slider-fill",
+      约束百分比字符串(
+        Number.isFinite(video.duration) && video.duration > 0 ? video.currentTime / video.duration : 0
+      )
+    );
+    时间滑杆.style.setProperty("--media-slider-buffer", 约束百分比字符串(读取视频缓冲比例(video)));
+
+    const 应显示加载态 =
+      !video.ended &&
+      !video.paused &&
+      (video.seeking || (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA && !!video.currentSrc));
+    if (应显示加载态) {
+      加载指示层.setAttribute("data-visible", "");
+    } else {
+      加载指示层.removeAttribute("data-visible");
+    }
+  };
+
+  const 切到指定进度 = (clientX: number): void => {
+    if (!当前视频 || !时间滑杆) {
+      return;
+    }
+    if (!Number.isFinite(当前视频.duration) || 当前视频.duration <= 0) {
+      return;
+    }
+    const rect = 时间滑杆.getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || rect.width <= 0) {
+      return;
+    }
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    当前视频.currentTime = 当前视频.duration * ratio;
+    同步控件展示();
+  };
+
+  const 切换播放状态 = (): void => {
+    if (!当前视频) {
+      return;
+    }
+    if (当前视频.ended) {
+      当前视频.currentTime = 0;
+    }
+    if (当前视频.paused || 当前视频.ended) {
+      void 当前视频.play().catch(() => undefined);
+      return;
+    }
+    当前视频.pause();
+  };
+
+  const 切换静音状态 = (): void => {
+    if (!当前视频) {
+      return;
+    }
+    当前视频.muted = !当前视频.muted;
+    同步控件展示();
+  };
+
+  const 绑定视频监听 = (video: 可原生全屏视频元素 | null): void => {
+    解绑当前视频监听();
+    当前视频 = video;
+    if (!video) {
+      同步控件展示();
+      return;
+    }
+
+    const 解绑列表: Array<() => void> = [];
+    const 监听视频事件 = (type: string, listener: EventListener): void => {
+      video.addEventListener(type, listener);
+      解绑列表.push(() => video.removeEventListener(type, listener));
+    };
+
+    const 更新展示 = (): void => {
+      同步控件展示();
+    };
+
+    [
+      "play",
+      "pause",
+      "ended",
+      "volumechange",
+      "timeupdate",
+      "durationchange",
+      "loadedmetadata",
+      "progress",
+      "seeking",
+      "seeked",
+      "waiting",
+      "playing",
+      "canplay",
+      "canplaythrough",
+      "error",
+      "emptied",
+    ].forEach((eventName) => 监听视频事件(eventName, 更新展示));
+
+    解绑当前视频监听 = (): void => {
+      for (const dispose of 解绑列表) {
+        dispose();
+      }
+      解绑列表.length = 0;
+    };
+    同步控件展示();
+  };
+
+  if (播放按钮) {
+    播放按钮.tabIndex = 0;
+    播放按钮.setAttribute("role", "button");
+    播放按钮.setAttribute("aria-label", "播放或暂停");
+    播放按钮.addEventListener("click", () => {
+      切换播放状态();
+    });
+    播放按钮.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        切换播放状态();
+      }
+    });
+  }
+
+  if (静音按钮) {
+    静音按钮.tabIndex = 0;
+    静音按钮.setAttribute("role", "button");
+    静音按钮.setAttribute("aria-label", "静音");
+    静音按钮.addEventListener("click", () => {
+      切换静音状态();
+    });
+    静音按钮.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        切换静音状态();
+      }
+    });
+  }
+
+  if (时间滑杆) {
+    时间滑杆.tabIndex = 0;
+    时间滑杆.setAttribute("role", "slider");
+    时间滑杆.setAttribute("aria-label", "播放进度");
+    时间滑杆.addEventListener("click", (event) => {
+      切到指定进度(event.clientX);
+    });
+    时间滑杆.addEventListener("keydown", (event) => {
+      if (!当前视频 || !Number.isFinite(当前视频.duration) || 当前视频.duration <= 0) {
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        当前视频.currentTime = Math.max(0, 当前视频.currentTime - 5);
+        同步控件展示();
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        当前视频.currentTime = Math.min(当前视频.duration, 当前视频.currentTime + 5);
+        同步控件展示();
+      }
+    });
+  }
+
+  if (!host.hasAttribute("tabindex")) {
+    host.tabIndex = -1;
+  }
+  host.addEventListener("keydown", (event) => {
+    const 命中热键动作 = 热键节点列表.find(
+      (node) => (node.getAttribute("keys") ?? "").toLowerCase() === event.key.toLowerCase()
+    );
+    const action = 命中热键动作?.getAttribute("action");
+    if (!action) {
+      return;
+    }
+    if (action === "togglePaused") {
+      event.preventDefault();
+      切换播放状态();
+    }
+    if (action === "toggleMuted") {
+      event.preventDefault();
+      切换静音状态();
+    }
+  });
+
+  const 刷新当前视频引用 = (): void => {
+    const candidate = 媒体插槽
+      ?.assignedElements({ flatten: true })
+      .find((element): element is 可原生全屏视频元素 => element instanceof HTMLVideoElement);
+    绑定视频监听(candidate ?? null);
+  };
+
+  媒体插槽?.addEventListener("slotchange", 刷新当前视频引用);
+  刷新当前视频引用();
+
+  return (): void => {
+    媒体插槽?.removeEventListener("slotchange", 刷新当前视频引用);
+    解绑当前视频监听();
+  };
+};
+
 const 注册KokoVideoSkin元素 = (): void => {
   if (typeof globalThis.customElements === "undefined" || typeof HTMLElement === "undefined") {
     return;
@@ -375,44 +662,51 @@ const 注册KokoVideoSkin元素 = (): void => {
     return;
   }
   class KokoVideoSkinElement extends HTMLElement {
+    private 清理控件绑定: (() => void) | null = null;
+
     connectedCallback() {
       if (this.shadowRoot) {
         return;
       }
       const shadowRoot = this.attachShadow({ mode: "open" });
       shadowRoot.innerHTML = KokoVideoSkinTemplate;
+      this.清理控件绑定 = 绑定KokoVideoSkin控件(this, shadowRoot);
+    }
+
+    disconnectedCallback() {
+      this.清理控件绑定?.();
+      this.清理控件绑定 = null;
     }
   }
   globalThis.customElements.define(KokoVideoSkinTagName, KokoVideoSkinElement);
 };
 
-const 注册默认VideoJs元素 = (): void | Promise<void> => {
+const 注册默认VideoJs元素 = (): void => {
   /**
-   * 默认走懒注册，但 Promise 会被复用，避免并发打开时重复 import。
-   * 一旦元素已定义，这里会同步返回，给打开手势留出“同栈创建壳 + 真全屏”的窗口。
+   * 默认注册只负责两件事：
+   * 1. 定义 `video-player` provider，给唯一壳一个稳定宿主标签；
+   * 2. 定义 `koko-video-skin`，把控件行为收口在本地薄壳，不再透传第二链播放器依赖。
+   *
+   * 测试环境里不一定存在 DOM Custom Elements/HTMLElement，
+   * 这里必须先短路，避免纯 Node 路径因为“预热默认元素”而被误伤。
    */
   if (
-    typeof globalThis.customElements !== "undefined" &&
-    globalThis.customElements.get("video-player") &&
+    typeof globalThis.customElements === "undefined" ||
+    typeof HTMLElement === "undefined"
+  ) {
+    return;
+  }
+  if (
+    globalThis.customElements.get(VideoJs播放器Provider标签) &&
     globalThis.customElements.get(KokoVideoSkinTagName)
   ) {
     return;
   }
-  if (!默认VideoJs元素注册Promise) {
-    默认VideoJs元素注册Promise = (async () => {
-      await import("@videojs/html/video/player");
-      await import("@videojs/html/media/container");
-      await import("@videojs/html/ui/buffering-indicator");
-      await import("@videojs/html/ui/controls");
-      await import("@videojs/html/ui/hotkey");
-      await import("@videojs/html/ui/mute-button");
-      await import("@videojs/html/ui/play-button");
-      await import("@videojs/html/ui/time");
-      await import("@videojs/html/ui/time-slider");
-      注册KokoVideoSkin元素();
-    })();
+  if (!globalThis.customElements.get(VideoJs播放器Provider标签)) {
+    class KokoVideoPlayerProviderElement extends HTMLElement {}
+    globalThis.customElements.define(VideoJs播放器Provider标签, KokoVideoPlayerProviderElement);
   }
-  return 默认VideoJs元素注册Promise;
+  注册KokoVideoSkin元素();
 };
 
 export const 预热默认VideoJs元素 = (): Promise<void> =>
@@ -426,7 +720,7 @@ const 创建默认播放器根 = (
     throw new Error("当前环境没有可用的浏览器文档，无法创建 Video.js 播放器壳");
   }
 
-  const provider = document.createElement("video-player");
+  const provider = document.createElement(VideoJs播放器Provider标签);
   注册KokoVideoSkin元素();
   const skin = document.createElement(KokoVideoSkinTagName);
   const video = document.createElement("video") as 可原生全屏视频元素;

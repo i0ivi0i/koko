@@ -22,14 +22,14 @@
 6. 唯一播放器 owner 已在 `frontend/媒体/全局唯一播放器.ts`，消息流、viewer、fullscreen 都应该迁移同一颗 player/container。
 7. hidden preview probe 已在 `frontend/媒体/视频预览.ts` 接入 `AbortSignal`，并用 `pause + removeAttribute("src") + load` 做 teardown。
 
-### 0.2 仍会阻挡唯一 WebTorrent 的风险
+### 0.2 当前收口状态（2026-04-28）
 
-1. `frontend/媒体/媒体播放.ts` 的 `媒体播放结果` 类型仍保留 `mode: "manifest"`；`frontend/房间消息窗.ts`、`frontend/媒体/壳层/查看器会话协作.ts`、`frontend/聊天应用内核.ts` 仍有 manifest 投影测试或兼容分支。
-2. `frontend/媒体/videojs播放器壳.ts` 仍能加载 `hls.js`，并有 HLS fatal fallback；`frontend/媒体/媒体查看器.ts` 仍动态 import `p2p-media-loader-hlsjs`。
-3. `frontend/media-sw.ts` 仍缓存 HLS/DASH manifest/segments；如果不隔离，会让烟测误把缓存命中当作正式播放成功。
-4. `src/媒体资产外壳.rs` 仍有 `streaming_asset` 和 `load_streaming_asset_content`；`tests/协作分发测试.rs` 仍有把 HLS/DASH 叫成“正式主链”的旧断言。
-5. `contentUrlByAttachmentId`、图片大图、thumbnail/poster、preview_asset 仍可能把原文件或静态图带到壳层；它们可以表达冷 UI 或 legacy 证据，但不能冒充正式可播真相。
-6. 当前预算快照还缺 `liveVideoElementWithSrcCount`、`hiddenProbeCount`、`previewVideoWithSrcCount`、正式 source mode 等浏览器验收指标。
+1. `mode: "manifest"`、viewer manifest 投影、消息窗 manifest host、`streaming_asset` 契约表面已经从正式链退场；当前只允许它们留在历史清理测试或归档文档里。
+2. `frontend/媒体/videojs播放器壳.ts` 已改成“原生 video + 本地薄壳控件”，不再加载 `@videojs/html`、`hls.js` 或 `p2p-media-loader-hlsjs`。
+3. `frontend/media-sw.ts` 只保留拦截旧 manifest/segment/Range 第二读取真相的 guard，不再把缓存命中包装成正式视频成功。
+4. 后端 `streaming_asset` / `load_streaming_asset_content` / `/stream/*` 第二链已经删除；旧 HLS/DASH 字样只允许作为历史清理证据存在。
+5. `contentUrlByAttachmentId`、thumbnail/poster、`preview_asset` 继续只能表达冷 UI 或 preview 证据，不得冒充正式可播成功。
+6. 下文 checklist 已执行完成，保留它们只是为了审计实施步骤，不再代表待办状态。
 
 ### 0.3 不允许的做法
 
@@ -163,14 +163,13 @@
 - Modify: `frontend/tests/聊天应用内核测试.spec.ts`
 - Modify: `tests/协作分发测试.rs`
 
-- [ ] **Step 1: 重读当前第二链入口**
+- [x] **Step 1: 重读当前第二链入口**
 
 Run:
 
 ```powershell
 rg -n 'mode: "manifest"|p2p-media-loader|hls\.js|kind: "hls"|hls_master_url|dash_mpd_url|master\.m3u8|streaming_asset|variant=original|originalSrc|buildAttachmentContentUrl|CDN|cdn|CacheStorage|caches\.open|workbox-range-requests|Range|206|preview_asset|thumbnail_url|still_url|media-sw|ServiceWorker|serviceWorker' src frontend tests -g '!frontend/dist/**'
 ```
-
 Expected: 能列出 HLS/DASH、manifest mode、original/direct、CDN、临时 range、Service Worker / CacheStorage、静态 preview cache 和 p2p-media-loader 的所有活入口。
 
 失败条件：
@@ -180,7 +179,7 @@ Expected: 能列出 HLS/DASH、manifest mode、original/direct、CDN、临时 ra
 3. `preview_asset`、`thumbnail_url`、`still_url`、poster、静态缓存被当作正式可播即失败。
 4. `web_seed_url` 直接进入 `<video src>`、Video.js source 或 viewer request 即失败。
 
-- [ ] **Step 2: 写媒体播放红测**
+- [x] **Step 2: 写媒体播放红测**
 
 在 `frontend/tests/媒体播放测试.spec.ts` 增加或改写测试：
 
@@ -194,7 +193,7 @@ it("web_seed_url 只能透传给 WebTorrent urlList，不会作为播放器 src"
 
 Expected RED: 如果当前仍能产生 `mode: "manifest"` 或 original/canonical 播放成功，测试失败。
 
-- [ ] **Step 3: 写 viewer / Video.js 红测**
+- [x] **Step 3: 写 viewer / Video.js 红测**
 
 在 `frontend/tests/媒体查看器测试.spec.ts` 和 `frontend/tests/videojs播放器壳测试.spec.ts` 增加：
 
@@ -206,7 +205,7 @@ it("Video.js 壳收到新主链视频时只按 file/swarm source 同步，不创
 
 Expected RED: 仍动态 import HLS 或 P2P HLS 增强时失败。
 
-- [ ] **Step 4: 写消息窗和内核红测**
+- [x] **Step 4: 写消息窗和内核红测**
 
 在 `frontend/tests/房间消息窗媒体查看器测试.spec.ts` 与 `frontend/tests/聊天应用内核测试.spec.ts` 增加：
 
@@ -218,7 +217,7 @@ it("本地完整视频重开查看器时必须重裁到 WebTorrent swarm，不�
 
 Expected RED: 现有 manifest 兼容投影仍存在时失败。
 
-- [ ] **Step 5: 写后端 locator 红测**
+- [x] **Step 5: 写后端 locator 红测**
 
 在 `tests/协作分发测试.rs` 或子模块里改写旧测试：
 
@@ -248,7 +247,7 @@ Expected RED: 旧测试里“视频 locator 应返回正式 HLS 主清单入口�
 - Modify: `tests/媒体上传测试/单文件主链.rs`
 - Modify: `tests/流媒体资产契约测试.rs`
 
-- [ ] **Step 1: 修改契约注释和类型语义**
+- [x] **Step 1: 修改契约注释和类型语义**
 
 要求：
 
@@ -257,7 +256,7 @@ Expected RED: 旧测试里“视频 locator 应返回正式 HLS 主清单入口�
 3. `媒体分发描述` 明确是正式新主链分发表面。
 4. `媒体冷源描述` 只能是 WebTorrent web seed / 旧债冷备来源，不能是播放器正式 src。
 
-- [ ] **Step 2: 新视频 locator 只暴露 file_asset 正式表面**
+- [x] **Step 2: 新视频 locator 只暴露 file_asset 正式表面**
 
 修改 `src/媒体资产外壳.rs`：
 
@@ -265,7 +264,7 @@ Expected RED: 旧测试里“视频 locator 应返回正式 HLS 主清单入口�
 2. HLS/DASH manifest 不再投影为新主链字段。
 3. `origin.original_url` 只能保留在冷源描述里，且注释写明“禁止喂播放器”。
 
-- [ ] **Step 3: 历史 HLS 只允许 legacy 隔离**
+- [x] **Step 3: 历史 HLS 只允许 legacy 隔离**
 
 如果数据库里已有 `attachment_streaming_manifests`，处理规则：
 
@@ -274,7 +273,7 @@ Expected RED: 旧测试里“视频 locator 应返回正式 HLS 主清单入口�
 3. `streaming_deleted_at` 后仍必须返回 null manifest。
 4. 新上传路径不能再写 manifest 行。
 
-- [ ] **Step 4: 保持 WebTorrent locator 不被削弱**
+- [x] **Step 4: 保持 WebTorrent locator 不被削弱**
 
 检查 `src/媒体协作分发.rs`：
 
@@ -284,7 +283,7 @@ Expected RED: 旧测试里“视频 locator 应返回正式 HLS 主清单入口�
 4. `join_ticket` 继续绑定 attachment/infohash。
 5. `MEDIA_CONNECTING_TO_PEERS / MEDIA_NO_ONLINE_SEED` 继续表达真实可恢复来源，不得因为没有 HLS 就假成功。
 
-- [ ] **Step 5: 跑后端定向测试**
+- [x] **Step 5: 跑后端定向测试**
 
 Run:
 
@@ -309,7 +308,7 @@ Expected: 新上传视频只以 WebTorrent/file_asset 为正式表面；legacy H
 - Modify: `frontend/tests/房间消息窗媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/聊天应用内核测试.spec.ts`
 
-- [ ] **Step 1: 删除或隔离 `mode: "manifest"` 正式类型**
+- [x] **Step 1: 删除或隔离 `mode: "manifest"` 正式类型**
 
 修改 `frontend/媒体/媒体播放.ts`：
 
@@ -317,7 +316,7 @@ Expected: 新上传视频只以 WebTorrent/file_asset 为正式表面；legacy H
 2. `anchor` 只能保留给图片、legacy 冷源或明确非视频兼容，不得服务新主链视频。
 3. 如果确实还需保留 manifest 类型，必须改名为 `legacy_manifest`，并且只能在 legacy 文件/测试中出现。
 
-- [ ] **Step 2: 更新播放器注释**
+- [x] **Step 2: 更新播放器注释**
 
 把 `媒体播放.ts` 顶部“swarm 不足退回锚点”的旧注释改掉：
 
@@ -325,7 +324,7 @@ Expected: 新上传视频只以 WebTorrent/file_asset 为正式表面；legacy H
 2. 图片：按 blob canonical / swarm 规则读取。
 3. 冷源：只作为 WebTorrent web seed 或 legacy 证据，不是正式播放链。
 
-- [ ] **Step 3: 清掉查看器 manifest 投影**
+- [x] **Step 3: 清掉查看器 manifest 投影**
 
 修改 `frontend/媒体/壳层/查看器会话协作.ts`：
 
@@ -333,7 +332,7 @@ Expected: 新上传视频只以 WebTorrent/file_asset 为正式表面；legacy H
 2. 查看器 request 不再携带 HLS `fallbackSrc` / `streamingDistribution` 作为新主链字段。
 3. recovering 阶段继续清空旧 src，等待 WebTorrent owner 重裁。
 
-- [ ] **Step 4: 清掉消息窗 manifest host**
+- [x] **Step 4: 清掉消息窗 manifest host**
 
 修改 `frontend/房间消息窗.ts`：
 
@@ -341,7 +340,7 @@ Expected: 新上传视频只以 WebTorrent/file_asset 为正式表面；legacy H
 2. `同步时间线唯一播放器宿主` 的 `kind` 对新主链只应是 `file`。
 3. 视频未拿到 swarm 时只显示 poster/preview truth，不能塞 m3u8 或 original 到 `<video>`。
 
-- [ ] **Step 5: 跑前端定向测试**
+- [x] **Step 5: 跑前端定向测试**
 
 Run:
 
@@ -364,7 +363,7 @@ Expected: 正式新视频只出现 `mode: "swarm"` 或真实失败态；没有 m
 - Modify: `frontend/tests/媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/媒体服务工作线程测试.spec.ts`
 
-- [ ] **Step 1: 判断能否直接删依赖**
+- [x] **Step 1: 判断能否直接删依赖**
 
 Run:
 
@@ -374,7 +373,7 @@ rg -n 'hls\.js|p2p-media-loader-hlsjs|kind: "hls"|HlsJsP2PEngine' frontend -g '!
 
 Expected: 只剩 `videojs播放器壳.ts`、`媒体查看器.ts`、测试和 package 依赖。
 
-- [ ] **Step 2: 删除正式 HLS provider**
+- [x] **Step 2: 删除正式 HLS provider**
 
 首选实现：
 
@@ -382,7 +381,7 @@ Expected: 只剩 `videojs播放器壳.ts`、`媒体查看器.ts`、测试和 pac
 2. 播放器壳只接受 `kind: "file"` 的 source。
 3. 如果暂时必须保留 legacy，移动到明确 `legacy` 命名的窄路径，并且默认不被新主链调用。
 
-- [ ] **Step 3: 删除 `p2p-media-loader-hlsjs` 正式挂点**
+- [x] **Step 3: 删除 `p2p-media-loader-hlsjs` 正式挂点**
 
 修改 `媒体查看器.ts`：
 
@@ -390,7 +389,7 @@ Expected: 只剩 `videojs播放器壳.ts`、`媒体查看器.ts`、测试和 pac
 2. 删除 `挂接P2PHls增强层` 作为正式壳依赖。
 3. 如果保留 benchmark，必须只能由测试或显式 benchmark 入口调用，不进入 viewer 正式路径。
 
-- [ ] **Step 4: 收口 service worker 缓存**
+- [x] **Step 4: 收口 service worker 缓存**
 
 修改 `frontend/media-sw.ts`：
 
@@ -398,7 +397,7 @@ Expected: 只剩 `videojs播放器壳.ts`、`媒体查看器.ts`、测试和 pac
 2. HLS/DASH manifest/segment 缓存删除或改成 legacy cache，且不参与正式成功指标。
 3. 不缓存新主链正式视频字节成第二读取真相。
 
-- [ ] **Step 5: 清理依赖**
+- [x] **Step 5: 清理依赖**
 
 如果步骤 2/3 已删掉所有正式引用：
 
@@ -409,7 +408,7 @@ pnpm --dir frontend install --lockfile-only
 
 Expected: `frontend/package.json` 和 `frontend/pnpm-lock.yaml` 不再保留无用 HLS/P2P HLS 依赖。
 
-- [ ] **Step 6: 跑 HLS 隔离测试**
+- [x] **Step 6: 跑 HLS 隔离测试**
 
 Run:
 
@@ -433,7 +432,7 @@ Expected: 正式 viewer / player 不加载 HLS；legacy/benchmark 如保留，�
 - Modify: `frontend/tests/房间消息窗媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/资产协作分发运行时测试.spec.ts`
 
-- [ ] **Step 1: 扩展预算快照**
+- [x] **Step 1: 扩展预算快照**
 
 新增或投影 `1.4` 表里的全部字段，最低必须覆盖这些代码侧字段：
 
@@ -487,7 +486,7 @@ Expected: 正式 viewer / player 不加载 HLS；legacy/benchmark 如保留，�
 
 Expected: 快照能区分桌面/移动阈值，能标出 owner generation，能说明正式 source 是 WebTorrent stream server、blob swarm source，还是失败态；不能只输出“activeVideoCount”这类粗字段。
 
-- [ ] **Step 2: `contentUrlByAttachmentId` 不再放大整房直链**
+- [x] **Step 2: `contentUrlByAttachmentId` 不再放大整房直链**
 
 修改 `frontend/聊天媒体编排.ts`：
 
@@ -495,7 +494,7 @@ Expected: 快照能区分桌面/移动阈值，能标出 owner generation，能�
 2. 图片大图只服务当前窗口或 viewer 明确打开，不服务整房历史。
 3. 远处历史只保留冷表达，不预先拿重 URL。
 
-- [ ] **Step 3: 帮助窗口不拉活整房附件**
+- [x] **Step 3: 帮助窗口不拉活整房附件**
 
 修改 `读取当前帮助窗口附件标识`、`读取当前房间帮助附件候选`、`协作补齐协作.恢复当前房间缓存帮助任务`：
 
@@ -503,7 +502,7 @@ Expected: 快照能区分桌面/移动阈值，能标出 owner generation，能�
 2. help window 只来自当前媒体窗口、自动播候选、viewer、owner、已完整缓存且在帮助窗口内的条目。
 3. 轻帮助保留协作价值，不保留前台重 reader。
 
-- [ ] **Step 4: 房间消息窗只按窗口渲染真实表面**
+- [x] **Step 4: 房间消息窗只按窗口渲染真实表面**
 
 修改 `frontend/房间消息窗.ts`：
 
@@ -512,7 +511,7 @@ Expected: 快照能区分桌面/移动阈值，能标出 owner generation，能�
 3. 远处视频只显示 poster/preview truth，不保留 `/webtorrent/...` src。
 4. 图片 `<img>` 数量遵守虚拟窗口，不被 content URL 表放大。
 
-- [ ] **Step 5: 锁死轻帮助态**
+- [x] **Step 5: 锁死轻帮助态**
 
 修改 `frontend/媒体/资产协作分发运行时.ts`：
 
@@ -521,7 +520,7 @@ Expected: 快照能区分桌面/移动阈值，能标出 owner generation，能�
 3. `zeroRefHeavySessionCount == 0`。
 4. `zeroRefWholeFileReaderCount == 0`。
 
-- [ ] **Step 6: 跑预算定向测试**
+- [x] **Step 6: 跑预算定向测试**
 
 Run:
 
@@ -541,7 +540,7 @@ Expected: spec 14.5 的 v0 预算能被测试读到，并且超限会失败。
 - Modify: `frontend/tests/视频预览测试.spec.ts`
 - Modify: `frontend/tests/视频预览协作测试.spec.ts`
 
-- [ ] **Step 1: 给 locator / swarm preview source 接入取消**
+- [x] **Step 1: 给 locator / swarm preview source 接入取消**
 
 要求：
 
@@ -549,7 +548,7 @@ Expected: spec 14.5 的 v0 预算能被测试读到，并且超限会失败。
 2. `解析协作分发预览源` 阶段失败或取消后必须释放 preview consumer。
 3. 旧 generation 的 preview 结果不能写回当前状态。
 
-- [ ] **Step 2: preview 不冒充正式成功**
+- [x] **Step 2: preview 不冒充正式成功**
 
 测试必须断言：
 
@@ -557,7 +556,7 @@ Expected: spec 14.5 的 v0 预算能被测试读到，并且超限会失败。
 2. hidden probe 抓到首帧不能把 formal source mode 改成成功。
 3. 只有 WebTorrent swarm playback / streamURL 成立，才算正式视频可播。
 
-- [ ] **Step 3: 保持 teardown 严格**
+- [x] **Step 3: 保持 teardown 严格**
 
 继续要求：
 
@@ -567,7 +566,7 @@ Expected: spec 14.5 的 v0 预算能被测试读到，并且超限会失败。
 4. AbortSignal
 5. consumer release
 
-- [ ] **Step 4: 跑 preview 定向测试**
+- [x] **Step 4: 跑 preview 定向测试**
 
 Run:
 
@@ -587,7 +586,7 @@ Expected: preview 取消、旧代次失效、consumer release、静态图不冒�
 - Modify: `frontend/tests/媒体协作分发测试.spec.ts`
 - Modify: `frontend/tests/资产协作分发运行时测试.spec.ts`
 
-- [ ] **Step 1: 记录正式 source 证据**
+- [x] **Step 1: 记录正式 source 证据**
 
 正式 swarm source 必须可观测：
 
@@ -597,7 +596,7 @@ Expected: preview 取消、旧代次失效、consumer release、静态图不冒�
 4. `torrent_info_hash` 与 locator 一致。
 5. `web_seed_url` 进入 `urlList`，不直接成为播放器 src。
 
-- [ ] **Step 2: route drain 继续按真实尾波**
+- [x] **Step 2: route drain 继续按真实尾波**
 
 保持 `/webtorrent/...` route drain：
 
@@ -606,7 +605,7 @@ Expected: preview 取消、旧代次失效、consumer release、静态图不冒�
 3. browser tailwave 未结束不能 retire route。
 4. 烟测中 `/webtorrent/...` 404 记为失败。
 
-- [ ] **Step 3: 完整 peer / 片段帮助者失败态**
+- [x] **Step 3: 完整 peer / 片段帮助者失败态**
 
 后 `24 小时` 失败态不能只看 `complete_peer == 0`：
 
@@ -614,7 +613,7 @@ Expected: preview 取消、旧代次失效、consumer release、静态图不冒�
 2. 确实没有可恢复来源时，进入真实 no-seed。
 3. 两种情况都不得回退 HLS、original 或服务器第二主链。
 
-- [ ] **Step 4: 跑 WebTorrent 定向测试**
+- [x] **Step 4: 跑 WebTorrent 定向测试**
 
 Run:
 
@@ -639,7 +638,7 @@ Expected: WebTorrent source evidence、route drain、no-seed 语义全部可测�
 - Modify: `frontend/tests/房间消息窗媒体查看器测试.spec.ts`
 - Modify: `frontend/tests/聊天应用内核测试.spec.ts`
 
-- [ ] **Step 1: 写 owner 往返保护测试**
+- [x] **Step 1: 写 owner 往返保护测试**
 
 ```ts
 it("timeline -> viewer/fullscreen -> timeline -> 同视频 viewer 不会报附件当前不可获取", async () => {});
@@ -649,7 +648,7 @@ it("owner 切换只迁移同一颗 player/container，不创建第二颗正式�
 it("fullscreen API 失败时仍进入 viewer 沉浸态，并保留下一次用户点击重试全屏", async () => {});
 ```
 
-- [ ] **Step 2: 按 consumer 粒度释放**
+- [x] **Step 2: 按 consumer 粒度释放**
 
 要求：
 
@@ -658,7 +657,7 @@ it("fullscreen API 失败时仍进入 viewer 沉浸态，并保留下一次用�
 3. 旧失败态不能污染下一次点击。
 4. `全局唯一播放器.ts` 不持有 source owner。
 
-- [ ] **Step 3: 保持视觉连续性**
+- [x] **Step 3: 保持视觉连续性**
 
 要求：
 
@@ -666,7 +665,7 @@ it("fullscreen API 失败时仍进入 viewer 沉浸态，并保留下一次用�
 2. 退场 bridge 窗口有上限。
 3. rVFC 探针只写当前 owner generation。
 
-- [ ] **Step 4: 跑 viewer 定向测试**
+- [x] **Step 4: 跑 viewer 定向测试**
 
 Run:
 
@@ -684,7 +683,7 @@ Expected: 同一视频往返、唯一播放器、fullscreen 失败恢复、无�
 - No new smoke scripts.
 - Modify only documentation if recording smoke evidence is required.
 
-- [ ] **Step 1: 定向测试合集**
+- [x] **Step 1: 定向测试合集**
 
 Run:
 
@@ -694,7 +693,7 @@ pnpm --dir frontend exec vitest run tests/媒体播放测试.spec.ts tests/媒�
 
 Expected: 全部通过，且测试名不再把 HLS/DASH/p2p-media-loader 称为正式主链。
 
-- [ ] **Step 2: 全量构建验证**
+- [x] **Step 2: 全量构建验证**
 
 Run:
 
@@ -706,7 +705,7 @@ cargo test
 
 Expected: 前端测试、前端构建、Rust 测试全部通过。
 
-- [ ] **Step 3: 第二链残留扫描**
+- [x] **Step 3: 第二链残留扫描**
 
 Run:
 
@@ -722,7 +721,7 @@ Expected:
 4. `web_seed_url` 只用于 WebTorrent `urlList` 或后端 locator 响应，不喂播放器。
 5. CDN、临时 range、`Range`/`206`、Service Worker / CacheStorage、静态 preview cache 不能出现在正式成功路径。
 
-- [ ] **Step 4: 启动本地服务**
+- [x] **Step 4: 启动本地服务**
 
 Run:
 
@@ -732,7 +731,7 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1
 
 Expected: 本地 HTTP/HTTPS 服务启动成功，端口就绪。
 
-- [ ] **Step 5: Chrome DevTools CLI 烟测**
+- [x] **Step 5: Chrome DevTools CLI 烟测**
 
 按 `chrome-devtools-cli` skill 的 CLI 命令链执行，不新增仓库脚本：
 
@@ -767,7 +766,7 @@ Expected:
 15. JS heap、renderer private memory、GPU/纹理内存压力后回落。
 16. `24 小时` 后如果片段帮助者可恢复，必须仍走 WebTorrent；如果确实无可恢复来源，必须真实 no-seed，不能回退第二链。
 
-- [ ] **Step 6: Playwright CLI 补烟测**
+- [x] **Step 6: Playwright CLI 补烟测**
 
 按 `playwright-cli` skill 的 CLI 命令链执行，不新增仓库脚本：
 
@@ -786,7 +785,7 @@ Expected:
 4. 静态 preview 命中只记为 UI 表达，不记为正式可播。
 5. 移动端 `budgetSnapshot` 满足 `1.4` 表的移动阈值。
 
-- [ ] **Step 7: 烟测证据模板**
+- [x] **Step 7: 烟测证据模板**
 
 最终验收必须在提交前留下这类记录，不允许只写“看起来正常”：
 
@@ -825,7 +824,7 @@ decision:
 
 Expected: 每个桌面、移动、高压、老用户返回、24h 退场场景都有命令、环境、证据、失败阈值和裁决。
 
-- [ ] **Step 8: graphify 与提交**
+- [x] **Step 8: graphify 与提交**
 
 Run:
 
