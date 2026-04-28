@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { io, type Socket } from "socket.io-client";
 import { createServer } from "node:net";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
@@ -31,13 +31,9 @@ type 房间事件 = {
 };
 
 const repoRoot = resolve(process.cwd(), "..");
-// realtime 真链路测试会自己拉起后端。如果继续复用默认 target/debug，
-// 就会和开发者本地正在运行的 cargo run 争抢同一个 koko.exe，导致测试启动超时。
-// 这里固定切到 target/ 下的独立子目录，让“开发中跑服务”和“回归里起临时后端”互不踩踏，
-// 同时又不会在仓库根制造新的未跟踪目录。
-const backendTargetDir = resolve(repoRoot, "target", "realtime-tests");
 const backendBinaryPath = resolve(
-  backendTargetDir,
+  repoRoot,
+  "target",
   "debug",
   process.platform === "win32" ? "koko.exe" : "koko"
 );
@@ -551,12 +547,9 @@ function ensureBackendBinaryPrepared(): void {
     return;
   }
 
-  mkdirSync(backendTargetDir, { recursive: true });
-
-  // 真链路测试的重点是验证 socket/HTTP 闭环，不是反复测 cargo 编译器。
-  // 先在独立 target 目录预编译一次，再直接起二进制，既避开默认 target/debug 冲突，
-  // 也避免首轮编译时间吃掉 waitForServer 的启动窗口。
-  const result = spawnSync("cargo", ["build", "--quiet", "--target-dir", backendTargetDir], {
+  // 真链路测试的重点是验证 socket/HTTP 闭环，不是额外测一遍“冷 target-dir 从零编译”。
+  // 这里优先复用默认 target/debug 的后端产物；缺失时再做一次普通 cargo build。
+  const result = spawnSync("cargo", ["build", "--quiet"], {
     cwd: repoRoot,
     env: {
       ...process.env,

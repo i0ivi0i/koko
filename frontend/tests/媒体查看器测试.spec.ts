@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { 媒体播放位置 } from "../媒体/媒体播放";
 import { 创建媒体查看器, type 媒体查看器依赖 } from "../媒体/媒体查看器";
@@ -1397,7 +1398,9 @@ describe("媒体查看器适配器", () => {
   });
 
   it("manifest 视频也会进入同一个 Video.js 壳，不再单独拉起 HLS overlay", async () => {
-    const createVideoJsPlayerShell = vi.fn(() => 创建测试VideoJs播放器壳());
+    const createVideoJsPlayerShell = vi.fn<NonNullable<媒体查看器依赖["createVideoJsPlayerShell"]>>(
+      (_source, _deps) => 创建测试VideoJs播放器壳()
+    );
     const viewer = 创建媒体查看器({
       createVideoJsPlayerShell,
       isMobileViewport: () => false,
@@ -1419,17 +1422,21 @@ describe("媒体查看器适配器", () => {
 
     expect(createVideoJsPlayerShell).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: "hls",
+        kind: "file",
         src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
       }),
       expect.objectContaining({
         mountTarget: expect.any(HTMLElement),
-        挂接P2PHls增强层: expect.any(Function),
+      })
+    );
+    expect(createVideoJsPlayerShell.mock.calls[0]?.[1]).toEqual(
+      expect.not.objectContaining({
+        挂接P2PHls增强层: expect.anything(),
       })
     );
   });
 
-  it("默认视频查看器会把 HLS P2P 增强挂接函数交给 Video.js 壳，而不是让 provider 裸跑", async () => {
+  it("默认视频查看器不再给 Video.js 壳注入 HLS/P2P HLS 增强入口", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
       const video = document.createElement("video");
@@ -1468,8 +1475,8 @@ describe("媒体查看器适配器", () => {
 
       expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(1);
       expect(创建VideoJs播放器壳.mock.calls[0]?.[1]).toEqual(
-        expect.objectContaining({
-          挂接P2PHls增强层: expect.any(Function),
+        expect.not.objectContaining({
+          挂接P2PHls增强层: expect.anything(),
         })
       );
 
@@ -1480,89 +1487,13 @@ describe("媒体查看器适配器", () => {
     }
   });
 
-  it("默认视频查看器挂接 HLS P2P 引擎时，会显式带上 announceTrackers 与正式时间窗参数", async () => {
-    vi.resetModules();
-    const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
-      const video = document.createElement("video");
-      const container = document.createElement("div");
-      return 创建测试VideoJs播放器壳({
-        video,
-        container,
-        进入全屏: 创建测试VideoJs进入全屏(container),
-      });
-    });
-    const bindHls = vi.fn();
-    const HlsJsP2PEngine = vi.fn(
-      class {
-        bindHls = bindHls;
-      }
-    );
-    vi.doMock("../媒体/videojs播放器壳", () => ({
-      创建VideoJs播放器壳,
-      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
-    }));
-    vi.doMock("p2p-media-loader-hlsjs", () => ({
-      HlsJsP2PEngine,
-    }));
+  it("媒体查看器源码不再动态 import p2p-media-loader-hlsjs，也不再把 .m3u8 特判成 HLS", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "../媒体/媒体查看器.ts"), "utf8");
 
-    try {
-      const { 创建媒体查看器: 创建默认媒体查看器 } = await import("../媒体/媒体查看器");
-      const viewer = 创建默认媒体查看器({
-        isMobileViewport: () => false,
-      });
-
-      viewer.打开({
-        startAttachmentId: "att-video-default-p2p-hls-config-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-default-p2p-hls-config-1",
-            src: "http://media.local/stream/att-video-default-p2p-hls-config-1/master.m3u8",
-            posterSrc: "http://media.local/poster-default-p2p-hls-config-1",
-            streamingDistribution: {
-              swarm_id: "swarm-default-p2p-hls-config-1",
-              announce_urls: ["wss://tracker-1.koko.local/announce", "wss://tracker-2.koko.local/announce"],
-              web_seed_url: "http://media.local/web-seed-default-p2p-hls-config-1",
-              join_ticket: "ticket-default-p2p-hls-config-1",
-              ticket_expires_at: null,
-              survival_mode: "server_assisted",
-            },
-            width: 1280,
-            height: 720,
-          },
-        ],
-      });
-      await Promise.resolve();
-
-      const deps = 创建VideoJs播放器壳.mock.calls[0]?.[1] as
-        | { 挂接P2PHls增强层?: (input: { hls: object }) => Promise<void> }
-        | undefined;
-      expect(deps?.挂接P2PHls增强层).toEqual(expect.any(Function));
-
-      const fakeHls = {};
-      await deps?.挂接P2PHls增强层?.({ hls: fakeHls });
-
-      expect(HlsJsP2PEngine).toHaveBeenCalledWith({
-        core: {
-          announceTrackers: [
-            "wss://tracker-1.koko.local/announce",
-            "wss://tracker-2.koko.local/announce",
-          ],
-          simultaneousHttpDownloads: 2,
-          simultaneousP2PDownloads: 3,
-          highDemandTimeWindow: 15,
-          httpDownloadTimeWindow: 3000,
-          p2pDownloadTimeWindow: 6000,
-        },
-      });
-      expect(bindHls).toHaveBeenCalledWith(fakeHls);
-
-      viewer.销毁();
-    } finally {
-      vi.doUnmock("../媒体/videojs播放器壳");
-      vi.doUnmock("p2p-media-loader-hlsjs");
-      vi.resetModules();
-    }
+    expect(source).not.toContain("p2p-media-loader-hlsjs");
+    expect(source).not.toContain('kind: "hls"');
+    expect(source).not.toContain("HlsJsP2PEngine");
+    expect(source).not.toContain("/\\.m3u8(?:$|\\?)/");
   });
 
   it("视频壳会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {

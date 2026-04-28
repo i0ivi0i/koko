@@ -1,24 +1,12 @@
 import { 媒体是否默认循环播放 } from "./媒体播放.js";
 
-type Hls构造器 = typeof import("hls.js").default;
-type Hls播放器源描述 = Extract<VideoJs播放器源描述, { kind: "hls" }>;
-
-export type VideoJs播放器源描述 =
-  | {
-      kind: "file";
-      src: string;
-      posterSrc: string | null;
-      width: number;
-      height: number;
-    }
-  | {
-      kind: "hls";
-      src: string;
-      fallbackSrc?: string | null;
-      posterSrc: string | null;
-      width: number;
-      height: number;
-    };
+export type VideoJs播放器源描述 = {
+  kind: "file";
+  src: string;
+  posterSrc: string | null;
+  width: number;
+  height: number;
+};
 
 type 可请求全屏容器 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
@@ -68,23 +56,11 @@ export type VideoJs播放器壳依赖 = {
    */
   registerVideoJsElements?: () => void | Promise<void>;
   /**
-   * 这里只允许返回同一套播放器 DOM。
-   * 不管后面接 file、blob 还是 HLS，都必须继续复用这一个 provider/container/video。
+   * 壳层只允许维护同一套播放器 DOM。
+   * 不管后面接 blob、`/webtorrent/...` 还是其他单一正式字节地址，都必须继续复用
+   * 这一个 provider/container/video，不能在壳里长出第二条 source owner 链。
    */
   createPlayer?: (source: VideoJs播放器源描述) => VideoJs播放器根节点;
-  loadHlsConstructor?: () => Promise<Hls构造器>;
-  /**
-   * `p2p-media-loader-hlsjs` 这类增强层只能从壳外挂进来。
-   * 壳层只给出可选挂点，不在这里直接 import 具体增强库，
-   * 这样才能持续保证“增强层不是正式首播必经路径”。
-   */
-  挂接P2PHls增强层?: (input: {
-    hls: InstanceType<Hls构造器>;
-    video: 可原生全屏视频元素;
-    provider: HTMLElement;
-    container: 可请求全屏容器;
-    source: Hls播放器源描述;
-  }) => void | Promise<void>;
   mountTarget?: HTMLElement;
 };
 
@@ -564,10 +540,6 @@ const 创建VideoJs播放器壳核心 = (
 
   let 当前源 = initialSource;
   let 已销毁 = false;
-  let hls构造器Promise: Promise<Hls构造器> | null = null;
-  let hls实例: InstanceType<Hls构造器> | null = null;
-  let 已挂接P2PHls增强层 = false;
-  let 已致命失败Hls源地址: string | null = null;
 
   const 释放真实视频资源 = (): void => {
     try {
@@ -579,147 +551,12 @@ const 创建VideoJs播放器壳核心 = (
     root.video.load();
   };
 
-  const 销毁Hls实例 = (): void => {
-    if (!hls实例) {
-      return;
-    }
-    hls实例.destroy();
-    hls实例 = null;
-  };
-  const 读取Hls构造器 = (): Promise<Hls构造器> => {
-    if (!hls构造器Promise) {
-      hls构造器Promise =
-        deps.loadHlsConstructor != null
-          ? deps.loadHlsConstructor()
-          : import("hls.js").then((module) => module.default);
-    }
-    return hls构造器Promise;
-  };
-
-  const 构造Hls回退文件源 = (
-    source: Hls播放器源描述
-  ): VideoJs播放器源描述 | null => {
-    const fallbackSrc = source.fallbackSrc?.trim();
-    if (!fallbackSrc) {
-      return null;
-    }
-    return {
-      kind: "file",
-      src: fallbackSrc,
-      posterSrc: source.posterSrc,
-      width: source.width,
-      height: source.height,
-    };
-  };
-
   const 应用文件源 = (source: VideoJs播放器源描述): void => {
-    销毁Hls实例();
-    已挂接P2PHls增强层 = false;
     if (!是同一个文件媒体地址(root.video.src, source.src)) {
       root.video.src = source.src;
     }
   };
-
-  const 尝试挂接壳外P2PHls增强层 = (source: Hls播放器源描述): void => {
-    if (!hls实例 || 已挂接P2PHls增强层 || !deps.挂接P2PHls增强层) {
-      return;
-    }
-    已挂接P2PHls增强层 = true;
-    /**
-     * 这里绝不 await。
-     * 正式主链先 attach/loadSource；增强层后挂且可失败。
-     * 如果增强挂接失败，只允许降级成“没有 P2P 增强”，不能把首播一起拖死。
-     */
-    void Promise.resolve(
-      deps.挂接P2PHls增强层({
-        hls: hls实例,
-        video: root.video,
-        provider: root.provider,
-        container: root.container,
-        source,
-      })
-    ).catch((error: unknown) => {
-      console.warn("[koko:videojs-shell:p2p-enhancer]", { src: source.src }, error);
-    });
-  };
-
-  const 应用Hls源 = async (
-    source: Hls播放器源描述,
-    previousSource: VideoJs播放器源描述 | null
-  ): Promise<void> => {
-    const Hls = await 读取Hls构造器();
-    if (typeof Hls.isSupported === "function" && Hls.isSupported()) {
-      if (!hls实例) {
-        hls实例 = new Hls();
-        hls实例.attachMedia(root.video);
-        const 错误事件名 = (
-          Hls as unknown as { Events?: { ERROR?: string } }
-        ).Events?.ERROR;
-        if (错误事件名 && typeof (hls实例 as unknown as { on?: unknown }).on === "function") {
-          (
-            hls实例 as unknown as {
-              on: (
-                eventName: string,
-                handler: (eventName: string, payload: unknown) => void
-              ) => void;
-            }
-          ).on(错误事件名, (_eventName, payload) => {
-            const fatal =
-              typeof payload === "object" &&
-              payload !== null &&
-              (payload as { fatal?: unknown }).fatal === true;
-            if (!fatal || 已销毁 || 当前源.kind !== "hls") {
-              return;
-            }
-            const fallbackSource = 构造Hls回退文件源(当前源);
-            if (!fallbackSource) {
-              return;
-            }
-            已致命失败Hls源地址 = 当前源.src;
-            console.warn("[koko:videojs-shell:hls-fallback]", {
-              from: 当前源.src,
-              to: fallbackSource.src,
-            });
-            应用展示源(root, fallbackSource);
-            应用文件源(fallbackSource);
-            当前源 = fallbackSource;
-          });
-        }
-      }
-      尝试挂接壳外P2PHls增强层(source);
-      /**
-       * HLS 主链同步必须只在正式源变化时重载。
-       * 否则媒体会话每次投影快照，都会把同一条 manifest 重新 loadSource 一遍，
-       * 用户看到的就会是“明明是同一个会话，却不停转圈重连”。
-       */
-      if (!previousSource || previousSource.kind !== "hls" || previousSource.src !== source.src) {
-        hls实例.loadSource(source.src);
-      }
-      return;
-    }
-
-    root.video.src = source.src;
-  };
-
-  const 应用源 = (
-    source: VideoJs播放器源描述,
-    previousSource: VideoJs播放器源描述 | null
-  ): VideoJs播放器源描述 => {
-    if (source.kind === "hls") {
-      if (已致命失败Hls源地址 && 已致命失败Hls源地址 === source.src) {
-        const fallbackSource = 构造Hls回退文件源(source);
-        if (fallbackSource) {
-          应用展示源(root, fallbackSource);
-          应用文件源(fallbackSource);
-          return fallbackSource;
-        }
-      } else if (已致命失败Hls源地址 && 已致命失败Hls源地址 !== source.src) {
-        已致命失败Hls源地址 = null;
-      }
-      应用展示源(root, source);
-      void 应用Hls源(source, previousSource);
-      return source;
-    }
+  const 应用源 = (source: VideoJs播放器源描述): VideoJs播放器源描述 => {
     应用展示源(root, source);
     应用文件源(source);
     return source;
@@ -727,18 +564,17 @@ const 创建VideoJs播放器壳核心 = (
 
   /**
    * 创建时就先把初始源挂进唯一那颗 video。
-   * 这样后面的 file -> HLS / HLS -> file 只是在同一会话里切 provider，
-   * 不会重新长出第二套播放器实现。
+   * 后面不管切 blob、webtorrent 还是其他单一正式地址，都是同一会话里的同一颗 video，
+   * 不会因为源地址变化再长出第二套播放器实现。
    */
-  当前源 = 应用源(initialSource, null);
+  当前源 = 应用源(initialSource);
 
   return {
     同步(source) {
       if (已销毁) {
         return;
       }
-      const previousSource = 当前源;
-      当前源 = 应用源(source, previousSource);
+      当前源 = 应用源(source);
     },
     挂载到宿主(mountTarget) {
       if (已销毁) {
@@ -786,7 +622,6 @@ const 创建VideoJs播放器壳核心 = (
         return;
       }
       已销毁 = true;
-      销毁Hls实例();
       释放真实视频资源();
       root.destroy?.();
       root.provider.remove();

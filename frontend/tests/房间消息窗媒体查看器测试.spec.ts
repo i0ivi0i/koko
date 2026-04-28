@@ -541,19 +541,11 @@ describe("房间消息窗媒体查看器", () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "manifest",
+        mode: "anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
         thumbnailUrl: "http://media.local/poster-video-1",
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-1",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         hint: null,
       } satisfies 媒体播放结果,
     };
@@ -4097,23 +4089,15 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
-  it("视频已经切到 HLS manifest 主链时，消息卡片继续用 poster 占位，但查看器要拿到 manifest 地址", async () => {
+  it("旧 manifest 播放快照不会再被投影成查看器正式视频源，而是等待唯一主链重裁", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "manifest",
+        mode: "anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
         thumbnailUrl: "http://media.local/poster-video-1",
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-1",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         hint: null,
       } satisfies 媒体播放结果,
     };
@@ -4153,16 +4137,8 @@ describe("房间消息窗媒体查看器", () => {
       {
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/stream/att-video-1/master.m3u8",
+        src: "",
         posterSrc: "http://media.local/poster-video-1",
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-1",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         width: 1280,
         height: 720,
       },
@@ -4390,7 +4366,7 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
-  it("视频已经切到 HLS manifest 主链且没有 poster 时，消息卡片会退到静态占位，而不是把 m3u8 塞给原生 video", async () => {
+  it("旧 manifest 播放快照没有 poster 时，查看器也不能继续带着 m3u8 打开", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -4411,19 +4387,11 @@ describe("房间消息窗媒体查看器", () => {
     ];
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "manifest",
+        mode: "anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
         thumbnailUrl: null,
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-1",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         hint: null,
       } satisfies 媒体播放结果,
     };
@@ -4459,16 +4427,8 @@ describe("房间消息窗媒体查看器", () => {
       {
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/stream/att-video-1/master.m3u8",
+        src: "",
         posterSrc: null,
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-1",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         width: 1280,
         height: 720,
       },

@@ -18,15 +18,13 @@ type 媒体播放输入 = {
 
 type 媒体播放结果 =
   | {
-      mode: "swarm" | "anchor" | "manifest";
+      mode: "swarm" | "anchor";
       attachmentId: string;
       kind: 媒体种类;
       src: string;
-      fallbackSrc?: string;
       thumbnailUrl: string | null;
       contentHash?: string | null;
       distribution?: 媒体资产分发表面 | null;
-      streamingDistribution?: 媒体资产分发表面 | null;
       hint: "正在协作分发" | null;
     }
   | {
@@ -115,25 +113,26 @@ const 是否为附件已删除错误 = (error: unknown): boolean =>
   "code" in error &&
   (error as { code?: unknown }).code === "attachment_not_found";
 
+/**
+ * 历史缓存或旧会话快照里，可能仍残留 HLS/DASH manifest 地址。
+ * 即使这些地址后来被包进 `anchor` 播放结果，它们也不能再被当成正式视频源。
+ */
+export const 视频地址属于旧流媒体清单 = (src: string | null | undefined): boolean => {
+  const normalized = src?.trim();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    /\/stream\/(?:hls|dash)\//i.test(normalized) ||
+    /\.(?:m3u8|mpd)(?:$|[?#])/i.test(normalized)
+  );
+};
+
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
 ): "正在协作分发" | null => {
   // “正在补块”只说明协作分发还在后台补齐文件块；只要已有可播放 src，就不是用户可见故障。
   return hint === "正在补块" ? null : hint;
-};
-
-const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean => {
-  const lifecycle = locator.streaming_asset?.lifecycle;
-  if (!lifecycle) {
-    return false;
-  }
-  /**
-   * 流媒体冷备是否正式退场，以后端已经宣布的删除事实为准：
-   * 1. 前端墙钟不能越位替后端裁“是不是到点了”；
-   * 2. 这样不会因为缓存 locator、时钟漂移或测试固化时间把有效 HLS 误判成过期；
-   * 3. 这里只回答“服务端是否已经宣布流媒体冷备删掉”，不额外再长第二套可用性真相。
-   */
-  return Boolean(lifecycle.streaming_deleted_at);
 };
 
 /**
@@ -261,13 +260,12 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   /**
    * 播放锚点只认 nested asset 自己声明的冷源 / canonical：
    * 1. file_video 优先 canonical，再退到 origin；
-   * 2. streaming_video 只从 streaming_asset.origin 读冷源；
-   * 3. blob_image 只读 canonical，不再回到顶层 original_url 兼容别名。
+   * 2. blob_image 只读 canonical，不再回到顶层 original_url 兼容别名；
+   * 3. 旧 streaming_asset 即使还在 locator 里，也不能再参与正式锚点裁决。
    */
   const 读取锚点地址 = (locator: 媒体定位结果): string | null =>
     locator.file_asset?.variants.canonical?.url ??
     locator.file_asset?.origin.original_url ??
-    locator.streaming_asset?.origin.original_url ??
     locator.blob_asset?.variants?.canonical?.url ??
     null;
 
@@ -325,12 +323,12 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return false;
     }
     /**
-     * 只有已经进入流媒体/协作过渡面的 video，才值得在首开前多问一次 locator。
-     * 1. 旧 locator 就算还带着 HLS manifest，也不能阻止 WebTorrent / join_ticket 的刷新；
-     * 2. 纯旧式冷源附件继续直接走 anchor，避免给不相关的视频平白增加一次请求；
-     * 3. 真正的强刷节流继续由下面的冷却窗口兜住，不靠旧 manifest 语义短路。
+     * viewer 首开前值不值得强刷，只看“正式 WebTorrent 相关事实是否已经存在”：
+     * 1. distribution / file_asset.distribution 说明这条视频已经有唯一主链线索；
+     * 2. 旧 streaming_asset 不再触发额外刷新，避免把冷备字段重新抬回正式选路；
+     * 3. 真正的强刷节流继续由下面的冷却窗口兜住。
      */
-    return Boolean(locator.streaming_asset || locator.distribution);
+    return Boolean(locator.distribution || locator.file_asset?.distribution);
   };
 
   const 刷新查看器视频定位 = async (

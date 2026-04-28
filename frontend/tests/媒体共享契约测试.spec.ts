@@ -9,7 +9,7 @@ describe("媒体共享契约", () => {
     vi.restoreAllMocks();
   });
 
-  it("loadMediaLocator 只把多壳共享字段暴露给 Web，不把页面流程字段写回 streaming_asset", async () => {
+  it("loadMediaLocator 只把多壳共享字段暴露给 Web，不把页面流程字段写回 file_asset", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -43,14 +43,21 @@ describe("媒体共享契约", () => {
             },
             survival_mode: "server_assisted",
           },
-          streaming_asset: {
+          file_asset: {
             asset_id: "att-shared-video-1",
             content_hash: "hash-att-shared-video-1",
-            kind: "streaming_video" as const,
-            manifest: {
-              hls_master_url: "/api/media/att-shared-video-1/stream/hls/master.m3u8?session_id=s-1",
-              dash_mpd_url: "/api/media/att-shared-video-1/stream/dash/stream.mpd?session_id=s-1",
+            kind: "file_video" as const,
+            variants: {
+              canonical: {
+                id: "canonical",
+                mime_type: "video/mp4",
+                url: "/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
+                width: 1280,
+                height: 720,
+              },
             },
+            manifest: null,
+            lifecycle: null,
             distribution: {
               swarm_id: "swarm-hash-att-shared-video-1",
               announce_urls: ["/api/swarm/announce"],
@@ -83,15 +90,15 @@ describe("媒体共享契约", () => {
     expect("panelMode" in locator).toBe(false);
     expect(
       "toast_text" in
-        (locator.streaming_asset as unknown as Record<string, unknown>)
+        (locator.file_asset as unknown as Record<string, unknown>)
     ).toBe(false);
     expect(
       "presence_url" in
-        (locator.streaming_asset?.distribution as unknown as Record<string, unknown>)
+        (locator.file_asset?.distribution as unknown as Record<string, unknown>)
     ).toBe(false);
     expect(
       "drawerOpen" in
-        (locator.streaming_asset?.distribution as unknown as Record<string, unknown>)
+        (locator.file_asset?.distribution as unknown as Record<string, unknown>)
     ).toBe(false);
     expect("original_url" in (locator as unknown as Record<string, unknown>)).toBe(false);
     expect(
@@ -124,14 +131,37 @@ describe("媒体共享契约", () => {
         (((locator as unknown as { preview_asset?: Record<string, unknown> })
           .preview_asset ?? {}) as Record<string, unknown>)
     ).toBe(false);
-    expect(locator.streaming_asset?.distribution).toEqual({
-      swarm_id: "swarm-hash-att-shared-video-1",
-      announce_urls: ["ws://localhost:3000/api/swarm/announce"],
-      web_seed_url:
-        "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
-      join_ticket: null,
-      ticket_expires_at: null,
-      survival_mode: "server_assisted",
+    expect(locator.file_asset).toEqual({
+      asset_id: "att-shared-video-1",
+      content_hash: "hash-att-shared-video-1",
+      kind: "file_video",
+      variants: {
+        canonical: {
+          id: "canonical",
+          mime_type: "video/mp4",
+          url: "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
+          width: 1280,
+          height: 720,
+        },
+      },
+      manifest: null,
+      lifecycle: null,
+      distribution: {
+        swarm_id: "swarm-hash-att-shared-video-1",
+        announce_urls: ["ws://localhost:3000/api/swarm/announce"],
+        web_seed_url:
+          "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
+        join_ticket: null,
+        ticket_expires_at: null,
+        survival_mode: "server_assisted",
+      },
+      origin: {
+        original_url:
+          "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
+        expires_at_epoch_seconds: 1775942400,
+        available: true,
+        role: "cold_backup_only",
+      },
     });
   });
 

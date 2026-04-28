@@ -938,7 +938,7 @@ describe("聊天应用内核", () => {
     expect(激活协作补齐).not.toHaveBeenCalled();
   });
 
-  it("本地完整视频已先落到 manifest 时，打开正式查看器会先触发一次会话重裁决，再决定是否继续走 HLS", async () => {
+  it("本地完整视频已先落到旧 manifest 时，打开正式查看器会先触发一次会话重裁决，再决定是否继续等待唯一主链", async () => {
     const 创建视频消息传输 = () => {
       const transport = new 假传输();
       transport.joinQueue = [
@@ -990,19 +990,11 @@ describe("聊天应用内核", () => {
       hint: null,
     };
     const manifest播放结果 = {
-      mode: "manifest" as const,
+      mode: "anchor" as const,
       attachmentId: "att-video-cache-manifest-1",
       kind: "video" as const,
       src: "http://media.local/stream/att-video-cache-manifest-1/master.m3u8",
       thumbnailUrl: "http://media.local/poster-att-video-cache-manifest-1",
-      streamingDistribution: {
-        swarm_id: "swarm-video-cache-manifest-1",
-        announce_urls: ["wss://tracker.koko.local/announce"],
-        web_seed_url: "http://media.local/original-att-video-cache-manifest-1.mp4",
-        join_ticket: null,
-        ticket_expires_at: null,
-        survival_mode: "server_assisted" as const,
-      },
       hint: null,
     };
 
@@ -1101,14 +1093,6 @@ describe("聊天应用内核", () => {
           attachmentId: "att-video-cache-manifest-1",
           src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
           posterSrc: "http://media.local/poster-att-video-cache-manifest-1",
-          streamingDistribution: {
-            swarm_id: "swarm-video-cache-manifest-1",
-            announce_urls: ["wss://tracker.koko.local/announce"],
-            web_seed_url: "http://media.local/original-att-video-cache-manifest-1.mp4",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
           width: 1280,
           height: 720,
         },
@@ -1455,7 +1439,7 @@ describe("聊天应用内核", () => {
           hint: null,
         })
         .mockResolvedValueOnce({
-          mode: "manifest",
+          mode: "anchor",
           attachmentId: "att-video-hls",
           kind: "video",
           src: "http://media.local/stream/att-video-hls/master.m3u8",
@@ -1502,7 +1486,7 @@ describe("聊天应用内核", () => {
         {
           kind: "video",
           attachmentId: "att-video-hls",
-          src: "http://media.local/stream/att-video-hls/master.m3u8",
+          src: "",
           posterSrc: "http://media.local/poster-att-video-hls",
           width: 1280,
           height: 720,
@@ -1511,7 +1495,7 @@ describe("聊天应用内核", () => {
     });
   });
 
-  it("视频会话已经拿到 manifest 主链时，打开查看器会先投影当前播放真相，而不是继续带着旧 originalSrc", async () => {
+  it("视频会话还没把唯一正式源投给查看器时，打开查看器会先清空旧 originalSrc 等待后续同步", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -1552,19 +1536,11 @@ describe("聊天应用内核", () => {
     读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "manifest",
+        mode: "anchor",
         attachmentId: "att-video-open-manifest",
         kind: "video",
         src: "http://media.local/stream/att-video-open-manifest/master.m3u8",
         thumbnailUrl: "http://media.local/poster-att-video-open-manifest",
-        streamingDistribution: {
-          swarm_id: "swarm-hash-att-video-open-manifest",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: "http://media.local/stream/att-video-open-manifest/master.m3u8",
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         hint: null,
       }),
     });
@@ -1598,16 +1574,8 @@ describe("聊天应用内核", () => {
         {
           kind: "video",
           attachmentId: "att-video-open-manifest",
-          src: "http://media.local/stream/att-video-open-manifest/master.m3u8",
-          posterSrc: "http://media.local/poster-att-video-open-manifest",
-          streamingDistribution: {
-            swarm_id: "swarm-hash-att-video-open-manifest",
-            announce_urls: ["wss://tracker.koko.local/announce"],
-            web_seed_url: "http://media.local/stream/att-video-open-manifest/master.m3u8",
-            join_ticket: null,
-            ticket_expires_at: null,
-            survival_mode: "server_assisted" as const,
-          },
+          src: "",
+          posterSrc: null,
           width: 1280,
           height: 720,
         },
@@ -3172,19 +3140,11 @@ describe("聊天应用内核", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "manifest",
+        mode: "anchor",
         attachmentId: "att-video-viewer-close-1",
         kind: "video",
         src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",
         thumbnailUrl: "http://media.local/poster-att-video-viewer-close-1",
-        streamingDistribution: {
-          swarm_id: "swarm-att-video-viewer-close-1",
-          announce_urls: ["wss://tracker.koko.local/announce"],
-          web_seed_url: null,
-          join_ticket: null,
-          ticket_expires_at: null,
-          survival_mode: "server_assisted" as const,
-        },
         hint: null,
       }),
       激活协作补齐,

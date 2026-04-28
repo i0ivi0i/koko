@@ -11,20 +11,12 @@ const 创建锚点播放结果 = (attachmentId: string): 媒体播放结果 => (
   hint: null,
 });
 
-const 创建流媒体播放结果 = (attachmentId: string): 媒体播放结果 => ({
-  mode: "manifest",
+const 创建旧清单锚点播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "anchor",
   attachmentId,
   kind: "video",
   src: `http://media.local/stream/${attachmentId}/master.m3u8`,
   thumbnailUrl: `http://media.local/poster-${attachmentId}`,
-  streamingDistribution: {
-    swarm_id: `swarm-${attachmentId}`,
-    announce_urls: ["wss://tracker.media.local/announce"],
-    web_seed_url: "http://media.local/web-seed",
-    join_ticket: null,
-    ticket_expires_at: null,
-    survival_mode: "server_assisted",
-  },
   hint: null,
 });
 
@@ -338,10 +330,10 @@ describe("媒体会话", () => {
     });
   });
 
-  it("会话已经稳定在 manifest 后，后续 SWARM_ACTIVE 只保留后台补齐机会，不会热切回 swarm", async () => {
+  it("会话已经稳定在旧清单锚点后，后续 SWARM_ACTIVE 只保留后台补齐机会，不会热切回 swarm", async () => {
     const 解析播放结果 = vi
       .fn()
-      .mockResolvedValue(创建流媒体播放结果("att-video-manifest-1"));
+      .mockResolvedValue(创建旧清单锚点播放结果("att-video-manifest-1"));
     const 会话 = 创建媒体会话({
       attachmentId: "att-video-manifest-1",
       kind: "video",
@@ -360,7 +352,7 @@ describe("媒体会话", () => {
     expect(会话.snapshot()).toMatchObject({
       status: "playing",
       playback: {
-        mode: "manifest",
+        mode: "anchor",
         src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
       },
       sourceVersion: 稳定后快照.sourceVersion,
@@ -442,12 +434,12 @@ describe("媒体会话", () => {
     会话.send({ type: "ORIGIN_AVAILABLE" });
 
     expect(第二次解析完成).toBeTypeOf("function");
-    第二次解析完成!(创建流媒体播放结果(attachmentId));
+    第二次解析完成!(创建旧清单锚点播放结果(attachmentId));
     await Promise.resolve();
     await Promise.resolve();
 
     expect(会话.snapshot().playback).toMatchObject({
-      mode: "manifest",
+      mode: "anchor",
       src: `http://media.local/stream/${attachmentId}/master.m3u8`,
     });
 
@@ -458,7 +450,7 @@ describe("媒体会话", () => {
     await Promise.resolve();
 
     expect(会话.snapshot().playback).toMatchObject({
-      mode: "manifest",
+      mode: "anchor",
       src: `http://media.local/stream/${attachmentId}/master.m3u8`,
     });
   });

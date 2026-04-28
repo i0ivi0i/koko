@@ -98,18 +98,18 @@ describe("媒体服务工作线程", () => {
     expect(runtime.fetchMock).not.toHaveBeenCalled();
   });
 
-  it("会优先复用已缓存的 HLS/CMAF segment，而不是重新走网络", async () => {
+  it("不再接管 HLS/CMAF segment 请求，避免 Service Worker 缓存长成第二正式链", async () => {
     const url = "http://media.local/api/media/att-video-1/stream/hls/video/1.m4s?session_id=s-1";
     const cache = 创建假缓存([[url, new Response("cached-segment", { status: 200 })]]);
     const runtime = await 准备媒体服务工作线程({ 缓存: cache });
 
-    const response = await runtime.执行请求(new Request(url));
-
-    expect(await response.text()).toBe("cached-segment");
+    await expect(runtime.执行请求(new Request(url))).rejects.toThrow(
+      "media-sw 未接管请求"
+    );
     expect(runtime.fetchMock).not.toHaveBeenCalled();
   });
 
-  it("清单请求网络失败时，会回退到已缓存的 manifest", async () => {
+  it("不再接管 manifest 请求，避免 CacheStorage 命中被误记成正式播放成功", async () => {
     const url = "http://media.local/api/media/att-video-1/stream/hls/master.m3u8?session_id=s-1";
     const cache = 创建假缓存([[url, new Response("#EXTM3U\n# cached", { status: 200 })]]);
     const runtime = await 准备媒体服务工作线程({
@@ -119,27 +119,27 @@ describe("媒体服务工作线程", () => {
       }),
     });
 
-    const response = await runtime.执行请求(new Request(url));
-
-    expect(await response.text()).toContain("# cached");
+    await expect(runtime.执行请求(new Request(url))).rejects.toThrow(
+      "media-sw 未接管请求"
+    );
+    expect(runtime.fetchMock).not.toHaveBeenCalled();
   });
 
-  it("完整 segment 已在缓存中时，会直接从缓存切出 Range 响应", async () => {
+  it("不再替流媒体 Range 请求切 206 响应，避免 workbox-range-requests 继续充当正式读取真相", async () => {
     const url = "http://media.local/api/media/att-video-1/stream/dash/video/1.m4s?session_id=s-1";
     const bytes = Uint8Array.from([10, 20, 30, 40]);
     const cache = 创建假缓存([[url, new Response(bytes, { status: 200 })]]);
     const runtime = await 准备媒体服务工作线程({ 缓存: cache });
 
-    const response = await runtime.执行请求(
-      new Request(url, {
-        headers: {
-          Range: "bytes=1-2",
-        },
-      })
-    );
-
-    expect(response.status).toBe(206);
-    expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual([20, 30]);
+    await expect(
+      runtime.执行请求(
+        new Request(url, {
+          headers: {
+            Range: "bytes=1-2",
+          },
+        })
+      )
+    ).rejects.toThrow("media-sw 未接管请求");
     expect(runtime.fetchMock).not.toHaveBeenCalled();
   });
 });

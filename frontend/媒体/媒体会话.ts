@@ -168,7 +168,6 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       return "none";
     }
     const viewerSrc = "viewerSrc" in playback ? playback.viewerSrc ?? "" : "";
-    const fallbackSrc = "fallbackSrc" in playback ? playback.fallbackSrc ?? "" : "";
     const contentHash = "contentHash" in playback ? playback.contentHash ?? "" : "";
     return [
       playback.mode,
@@ -176,7 +175,6 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       playback.attachmentId,
       playback.src,
       viewerSrc,
-      fallbackSrc,
       contentHash,
     ].join("|");
   };

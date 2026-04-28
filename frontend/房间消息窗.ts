@@ -4,6 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
+  视频地址属于旧流媒体清单,
   type 媒体播放结果,
   type 媒体播放位置,
 } from "./媒体/媒体播放.js";
@@ -21,11 +22,10 @@ type 消息虚拟项 = {
 };
 
 /**
- * HLS manifest 不是时间线原生 `<video>` 的可播放文件。
- * 当后端暂时还没有真正的 poster 资产时，这里给一张极轻的 SVG 静态占位图：
- * 1. 不再把 `master.m3u8` 强塞给浏览器导致黑块和转圈；
- * 2. 又不需要为了一个时间线卡片在前端手搓第二套视频截图链；
- * 3. 查看器仍然继续拿正式 manifest 主链，不影响真正播放。
+ * 时间线卡片对“当前没有正式视频源”的表达只保留静态 poster。
+ * 1. 旧 manifest/HLS 地址不能再塞进时间线原生 `<video>`；
+ * 2. 查看器也不能继续把这类旧地址当成正式可播真相；
+ * 3. 当唯一主链还没重裁出来时，这张轻占位图就是唯一允许的降载表达。
  */
 const 默认视频清单占位Poster =
   "data:image/svg+xml;charset=utf-8," +
@@ -1394,9 +1394,14 @@ export class 房间消息窗 extends LitElement {
 
   private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
     const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
+    if (
+      attachment.kind === "video" &&
+      视频地址属于旧流媒体清单(playback?.src)
+    ) {
+      return "";
+    }
     return playback?.mode === "swarm" ||
-      playback?.mode === "anchor" ||
-      playback?.mode === "manifest"
+      playback?.mode === "anchor"
       ? playback.src
       : attachment.kind === "image"
         ? attachment.originalSrc
@@ -1497,10 +1502,19 @@ export class 房间消息窗 extends LitElement {
     );
     const host = visibleHost ?? stageHost;
     const src = host?.dataset.videoSrc?.trim() ?? "";
-    const kind = host?.dataset.videoKind === "hls" ? "hls" : "file";
+    // 时间线唯一播放器只接受正式唯一链的 file 源，旧 manifest/dash 残留必须当场拦下。
+    const kind = host?.dataset.videoKind === "file" ? "file" : null;
     const width = Number(host?.dataset.videoWidth ?? "0");
     const height = Number(host?.dataset.videoHeight ?? "0");
-    if (!host || !host.isConnected || !src || !Number.isFinite(width) || !Number.isFinite(height)) {
+    if (
+      !host ||
+      !host.isConnected ||
+      !src ||
+      !kind ||
+      视频地址属于旧流媒体清单(src) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
       读取默认全局唯一播放器().同步时间线自动播(null);
       return;
     }
@@ -1584,22 +1598,12 @@ export class 房间消息窗 extends LitElement {
           kind: "video",
           attachmentId: attachment.attachmentId,
           src: this.读取附件播放源(attachment),
-          ...(playback?.mode === "manifest" && playback.fallbackSrc
-            ? {
-                fallbackSrc: playback.fallbackSrc,
-              }
-            : {}),
           // 播放链拿到的新 thumbnail 可能已经完成重签；应优先覆盖消息快照里可能失效的旧 poster。
           posterSrc:
             playback?.thumbnailUrl ??
             this.读取时间线视频运行时预览(attachment.attachmentId)?.src ??
             attachment.posterSrc ??
             null,
-          ...(playback?.mode === "manifest" && playback.streamingDistribution
-            ? {
-                streamingDistribution: playback.streamingDistribution,
-              }
-            : {}),
           width: attachment.width,
           height: attachment.height,
         });
@@ -1993,7 +1997,7 @@ export class 房间消息窗 extends LitElement {
                     <div
                       class="message-video-canonical-host"
                       data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${ownerCanonicalVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc) ? "legacy_stream" : "file"}
                       data-video-src=${ownerCanonicalVideoSrc ?? ""}
                       data-video-poster=${previewVideoPoster ?? ""}
                       data-video-width=${attachment.width}
@@ -2025,7 +2029,7 @@ export class 房间消息窗 extends LitElement {
                       class="message-video-canonical-stage-host"
                       data-stage-host="true"
                       data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${ownerCanonicalVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc) ? "legacy_stream" : "file"}
                       data-video-src=${ownerCanonicalVideoSrc ?? ""}
                       data-video-poster=${previewVideoPoster ?? ""}
                       data-video-width=${attachment.width}

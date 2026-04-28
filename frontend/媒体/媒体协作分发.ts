@@ -567,7 +567,6 @@ export function 读取协作分发定位片段(
 
 const 读取协作分发基准地址 = (locator: 媒体定位结果): string | null =>
   locator.file_asset?.origin.original_url ??
-  locator.streaming_asset?.origin.original_url ??
   locator.blob_asset?.origin.original_url ??
   locator.file_asset?.variants.canonical?.url ??
   locator.blob_asset?.variants.canonical?.url ??

@@ -5,6 +5,7 @@ import type {
   媒体查看器打开请求,
   视频预览状态,
 } from "../index.js";
+import { 视频地址属于旧流媒体清单 } from "../index.js";
 
 type 查看器会话协作依赖 = {
   读取当前查看器请求(): 媒体查看器打开请求 | null;
@@ -23,7 +24,7 @@ type 查看器会话协作依赖 = {
 
 type 可投影媒体播放结果 = Extract<
   媒体播放结果,
-  { mode: "swarm" | "anchor" | "manifest" }
+  { mode: "swarm" | "anchor" }
 >;
 
 type 自动播查看器交接缓存 = {
@@ -61,9 +62,11 @@ export function 创建查看器会话协作(
   const 是否可投影播放结果 = (
     playback: 媒体播放结果 | null | undefined
   ): playback is 可投影媒体播放结果 =>
-    playback?.mode === "swarm" ||
-    playback?.mode === "anchor" ||
-    playback?.mode === "manifest";
+    (playback?.mode === "swarm" || playback?.mode === "anchor") &&
+    !(
+      playback?.kind === "video" &&
+      视频地址属于旧流媒体清单(playback.src)
+    );
 
   const 读取未过期自动播交接播放结果 = (
     attachmentId: string
@@ -110,17 +113,7 @@ export function 创建查看器会话协作(
       return {
         ...item,
         src: playback.src,
-        ...(playback.mode === "manifest" && playback.fallbackSrc
-          ? {
-              fallbackSrc: playback.fallbackSrc,
-            }
-          : {}),
         posterSrc: playback.thumbnailUrl ?? item.posterSrc,
-        ...(playback.mode === "manifest" && playback.streamingDistribution
-          ? {
-              streamingDistribution: playback.streamingDistribution,
-            }
-          : {}),
       };
     }
     return {
@@ -224,11 +217,12 @@ export function 创建查看器会话协作(
       return false;
     }
     /**
-     * 本地完整度可能先于 playback hydrate 恢复；这时先等会话真相一拍，
-     * 避免查看器拿静态 HLS/original src 先打一轮冷源请求。
-     * manifest 只重裁一次，防止为了 P2P 复用把查看器卡进无限等待。
+     * 本地完整度先于正式 swarm source hydrate 恢复时，查看器必须等待重裁一拍：
+     * 1. 只要当前 playback 还不是 `swarm`，就说明唯一正式链还没真正站稳；
+     * 2. 这时绝不能把旧 manifest/original src 再投回查看器抢跑；
+     * 3. 同附件只重裁一次，避免把等待唯一主链放大成无限循环。
      */
-    if (sessionSnapshot.playback.mode !== "manifest") {
+    if (sessionSnapshot.playback.mode === "swarm") {
       待重裁决的本地完整视频附件标识 = null;
       return false;
     }
