@@ -1337,8 +1337,19 @@ try {
         }
         if ($null -ne $httpsBootstrapProcess -and $httpsBootstrapProcess.Process.HasExited) {
             Write-ManagedProcessLogs $httpsBootstrapProcess
-            if ($httpsBootstrapProcess.Process.ExitCode -ne 0) {
-                Write-Warning "本地 HTTPS 引导进程异常退出，退出码: $($httpsBootstrapProcess.Process.ExitCode)"
+            $httpsBootstrapExitCode = $null
+            try {
+                # Start-Process + 重定向的短命子进程偶尔会先出现 HasExited=true、再稍后才把 ExitCode 回填。
+                # 这里先等句柄真正落稳，再判定是否异常，避免把正常的 launcher-mode 退出误报成 warning。
+                $httpsBootstrapProcess.Process.WaitForExit()
+                $httpsBootstrapProcess.Process.Refresh()
+                $httpsBootstrapExitCode = [int]$httpsBootstrapProcess.Process.ExitCode
+            }
+            catch {
+                $httpsBootstrapExitCode = $null
+            }
+            if ($null -ne $httpsBootstrapExitCode -and $httpsBootstrapExitCode -ne 0) {
+                Write-Warning "本地 HTTPS 引导进程异常退出，退出码: $httpsBootstrapExitCode"
             }
             $httpsBootstrapProcess = $null
         }

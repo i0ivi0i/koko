@@ -1,4 +1,10 @@
-use std::{future::Future, io};
+use std::{future::Future, io, time::Duration};
+
+/// 某些后台任务依赖 sidecar/外部控制面先完成启动。
+/// 这里显式延迟首拍，避免 Tokio `interval()` 默认“创建后立刻 tick 一次”把服务刚起来的冷启动窗口打穿。
+fn 创建延迟首拍周期器(period: Duration) -> tokio::time::Interval {
+    tokio::time::interval_at(tokio::time::Instant::now() + period, period)
+}
 
 /// 应用启动入口只负责编排，不承载业务规则。
 ///
@@ -108,7 +114,7 @@ where
         .协作分发
         .swarm_seed_reconcile_interval_seconds;
     let seed_reconcile_handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+        let mut interval = 创建延迟首拍周期器(Duration::from_secs(
             seed_reconcile_interval_seconds as u64,
         ));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -197,5 +203,32 @@ async fn 等待退出信号() {
     #[cfg(not(unix))]
     {
         ctrl_c.await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::创建延迟首拍周期器;
+    use std::time::Instant;
+    use tokio::time::{self, Duration, MissedTickBehavior};
+
+    #[tokio::test]
+    async fn 延迟首拍周期器不会在刚创建后立刻触发() {
+        let mut interval = 创建延迟首拍周期器(Duration::from_millis(200));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        assert!(
+            time::timeout(Duration::from_millis(50), interval.tick())
+                .await
+                .is_err(),
+            "协作分发做种对账首拍必须等 sidecar 启动窗口过去，不能在服务刚绑定端口后立刻开火"
+        );
+
+        let started_at = Instant::now();
+        interval.tick().await;
+        assert!(
+            started_at.elapsed() >= Duration::from_millis(120),
+            "首拍至少要明显晚于刚创建后的冷启动窗口，不能退化回立即 tick"
+        );
     }
 }
