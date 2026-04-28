@@ -227,6 +227,9 @@ const KokoVideoSkinTemplate = `
       display: none;
       pointer-events: none;
     }
+    :host([data-presentation="inline"]) media-buffering-indicator {
+      display: none !important;
+    }
     media-controls-group {
       display: flex;
       align-items: center;

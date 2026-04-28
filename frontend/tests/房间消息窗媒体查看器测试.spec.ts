@@ -2439,16 +2439,38 @@ describe("房间消息窗媒体查看器", () => {
 
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
-    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
-    const reacquiredVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    const reacquireStageHost = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-stage-host[data-attachment-id="att-video-1"]'
+    );
+    const reacquireVisibleHost = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-host[data-attachment-id="att-video-1"]'
+    );
+    const reacquirePreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
     /**
-     * 归位零闪烁场景允许继续复用同一个预览节点：
-     * 我们真正关心的是 canonical 标记和 swarm src 不要抖动，
-     * 不是“必须重建一个新 DOM 节点”。反过来说，能复用旧节点更接近真实丝滑体验。
+     * 同一条视频因滚动离屏释放 owner 后再回到 owner，也必须先走隐藏预热：
+     * 1. 用户可见面继续由暂停预览帧承接；
+     * 2. 唯一播放器在隐藏宿主里恢复 source/time；
+     * 3. 等 canonical 真正 canplay 后才揭帘，不能在可见卡片上现场 load/seek/play。
      */
+    expect(reacquireVisibleHost).toBeNull();
+    expect(reacquireStageHost).not.toBeNull();
+    expect(reacquireStageHost?.dataset.stageHost).toBe("true");
+    expect(reacquireStageHost?.dataset.videoSrc).toBe(playback.src);
+    expect(reacquirePreviewVideo).not.toBeNull();
+    expect(reacquirePreviewVideo?.dataset.canonicalPlayer).toBeUndefined();
+    expect(reacquirePreviewVideo?.autoplay).toBe(false);
+    expect(reacquirePreviewVideo?.getAttribute("src")).toBe(playback.src);
+
+    const reacquiredVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
+    expect(
+      pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
     expect(reacquiredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(reacquiredVideo?.autoplay).toBe(true);
     expect(reacquiredVideo?.getAttribute("src")).toBe(playback.src);

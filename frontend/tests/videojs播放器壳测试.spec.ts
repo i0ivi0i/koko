@@ -41,6 +41,12 @@ describe("Video.js 播放器壳", () => {
     expect(source).not.toContain("@videojs/html");
   });
 
+  it("消息流 inline 表面不显示播放器壳 buffering 圆圈，等待态由隐藏预热和暂停帧承接", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "../媒体/videojs播放器壳.ts"), "utf8");
+
+    expect(source).toContain(':host([data-presentation="inline"]) media-buffering-indicator');
+  });
+
   it("file/blob 首播不会请求第二播放器实现，也不会尝试加载 HLS provider", async () => {
     const createPlayer = vi.fn(() => 创建假播放器根());
 

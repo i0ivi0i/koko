@@ -265,15 +265,18 @@ export class 房间消息窗 extends LitElement {
         this.最近退场Owner附件Id = null;
       }
       if (
-        previousOwnerAttachmentId &&
         currentOwnerAttachmentId &&
-        currentOwnerAttachmentId !== previousOwnerAttachmentId
+        currentOwnerAttachmentId !== previousOwnerAttachmentId &&
+        (previousOwnerAttachmentId ||
+          currentOwnerAttachmentId === this.最近退场Owner附件Id)
       ) {
         /**
          * reveal gate 只对“这一轮 owner 交接”有效，绝不能跨轮次复用：
          * 1. 同一附件多次进出 owner 是消息流常态，上一轮 ready 不代表这一轮 canonical player 仍然已经对齐；
          * 2. 如果继续沿用旧缓存，render 会直接显露可见 canonical host，唯一播放器就会在用户眼前现场切源 / seek；
-         * 3. 因此 owner 每次切到新附件时，都必须先清掉该附件历史 ready 结论，强制重新走 hidden stage 校验。
+         * 3. “离屏 -> owner 为空 -> 同一附件滑回”也属于同一条视觉连续性交接，必须继续保留暂停底板，
+         *    让唯一播放器在隐藏宿主里恢复位置后再揭帘；
+         * 4. 因此 owner 每次进入需要承接旧可见帧的交接时，都必须清掉历史 ready 结论，重新走 hidden stage 校验。
          */
         this.时间线唯一播放器可见接管就绪源.delete(currentOwnerAttachmentId);
         this.时间线隐藏接管附件Id = currentOwnerAttachmentId;
