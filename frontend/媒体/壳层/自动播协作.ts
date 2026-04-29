@@ -25,6 +25,7 @@ type 自动播协作依赖 = {
   }): Promise<媒体播放结果>;
   释放附件播放资源(input: 媒体播放释放请求): void;
   构造自动播ConsumerId(attachmentId: string): string;
+  标记自动播进入帮助链(attachmentId: string): void;
   请求重渲染(): void;
 };
 
@@ -112,6 +113,7 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
        * 2. 这样点击放大时，viewer 才能继续沿用这条热会话，而不是在“会话已热、自动播再热”之间抖动；
        * 3. 这里只对 swarm 复用，其他 surface 仍保留原来的自动播裁决分支，避免把 anchor/manifest 误投到时间线自动播。
        */
+      deps.标记自动播进入帮助链(attachmentId);
       deps.接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
         attachmentId,
@@ -152,6 +154,9 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
           当前代次 !== 自动播解析代次
         ) {
           return;
+        }
+        if (playback.kind === "video" && playback.mode === "swarm") {
+          deps.标记自动播进入帮助链(attachmentId);
         }
         deps.接收媒体运行时事实({
           type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",

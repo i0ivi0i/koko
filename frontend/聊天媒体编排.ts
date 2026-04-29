@@ -56,6 +56,7 @@ import {
   type 媒体会话端口,
   type 媒体播放结果,
   type 媒体播放位置,
+  type 协作分发会话事件,
   type 预览缓存端口,
   type 视频预览状态,
   type WebTorrentSessionLifecycleSnapshot,
@@ -153,6 +154,7 @@ export interface 聊天媒体编排端口 {
       attachmentId: string;
       kind: "image" | "video";
       consumerId?: string;
+      onSessionEvent?: (event: 协作分发会话事件) => void;
     }): Promise<void>;
     释放附件播放资源?(input: 媒体播放释放请求): void;
   }): void;
@@ -898,6 +900,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     解析播放结果: (input) => 媒体播放器.解析播放结果(input),
     释放附件播放资源,
     构造自动播ConsumerId,
+    标记自动播进入帮助链: (attachmentId) => {
+      const attachment = 读取附件条目(attachmentId);
+      if (!attachment || attachment.kind !== "video") {
+        return;
+      }
+      // 自动播放一旦真实吃到 swarm 视频字节，就已经是“看过”的用户；
+      // 这里把它晋升到后台补齐帮助链，避免 owner 离屏后整文件补齐被降掉。
+      协作补齐协作.处理媒体会话信号({
+        attachmentId,
+        signal: { type: "ASSET_BACKFILLING" },
+      });
+    },
     请求重渲染: deps.请求重渲染,
   });
 
