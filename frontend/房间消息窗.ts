@@ -379,26 +379,47 @@ export class 房间消息窗 extends LitElement {
         const savedTimelineFrame =
           this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
         const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
+        const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
+          attachment.attachmentId
+        );
         const shouldReuseSavedTimelineFrameAsPreview =
-          Boolean(savedTimelineFrameSrc) &&
-          (!playback || this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId));
+          this.读取保存续帧是否允许承接时间线预览底板({
+            attachmentId: attachment.attachmentId,
+            playback,
+            playbackTimelineVideoSrc,
+            savedTimelineFrameSrc,
+          });
         const timelinePreviewVideoSrcCandidate =
           playbackTimelineVideoSrc ??
-          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+          knownReadyTimelineFrameSrc;
         const budget = this.读取时间线视频预算投影(
           attachment,
           timelinePreviewVideoSrcCandidate
         );
         const timelinePreviewVideoSrc =
           budget.previewVideoSrc ??
-          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+          knownReadyTimelineFrameSrc;
+        const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
+          attachment.attachmentId,
+          timelinePreviewVideoSrc
+        );
+        const hasExistingSameSourcePreviewFrame = this.读取时间线现有预览视频是否可继续显示(
+          attachment.attachmentId,
+          timelinePreviewVideoSrc
+        );
         if (
           this.读取时间线预览视频是否允许渲染(budget, {
+            hasExistingSameSourcePreviewFrame,
+            hasKnownReadyPreviewFrame,
             previewVideoSrc: timelinePreviewVideoSrc,
             shouldReuseSavedTimelineFrameAsPreview,
           }) &&
           timelinePreviewVideoSrc &&
-          可渲染真实预览视频附件.has(attachment.attachmentId)
+          (可渲染真实预览视频附件.has(attachment.attachmentId) ||
+            hasExistingSameSourcePreviewFrame ||
+            hasKnownReadyPreviewFrame)
         ) {
           previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
         }
@@ -506,6 +527,18 @@ export class 房间消息窗 extends LitElement {
       return false;
     }
     return this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc;
+  }
+
+  private 读取时间线视频已就绪首帧预览源(attachmentId: string): string | null {
+    const previewState = this.mediaPreviewByAttachmentId[attachmentId] ?? null;
+    if (previewState?.phase === "missing_source") {
+      return null;
+    }
+    const src = this.时间线视频首帧就绪源.get(attachmentId) ?? null;
+    if (!src || 视频地址属于旧流媒体清单(src)) {
+      return null;
+    }
+    return src;
   }
 
   private 标记时间线视频首帧已就绪(attachmentId: string, src: string | null): void {
@@ -1364,13 +1397,48 @@ export class 房间消息窗 extends LitElement {
     /**
      * 真实 preview `<video>` 的预算优先级固定为：
      * 1. 当前 owner / 刚退场 owner 先保住连续性；
-     * 2. 已进入近视口候选的卡片优先；
-     * 3. 其余只允许当前虚拟窗口里最靠前的一小撮视频继续挂真实 `<video>`。
+     * 2. 当前虚拟窗口里已经有保存续播位置的卡片优先，因为高速回滑时它们最容易被用户看见闪回 poster；
+     * 3. 当前虚拟窗口里已经真实出过首帧的卡片优先，因为编排冷快照可能比虚拟回滑慢一拍；
+     * 4. 已进入近视口候选的卡片优先；
+     * 5. 其余只允许当前虚拟窗口里最靠前的一小撮视频继续挂真实 `<video>`。
      *
      * 这样做的目的不是“所有历史视频都别显示”，而是让真正重的 DOM/解码表面收敛到稳定上限。
      */
     push(this.inlineAutoplayOwnerAttachmentId);
     push(this.最近退场Owner附件Id);
+    for (const virtualItem of virtualItems) {
+      const item = this.items[virtualItem.index];
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (attachment.kind !== "video") {
+          continue;
+        }
+        const position = this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
+        if (
+          position?.src &&
+          Number.isFinite(position.currentTime) &&
+          position.currentTime > 0
+        ) {
+          push(attachment.attachmentId);
+        }
+      }
+    }
+    for (const virtualItem of virtualItems) {
+      const item = this.items[virtualItem.index];
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (
+          attachment.kind === "video" &&
+          this.读取时间线视频已就绪首帧预览源(attachment.attachmentId)
+        ) {
+          push(attachment.attachmentId);
+        }
+      }
+    }
     for (const [attachmentId] of Array.from(this.自动播候选可见条目.entries()).sort(
       (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
     )) {
@@ -1530,6 +1598,8 @@ export class 房间消息窗 extends LitElement {
   private 读取时间线预览视频是否允许渲染(
     budget: 信息流视频预算投影,
     input: {
+      hasExistingSameSourcePreviewFrame?: boolean;
+      hasKnownReadyPreviewFrame?: boolean;
       previewVideoSrc: string | null;
       shouldReuseSavedTimelineFrameAsPreview: boolean;
     }
@@ -1537,32 +1607,61 @@ export class 房间消息窗 extends LitElement {
     if (budget.allowPreviewVideo) {
       return true;
     }
-    if (!input.previewVideoSrc || !input.shouldReuseSavedTimelineFrameAsPreview) {
+    if (!input.previewVideoSrc) {
+      return false;
+    }
+    if (
+      !input.shouldReuseSavedTimelineFrameAsPreview &&
+      !input.hasExistingSameSourcePreviewFrame &&
+      !input.hasKnownReadyPreviewFrame
+    ) {
       return false;
     }
     /**
      * 统一预算快照有时会比消息窗本地续播帧慢一拍：
      * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二播放链；
-     * 2. 它只负责在 owner 交接/退场窗口兜住暂停画面，避免 DOM 退回 poster/play 占位；
-     * 3. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止续帧桥被滥用成绕主链入口。
+     * 2. 高速滚动时，已经出过首帧的同源 preview 也允许多活一拍，兜住 IO/虚拟窗口预算抖动；
+     * 3. 如果那颗 DOM 已被虚拟列表卸载，首帧就绪缓存仍可证明同源像素已经真实出过帧；
+     * 4. 三种桥都只负责避免 DOM 退回 poster/play 占位，不拥有新的播放真相；
+     * 5. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
      */
     return budget.formalByteSource !== "non_webtorrent_bypass";
   }
 
-  private 读取保存续帧是否允许承接时间线预览底板(attachmentId: string): boolean {
+  private 读取保存续帧是否允许承接时间线预览底板(input: {
+    attachmentId: string;
+    playback: 媒体播放结果 | null;
+    playbackTimelineVideoSrc: string | null;
+    savedTimelineFrameSrc: string | null;
+  }): boolean {
+    if (!input.savedTimelineFrameSrc) {
+      return false;
+    }
     /**
-     * 保存续帧只允许服务两种场景：
-     * 1. 当前 owner 已经播起来后，为后续退场提前保住同一张底板；
-     * 2. 刚刚退场的 owner 仍在可见区内时，继续用这一帧兜住像素连续性。
+     * 保存续帧只允许服务三种场景：
+     * 1. 正式 playback 这一拍暂时还没回灌回来，此时保存帧是唯一像素桥；
+     * 2. 当前 / 刚退场 owner 需要保住底板连续性，避免 canonical host 挪走后闪回 poster；
+     * 3. 已有正式 swarm playback 且保存帧与当前 preview 源同源，说明它不是历史幽灵，而是同一条 WebTorrent 主链的暂停帧。
      *
      * 其余 `missing_source` 卡片即便有历史播放位置，也不代表它“天然就有 preview 真相”。
      * 否则 newcomer 首次进房滚动时，旧的 swarm 源会被房间消息窗偷偷重新长成一张 preview video，
      * 表面看像“有预览”，实际只是历史 playback 泄漏到了展示层。
      */
-    return (
-      this.inlineAutoplayOwnerAttachmentId === attachmentId ||
-      this.最近退场Owner附件Id === attachmentId
-    );
+    if (!input.playback) {
+      return true;
+    }
+    if (
+      this.inlineAutoplayOwnerAttachmentId === input.attachmentId ||
+      this.最近退场Owner附件Id === input.attachmentId
+    ) {
+      return true;
+    }
+    if (input.playback.mode !== "swarm") {
+      return false;
+    }
+    const normalizedSavedSrc = this.归一化时间线视频播放源(input.savedTimelineFrameSrc);
+    const normalizedPreviewSrc = this.归一化时间线视频播放源(input.playbackTimelineVideoSrc);
+    return Boolean(normalizedSavedSrc && normalizedSavedSrc === normalizedPreviewSrc);
   }
 
   private 同步时间线唯一播放器宿主(): void {
@@ -1888,23 +1987,20 @@ export class 房间消息窗 extends LitElement {
              * 不打开 original 冷源，也不产生第二条播放真相。
              */
             const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
+            const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
+              attachment.attachmentId
+            );
             const shouldReuseSavedTimelineFrameAsPreview =
-              Boolean(savedTimelineFrameSrc) &&
-              (
-                /**
-                 * 保存续帧有两种合法来源：
-                 * 1. 当前 attachment 的正式 playback 这一拍暂时还没回灌回来，此时它是唯一能兜住像素连续性的桥；
-                 * 2. 当前 / 刚退场 owner 需要保住底板连续性，避免 canonical host 挪走时直接退回 poster。
-                 *
-                 * 只要正式 playback 已经存在，就不能再把保存续帧无差别泄漏成通用 preview；
-                 * 否则 `missing_source` 卡片会靠“历史播过一次”伪装出一张并不合法的 preview video。
-                 */
-                !playback ||
-                this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId)
-              );
+              this.读取保存续帧是否允许承接时间线预览底板({
+                attachmentId: attachment.attachmentId,
+                playback,
+                playbackTimelineVideoSrc,
+                savedTimelineFrameSrc,
+              });
             const timelinePreviewVideoSrcCandidate =
               playbackTimelineVideoSrc ??
-              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+              knownReadyTimelineFrameSrc;
             const videoBudget = this.读取时间线视频预算投影(
               attachment,
               timelinePreviewVideoSrcCandidate
@@ -1913,11 +2009,13 @@ export class 房间消息窗 extends LitElement {
              * 时间线真正消费的是“统一预算投影 + 本地连续性桥”：
              * 1. canonical / preview 谁能露、谁该藏，先看编排层收口后的预算裁决；
              * 2. `savedTimelineFrameSrc` 只在预算没有 preview src 时兜住刚退场 owner 的同源续帧；
-             * 3. 这样消息窗就不再自己重算第二套 owner 逻辑，只负责把预算真相投影成 DOM。
+             * 3. `knownReadyTimelineFrameSrc` 只在高速虚拟回滑遇到冷快照时承接已经出过的同源首帧；
+             * 4. 这样消息窗就不再自己重算第二套 owner 逻辑，只负责把预算真相投影成 DOM。
              */
             const timelinePreviewVideoSrc =
               videoBudget.previewVideoSrc ??
-              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+              knownReadyTimelineFrameSrc;
             const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
             const shouldRenderInlineVideo =
               videoBudget.allowInlineCanonical && Boolean(ownerCanonicalVideoSrc);
@@ -1938,28 +2036,43 @@ export class 房间消息窗 extends LitElement {
               attachment.attachmentId,
               previewVideoSrc
             );
+            const hasExistingSameSourcePreviewFrame =
+              this.读取时间线现有预览视频是否可继续显示(
+                attachment.attachmentId,
+                previewVideoSrc
+              );
+            const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
+              attachment.attachmentId,
+              previewVideoSrc
+            );
             /**
              * 续播暂停帧是时间线自动播的视觉连续性底板，不是“等待用户点击播放”的静态封面。
              * 如果这里继续叠播放图标，owner 交接第一拍会先露一个中心图标再切成播放画面，
              * 肉眼看到的就是滑入/滑出时的闪一下。
              */
-            const shouldShowTimelinePlayIndicator = !shouldRenderInlineVideo && !restorableTimelineFrame;
+            const shouldShowTimelinePlayIndicator =
+              !shouldRenderInlineVideo &&
+              !restorableTimelineFrame &&
+              !hasExistingSameSourcePreviewFrame &&
+              !isFirstFrameReady;
             const shouldRenderPreviewVideo =
               Boolean(previewVideoSrc) &&
               this.读取时间线预览视频是否允许渲染(videoBudget, {
+                hasExistingSameSourcePreviewFrame,
+                hasKnownReadyPreviewFrame: isFirstFrameReady,
                 previewVideoSrc,
                 shouldReuseSavedTimelineFrameAsPreview,
               }) &&
-              可渲染真实预览视频附件.has(attachment.attachmentId);
+              (可渲染真实预览视频附件.has(attachment.attachmentId) ||
+                hasExistingSameSourcePreviewFrame ||
+                isFirstFrameReady);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
               !restorableTimelineFrame &&
+              !hasExistingSameSourcePreviewFrame &&
+              !isFirstFrameReady &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
-            const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
-              attachment.attachmentId,
-              previewVideoSrc
-            );
             /**
              * 时间线 `<video>` 一旦已经拿到首帧，就不能继续把 `poster` 当正式画面：
              * 1. 让非 owner 长期挂着 poster，等 owner 接管时再移除，会在 Chrome 里形成一次可见的“海报 -> 真视频帧”跳变；
@@ -1979,10 +2092,7 @@ export class 房间消息窗 extends LitElement {
               Boolean(restorableTimelineFrame) ||
               hasStablePreviewPosterSurface ||
               isFirstFrameReady ||
-              this.读取时间线现有预览视频是否可继续显示(
-                attachment.attachmentId,
-                previewVideoSrc
-              );
+              hasExistingSameSourcePreviewFrame;
             /**
              * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
              * 1. 有保存续播点、首帧缓存，或 DOM 上那张 preview `<video>` 自己已经 ready，都算“可继续显示”；

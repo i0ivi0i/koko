@@ -1297,7 +1297,7 @@ describe("房间消息窗媒体查看器", () => {
     expect(releasedVideo?.dataset.canonicalPlayer).toBeUndefined();
     expect(releasedVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(releasedVideo?.autoplay).toBe(false);
-    expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
+    expect(pane.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
   });
@@ -4992,6 +4992,346 @@ describe("房间消息窗媒体查看器", () => {
     await pane.updateComplete;
 
     expect(pane.querySelectorAll("video.message-video-preview").length).toBeLessThanOrEqual(6);
+
+    pane.remove();
+  });
+
+  it("高速换窗时，已经出帧的同源 WebTorrent preview 即使暂时跌出预算也不能回退 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `att-fast-scroll-${index + 1}`
+    );
+    const createItems = (ids: string[]) =>
+      ids.map((attachmentId, index) => 创建单视频消息项(attachmentId, index + 1));
+    pane.items = createItems(attachmentIds);
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const targetId = attachmentIds[0]!;
+    const existingPreview = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${targetId}"]:not([data-canonical-player="true"])`
+    );
+    expect(existingPreview).not.toBeNull();
+    existingPreview!.currentTime = 6.25;
+    Object.defineProperty(existingPreview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    内部面板.自动播候选可见条目.clear();
+    for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+    /**
+     * 模拟高速滚动的一拍：DOM 上仍有这张卡片和同源 `<video>`，
+     * 但 IntersectionObserver/预算排序先被另一组近视口候选占满。
+     */
+    pane.requestUpdate();
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const preservedPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    expect(videoCard).not.toBeNull();
+    expect(preservedPreview).toBe(existingPreview);
+    expect(preservedPreview?.currentTime).toBeCloseTo(6.25, 2);
+    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    pane.remove();
+  });
+
+  it("高速回滑时，已保存的同源 WebTorrent 播放位置应优先恢复为暂停帧而不是占位", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `att-fast-return-${index + 1}`
+    );
+    pane.items = attachmentIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+    const targetId = attachmentIds[0]!;
+    pane.inlineAutoplayOwnerAttachmentId = attachmentIds[7]!;
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [targetId]: {
+        src: `/webtorrent/hash-${targetId}/content-${targetId}.mp4`,
+        currentTime: 19.5,
+        updatedAt: 1_777_400_000_000,
+      },
+    };
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const restoredPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    expect(videoCard).not.toBeNull();
+    expect(restoredPreview).not.toBeNull();
+    expect(restoredPreview?.getAttribute("src")).toBe(
+      `/webtorrent/hash-${targetId}/content-${targetId}.mp4`
+    );
+    restoredPreview?.dispatchEvent(new Event("loadedmetadata"));
+    expect(restoredPreview?.currentTime).toBeCloseTo(19.5, 2);
+    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    pane.remove();
+  });
+
+  it("高速虚拟卸载后回到已出首帧视频时，应复用首帧缓存而不是闪回 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const targetId = "att-fast-remount-1";
+    const otherIds = Array.from(
+      { length: 7 },
+      (_, index) => `att-fast-remount-other-${index + 1}`
+    );
+    const allIds = [targetId, ...otherIds];
+    const createItems = (ids: string[]) =>
+      ids.map((attachmentId, index) => 创建单视频消息项(attachmentId, index + 1));
+    pane.items = createItems(allIds);
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      allIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 创建虚拟项 = (indexes: number[]): 测试虚拟项[] =>
+      indexes.map((index) => ({
+        key: `m-${allIds[index]}`,
+        index,
+        start: index * 240,
+      }));
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    const 读取虚拟项 = vi.spyOn(内部虚拟器, "getVirtualItems");
+
+    const firstPreview = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${targetId}"]:not([data-canonical-player="true"])`
+    );
+    expect(firstPreview).not.toBeNull();
+    Object.defineProperty(firstPreview!, "currentSrc", {
+      configurable: true,
+      value: `/webtorrent/hash-${targetId}/content-${targetId}.mp4`,
+    });
+    firstPreview!.dispatchEvent(new Event("loadeddata"));
+
+    读取虚拟项.mockReturnValue(创建虚拟项([1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "虚拟卸载";
+    await pane.updateComplete;
+    expect(
+      pane.querySelector(
+        `.message-video-card[data-attachment-id="${targetId}"]`
+      )
+    ).toBeNull();
+
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    内部面板.自动播候选可见条目.clear();
+    for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+    读取虚拟项.mockReturnValue(创建虚拟项([0, 1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "虚拟回滑";
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const restoredPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    expect(videoCard).not.toBeNull();
+    expect(restoredPreview).not.toBeNull();
+    expect(restoredPreview?.getAttribute("src")).toBe(
+      `/webtorrent/hash-${targetId}/content-${targetId}.mp4`
+    );
+    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    pane.remove();
+  });
+
+  it("高速回滑遇到编排冷快照时，首帧缓存仍应接住同源 WebTorrent preview", async () => {
+    const pane = 创建媒体消息窗();
+    const targetId = "att-fast-cold-budget-1";
+    const otherIds = Array.from(
+      { length: 7 },
+      (_, index) => `att-fast-cold-budget-other-${index + 1}`
+    );
+    const allIds = [targetId, ...otherIds];
+    const createItems = (ids: string[]) =>
+      ids.map((attachmentId, index) => 创建单视频消息项(attachmentId, index + 1));
+    const targetSrc = `/webtorrent/hash-${targetId}/content-${targetId}.mp4`;
+    pane.items = createItems(allIds);
+    pane.mediaPlaybackByAttachmentId = {
+      [targetId]: {
+        mode: "swarm",
+        attachmentId: targetId,
+        kind: "video",
+        src: targetSrc,
+        thumbnailUrl: `http://media.local/poster-${targetId}`,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 创建虚拟项 = (indexes: number[]): 测试虚拟项[] =>
+      indexes.map((index) => ({
+        key: `m-${allIds[index]}`,
+        index,
+        start: index * 240,
+      }));
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    const 读取虚拟项 = vi.spyOn(内部虚拟器, "getVirtualItems");
+
+    const firstPreview = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${targetId}"]:not([data-canonical-player="true"])`
+    );
+    expect(firstPreview).not.toBeNull();
+    Object.defineProperty(firstPreview!, "currentSrc", {
+      configurable: true,
+      value: targetSrc,
+    });
+    firstPreview!.dispatchEvent(new Event("loadeddata"));
+
+    读取虚拟项.mockReturnValue(创建虚拟项([1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "冷快照虚拟卸载";
+    await pane.updateComplete;
+
+    (pane as unknown as {
+      mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+      mediaVideoBudgetByAttachmentId: Record<string, unknown>;
+    }).mediaPlaybackByAttachmentId = {};
+    (pane as unknown as {
+      mediaVideoBudgetByAttachmentId: Record<string, unknown>;
+    }).mediaVideoBudgetByAttachmentId = {
+      [targetId]: {
+        attachmentId: targetId,
+        tier: "cold_expression",
+        reason: "inactive",
+        canonicalVideoSrc: null,
+        previewVideoSrc: null,
+        allowInlineCanonical: false,
+        allowPreviewVideo: false,
+        formalByteSource: "none",
+      },
+    };
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    内部面板.自动播候选可见条目.clear();
+    for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+    读取虚拟项.mockReturnValue(创建虚拟项([0, 1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "冷快照高速回滑";
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const restoredPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    expect(restoredPreview).not.toBeNull();
+    expect(restoredPreview?.getAttribute("src")).toBe(new URL(targetSrc, window.location.href).href);
+    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
   });
