@@ -25,6 +25,69 @@ const 创建假播放器根 = () => {
   };
 };
 
+const 安装可写媒体状态 = (
+  video: HTMLVideoElement,
+  state: {
+    currentSrc?: string;
+    currentTime?: number;
+    duration?: number;
+    ended?: boolean;
+    paused?: boolean;
+    readyState?: number;
+    seeking?: boolean;
+  } = {}
+) => {
+  let currentTime = state.currentTime ?? 0;
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    get: () => currentTime,
+    set: (value: number) => {
+      currentTime = value;
+    },
+  });
+  Object.defineProperty(video, "duration", {
+    configurable: true,
+    get: () => state.duration ?? 60,
+  });
+  Object.defineProperty(video, "paused", {
+    configurable: true,
+    get: () => state.paused ?? false,
+  });
+  Object.defineProperty(video, "ended", {
+    configurable: true,
+    get: () => state.ended ?? false,
+  });
+  Object.defineProperty(video, "seeking", {
+    configurable: true,
+    get: () => state.seeking ?? false,
+  });
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    get: () => state.readyState ?? HTMLMediaElement.HAVE_ENOUGH_DATA,
+  });
+  Object.defineProperty(video, "currentSrc", {
+    configurable: true,
+    get: () => state.currentSrc ?? "blob:http://media.local/current.mp4",
+  });
+  return {
+    读取当前时间: () => currentTime,
+  };
+};
+
+const 派发指针事件 = (target: Element, type: string, clientX: number): void => {
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+  }) as PointerEvent;
+  Object.defineProperties(event, {
+    clientX: { value: clientX },
+    pointerId: { value: 1 },
+    pointerType: { value: "mouse" },
+  });
+  target.dispatchEvent(event);
+};
+
 describe("Video.js 播放器壳", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -116,6 +179,104 @@ describe("Video.js 播放器壳", () => {
     );
 
     expect(shell.读取视频元素().loop).toBe(true);
+
+    shell.destroy();
+  });
+
+  it("播放器壳迁移后会重新绑定真实 video 事件，不让全屏 loading 圆圈卡成第二真相", async () => {
+    const firstMount = document.createElement("div");
+    const nextMount = document.createElement("div");
+    document.body.append(firstMount, nextMount);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-reconnect-1",
+        posterSrc: null,
+        width: 1280,
+        height: 720,
+      },
+      {
+        mountTarget: firstMount,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+    const provider = firstMount.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    const skin = provider?.querySelector<HTMLElement>("koko-video-skin");
+    const shadowRoot = skin?.shadowRoot;
+    const indicator = shadowRoot?.querySelector<HTMLElement>("media-buffering-indicator");
+    const currentLabel = shadowRoot?.querySelector<HTMLElement>('media-time[type="current"]');
+    const slider = shadowRoot?.querySelector<HTMLElement>("media-time-slider");
+    expect(provider).not.toBeNull();
+    expect(skin).not.toBeNull();
+    expect(indicator).not.toBeNull();
+    expect(currentLabel).not.toBeNull();
+    expect(slider).not.toBeNull();
+
+    const video = shell.读取视频元素();
+    安装可写媒体状态(video, {
+      currentTime: 12,
+      duration: 60,
+      paused: false,
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+    });
+    indicator!.setAttribute("data-visible", "");
+
+    provider!.remove();
+    nextMount.append(provider!);
+    video.dispatchEvent(new Event("timeupdate"));
+
+    expect(currentLabel?.textContent).toBe("0:12");
+    expect(slider?.style.getPropertyValue("--media-slider-fill")).toBe("20%");
+    expect(indicator?.hasAttribute("data-visible")).toBe(false);
+
+    shell.destroy();
+  });
+
+  it("全屏进度条支持按住拖拽连续 seek，而不是只能点击跳转", async () => {
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-drag-seek-1",
+        posterSrc: null,
+        width: 1280,
+        height: 720,
+      },
+      {
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+    const slider = document
+      .querySelector("koko-video-skin")
+      ?.shadowRoot?.querySelector<HTMLElement>("media-time-slider");
+    expect(slider).not.toBeNull();
+    Object.defineProperty(slider, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 244,
+        height: 44,
+        left: 100,
+        right: 300,
+        top: 200,
+        width: 200,
+        x: 100,
+        y: 200,
+        toJSON: () => undefined,
+      }),
+    });
+    const state = 安装可写媒体状态(shell.读取视频元素(), {
+      currentTime: 0,
+      duration: 100,
+      paused: false,
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+    });
+
+    派发指针事件(slider!, "pointerdown", 125);
+    派发指针事件(slider!, "pointermove", 250);
+    派发指针事件(slider!, "pointerup", 250);
+
+    expect(state.读取当前时间()).toBe(75);
+    expect(slider?.style.getPropertyValue("--media-slider-fill")).toBe("75%");
 
     shell.destroy();
   });

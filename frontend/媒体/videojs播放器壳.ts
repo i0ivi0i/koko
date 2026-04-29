@@ -24,6 +24,7 @@ export type VideoJs全屏进入结果 = "standard" | "native" | "unsupported";
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
 const VideoJs播放器Provider标签 = "video-player";
 const KokoVideoSkinTagName = "koko-video-skin";
+const 等待态时间推进判定阈值秒 = 0.05;
 
 type 可兼容远端播放对象 = {
   watchAvailability?: (...args: unknown[]) => unknown;
@@ -255,6 +256,8 @@ const KokoVideoSkinTemplate = `
       min-width: 5rem;
       height: 2.75rem;
       cursor: pointer;
+      touch-action: none;
+      user-select: none;
     }
     media-slider-track {
       position: relative;
@@ -423,6 +426,25 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
 
   let 当前视频: 可原生全屏视频元素 | null = null;
   let 解绑当前视频监听 = (): void => undefined;
+  let 等待态起点时间: number | null = null;
+  let 正在拖动进度 = false;
+  const 解绑控件监听列表: Array<() => void> = [];
+
+  const 监听控件事件 = (target: EventTarget | null, type: string, listener: EventListener): void => {
+    if (!target) {
+      return;
+    }
+    target.addEventListener(type, listener);
+    解绑控件监听列表.push(() => target.removeEventListener(type, listener));
+  };
+
+  const 读取有效时长 = (video: HTMLVideoElement): number =>
+    Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+
+  const 等待态已经被播放推进 = (video: HTMLVideoElement): boolean =>
+    等待态起点时间 !== null &&
+    Number.isFinite(video.currentTime) &&
+    Math.abs(video.currentTime - 等待态起点时间) > 等待态时间推进判定阈值秒;
 
   const 同步控件展示 = (): void => {
     if (!播放按钮 || !静音按钮 || !当前时间标签 || !总时长标签 || !时间滑杆 || !加载指示层) {
@@ -438,8 +460,15 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
       总时长标签.textContent = "0:00";
       时间滑杆.style.setProperty("--media-slider-fill", "0%");
       时间滑杆.style.setProperty("--media-slider-buffer", "0%");
+      时间滑杆.setAttribute("aria-valuemin", "0");
+      时间滑杆.setAttribute("aria-valuemax", "0");
+      时间滑杆.setAttribute("aria-valuenow", "0");
       加载指示层.removeAttribute("data-visible");
       return;
+    }
+
+    if (等待态已经被播放推进(video)) {
+      等待态起点时间 = null;
     }
 
     if (video.ended) {
@@ -461,20 +490,30 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     }
     静音按钮.setAttribute("data-volume-level", muted || video.volume < 0.5 ? "low" : "high");
 
-    当前时间标签.textContent = 格式化媒体时间(video.currentTime);
+    const duration = 读取有效时长(video);
+    const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    当前时间标签.textContent = 格式化媒体时间(currentTime);
     总时长标签.textContent = 格式化媒体时间(video.duration);
     时间滑杆.style.setProperty(
       "--media-slider-fill",
-      约束百分比字符串(
-        Number.isFinite(video.duration) && video.duration > 0 ? video.currentTime / video.duration : 0
-      )
+      约束百分比字符串(duration > 0 ? currentTime / duration : 0)
     );
     时间滑杆.style.setProperty("--media-slider-buffer", 约束百分比字符串(读取视频缓冲比例(video)));
+    时间滑杆.setAttribute("aria-valuemin", "0");
+    时间滑杆.setAttribute("aria-valuemax", String(Math.round(duration)));
+    时间滑杆.setAttribute("aria-valuenow", String(Math.round(currentTime)));
 
-    const 应显示加载态 =
-      !video.ended &&
-      !video.paused &&
-      (video.seeking || (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA && !!video.currentSrc));
+    /**
+     * loading 圆圈只表达“播放真的卡在等待点”，不能表达“readyState 短暂低于未来帧”。
+     * Video.js 官方历史修复也是等播放时间真正越过 waiting 触发点后再撤等待态；
+     * 这里把等待真相收口到同一颗真实 video 的事件流，避免全屏壳层残留第二套 loading 判断。
+     */
+    const 缺少当前帧 = !!video.currentSrc && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+    const 仍卡在等待点 =
+      等待态起点时间 !== null &&
+      !等待态已经被播放推进(video) &&
+      !!video.currentSrc;
+    const 应显示加载态 = !video.ended && !video.paused && (video.seeking || 缺少当前帧 || 仍卡在等待点);
     if (应显示加载态) {
       加载指示层.setAttribute("data-visible", "");
     } else {
@@ -486,7 +525,8 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     if (!当前视频 || !时间滑杆) {
       return;
     }
-    if (!Number.isFinite(当前视频.duration) || 当前视频.duration <= 0) {
+    const duration = 读取有效时长(当前视频);
+    if (duration <= 0) {
       return;
     }
     const rect = 时间滑杆.getBoundingClientRect();
@@ -494,7 +534,45 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
       return;
     }
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    当前视频.currentTime = 当前视频.duration * ratio;
+    当前视频.currentTime = duration * ratio;
+    等待态起点时间 = 当前视频.currentTime;
+    同步控件展示();
+  };
+
+  const 开始拖动进度 = (event: PointerEvent): void => {
+    if (!当前视频 || 读取有效时长(当前视频) <= 0) {
+      return;
+    }
+    正在拖动进度 = true;
+    event.preventDefault();
+    时间滑杆?.focus();
+    try {
+      时间滑杆?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // 某些测试环境不实现 pointer capture；真实浏览器会用它保证拖出滑杆后仍连续 seek。
+    }
+    切到指定进度(event.clientX);
+  };
+
+  const 拖动进度中 = (event: PointerEvent): void => {
+    if (!正在拖动进度) {
+      return;
+    }
+    event.preventDefault();
+    切到指定进度(event.clientX);
+  };
+
+  const 结束拖动进度 = (event: PointerEvent): void => {
+    if (!正在拖动进度) {
+      return;
+    }
+    event.preventDefault();
+    正在拖动进度 = false;
+    try {
+      时间滑杆?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // 与 setPointerCapture 对称：没有实现时不影响点击与键盘 seek。
+    }
     同步控件展示();
   };
 
@@ -523,6 +601,7 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
   const 绑定视频监听 = (video: 可原生全屏视频元素 | null): void => {
     解绑当前视频监听();
     当前视频 = video;
+    等待态起点时间 = null;
     if (!video) {
       同步控件展示();
       return;
@@ -537,25 +616,31 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     const 更新展示 = (): void => {
       同步控件展示();
     };
+    const 标记等待点 = (): void => {
+      等待态起点时间 = Number.isFinite(video.currentTime) ? video.currentTime : null;
+      同步控件展示();
+    };
+    const 标记播放推进 = (): void => {
+      if (等待态已经被播放推进(video)) {
+        等待态起点时间 = null;
+      }
+      同步控件展示();
+    };
+    const 清掉等待点并同步 = (): void => {
+      等待态起点时间 = null;
+      同步控件展示();
+    };
 
-    [
-      "play",
-      "pause",
-      "ended",
-      "volumechange",
-      "timeupdate",
-      "durationchange",
-      "loadedmetadata",
-      "progress",
-      "seeking",
-      "seeked",
-      "waiting",
-      "playing",
-      "canplay",
-      "canplaythrough",
-      "error",
-      "emptied",
-    ].forEach((eventName) => 监听视频事件(eventName, 更新展示));
+    ["play", "pause", "ended", "volumechange", "durationchange", "loadedmetadata", "progress", "error"].forEach(
+      (eventName) => 监听视频事件(eventName, 更新展示)
+    );
+    监听视频事件("timeupdate", 标记播放推进);
+    监听视频事件("waiting", 标记等待点);
+    监听视频事件("seeking", 标记等待点);
+    ["seeked", "playing", "canplay", "canplaythrough"].forEach((eventName) =>
+      监听视频事件(eventName, 清掉等待点并同步)
+    );
+    监听视频事件("emptied", 清掉等待点并同步);
 
     解绑当前视频监听 = (): void => {
       for (const dispose of 解绑列表) {
@@ -570,12 +655,13 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     播放按钮.tabIndex = 0;
     播放按钮.setAttribute("role", "button");
     播放按钮.setAttribute("aria-label", "播放或暂停");
-    播放按钮.addEventListener("click", () => {
+    监听控件事件(播放按钮, "click", () => {
       切换播放状态();
     });
-    播放按钮.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
+    监听控件事件(播放按钮, "keydown", (event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+        keyboardEvent.preventDefault();
         切换播放状态();
       }
     });
@@ -585,12 +671,13 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     静音按钮.tabIndex = 0;
     静音按钮.setAttribute("role", "button");
     静音按钮.setAttribute("aria-label", "静音");
-    静音按钮.addEventListener("click", () => {
+    监听控件事件(静音按钮, "click", () => {
       切换静音状态();
     });
-    静音按钮.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
+    监听控件事件(静音按钮, "keydown", (event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+        keyboardEvent.preventDefault();
         切换静音状态();
       }
     });
@@ -600,21 +687,34 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
     时间滑杆.tabIndex = 0;
     时间滑杆.setAttribute("role", "slider");
     时间滑杆.setAttribute("aria-label", "播放进度");
-    时间滑杆.addEventListener("click", (event) => {
-      切到指定进度(event.clientX);
+    监听控件事件(时间滑杆, "click", (event) => {
+      切到指定进度((event as MouseEvent).clientX);
     });
-    时间滑杆.addEventListener("keydown", (event) => {
-      if (!当前视频 || !Number.isFinite(当前视频.duration) || 当前视频.duration <= 0) {
+    监听控件事件(时间滑杆, "pointerdown", (event) => {
+      开始拖动进度(event as PointerEvent);
+    });
+    监听控件事件(时间滑杆, "pointermove", (event) => {
+      拖动进度中(event as PointerEvent);
+    });
+    监听控件事件(时间滑杆, "pointerup", (event) => {
+      结束拖动进度(event as PointerEvent);
+    });
+    监听控件事件(时间滑杆, "pointercancel", (event) => {
+      结束拖动进度(event as PointerEvent);
+    });
+    监听控件事件(时间滑杆, "keydown", (event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (!当前视频 || 读取有效时长(当前视频) <= 0) {
         return;
       }
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
+      if (keyboardEvent.key === "ArrowLeft") {
+        keyboardEvent.preventDefault();
         当前视频.currentTime = Math.max(0, 当前视频.currentTime - 5);
         同步控件展示();
       }
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        当前视频.currentTime = Math.min(当前视频.duration, 当前视频.currentTime + 5);
+      if (keyboardEvent.key === "ArrowRight") {
+        keyboardEvent.preventDefault();
+        当前视频.currentTime = Math.min(读取有效时长(当前视频), 当前视频.currentTime + 5);
         同步控件展示();
       }
     });
@@ -623,37 +723,47 @@ const 绑定KokoVideoSkin控件 = (host: HTMLElement, shadowRoot: ShadowRoot): (
   if (!host.hasAttribute("tabindex")) {
     host.tabIndex = -1;
   }
-  host.addEventListener("keydown", (event) => {
+  监听控件事件(host, "keydown", (event) => {
+    const keyboardEvent = event as KeyboardEvent;
     const 命中热键动作 = 热键节点列表.find(
-      (node) => (node.getAttribute("keys") ?? "").toLowerCase() === event.key.toLowerCase()
+      (node) => (node.getAttribute("keys") ?? "").toLowerCase() === keyboardEvent.key.toLowerCase()
     );
     const action = 命中热键动作?.getAttribute("action");
     if (!action) {
       return;
     }
     if (action === "togglePaused") {
-      event.preventDefault();
+      keyboardEvent.preventDefault();
       切换播放状态();
     }
     if (action === "toggleMuted") {
-      event.preventDefault();
+      keyboardEvent.preventDefault();
       切换静音状态();
     }
   });
 
   const 刷新当前视频引用 = (): void => {
-    const candidate = 媒体插槽
+    const assignedCandidate = 媒体插槽
       ?.assignedElements({ flatten: true })
       .find((element): element is 可原生全屏视频元素 => element instanceof HTMLVideoElement);
-    绑定视频监听(candidate ?? null);
+    const hostCandidate = host.querySelector("video[slot='media'], video");
+    绑定视频监听(
+      assignedCandidate ?? (hostCandidate instanceof HTMLVideoElement ? hostCandidate : null)
+    );
   };
 
-  媒体插槽?.addEventListener("slotchange", 刷新当前视频引用);
+  监听控件事件(媒体插槽, "slotchange", 刷新当前视频引用);
   刷新当前视频引用();
 
   return (): void => {
-    媒体插槽?.removeEventListener("slotchange", 刷新当前视频引用);
     解绑当前视频监听();
+    当前视频 = null;
+    等待态起点时间 = null;
+    正在拖动进度 = false;
+    for (const dispose of 解绑控件监听列表) {
+      dispose();
+    }
+    解绑控件监听列表.length = 0;
   };
 };
 
@@ -668,12 +778,13 @@ const 注册KokoVideoSkin元素 = (): void => {
     private 清理控件绑定: (() => void) | null = null;
 
     connectedCallback() {
-      if (this.shadowRoot) {
-        return;
+      const shadowRoot = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+      if (!this.shadowRoot || shadowRoot.childElementCount === 0) {
+        shadowRoot.innerHTML = KokoVideoSkinTemplate;
       }
-      const shadowRoot = this.attachShadow({ mode: "open" });
-      shadowRoot.innerHTML = KokoVideoSkinTemplate;
-      this.清理控件绑定 = 绑定KokoVideoSkin控件(this, shadowRoot);
+      if (!this.清理控件绑定) {
+        this.清理控件绑定 = 绑定KokoVideoSkin控件(this, shadowRoot);
+      }
     }
 
     disconnectedCallback() {
