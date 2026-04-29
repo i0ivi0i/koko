@@ -1,6 +1,6 @@
 use sqlx::{PgPool, Row, postgres::PgRow};
 
-use crate::{contract, usecase};
+use crate::{contract, media_distribution, usecase};
 
 use super::{
     Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输回执写入参数, 媒体上传运输角色,
@@ -835,7 +835,8 @@ async fn 列出待做种协作分发项_异步(
                 dm.content_hash,
                 dm.swarm_id,
                 EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch,
-                dm.torrent_info_hash
+                dm.torrent_info_hash,
+                dm.torrent_bytes
          FROM attachments a
          JOIN attachment_distribution_metadata dm
            ON dm.attachment_id = a.attachment_id
@@ -863,14 +864,36 @@ async fn 列出待做种协作分发项_异步(
 
     Ok(rows
         .into_iter()
-        .map(|row| usecase::待做种协作分发项 {
-            附件标识: row.get("attachment_id"),
-            会话标识: row.get("owner_session_id"),
-            content_id: row.get("content_id"),
-            content_hash: row.get("content_hash"),
-            swarm_id: row.get("swarm_id"),
-            web_seed_until秒: row.get("web_seed_until_epoch"),
-            torrent_info_hash: row.get("torrent_info_hash"),
+        .filter_map(|row| {
+            let attachment_id: String = row.get("attachment_id");
+            let torrent_info_hash: String = row.get("torrent_info_hash");
+            let torrent_bytes: Vec<u8> = row.get("torrent_bytes");
+            if let Err(error) = media_distribution::诊断协作分发torrent元信息(
+                torrent_bytes.as_slice(),
+                torrent_info_hash.as_str(),
+            ) {
+                // 做种对账面对真实 sidecar，不能把历史脏 metainfo 交给 start 再靠 400 重试暴露。
+                // 这里降级为对账输入过滤；真正的新写入仍由上传主链生成合法 metainfo。
+                tracing::debug!(
+                    usecase = "协作分发做种对账",
+                    adapter = "postgres",
+                    outcome = "skipped",
+                    attachment_id = attachment_id.as_str(),
+                    info_hash = torrent_info_hash.as_str(),
+                    reason = %error,
+                    "跳过不可用于做种的 torrent 元信息"
+                );
+                return None;
+            }
+            Some(usecase::待做种协作分发项 {
+                附件标识: attachment_id,
+                会话标识: row.get("owner_session_id"),
+                content_id: row.get("content_id"),
+                content_hash: row.get("content_hash"),
+                swarm_id: row.get("swarm_id"),
+                web_seed_until秒: row.get("web_seed_until_epoch"),
+                torrent_info_hash,
+            })
         })
         .collect())
 }

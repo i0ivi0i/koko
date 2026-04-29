@@ -81,6 +81,36 @@ pub(crate) fn 生成附件torrent元信息(
     })
 }
 
+/// 做种对账只接受可被真实 WebTorrent sidecar 解析的 metainfo。
+/// 这不是展示层防噪音：如果脏数据只靠 `torrent_bytes IS NOT NULL` 进入 start，
+/// 真实 sidecar 会持续 400，启动器日志会被旧脏记录淹没。
+pub(crate) fn 诊断协作分发torrent元信息(
+    torrent_bytes: &[u8],
+    expected_info_hash: &str,
+) -> Result<(), String> {
+    let expected_info_hash = expected_info_hash.trim().to_ascii_lowercase();
+    if expected_info_hash.len() != 40
+        || !expected_info_hash
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("torrent_info_hash 必须是 40 位 hex".to_string());
+    }
+    if torrent_bytes.is_empty() {
+        return Err("torrent_bytes 不能为空".to_string());
+    }
+
+    let metainfo = Metainfo::from_bytes(torrent_bytes)
+        .map_err(|error| format!("解析 torrent metainfo 失败: {error}"))?;
+    let actual_info_hash = hex::encode(metainfo.info().info_hash().as_ref());
+    if actual_info_hash != expected_info_hash {
+        return Err(format!(
+            "torrent_info_hash 与 metainfo 不匹配: expected={expected_info_hash}, actual={actual_info_hash}"
+        ));
+    }
+    Ok(())
+}
+
 fn 拼接公开地址(public_endpoint: Option<&str>, path: &str) -> String {
     public_endpoint
         .map(|value| format!("{}{}", value.trim_end_matches('/'), path))
@@ -428,6 +458,38 @@ mod tests {
                 session_id: Some("s-test".to_string()),
                 attachment_id: Some("att-test".to_string()),
             }
+        );
+    }
+
+    #[test]
+    fn 做种对账会拒绝不可解析torrent元信息() {
+        let 结果 = 诊断协作分发torrent元信息(
+            &[0x64_u8, 0x31, 0x3a, 0x61, 0x30, 0x3a, 0x65],
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+
+        assert!(
+            结果.is_err(),
+            "不可解析 metainfo 不能进入后端强做种对账，否则真实 sidecar 会持续 400 刷启动器 WARN"
+        );
+    }
+
+    #[test]
+    fn 做种对账会拒绝torrent_info_hash不匹配的元信息() {
+        let torrent = 生成附件torrent元信息(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            ".mp4",
+            b"koko-valid-media",
+        )
+        .expect("测试 torrent 应可生成");
+        let 结果 = 诊断协作分发torrent元信息(
+            torrent.torrent_bytes.as_slice(),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
+
+        assert!(
+            结果.is_err(),
+            "数据库里的 torrent_info_hash 必须和 metainfo 自身 info_hash 一致，不能只看字段非空"
         );
     }
 }

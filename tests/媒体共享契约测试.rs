@@ -140,11 +140,17 @@ async fn 视频complete共享契约不包含_web_页面流程和展示文案字�
     断言对象不包含壳层私货(origin, "video origin");
     assert_eq!(media_asset["kind"].as_str(), Some("file_video"));
     assert!(
-        media_asset["manifest"].is_null(),
+        media_asset
+            .get("manifest")
+            .map(serde_json::Value::is_null)
+            .unwrap_or(true),
         "单文件视频不再暴露 HLS/DASH manifest"
     );
     assert!(
-        media_asset["lifecycle"].is_null(),
+        media_asset
+            .get("lifecycle")
+            .map(serde_json::Value::is_null)
+            .unwrap_or(true),
         "单文件视频不再暴露 streaming lifecycle"
     );
     assert!(

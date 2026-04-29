@@ -1,5 +1,6 @@
 use super::*;
 use axum::{Json as AxumJson, Router, extract::State as AxumState, routing::post};
+use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
 use object_store::{ObjectStoreExt, path::Path as ObjectPath};
 use std::sync::{Arc, Mutex};
 use tokio::{
@@ -17,6 +18,24 @@ struct 假Seeder控制面记录 {
 }
 
 type 假Seeder控制面记录句柄 = Arc<Mutex<假Seeder控制面记录>>;
+
+fn 构造有效测试torrent元信息(seed: &str) -> (Vec<u8>, String, i32) {
+    let shared_bytes = format!("koko-valid-test-media-{seed}").into_bytes();
+    let file_name = format!("content-{seed}.mp4");
+    let accessor = DirectAccessor::new(file_name.as_str(), shared_bytes.as_slice());
+    let torrent_bytes = MetainfoBuilder::new()
+        .set_private_flag(Some(true))
+        .set_piece_length(PieceLength::OptBalanced)
+        .build(1, accessor, |_| ())
+        .expect("测试 torrent metainfo 必须能生成");
+    let metainfo = Metainfo::from_bytes(torrent_bytes.as_slice())
+        .expect("测试 torrent metainfo 必须能解析");
+    (
+        torrent_bytes,
+        hex::encode(metainfo.info().info_hash().as_ref()),
+        metainfo.info().piece_length() as i32,
+    )
+}
 
 async fn 启动假seeder控制面() -> (String, 假Seeder控制面记录句柄, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -1455,8 +1474,8 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
     let attachment_id_active = format!("att-backend-seed-active-{uniq}");
     let shared_swarm_id = format!("swarm-backend-seed-shared-{uniq}");
     let shared_content_hash = format!("{uniq:016x}{uniq:016x}{uniq:016x}{uniq:016x}");
-    let active_info_hash = "2222222222222222222222222222222222222222";
-    let fake_torrent_bytes = vec![0x64_u8, 0x31, 0x3a, 0x61, 0x30, 0x3a, 0x65];
+    let (torrent_bytes, active_info_hash, piece_length) =
+        构造有效测试torrent元信息(format!("backend-seed-active-{uniq}").as_str());
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -1500,9 +1519,9 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
          WHERE attachment_id = $1",
     )
     .bind(&attachment_id_active)
-    .bind(active_info_hash)
-    .bind(&fake_torrent_bytes)
-    .bind(16_384_i32)
+    .bind(&active_info_hash)
+    .bind(&torrent_bytes)
+    .bind(piece_length)
     .execute(&pool)
     .await
     .expect("应能把 active 附件补齐做种所需 torrent 元信息");
@@ -1527,6 +1546,37 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
         Some("MEDIA_READY"),
         "backend strong seed 应被当成正式可用来源，状态必须保持 READY"
     );
+
+    let cleanup_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库清理测试附件");
+    sqlx::query(
+        "DELETE FROM attachment_streaming_manifests
+         WHERE attachment_id IN ($1, $2)",
+    )
+    .bind(&attachment_id_expired)
+    .bind(&attachment_id_active)
+    .execute(&cleanup_pool)
+    .await
+    .expect("应能清理流媒体清单元数据");
+    sqlx::query(
+        "DELETE FROM attachment_distribution_metadata
+         WHERE attachment_id IN ($1, $2)",
+    )
+    .bind(&attachment_id_expired)
+    .bind(&attachment_id_active)
+    .execute(&cleanup_pool)
+    .await
+    .expect("应能清理协作分发元数据");
+    sqlx::query("DELETE FROM attachments WHERE attachment_id IN ($1, $2)")
+        .bind(&attachment_id_expired)
+        .bind(&attachment_id_active)
+        .execute(&cleanup_pool)
+        .await
+        .expect("应能清理附件记录");
+    cleanup_pool.close().await;
 
     fake_seeder_server.abort();
     恢复环境变量(backup);
@@ -1579,12 +1629,10 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
     let attachment_id = format!("att-seed-reconcile-{uniq}");
-    let info_hash = "0123456789abcdef0123456789abcdef01234567";
-    // 这里显式补齐最小 torrent 元信息，确保该附件在“可做种”语义上是完整记录。
-    // 注意：本测试只验证对账命令面，不验证 sidecar 解析 torrent 字节的能力，
-    // 所以这里的字节只要求“非空且可落库”，不要求可播放。
-    let fake_torrent_bytes = vec![0x64_u8, 0x31, 0x3a, 0x61, 0x30, 0x3a, 0x65];
-    let fake_piece_length = 16_384_i32;
+    // 这里显式补齐真实可解析的 torrent 元信息。做种对账面对的是 sidecar 真接口，
+    // 测试也必须使用同等级输入，不能再用假 bencode 污染共享开发库。
+    let (torrent_bytes, info_hash, piece_length) =
+        构造有效测试torrent元信息(format!("seed-reconcile-{uniq}").as_str());
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -1605,9 +1653,9 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
          WHERE attachment_id = $1",
     )
     .bind(&attachment_id)
-    .bind(info_hash)
-    .bind(&fake_torrent_bytes)
-    .bind(fake_piece_length)
+    .bind(&info_hash)
+    .bind(&torrent_bytes)
+    .bind(piece_length)
     .execute(&pool)
     .await
     .expect("应能补齐 torrent_info_hash");
@@ -1624,7 +1672,7 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
     let matched_start_payload = records
         .start_payloads
         .iter()
-        .find(|payload| payload["infoHash"].as_str() == Some(info_hash));
+        .find(|payload| payload["infoHash"].as_str() == Some(info_hash.as_str()));
     assert!(
         matched_start_payload.is_some(),
         "对账触发的 seeder start 集合里必须包含当前测试附件的权威 infoHash"
@@ -1666,7 +1714,11 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
     let reconcile_contains_target = records.reconcile_payloads.iter().any(|payload| {
         payload["activeInfoHashes"]
             .as_array()
-            .map(|values| values.iter().any(|value| value.as_str() == Some(info_hash)))
+            .map(|values| {
+                values
+                    .iter()
+                    .any(|value| value.as_str() == Some(info_hash.as_str()))
+            })
             .unwrap_or(false)
     });
     assert!(
@@ -1768,6 +1820,106 @@ async fn 做种对账会跳过缺失torrent元信息的脏附件记录() {
     assert!(
         !contains_dirty_info_hash,
         "缺失 torrent_bytes/piece_length 的脏记录必须被跳过，不能再触发 sidecar start 重试噪音"
+    );
+
+    let cleanup_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库清理测试附件");
+    sqlx::query("DELETE FROM attachment_distribution_metadata WHERE attachment_id = $1")
+        .bind(&attachment_id)
+        .execute(&cleanup_pool)
+        .await
+        .expect("应能清理协作分发元数据");
+    sqlx::query("DELETE FROM attachments WHERE attachment_id = $1")
+        .bind(&attachment_id)
+        .execute(&cleanup_pool)
+        .await
+        .expect("应能清理附件记录");
+    cleanup_pool.close().await;
+
+    fake_seeder_server.abort();
+    恢复环境变量(backup);
+}
+
+#[tokio::test]
+#[serial]
+async fn 做种对账会跳过不可解析torrent元信息的脏附件记录() {
+    let (fake_seeder_base_url, seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
+    let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
+    env::set_var(
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        fake_seeder_base_url.as_str(),
+    );
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let (_, bootstrap) = send_json(
+        app,
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("seed-reconcile-bad-torrent-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+    let attachment_id = format!("att-seed-reconcile-bad-torrent-{uniq}");
+    let info_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let bad_torrent_bytes = vec![0x64_u8, 0x31, 0x3a, 0x61, 0x30, 0x3a, 0x65];
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入附件");
+    插入ready视频附件记录(&pool, session_id, &attachment_id).await;
+    插入附件协作分发元数据记录(&pool, &attachment_id).await;
+    sqlx::query(
+        "UPDATE attachment_distribution_metadata
+         SET torrent_info_hash = $2,
+             torrent_bytes = $3,
+             piece_length_bytes = $4,
+             web_seed_until = NOW() + INTERVAL '5 minutes'
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .bind(info_hash)
+    .bind(&bad_torrent_bytes)
+    .bind(16_384_i32)
+    .execute(&pool)
+    .await
+    .expect("应能写入不可解析 torrent 字节的脏记录");
+    pool.close().await;
+
+    koko::shell::执行一次协作分发做种对账(state)
+        .await
+        .expect("做种对账应执行成功");
+
+    let records = seeder_records
+        .lock()
+        .expect("seeder 控制面记录锁不应中毒")
+        .clone();
+    let contains_dirty_info_hash = records
+        .start_payloads
+        .iter()
+        .any(|payload| payload["infoHash"].as_str() == Some(info_hash));
+    assert!(
+        !contains_dirty_info_hash,
+        "不可解析 torrent_bytes 的脏记录必须在对账输入侧被跳过，不能交给 sidecar 反复 400 刷启动器 WARN"
     );
 
     let cleanup_pool = PgPoolOptions::new()
