@@ -613,6 +613,8 @@ const 创建默认VideoJs播放器层 = async (
   overlay.dataset.mediaViewerPresentation = 使用沉浸查看器布局 ? "immersive" : "dialog";
   mount.dataset.mediaViewerMount = "video";
   mount.dataset.mediaViewerImmersive = 使用沉浸查看器布局 ? "true" : "false";
+  mount.dataset.mediaViewerSystemFullscreen =
+    使用沉浸查看器布局 && options.shouldRequestSystemFullscreen !== false ? "true" : "false";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "视频查看器");

@@ -68,25 +68,80 @@ export type VideoJs播放器壳依赖 = {
 const 读取纵横比 = (source: VideoJs播放器源描述): string =>
   `${Math.max(1, source.width)}/${Math.max(1, source.height)}`;
 
+const 格式化像素 = (value: number): string => `${Math.round(value * 1000) / 1000}px`;
+
+const 读取正数 = (value: number | undefined, fallback: number): number =>
+  Number.isFinite(value) && value !== undefined && value > 0 ? value : fallback;
+
+const 读取沉浸挂载盒尺寸 = (
+  source: VideoJs播放器源描述,
+  mountTarget?: HTMLElement
+): { width: number; height: number } => {
+  const rect = mountTarget?.getBoundingClientRect();
+  const viewportWidth = typeof window === "undefined" ? source.width : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? source.height : window.innerHeight;
+  return {
+    width: 读取正数(rect?.width, 读取正数(viewportWidth, source.width)),
+    height: 读取正数(rect?.height, 读取正数(viewportHeight, source.height)),
+  };
+};
+
+const 计算沉浸媒体盒尺寸 = (
+  source: VideoJs播放器源描述,
+  mountTarget?: HTMLElement
+): { width: number; height: number } => {
+  const mount = 读取沉浸挂载盒尺寸(source, mountTarget);
+  const mediaAspect = Math.max(1, source.width) / Math.max(1, source.height);
+  const mountAspect = mount.width / mount.height;
+  if (mediaAspect >= mountAspect) {
+    return {
+      width: mount.width,
+      height: mount.width / mediaAspect,
+    };
+  }
+  return {
+    width: mount.height * mediaAspect,
+    height: mount.height,
+  };
+};
+
 const 同步播放器挂载布局 = (
   root: VideoJs播放器根节点,
   source: VideoJs播放器源描述,
   mountTarget?: HTMLElement
 ): void => {
   const 使用沉浸挂载布局 = mountTarget?.dataset.mediaViewerImmersive === "true";
+  const 使用应用内沉浸适配布局 =
+    使用沉浸挂载布局 && mountTarget?.dataset.mediaViewerSystemFullscreen !== "true";
+  const 沉浸盒尺寸 = 使用应用内沉浸适配布局
+    ? 计算沉浸媒体盒尺寸(source, mountTarget)
+    : null;
+  const 沉浸播放器盒样式 = 沉浸盒尺寸
+    ? `display:block;width:${格式化像素(沉浸盒尺寸.width)};height:${格式化像素(
+        沉浸盒尺寸.height
+      )};max-width:100%;max-height:100%;background:#000;overflow:hidden;`
+    : "";
   /**
    * provider/container 的尺寸真相必须跟着当前宿主走：
    * 1. 同一颗 canonical player 会在时间线宿主和查看器宿主之间迁移；
    * 2. 不能把“第一次挂载时的布局样式”偷偷残留到下一次宿主，否则时间线和沉浸层会互相污染；
    * 3. 因此每次迁移宿主后，都要按新宿主重新同步 provider/container 的唯一尺寸语义。
+   *
+   * 移动端应用内沉浸全屏不能再依赖浏览器原生 fullscreen 帮忙适配尺寸。
+   * 这里按宿主盒和视频自然比例先算出唯一播放器盒，避免横屏视频被 `height:100%`
+   * 反推出超宽容器，也避免竖屏视频为了铺满高度而横向溢出。
    */
   root.provider.style.cssText = 使用沉浸挂载布局
-    ? "display:block;width:100%;height:100%;max-width:100%;background:#000;"
+    ? 使用应用内沉浸适配布局
+      ? 沉浸播放器盒样式
+      : "display:block;width:100%;height:100%;max-width:100%;background:#000;"
     : "display:block;width:100%;max-width:100%;background:#000;";
   root.container.style.cssText = 使用沉浸挂载布局
-    ? `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
-        source
-      )};`
+    ? 使用应用内沉浸适配布局
+      ? `${沉浸播放器盒样式}aspect-ratio:${读取纵横比(source)};`
+      : `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
+          source
+        )};`
     : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
         source
       )};`;
@@ -854,7 +909,8 @@ const 创建默认播放器根 = (
    */
   video.loop = 媒体是否默认循环播放("video");
   video.playsInline = true;
-  video.style.cssText = "display:block;width:100%;height:100%;background:#000;";
+  video.style.cssText =
+    "display:block;width:100%;height:100%;background:#000;object-fit:contain;";
   /**
    * 统一皮肤默认先按 viewer 能力创建，再由唯一播放器 owner 在 inline/viewer 之间切展示模式。
    * 这样消息流与查看器继续共享同一套 DOM/播放器壳，不会因为“无控件”再长第二模板。

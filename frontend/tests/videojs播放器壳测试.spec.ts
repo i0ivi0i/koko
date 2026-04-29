@@ -133,6 +133,94 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("移动端沉浸全屏里的横屏视频按视口宽度等比适配，不会被满高撑出窗口", async () => {
+    const mount = document.createElement("div");
+    mount.dataset.mediaViewerImmersive = "true";
+    Object.defineProperty(mount, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 844,
+        height: 844,
+        left: 0,
+        right: 390,
+        top: 0,
+        width: 390,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }),
+    });
+    document.body.append(mount);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-immersive-landscape-1",
+        posterSrc: null,
+        width: 1920,
+        height: 1080,
+      },
+      {
+        mountTarget: mount,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+    const provider = mount.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    const container = shell.读取容器元素();
+    const video = shell.读取视频元素();
+
+    expect(provider?.style.width).toBe("390px");
+    expect(provider?.style.height).toBe("219.375px");
+    expect(container.style.width).toBe("390px");
+    expect(container.style.height).toBe("219.375px");
+    expect(video.style.objectFit).toBe("contain");
+
+    shell.destroy();
+  });
+
+  it("移动端沉浸全屏里的竖屏视频按视口高度等比适配，不会横向溢出", async () => {
+    const mount = document.createElement("div");
+    mount.dataset.mediaViewerImmersive = "true";
+    Object.defineProperty(mount, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 390,
+        height: 390,
+        left: 0,
+        right: 844,
+        top: 0,
+        width: 844,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }),
+    });
+    document.body.append(mount);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-immersive-portrait-1",
+        posterSrc: null,
+        width: 1080,
+        height: 1920,
+      },
+      {
+        mountTarget: mount,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+    const provider = mount.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    const container = shell.读取容器元素();
+
+    expect(provider?.style.width).toBe("219.375px");
+    expect(provider?.style.height).toBe("390px");
+    expect(container.style.width).toBe("219.375px");
+    expect(container.style.height).toBe("390px");
+
+    shell.destroy();
+  });
+
   it("同一个壳实例在两个 file 源之间同步时，不会重建第二套 overlay", async () => {
     const createPlayer = vi.fn(() => 创建假播放器根());
     const shell = await 创建VideoJs播放器壳(
