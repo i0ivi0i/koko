@@ -139,14 +139,22 @@ describe("全局丝滑自动播", () => {
     expect(decision).toMatchObject({ phase: "retired", kind: "retire" });
   });
 
-  it("XState 机器真实存在且不能被 void 成装饰性状态机", () => {
+  it("播放连续性裁决保留显式顺序，但不能把 XState runtime 放进滚动热路径", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "../媒体/全局丝滑自动播.ts"),
       "utf8"
     );
 
-    expect(播放连续性机).toBeTruthy();
-    expect(source).toContain("initialTransition");
-    expect(source).not.toContain("void 播放连续性机");
+    expect(播放连续性机.transitions).toEqual([
+      "retired",
+      "coldPlaceholder",
+      "fullscreenHandoff",
+      "viewerHandoff",
+      "visible",
+      "pausedFrame",
+      "hiddenHandoff",
+    ]);
+    expect(source).not.toContain("initialTransition");
+    expect(source).not.toContain("setup(");
   });
 });

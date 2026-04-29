@@ -232,8 +232,6 @@ export function 创建视频预览协作(
       const trigger = input.trigger ?? "default";
       const 当前缺源可见重试记录 =
         视频预览缺源可见重试记录表.get(attachmentId) ?? null;
-      const 正在加载但已有更强播放源 =
-        currentPreview.phase === "loading" && Boolean(当前预览播放源);
       const 允许可见候选突破同版缺源阻断 =
         trigger === "visible_candidate" &&
         currentPreview.phase === "missing_source" &&
@@ -254,7 +252,13 @@ export function 创建视频预览协作(
       if (
         !attachment ||
         attachment.kind !== "video" ||
-        (currentPreview.phase === "loading" && !正在加载但已有更强播放源) ||
+        /**
+         * loading 是当前附件唯一进行中的 preview owner。
+         * 滚动可见信号不能用“已有播放源”再次顶掉旧代次；否则同一个附件会在
+         * locator / swarm preview / 抓帧之间反复开关。真正的更强播放源重试
+         * 已经由 missing_source + sourceVersion 规则接管。
+         */
+        currentPreview.phase === "loading" ||
         currentPreview.phase === "ready" ||
         /**
          * `missing_source` 只应该阻断“这一版会话里仍然完全没有可抓帧源”的重复空转：

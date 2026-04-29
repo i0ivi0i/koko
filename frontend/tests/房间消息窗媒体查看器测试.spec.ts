@@ -312,7 +312,7 @@ const 驱动时间线Canonical就绪 = async (
 };
 
 describe("房间消息窗媒体查看器", () => {
-  it("IntersectionObserver 首次接管前，也会先用当前视口量测给出可见自动播候选", async () => {
+  it("IntersectionObserver 首次接管时，不再同步量测视口，候选由观察器回调给出", async () => {
     const pane = 创建媒体消息窗();
     const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
     let nextAnimationFrameId = 1;
@@ -324,14 +324,22 @@ describe("房间消息窗媒体查看器", () => {
         callback(performance.now());
       }
     };
+    type 观察回调 = (
+      entries: IntersectionObserverEntry[],
+      observer: IntersectionObserver
+    ) => void;
+    let observerCallback: 观察回调 | null = null;
+    let observerInstance: IntersectionObserver | null = null;
 
     class 假交叉观察器 {
       readonly root: Element | Document | null;
       readonly rootMargin = "0px";
       readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
 
-      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      constructor(callback: 观察回调, options?: IntersectionObserverInit) {
+        observerCallback = callback;
         this.root = (options?.root as Element | Document | null) ?? null;
+        observerInstance = this as unknown as IntersectionObserver;
       }
 
       observe(): void {}
@@ -398,17 +406,30 @@ describe("房间消息窗媒体查看器", () => {
           调度自动播候选(scrollContainer: HTMLElement): void;
         }
       ).同步自动播候选观察(scrollContainer!);
-      (
-        pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
-        }
-      ).调度自动播候选(scrollContainer!);
 
+      expect(videoRectSpy).not.toHaveBeenCalled();
+      expect(observedEvents).toHaveLength(0);
+      expect(observerCallback).not.toBeNull();
+      expect(observerInstance).not.toBeNull();
+      if (!observerCallback || !observerInstance) {
+        throw new Error("IntersectionObserver 回调未就绪");
+      }
+      (observerCallback as 观察回调)(
+        [
+          {
+            target: videoButton!,
+            isIntersecting: true,
+            intersectionRatio: 1,
+            boundingClientRect: new DOMRect(0, 270, 320, 180),
+            rootBounds: new DOMRect(0, 0, 320, 720),
+            intersectionRect: new DOMRect(0, 270, 320, 180),
+            time: performance.now(),
+          } as IntersectionObserverEntry,
+        ],
+        observerInstance
+      );
       flushAnimationFrame();
 
-      expect(videoRectSpy).toHaveBeenCalled();
       expect(observedEvents.at(-1)?.detail.candidates).toEqual([
         {
           attachmentId: "att-video-1",
@@ -1714,7 +1735,7 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
-  it("虚拟列表只因滚动换窗时，也会先释放退场 preview video 源", async () => {
+  it("虚拟列表纯滚动换窗不会同步几何扫描 preview video，避免滚动热路径强制回流", async () => {
     const pane = 创建媒体消息窗();
     const attachmentIds = Array.from({ length: 24 }, (_, index) => `att-scroll-release-${index + 1}`);
     pane.items = attachmentIds.map((attachmentId, index) =>
@@ -1754,17 +1775,23 @@ describe("房间消息窗媒体查看器", () => {
     try {
       pauseSpy.mockClear();
       loadSpy.mockClear();
-      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 320, 720));
-      previewVideos.forEach((video, index) => {
+      const scrollRectSpy = vi
+        .spyOn(scrollContainer!, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(0, 0, 320, 720));
+      const videoRectSpies = previewVideos.map((video, index) =>
         vi.spyOn(video, "getBoundingClientRect").mockReturnValue(
           new DOMRect(0, 2_000 + index * 220, 320, 180)
-        );
-      });
+        )
+      );
       scrollContainer!.scrollTop = 10_000;
       scrollContainer!.dispatchEvent(new Event("scroll"));
 
-      expect(pauseSpy).toHaveBeenCalled();
-      expect(loadSpy).toHaveBeenCalled();
+      expect(scrollRectSpy).not.toHaveBeenCalled();
+      for (const videoRectSpy of videoRectSpies) {
+        expect(videoRectSpy).not.toHaveBeenCalled();
+      }
+      expect(pauseSpy).not.toHaveBeenCalled();
+      expect(loadSpy).not.toHaveBeenCalled();
     } finally {
       pauseSpy.mockRestore();
       loadSpy.mockRestore();
@@ -2860,6 +2887,94 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("自动播 owner 仍存在但当前虚拟窗口没有宿主时，不会把唯一播放器同步成 null", async () => {
+    const pane = 创建媒体消息窗();
+    const 全局唯一播放器 = 读取默认全局唯一播放器();
+    const 同步时间线自动播Spy = vi.spyOn(全局唯一播放器, "同步时间线自动播");
+    const 冲刷当前时间线播放位置Spy = vi.spyOn(
+      全局唯一播放器,
+      "冲刷当前时间线播放位置"
+    );
+    const 暂停当前时间线播放Spy = vi.spyOn(全局唯一播放器, "暂停当前时间线播放");
+    同步时间线自动播Spy.mockClear();
+    冲刷当前时间线播放位置Spy.mockClear();
+    暂停当前时间线播放Spy.mockClear();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-owner-offscreen",
+      kind: "video",
+      src: "http://media.local/swarm-video-owner-offscreen",
+      thumbnailUrl: "http://media.local/poster-video-owner-offscreen",
+      hint: null,
+    } satisfies 媒体播放结果;
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-owner-offscreen",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-owner-offscreen",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-owner-offscreen",
+            posterSrc: "http://media.local/poster-owner-offscreen",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-visible-other",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-visible-other",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-visible-other",
+            posterSrc: "http://media.local/poster-visible-other",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-owner-offscreen": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-owner-offscreen";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-owner-offscreen": playback,
+    };
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    vi.spyOn(内部虚拟器, "getVirtualItems").mockReturnValue([
+      { key: "message-visible-other", index: 1, start: 240 },
+    ]);
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const 同步调用序列 = 同步时间线自动播Spy.mock.calls.map(([input]) =>
+      input ? input.attachmentId : null
+    );
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-owner-offscreen"]')
+    ).toBeNull();
+    expect(同步调用序列).not.toContain(null);
+    expect(冲刷当前时间线播放位置Spy).not.toHaveBeenCalled();
+    expect(暂停当前时间线播放Spy).toHaveBeenCalled();
+
+    pane.remove();
+  });
+
   it("双视频自动播 owner 交接时，如果目标卡片的预览真相仍是 missing_source，就禁止拿冷 playback video 当隐藏接管 cover", async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {
@@ -3087,6 +3202,87 @@ describe("房间消息窗媒体查看器", () => {
     ).toBeNull();
 
     pane.remove();
+  });
+
+  it("时间线冻结帧导出走异步 toBlob，避免同步 toDataURL 卡住滚动热路径", async () => {
+    const pane = 创建媒体消息窗();
+    const video = document.createElement("video");
+    video.setAttribute("src", "http://media.local/freeze-video");
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      value: 3.25,
+    });
+    Object.defineProperty(video, "readyState", {
+      configurable: true,
+      value: HTMLMediaElement.HAVE_CURRENT_DATA,
+    });
+    Object.defineProperty(video, "videoWidth", {
+      configurable: true,
+      value: 1280,
+    });
+    Object.defineProperty(video, "videoHeight", {
+      configurable: true,
+      value: 720,
+    });
+    const drawImage = vi.fn();
+    const toDataURL = vi.fn(() => {
+      throw new Error("不应同步 toDataURL");
+    });
+    const toBlob = vi.fn((callback: BlobCallback) => {
+      callback(new Blob(["freeze"], { type: "image/webp" }));
+    });
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob,
+      toDataURL,
+    } as unknown as HTMLCanvasElement;
+    const 原始创建元素 = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      if (tagName === "canvas") {
+        return canvas;
+      }
+      return 原始创建元素(tagName);
+    });
+
+    class 假FileReader {
+      result: string | ArrayBuffer | null = null;
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
+      onerror: ((event: ProgressEvent<FileReader>) => void) | null = null;
+
+      readAsDataURL(): void {
+        this.result = "data:image/webp;base64,freeze";
+        queueMicrotask(() =>
+          this.onload?.(undefined as unknown as ProgressEvent<FileReader>)
+        );
+      }
+    }
+
+    vi.stubGlobal("FileReader", 假FileReader);
+
+    try {
+      (
+        pane as unknown as {
+          捕获时间线自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void;
+        }
+      ).捕获时间线自动播冻结帧("att-freeze-async", video);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(drawImage).toHaveBeenCalledTimes(1);
+      expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/webp", 0.82);
+      expect(toDataURL).not.toHaveBeenCalled();
+      expect(
+        (
+          pane as unknown as {
+            时间线自动播冻结帧: Map<string, { dataUrl: string }>;
+          }
+        ).时间线自动播冻结帧.get("att-freeze-async")?.dataUrl
+      ).toBe("data:image/webp;base64,freeze");
+    } finally {
+      createElement.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("双视频自动播 owner 交接时，只要目标卡片已经有同源预览视频，也必须先走隐藏预热宿主而不是直接显露 canonical host", async () => {
@@ -3567,6 +3763,119 @@ describe("房间消息窗媒体查看器", () => {
     expect(loadSpy).toHaveBeenCalledTimes(1);
 
     loadSpy.mockRestore();
+    pane.remove();
+  });
+
+  it("自动播首帧预热只提升排序后的少数候选，避免滚动时批量 load 视频", async () => {
+    const pane = 创建媒体消息窗();
+    const 创建播放 = (attachmentId: string): 媒体播放结果 => ({
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: `http://media.local/swarm-${attachmentId}`,
+      thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+      hint: null,
+    });
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-preheat-budget",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-att-video-1",
+            posterSrc: "http://media.local/poster-att-video-1",
+          },
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-att-video-2",
+            posterSrc: "http://media.local/poster-att-video-2",
+          },
+          {
+            kind: "video",
+            attachmentId: "att-video-3",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-att-video-3",
+            posterSrc: "http://media.local/poster-att-video-3",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": 创建播放("att-video-1"),
+      "att-video-2": 创建播放("att-video-2"),
+      "att-video-3": 创建播放("att-video-3"),
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    const syntheticThirdTrigger = document.createElement("button");
+    syntheticThirdTrigger.className = "message-video-preview-trigger";
+    syntheticThirdTrigger.dataset.attachmentId = "att-video-3";
+    const syntheticThirdVideo = document.createElement("video");
+    syntheticThirdVideo.className = "message-video-preview";
+    syntheticThirdVideo.dataset.attachmentId = "att-video-3";
+    syntheticThirdVideo.src = "http://media.local/swarm-att-video-3";
+    syntheticThirdVideo.preload = "metadata";
+    syntheticThirdTrigger.append(syntheticThirdVideo);
+    pane.append(syntheticThirdTrigger);
+
+    const 读取预览视频 = (attachmentId: string) =>
+      pane.querySelector<HTMLVideoElement>(
+        `video.message-video-preview[data-attachment-id="${attachmentId}"]`
+      );
+    const firstVideo = 读取预览视频("att-video-1");
+    const secondVideo = 读取预览视频("att-video-2");
+    const thirdVideo = 读取预览视频("att-video-3");
+    expect(firstVideo).not.toBeNull();
+    expect(secondVideo).not.toBeNull();
+    expect(thirdVideo).not.toBeNull();
+    const videos = [firstVideo!, secondVideo!, thirdVideo!];
+    for (const video of videos) {
+      Object.defineProperty(video, "readyState", {
+        configurable: true,
+        value: HTMLMediaElement.HAVE_METADATA,
+      });
+    }
+    const loadSpies = videos.map((video) => vi.spyOn(video, "load").mockImplementation(() => {}));
+
+    (
+      pane as unknown as {
+        预热自动播候选首帧(
+          candidates: Array<{
+            attachmentId: string;
+            visibilityRatio: number;
+            distanceToViewportCenter: number;
+          }>
+        ): void;
+      }
+    ).预热自动播候选首帧([
+      { attachmentId: "att-video-2", visibilityRatio: 0.9, distanceToViewportCenter: 4 },
+      { attachmentId: "att-video-1", visibilityRatio: 0.8, distanceToViewportCenter: 8 },
+      { attachmentId: "att-video-3", visibilityRatio: 0.7, distanceToViewportCenter: 12 },
+    ]);
+
+    expect(secondVideo?.preload).toBe("auto");
+    expect(firstVideo?.preload).toBe("auto");
+    expect(thirdVideo?.preload).toBe("metadata");
+    expect(loadSpies[1]).toHaveBeenCalledTimes(1);
+    expect(loadSpies[0]).toHaveBeenCalledTimes(1);
+    expect(loadSpies[2]).not.toHaveBeenCalled();
+
+    loadSpies.forEach((spy) => spy.mockRestore());
     pane.remove();
   });
 
@@ -4201,14 +4510,22 @@ describe("房间消息窗媒体查看器", () => {
         callback(performance.now());
       }
     };
+    type 观察回调 = (
+      entries: IntersectionObserverEntry[],
+      observer: IntersectionObserver
+    ) => void;
+    let observerCallback: 观察回调 | null = null;
+    let observerInstance: IntersectionObserver | null = null;
 
     class 假交叉观察器 {
       readonly root: Element | Document | null;
       readonly rootMargin = "0px";
       readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
 
-      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      constructor(callback: 观察回调, options?: IntersectionObserverInit) {
+        observerCallback = callback;
         this.root = (options?.root as Element | Document | null) ?? null;
+        observerInstance = this as unknown as IntersectionObserver;
       }
 
       observe(): void {}
@@ -4275,13 +4592,25 @@ describe("房间消息窗媒体查看器", () => {
           调度自动播候选(scrollContainer: HTMLElement): void;
         }
       ).同步自动播候选观察(scrollContainer!);
-      (
-        pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
-        }
-      ).调度自动播候选(scrollContainer!);
+      expect(observerCallback).not.toBeNull();
+      expect(observerInstance).not.toBeNull();
+      if (!observerCallback || !observerInstance) {
+        throw new Error("IntersectionObserver 回调未就绪");
+      }
+      (observerCallback as 观察回调)(
+        [
+          {
+            target: videoButton!,
+            isIntersecting: false,
+            intersectionRatio: 0,
+            boundingClientRect: new DOMRect(0, 980, 320, 180),
+            rootBounds: new DOMRect(0, 0, 320, 720),
+            intersectionRect: new DOMRect(0, 0, 0, 0),
+            time: performance.now(),
+          } as IntersectionObserverEntry,
+        ],
+        observerInstance
+      );
 
       flushAnimationFrame();
 
@@ -4299,7 +4628,7 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
-  it("房间首轮更新时，近视口预热候选会立即派发，而不是再额外等一帧 rAF", async () => {
+  it("房间首轮更新时，现代浏览器不再同步量测并立即派发自动播候选", async () => {
     const pane = 创建媒体消息窗();
     const observedDetails: Array<{ candidates: unknown[] }> = [];
     let nextAnimationFrameId = 1;
@@ -4370,17 +4699,8 @@ describe("房间消息窗媒体查看器", () => {
       pane.mediaPlaybackByAttachmentId = { ...pane.mediaPlaybackByAttachmentId };
       await pane.updateComplete;
 
-      expect(observedDetails).toEqual([
-        {
-          candidates: [
-            {
-              attachmentId: "att-video-1",
-              visibilityRatio: 0,
-              distanceToViewportCenter: 710,
-            },
-          ],
-        },
-      ]);
+      expect(videoButton!.getBoundingClientRect).not.toHaveBeenCalled();
+      expect(observedDetails).toEqual([]);
       expect(rafCallbacks.size).toBe(0);
     } finally {
       pane.remove();
@@ -5896,7 +6216,71 @@ describe("房间消息窗媒体查看器", () => {
     expect(最新附件集合.length).toBeLessThanOrEqual(24);
     expect(
       最新附件集合.filter((attachmentId) => attachmentId.startsWith(视频附件前缀)).length
-    ).toBeLessThanOrEqual(12);
+    ).toBeLessThanOrEqual(4);
+
+    pane.remove();
+  });
+
+  it("虚拟列表纯 range 更新也会刷新媒体窗口观察，避免运行时沿用旧预算清空自动播 owner", async () => {
+    const pane = 创建媒体消息窗();
+    const 观察记录: string[][] = [];
+    pane.addEventListener("room-media-window-observed", (event) => {
+      观察记录.push((event as CustomEvent<{ attachmentIds: string[] }>).detail.attachmentIds);
+    });
+    pane.items = Array.from({ length: 8 }, (_, index) => ({
+      ...创建媒体消息项(),
+      id: `m-window-range-${index + 1}`,
+      eventPosition: index + 1,
+      attachments: [
+        {
+          kind: "video" as const,
+          attachmentId: `att-video-window-range-${index + 1}`,
+          width: 1280,
+          height: 720,
+          displayWidth: 320,
+          displayHeight: 180,
+          originalSrc: `http://media.local/original-video-window-range-${index + 1}`,
+          posterSrc: `http://media.local/poster-video-window-range-${index + 1}`,
+        },
+      ],
+    }));
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 创建虚拟项 = (indexes: number[]): 测试虚拟项[] =>
+      indexes.map((index) => ({
+        key: `m-window-range-${index + 1}`,
+        index,
+        start: index * 240,
+      }));
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    const 读取虚拟项 = vi.spyOn(内部虚拟器, "getVirtualItems");
+    读取虚拟项.mockReturnValue(创建虚拟项([0, 1]));
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    const 初始观察次数 = 观察记录.length;
+    expect(观察记录.at(-1)).toEqual([
+      "att-video-window-range-1",
+      "att-video-window-range-2",
+    ]);
+
+    pane.requestUpdate();
+    await pane.updateComplete;
+    expect(观察记录.length).toBe(初始观察次数);
+
+    读取虚拟项.mockReturnValue(创建虚拟项([4, 5]));
+    pane.requestUpdate();
+    await pane.updateComplete;
+
+    expect(观察记录.length).toBeGreaterThan(初始观察次数);
+    expect(观察记录.at(-1)).toEqual([
+      "att-video-window-range-5",
+      "att-video-window-range-6",
+    ]);
 
     pane.remove();
   });

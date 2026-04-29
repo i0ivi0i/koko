@@ -101,10 +101,21 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
   const 解析自动播播放结果 = (attachmentId: string): void => {
     const attachment = deps.读取附件条目(attachmentId);
     if (!attachment || attachment.kind !== "video") {
-      清空自动播播放结果();
+      deps.接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+        attachmentId,
+      });
       return;
     }
     const 当前代次 = ++自动播解析代次;
+    const 当前目标仍有效 = (): boolean => {
+      const context = deps.读取媒体运行时上下文();
+      return (
+        当前代次 === 自动播解析代次 &&
+        (context.inlineAutoplayOwnerAttachmentId === attachmentId ||
+          context.inlineAutoplayPendingAttachmentId === attachmentId)
+      );
+    };
     const 热会话播放结果 = deps.读取媒体会话快照(attachmentId)?.playback;
     if (热会话播放结果?.kind === "video" && 热会话播放结果.mode === "swarm") {
       /**
@@ -121,10 +132,6 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       });
       return;
     }
-    deps.接收媒体运行时事实({
-      type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
-      attachmentId,
-    });
     const 自动播播放结果Promise = deps.解析播放结果({
       attachmentId,
       kind: attachment.kind,
@@ -149,10 +156,7 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
     }
     void 自动播播放结果Promise
       .then((playback) => {
-        if (
-          deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
-          当前代次 !== 自动播解析代次
-        ) {
+        if (!当前目标仍有效()) {
           return;
         }
         if (playback.kind === "video" && playback.mode === "swarm") {
@@ -165,10 +169,7 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
         });
       })
       .catch(() => {
-        if (
-          deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
-          当前代次 !== 自动播解析代次
-        ) {
+        if (!当前目标仍有效()) {
           return;
         }
         deps.接收媒体运行时事实({
@@ -185,9 +186,7 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       if (deps.读取媒体运行时上下文().inlineAutoplayPendingAttachmentId !== attachmentId) {
         return;
       }
-      deps.接收媒体运行时事实({
-        type: "INLINE_AUTOPLAY_SETTLE_ELAPSED",
-      });
+      解析自动播播放结果(attachmentId);
     }, 自动播候选稳定等待毫秒);
   };
 
@@ -221,10 +220,13 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       if (before.inlineAutoplayOwnerAttachmentId !== after.inlineAutoplayOwnerAttachmentId) {
         if (before.inlineAutoplayOwnerAttachmentId) {
           释放当前自动播Owner(before.inlineAutoplayOwnerAttachmentId);
-        } else {
+        } else if (!after.inlineAutoplayOwnerAttachmentId) {
           清空自动播播放结果();
         }
-        if (after.inlineAutoplayOwnerAttachmentId) {
+        if (
+          after.inlineAutoplayOwnerAttachmentId &&
+          after.inlineAutoplayPlayback?.attachmentId !== after.inlineAutoplayOwnerAttachmentId
+        ) {
           解析自动播播放结果(after.inlineAutoplayOwnerAttachmentId);
         }
       }

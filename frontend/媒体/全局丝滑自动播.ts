@@ -1,5 +1,3 @@
-import { initialTransition, setup } from "xstate";
-
 export type 播放连续性表面 = "timeline" | "viewer" | "fullscreen";
 
 export type 播放连续性阶段 =
@@ -35,10 +33,6 @@ export type 播放连续性决策 =
   | { phase: "fullscreenHandoff"; kind: "fullscreen_handoff"; targetCurrentTime: number }
   | { phase: "retired"; kind: "retire" };
 
-interface 播放连续性上下文 {
-  input: 播放连续性输入;
-}
-
 const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性输入["savedPosition"] => {
   if (!input.source.src || !input.savedPosition) {
     return null;
@@ -61,12 +55,6 @@ const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性
   return input.savedPosition;
 };
 
-const 读取目标时间 = (input: 播放连续性输入): number =>
-  读取同源保存位置(input)?.currentTime ?? 0;
-
-const 有同源连续性证据 = (input: 播放连续性输入): boolean =>
-  Boolean(读取同源保存位置(input)) || (input.dom.sourceMatches && input.host.hasStableFrame);
-
 const 读取冷占位理由 = (
   input: 播放连续性输入
 ): "no_source" | "no_position" | "host_missing" => {
@@ -79,70 +67,49 @@ const 读取冷占位理由 = (
   return "no_position";
 };
 
-export const 播放连续性机 = setup({
-  types: {
-    context: {} as 播放连续性上下文,
-    input: {} as 播放连续性输入,
-  },
-  guards: {
-    需要退场: ({ context }) => context.input.intent.retire === true,
-    缺少正式源: ({ context }) => !context.input.source.src,
-    宿主缺失: ({ context }) => !context.input.host.exists,
-    缺少同源连续性证据: ({ context }) => !有同源连续性证据(context.input),
-    需要全屏接管: ({ context }) => context.input.intent.fullscreen,
-    需要查看器接管: ({ context }) => context.input.intent.viewerOpen,
-    可露出Canonical: ({ context }) =>
-      context.input.dom.sourceMatches && context.input.dom.canonicalReadyState >= 2,
-    可保持暂停帧: ({ context }) =>
-      context.input.host.hasStableFrame &&
-      context.input.dom.sourceMatches &&
-      context.input.dom.previewReadyState >= 2,
-  },
-}).createMachine({
+export const 播放连续性机 = Object.freeze({
   id: "globalSmoothAutoplay",
-  initial: "evaluating",
-  context: ({ input }) => ({ input }),
-  states: {
-    evaluating: {
-      always: [
-        { guard: "需要退场", target: "retired" },
-        { guard: "缺少正式源", target: "coldPlaceholder" },
-        { guard: "宿主缺失", target: "coldPlaceholder" },
-        { guard: "缺少同源连续性证据", target: "coldPlaceholder" },
-        { guard: "需要全屏接管", target: "fullscreenHandoff" },
-        { guard: "需要查看器接管", target: "viewerHandoff" },
-        { guard: "可露出Canonical", target: "visible" },
-        { guard: "可保持暂停帧", target: "pausedFrame" },
-        { target: "hiddenHandoff" },
-      ],
-    },
-    coldPlaceholder: {},
-    hiddenHandoff: {},
-    visible: {},
-    pausedFrame: {},
-    viewerHandoff: {},
-    fullscreenHandoff: {},
-    retired: {},
-  },
+  transitions: [
+    "retired",
+    "coldPlaceholder",
+    "fullscreenHandoff",
+    "viewerHandoff",
+    "visible",
+    "pausedFrame",
+    "hiddenHandoff",
+  ] satisfies 播放连续性阶段[],
 });
 
 export const 判定播放连续性表面 = (input: 播放连续性输入): 播放连续性决策 => {
-  const [snapshot] = initialTransition(播放连续性机, input);
-  const phase = snapshot.value as 播放连续性阶段;
-  switch (phase) {
-    case "retired":
-      return { phase, kind: "retire" };
-    case "coldPlaceholder":
-      return { phase, kind: "cold_placeholder", reason: 读取冷占位理由(input) };
-    case "pausedFrame":
-      return { phase, kind: "hold_frame", src: input.source.src };
-    case "hiddenHandoff":
-      return { phase, kind: "hidden_handoff", targetCurrentTime: 读取目标时间(input) };
-    case "visible":
-      return { phase, kind: "visible_canonical", targetCurrentTime: 读取目标时间(input) };
-    case "viewerHandoff":
-      return { phase, kind: "viewer_handoff", targetCurrentTime: 读取目标时间(input) };
-    case "fullscreenHandoff":
-      return { phase, kind: "fullscreen_handoff", targetCurrentTime: 读取目标时间(input) };
+  const savedPosition = 读取同源保存位置(input);
+  const targetCurrentTime = savedPosition?.currentTime ?? 0;
+  const hasContinuityEvidence =
+    Boolean(savedPosition) || (input.dom.sourceMatches && input.host.hasStableFrame);
+  if (input.intent.retire === true) {
+    return { phase: "retired", kind: "retire" };
   }
+  if (!input.source.src || !input.host.exists || !hasContinuityEvidence) {
+    return {
+      phase: "coldPlaceholder",
+      kind: "cold_placeholder",
+      reason: 读取冷占位理由(input),
+    };
+  }
+  if (input.intent.fullscreen) {
+    return { phase: "fullscreenHandoff", kind: "fullscreen_handoff", targetCurrentTime };
+  }
+  if (input.intent.viewerOpen) {
+    return { phase: "viewerHandoff", kind: "viewer_handoff", targetCurrentTime };
+  }
+  if (input.dom.sourceMatches && input.dom.canonicalReadyState >= 2) {
+    return { phase: "visible", kind: "visible_canonical", targetCurrentTime };
+  }
+  if (
+    input.host.hasStableFrame &&
+    input.dom.sourceMatches &&
+    input.dom.previewReadyState >= 2
+  ) {
+    return { phase: "pausedFrame", kind: "hold_frame", src: input.source.src };
+  }
+  return { phase: "hiddenHandoff", kind: "hidden_handoff", targetCurrentTime };
 };

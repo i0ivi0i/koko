@@ -220,6 +220,46 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
   });
 
+  it("pending 候选的播放源到位时，会原子切成 owner，避免 owner 已切但 playback 为空", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "swarm",
+      attachmentId: "att-video-inline-pending-ready",
+      kind: "video",
+      src: "blob:http://media.local/swarm-pending-ready",
+      thumbnailUrl: null,
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-pending-ready",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-inline-pending-ready"
+    );
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-inline-pending-ready",
+      playback,
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-pending-ready"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+  });
+
   it("自动播播放位置由媒体运行时持有，owner 释放后仍保留同源续播时间戳", () => {
     const actor = 创建媒体运行时Actor();
 
@@ -606,6 +646,63 @@ describe("媒体运行时", () => {
     });
 
     // 连续空观测仍需释放 owner，避免离屏附件长期占用预算。
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+  });
+
+  it("候选连续空帧但 owner 仍在活媒体窗口内时，不会释放 canonical owner", () => {
+    const actor = 创建媒体运行时Actor();
+    const attachmentId = "att-video-inline-active-window-jitter";
+    const playback: 媒体播放结果 = {
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: "blob:http://media.local/swarm-active-window-jitter",
+      thumbnailUrl: null,
+      hint: null,
+    };
+
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: [attachmentId],
+    });
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId,
+          visibilityRatio: 0.93,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId,
+      playback,
+    });
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      attachmentId
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: [],
+      positionRetentionAttachmentIds: [attachmentId],
+    });
+
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
   });

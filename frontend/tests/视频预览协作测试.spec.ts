@@ -159,6 +159,65 @@ describe("视频预览协作", () => {
     });
   });
 
+  it("同附件预览加载中时，可见候选不能用已有播放源反复重启同一个抓帧任务", async () => {
+    const attachmentId = "att-video-loading-owner";
+    const frame = 创建延后Promise<{
+      objectUrl: string;
+      source: "early_frame";
+      width: number;
+      height: number;
+    }>();
+    const 抓取视频预览 = vi.fn(() => frame.promise);
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (id) => ({ attachmentId: id, kind: "video" }),
+      读取会话播放源版本: () => 3,
+      读取当前视频预览播放源: () => ({
+        src: `http://127.0.0.1:8080/webtorrent/${attachmentId}/content.mp4`,
+        contentHash: `hash-${attachmentId}`,
+      }),
+      获取媒体定位: vi.fn(async () => {
+        throw new Error("已有会话播放源时不应请求 locator");
+      }),
+      解析协作分发预览源: vi.fn(async () => {
+        throw new Error("已有会话播放源时不应解析 swarm source");
+      }),
+      释放协作分发消费者: vi.fn(),
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览,
+      接收媒体运行时事实: vi.fn(),
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (id) => `preview:${id}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+    协作.解析视频预览(attachmentId);
+    await 刷新异步队列();
+
+    expect(抓取视频预览).toHaveBeenCalledTimes(1);
+    expect(协作.读取视频预览状态(attachmentId)).toEqual({
+      phase: "loading",
+    });
+
+    协作.解析视频预览(attachmentId, { trigger: "visible_candidate" } as never);
+    await 刷新异步队列();
+    expect(抓取视频预览).toHaveBeenCalledTimes(1);
+
+    frame.resolve({
+      objectUrl: `blob:preview-${attachmentId}`,
+      source: "early_frame",
+      width: 1280,
+      height: 720,
+    });
+    await 刷新异步队列();
+
+    expect(协作.读取视频预览状态(attachmentId)).toEqual({
+      phase: "ready",
+      src: `blob:preview-${attachmentId}`,
+      source: "early_frame",
+    });
+  });
+
   it("同版 missing_source 视频进入可见候选后，也必须允许受控重试 locator/swarm 预览", async () => {
     const attachmentId = "att-video-visible-retry";
     const 构造定位结果 = (

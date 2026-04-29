@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  排序消息视频自动播候选,
   选择消息视频自动播Owner,
   选择消息视频自动播连续Owner候选,
   type 消息视频自动播候选,
@@ -26,6 +27,32 @@ describe("消息视频自动播编排", () => {
     ];
 
     expect(选择消息视频自动播Owner(candidates)).toBe("att-video-center");
+  });
+
+  it("候选预热复用同一套排序，不能被 DOM 顺序带偏", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-dom-first",
+        visibilityRatio: 0.9,
+        distanceToViewportCenter: 120,
+      },
+      {
+        attachmentId: "att-video-center",
+        visibilityRatio: 0.82,
+        distanceToViewportCenter: 10,
+      },
+      {
+        attachmentId: "att-video-near",
+        visibilityRatio: 0.86,
+        distanceToViewportCenter: 24,
+      },
+    ];
+
+    expect(排序消息视频自动播候选(candidates).map((candidate) => candidate.attachmentId)).toEqual([
+      "att-video-center",
+      "att-video-near",
+      "att-video-dom-first",
+    ]);
   });
 
   it("连续性阈值以下时，不会选出自动播 owner", () => {

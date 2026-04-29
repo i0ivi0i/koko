@@ -43,6 +43,11 @@ const 排序自动播候选 = (
   return sortedCandidates;
 };
 
+export const 排序消息视频自动播候选 = (
+  candidates: 消息视频自动播候选[],
+  preferredAttachmentId: string | null = null
+): 消息视频自动播候选[] => 排序自动播候选(candidates, preferredAttachmentId);
+
 const 读取自动播竞争候选 = (
   candidates: 消息视频自动播候选[],
   minVisibilityRatio: number

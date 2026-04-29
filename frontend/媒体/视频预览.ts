@@ -1,5 +1,5 @@
 import {
-  从视频探针导出静态预览图,
+  从视频探针异步导出静态预览图,
   读取预览采样时间,
 } from "./视频元数据.js";
 
@@ -141,6 +141,7 @@ export async function 从媒体源抓取视频预览(
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     let rvfc兜底定时器: ReturnType<typeof setTimeout> | null = null;
     let rvfc请求序号 = 0;
+    let 正在导出静态帧 = false;
     const abortSignal = input.signal ?? null;
 
     const onAbort = (): void => {
@@ -204,28 +205,38 @@ export async function 从媒体源抓取视频预览(
     };
 
     const 导出当前帧 = (source: Exclude<视频预览来源, "none">): void => {
-      const objectUrl = 从视频探针导出静态预览图(probe, {
-        ...(input.createCanvasElement
-          ? {
-              createCanvasElement: input.createCanvasElement,
-            }
-          : {}),
-      });
-      if (!objectUrl) {
-        finish({
-          objectUrl: null,
-          source: "none",
-          width: null,
-          height: null,
-        });
+      if (settled || 正在导出静态帧) {
         return;
       }
-      finish({
-        objectUrl,
-        source,
-        width: probe.videoWidth || null,
-        height: probe.videoHeight || null,
-      });
+      正在导出静态帧 = true;
+      void (async () => {
+        const objectUrl = await 从视频探针异步导出静态预览图(probe, {
+          ...(input.createCanvasElement
+            ? {
+                createCanvasElement: input.createCanvasElement,
+              }
+            : {}),
+        });
+        正在导出静态帧 = false;
+        if (settled) {
+          return;
+        }
+        if (!objectUrl) {
+          finish({
+            objectUrl: null,
+            source: "none",
+            width: null,
+            height: null,
+          });
+          return;
+        }
+        finish({
+          objectUrl,
+          source,
+          width: probe.videoWidth || null,
+          height: probe.videoHeight || null,
+        });
+      })();
     };
 
     const 请求已解码帧截图 = (): void => {

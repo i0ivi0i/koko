@@ -249,6 +249,88 @@ describe("聊天媒体编排", () => {
     编排.销毁();
   });
 
+  it("自动播候选预览解析只启动排序后的少数候选，避免滚动中批量开 swarm", async () => {
+    const attachmentIds = [
+      "att-video-preheat-1",
+      "att-video-preheat-2",
+      "att-video-preheat-3",
+    ] as const;
+    const loadMediaLocator = vi.fn(async (_sessionId: string, attachmentId: string) => ({
+      attachment_id: attachmentId,
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: `http://media.local/original-${attachmentId}`,
+      thumbnail_url: null,
+      distribution: null,
+      file_asset: {
+        asset_id: attachmentId,
+        content_hash: `hash-${attachmentId}`,
+        kind: "single_file_video" as const,
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "video/mp4",
+            url: `http://media.local/canonical-${attachmentId}.mp4`,
+            width: 1280,
+            height: 720,
+          },
+        },
+        origin: {
+          original_url: `http://media.local/original-${attachmentId}`,
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+        distribution: null,
+      },
+    }));
+    const transport: 前端传输端口 = {
+      loadMediaLocator,
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+    const 编排 = 创建聊天媒体编排({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => attachmentIds.map(生成视频消息),
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: null,
+        source: "none" as const,
+        width: null,
+        height: null,
+      })),
+    });
+
+    编排.处理自动播候选([
+      { attachmentId: attachmentIds[2], visibilityRatio: 0.82, distanceToViewportCenter: 20 },
+      { attachmentId: attachmentIds[0], visibilityRatio: 0.92, distanceToViewportCenter: 0 },
+      { attachmentId: attachmentIds[1], visibilityRatio: 0.88, distanceToViewportCenter: 10 },
+    ]);
+    await 刷新异步队列();
+
+    expect(loadMediaLocator.mock.calls.map(([, attachmentId]) => attachmentId)).toEqual([
+      attachmentIds[0],
+      attachmentIds[1],
+    ]);
+
+    编排.销毁();
+  });
+
   it("自动播放视频拿到 swarm 后会晋升后台补齐帮助链", async () => {
     const attachmentId = "att-video-inline-help-chain-1";
     const playback = {

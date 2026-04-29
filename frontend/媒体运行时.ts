@@ -258,6 +258,7 @@ const 重算自动播候选补丁 = (
     媒体运行时上下文,
     | "currentViewerRequest"
     | "heavyWorkPolicy"
+    | "inlineAutoplayActiveAttachmentIds"
     | "inlineAutoplayConsecutiveEmptyObservedCount"
     | "inlineAutoplayOwnerAttachmentId"
     | "inlineAutoplayPendingAttachmentId"
@@ -303,6 +304,24 @@ const 重算自动播候选补丁 = (
       }
       return {
         inlineAutoplayPendingAttachmentId: continuityOwnerAttachmentId,
+        inlineAutoplayConsecutiveEmptyObservedCount: 0,
+      };
+    }
+    const activeAttachmentIds = new Set(context.inlineAutoplayActiveAttachmentIds ?? []);
+    const currentOwnerAttachmentId = context.inlineAutoplayOwnerAttachmentId;
+    const currentPendingAttachmentId = context.inlineAutoplayPendingAttachmentId;
+    const ownerStillInActiveWindow =
+      currentOwnerAttachmentId !== null && activeAttachmentIds.has(currentOwnerAttachmentId);
+    const pendingStillInActiveWindow =
+      currentPendingAttachmentId !== null &&
+      activeAttachmentIds.has(currentPendingAttachmentId);
+    if (ownerStillInActiveWindow || pendingStillInActiveWindow) {
+      /**
+       * 候选观察是 DOM/IntersectionObserver 的瞬时投影；活媒体窗口才是虚拟列表同步后的
+       * 生命周期真相。滚动重排时只要 owner/pending 仍在活窗口，就不能因为候选空帧拆掉
+       * canonical owner，否则会在同一条视频上制造 null -> owner 的闪烁。
+       */
+      return {
         inlineAutoplayConsecutiveEmptyObservedCount: 0,
       };
     }
@@ -497,23 +516,37 @@ const 媒体运行时机 = createMachine(
       }),
       释放自动播Owner: assign(() => 清空自动播Owner补丁()),
       记录自动播播放结果: assign(({ event, context }) => {
-        if (
-          event.type !== "INLINE_AUTOPLAY_PLAYBACK_RESOLVED" ||
-          event.attachmentId !== context.inlineAutoplayOwnerAttachmentId
-        ) {
+        if (event.type !== "INLINE_AUTOPLAY_PLAYBACK_RESOLVED") {
           return {};
         }
-        return {
-          inlineAutoplayPlayback: 可投影为自动播播放结果(event.playback)
-            ? { ...event.playback }
-            : null,
-        };
+        const playback = 可投影为自动播播放结果(event.playback)
+          ? { ...event.playback }
+          : null;
+        if (event.attachmentId === context.inlineAutoplayOwnerAttachmentId) {
+          return {
+            inlineAutoplayPlayback: playback,
+          };
+        }
+        if (event.attachmentId === context.inlineAutoplayPendingAttachmentId) {
+          return {
+            inlineAutoplayOwnerAttachmentId: event.attachmentId,
+            inlineAutoplayPendingAttachmentId: null,
+            inlineAutoplayPlayback: playback,
+            inlineAutoplayConsecutiveEmptyObservedCount: 0,
+          };
+        }
+        return {};
       }),
       清理自动播播放结果: assign(({ event, context }) => {
-        if (
-          event.type !== "INLINE_AUTOPLAY_PLAYBACK_FAILED" ||
-          event.attachmentId !== context.inlineAutoplayOwnerAttachmentId
-        ) {
+        if (event.type !== "INLINE_AUTOPLAY_PLAYBACK_FAILED") {
+          return {};
+        }
+        if (event.attachmentId === context.inlineAutoplayPendingAttachmentId) {
+          return {
+            inlineAutoplayPendingAttachmentId: null,
+          };
+        }
+        if (event.attachmentId !== context.inlineAutoplayOwnerAttachmentId) {
           return {};
         }
         return {

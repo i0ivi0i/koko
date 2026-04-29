@@ -53,6 +53,10 @@ type 预览画布依赖 = {
   createCanvasElement?: () => HTMLCanvasElement;
 };
 
+type 异步预览画布依赖 = 预览画布依赖 & {
+  createDataUrlFromBlob?: (blob: Blob) => Promise<string | null>;
+};
+
 const 计算预览导出尺寸 = (
   width: number,
   height: number
@@ -114,6 +118,64 @@ export function 从视频探针导出静态预览图(
      * 这里宁可返回 null 占位，也不把非 WebP 结果混进主链。
      */
     return dataUrl.startsWith("data:image/webp") ? dataUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+export const 读取BlobDataUrl = async (blob: Blob): Promise<string | null> => {
+  if (typeof FileReader !== "function") {
+    return null;
+  }
+  return await new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : null);
+    };
+    reader.onerror = () => {
+      resolve(null);
+    };
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
+ * 时间线运行时预览用异步编码导出，避免在滚动/自动播热路径里同步 `toDataURL`
+ * 把 WebP 编码和 base64 字符串分配塞进一帧主线程。
+ */
+export async function 从视频探针异步导出静态预览图(
+  probe: Pick<HTMLVideoElement, "videoWidth" | "videoHeight"> & CanvasImageSource,
+  deps: 异步预览画布依赖 = {}
+): Promise<string | null> {
+  const exportSize = 计算预览导出尺寸(probe.videoWidth, probe.videoHeight);
+  if (!exportSize) {
+    return null;
+  }
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = (deps.createCanvasElement ?? (() => document.createElement("canvas")))();
+  } catch {
+    return null;
+  }
+  canvas.width = exportSize.width;
+  canvas.height = exportSize.height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return null;
+  }
+  try {
+    context.drawImage(probe, 0, 0, canvas.width, canvas.height);
+    if (typeof canvas.toBlob === "function") {
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 视频预览导出Mime类型, 视频预览导出质量);
+      });
+      if (!blob || blob.type !== 视频预览导出Mime类型) {
+        return null;
+      }
+      const dataUrl = await (deps.createDataUrlFromBlob ?? 读取BlobDataUrl)(blob);
+      return dataUrl?.startsWith("data:image/webp") ? dataUrl : null;
+    }
+    return 从视频探针导出静态预览图(probe, deps);
   } catch {
     return null;
   }

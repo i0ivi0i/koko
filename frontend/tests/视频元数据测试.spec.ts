@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   可选择视频文件类型,
   从视频探针导出静态预览图,
+  从视频探针异步导出静态预览图,
   读取视频文件元数据,
   解析视频元数据失败代码,
   视频附件上传上限字节数,
@@ -204,6 +205,47 @@ describe("视频元数据", () => {
     expect(canvas.width).toBe(960);
     expect(canvas.height).toBe(540);
     expect(drawImage).toHaveBeenCalledWith(expect.any(Object), 0, 0, 960, 540);
+  });
+
+  it("运行时静态预览优先异步 toBlob 导出，避免滚动热路径同步 toDataURL", async () => {
+    const drawImage = vi.fn();
+    const toDataUrl = vi.fn(() => {
+      throw new Error("不应走同步 toDataURL");
+    });
+    const toBlob = vi.fn(
+      (callback: BlobCallback, type?: string, quality?: number) => {
+        callback(new Blob([new Uint8Array([1])], { type: type ?? "" }));
+        void quality;
+      }
+    );
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () =>
+        ({
+          drawImage,
+        }) as unknown as CanvasRenderingContext2D,
+      toBlob,
+      toDataURL: toDataUrl,
+    } as unknown as HTMLCanvasElement;
+
+    const result = await 从视频探针异步导出静态预览图(
+      {
+        videoWidth: 3840,
+        videoHeight: 2160,
+      } as HTMLVideoElement,
+      {
+        createCanvasElement: () => canvas,
+        createDataUrlFromBlob: async () => "data:image/webp;base64,async-preview",
+      }
+    );
+
+    expect(result).toBe("data:image/webp;base64,async-preview");
+    expect(canvas.width).toBe(960);
+    expect(canvas.height).toBe(540);
+    expect(drawImage).toHaveBeenCalledWith(expect.any(Object), 0, 0, 960, 540);
+    expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/webp", 0.92);
+    expect(toDataUrl).not.toHaveBeenCalled();
   });
 
   it("浏览器不支持 WebP 导出时会返回空预览，避免回落成非 WebP 图片", async () => {

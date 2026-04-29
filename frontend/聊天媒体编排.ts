@@ -45,6 +45,7 @@ import {
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   创建资产协作分发运行时,
+  排序消息视频自动播候选,
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
@@ -185,6 +186,7 @@ const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
 const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
 const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
+const 自动播预览预热候选上限 = 2;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -1083,7 +1085,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
-    for (const candidate of candidates) {
+    for (const candidate of candidates.slice(0, 自动播预览预热候选上限)) {
       const attachment = 读取附件条目(candidate.attachmentId);
       if (!attachment || attachment.kind !== "video") {
         continue;
@@ -1315,14 +1317,20 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
+      const 当前自动播上下文 = 读取媒体运行时上下文();
+      const preheatCandidates = 排序消息视频自动播候选(
+        candidates,
+        当前自动播上下文.inlineAutoplayPendingAttachmentId ??
+          当前自动播上下文.inlineAutoplayOwnerAttachmentId
+      ).slice(0, 自动播预览预热候选上限);
       const 自动播候选已变化 = 同步附件标识集合(
         当前自动播候选附件Id集合,
-        candidates.map((candidate) => candidate.attachmentId)
+        preheatCandidates.map((candidate) => candidate.attachmentId)
       );
       if (自动播候选已变化) {
         按当前窗口重同步消息附件播放结果();
       }
-      预热自动播候选媒体会话(candidates);
+      预热自动播候选媒体会话(preheatCandidates);
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
         candidates,

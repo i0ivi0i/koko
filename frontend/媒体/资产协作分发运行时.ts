@@ -104,6 +104,7 @@ type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings
    * 后续复用必须重新确认，不能把已经 404 的本地地址继续交给播放器制造错误风暴。
    */
   播放源已交付过: boolean;
+  播放源复用探测Promise: Promise<void> | null;
 };
 
 export type 资产协作分发会话快照 = {
@@ -708,6 +709,24 @@ const 删除底层协作分发会话 = (
   清理协作分发底层会话(session);
 };
 
+const 确认协作分发会话播放源仍可读 = (
+  session: 底层协作分发会话,
+  streamUrl: string
+): Promise<void> => {
+  if (session.播放源复用探测Promise) {
+    return session.播放源复用探测Promise;
+  }
+  const probePromise = 探测协作分发媒体源可读性(streamUrl, {
+    读取终止错误: () => session.terminalError,
+  }).finally(() => {
+    if (session.播放源复用探测Promise === probePromise) {
+      session.播放源复用探测Promise = null;
+    }
+  });
+  session.播放源复用探测Promise = probePromise;
+  return probePromise;
+};
+
 const 退掉整附件重补齐 = (session: 底层协作分发会话): void => {
   /**
    * zero-ref 轻帮助态的关键点不是“把会话删掉”，而是把 whole-file 重补齐退掉：
@@ -1200,6 +1219,7 @@ async function 确保协作分发会话(
       : "locating",
     generation: 0,
     播放源已交付过: false,
+    播放源复用探测Promise: null,
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
   安排协作分发会话票据续租(runtime, session, input.distribution);
@@ -1402,6 +1422,10 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       if (!distribution) {
         return null;
       }
+      const existingSession = runtime.底层会话表.get(distribution.swarm_id);
+      const 复用前为零引用会话 =
+        existingSession?.播放源已交付过 === true &&
+        existingSession.consumerBindings.size === 0;
       const session = await 确保协作分发会话(runtime, {
         attachmentId: input.attachmentId,
         kind: input.kind,
@@ -1418,11 +1442,9 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       if (!source) {
         return null;
       }
-      if (session.播放源已交付过) {
+      if (复用前为零引用会话) {
         try {
-          await 探测协作分发媒体源可读性(source.src, {
-            读取终止错误: () => session.terminalError,
-          });
+          await 确认协作分发会话播放源仍可读(session, source.src);
         } catch (error) {
           const reason: WebTorrentSessionTerminalReason =
             是否为协作分发JoinTicket失效错误(error)
@@ -1441,6 +1463,8 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
           }
           throw error;
         }
+      } else if (session.播放源复用探测Promise) {
+        await session.播放源复用探测Promise;
       }
       session.播放源已交付过 = true;
       session.lifecycleState = 推导协作分发会话当前生命周期(session);

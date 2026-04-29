@@ -964,6 +964,77 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("已交付播放源只在零引用重开时由会话 owner 合并探测，避免多消费者并发打 streamURL", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const torrentHandle = 创建可观测假Torrent(
+      "https://127.0.0.1/webtorrent/source-probe-owner/content.mp4"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+    const locator = 准备好的定位结果("att-source-probe-owner");
+
+    await 解析协作分发源({
+      attachmentId: "att-source-probe-owner",
+      kind: "video",
+      locator,
+      consumerId: "session:att-source-probe-owner",
+    });
+    fetchMock.mockClear();
+
+    await Promise.all([
+      解析协作分发源({
+        attachmentId: "att-source-probe-owner",
+        kind: "video",
+        locator,
+        consumerId: "preview:att-source-probe-owner",
+      }),
+      解析协作分发源({
+        attachmentId: "att-source-probe-owner",
+        kind: "video",
+        locator,
+        consumerId: "inline_autoplay:att-source-probe-owner",
+      }),
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    torrentHandle.emit("done");
+    for (const consumerId of [
+      "session:att-source-probe-owner",
+      "preview:att-source-probe-owner",
+      "inline_autoplay:att-source-probe-owner",
+    ]) {
+      释放协作分发消费者({
+        attachmentId: "att-source-probe-owner",
+        consumerId,
+      });
+    }
+    expect(读取协作分发会话状态("swarm-att-source-probe-owner")).toMatchObject({
+      refs: 0,
+    });
+
+    fetchMock.mockClear();
+    await Promise.all([
+      解析协作分发源({
+        attachmentId: "att-source-probe-owner",
+        kind: "video",
+        locator,
+        consumerId: "viewer:att-source-probe-owner",
+      }),
+      解析协作分发源({
+        attachmentId: "att-source-probe-owner",
+        kind: "video",
+        locator,
+        consumerId: "inline_autoplay:att-source-probe-owner",
+      }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("tracker 拒绝 join_ticket 后会立即丢弃运行时会话，并在短排水窗口后通过官方 remove 收尾", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
