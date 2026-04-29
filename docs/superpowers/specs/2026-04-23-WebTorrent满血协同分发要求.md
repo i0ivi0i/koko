@@ -1,8 +1,8 @@
 # WebTorrent 满血协同分发要求
 
-日期：2026-04-23（2026-04-28 融合）
-状态：Authority / Implemented
-适用范围：`koko` 的新上传图片/视频附件、`WebTorrent` 正式媒体字节主链、前 `24 小时` 后端强 seed、`24 小时` 后纯 peer 接力、时间线自动播放、查看器、全屏、后台补齐、帮助任务恢复、失败态与删除态。
+日期：2026-04-23（2026-04-29 融合 WebTorrent 生命周期 owner 模型）
+状态：Authority / Implemented（生命周期 owner 模型为新增执行裁决）
+适用范围：`koko` 的新上传图片/视频附件、`WebTorrent` 正式媒体字节主链、前 `24 小时` 后端强 seed、`24 小时` 后纯 peer 接力、时间线自动播放、查看器、全屏、后台补齐、帮助任务恢复、前端唯一 WebTorrent 运行时 owner、后端 Rust availability 裁决模型、失败态与删除态。
 上层总纲：`docs/superpowers/specs/2026-04-25-项目视频播放要求.md`
 
 本文件统一取代并吸收以下旧 spec：
@@ -17,6 +17,7 @@
 - `docs/superpowers/specs/2026-04-25-项目视频播放要求.md`
 - `UIUX禁令.md`
 - `学习/浏览器中的应用-前端应用化方案.md`
+- `学习/整理笔记/2026-04-23-WebTorrent极限协同分发动工前官方资料校准.md`
 - `学习/整理笔记/浏览器内应用与前端应用化官方实践笔记.md`
 - `学习/整理笔记/Web大视频秒开播放与P2P协同主链官方实践清单-2026.md`
 
@@ -28,6 +29,7 @@
 - BitTorrent BEP 19：<https://www.bittorrent.org/beps/bep_0019.html>
 - simple-peer：<https://github.com/feross/simple-peer>
 - bittorrent-tracker：<https://github.com/webtorrent/bittorrent-tracker>
+- XState v5 Actors：<https://stately.ai/docs/actors>
 
 ---
 
@@ -35,7 +37,7 @@
 
 **`koko` 的正式媒体内容字节只允许走唯一 `WebTorrent` whole-file swarm 主链；前 `24 小时` 后端只能作为 swarm 内强 seed 参与，`24 小时` 后退出该附件的媒体字节供给；每个看过或自动播放过且仍在线的群友，都应尽量被养成后来者的帮助者；群越活跃，分发越强；没人能发时，系统必须说真话。**
 
-这句话自然推出十条最高红线：
+这句话自然推出十一条最高红线：
 
 1. 禁止第二正式播放主链。
 2. 禁止第二正式分发链。
@@ -47,6 +49,7 @@
 8. 禁止把片段帮助者排除出 swarm 有效协作面。
 9. 禁止把“当前没有在线种子”和“内容已删除”混成一类。
 10. 禁止把浏览器、移动端、弱网或运行时上限包装成第二套保守产品真相。
+11. 禁止为了“状态机更清晰”而新增并列的全局 WebTorrent 大脑；状态机只能收口唯一 owner 内部生命周期，不能成为第二主链、第二分发真相或第二播放器真相。
 
 ---
 
@@ -153,6 +156,20 @@ BitTorrent / WebTorrent 的正常形态不是单来源串行下载，而是：
 但这些只能是基础设施级硬边界，不能上抬成产品层保守规则。
 禁止用“浏览器有限”为理由写死“默认只保最近 `3-5` 条帮助任务”“移动端默认不补齐”“弱网默认不帮别人”“滑出视口就停”。
 
+### 3.4 状态机是 owner 约束，不是新主链
+
+随着协同分发功能变多，继续只靠散落的 `Map`、布尔值和局部 guard，会把 join ticket、source generation、reader、presence、排水退场、轻帮助态和本地完整态混在一起。这里需要状态机思想，但不能把状态机误做成新的系统大脑。
+
+正确理解是：
+
+1. 前端可以复用现有 `XState v5`，把 WebTorrent 会话生命周期收进唯一协作分发 owner。
+2. 前端状态机只管理浏览器运行时和 swarm session 的生命周期，不管理附件是否成立、房间消息、删除权威事实、`24 小时` 服务器退字节裁决或播放器视觉连续性。
+3. 后端不为了和前端“对称”硬上 XState；Rust 侧用强类型 `enum`、纯函数 reducer 和表驱动测试表达 `SeederDecision / Availability / PeerKind` 更清楚。
+4. 前后端只能通过稳定 contract 交换 locator、join ticket、announce、presence、availability 和删除事实，禁止同步彼此内部状态。
+5. 状态机的价值是防止多处共写、隐式保活和退场竞态，不是扩大抽象层、复制 WebTorrent runtime，或把业务事实搬进框架。
+
+所以本文说“全局唯一 WebTorrent”，指的是唯一正式媒体字节主链和唯一前端运行时 owner，不是新建一个可以吞掉上传、消息、播放、缓存、tracker、seeder、availability 的巨型状态机。
+
 ---
 
 ## 4. 权威时间与服务器退字节
@@ -257,7 +274,42 @@ BitTorrent / WebTorrent 的正常形态不是单来源串行下载，而是：
 前端文案只能从稳定 contract code 派生，不能自己再发明另一套状态机。
 本地仍握有完整 payload 的客户端，在附件未删除前可以直接 `MEDIA_READY`；删除权威事实一旦成立，必须无条件切到 `MEDIA_DELETED`。
 
-### 5.4 默认重试节奏
+### 5.4 运行时生命周期状态
+
+`MEDIA_READY / MEDIA_CONNECTING_TO_PEERS / MEDIA_NO_ONLINE_SEED / MEDIA_DELETED` 是后端对外 contract 状态，不等于前端 WebTorrent runtime 的内部状态。前端需要内部生命周期模型，是为了管住浏览器资源、会话引用和退场时序；它不能覆盖 contract 状态，也不能向 UI 发明第二套可用性文案。
+
+前端全局 WebTorrent 运行时 owner 只允许有下面这些运行时状态：
+
+1. `unavailable`：当前浏览器环境不支持或不允许 WebTorrent 正式主链，例如非安全上下文、Service Worker 不可用或必要能力缺失。
+2. `booting`：正在加载 WebTorrent 构造器、等待 Service Worker controller、创建唯一 `client/createServer`。
+3. `ready`：唯一 `client/createServer` 已成立，可以接入 swarm session。
+4. `draining`：最后一个运行时消费者退出后，正在给浏览器已飞出的 `/webtorrent/...` range 尾波排水。
+5. `destroyed`：运行时已显式销毁，旧 generation 的 source、reader、timer、listener 和 route 都不允许再写回新状态。
+
+每个 `swarmId / torrentInfoHash` 的 session 只允许在唯一运行时 owner 下流转：
+
+1. `cold`：只有附件和 locator 真相，没有浏览器 WebTorrent 会话。
+2. `locating`：正在取 locator、`.torrent`、join ticket 或缓存描述。
+3. `joining`：已经拿到必要描述，正在进入 WebTorrent swarm。
+4. `swarm_active`：真实进入 swarm，已具备上报 `partial_peer` 的前提，但不一定 ready。
+5. `source_ready`：同一 torrent file 的 `streamURL / streamTo` 可读，具备交给预览、自动播或查看器的正式来源。
+6. `heavy_playback`：当前正式播放、查看器或全屏 owner 正在使用该来源，允许持有前台 reader、帧探针和必要重对象。
+7. `light_help`：不再承担前台播放，但仍保留 presence、swarm/store 或补齐价值；禁止继续持有前台播放级 reader。
+8. `locally_complete`：本地完整 payload 已成立，可以继续做种和恢复帮助任务，但不表示 UI 正在播放。
+9. `draining`：source 或消费者刚退场，正在按 generation 和引用计数等待浏览器尾波自然结束。
+10. `dropped`：会话已删除，旧 listener、timer、reader、source promise 和 join ticket refresh 都必须失效。
+
+失败事实只能作为同一 session 的终止或降级原因记录，例如 `ticket_invalid / no_peers / source_unreadable / unsupported_runtime / deleted`。其中 `deleted` 必须无条件服从后端删除权威事实；`ticket_invalid`、`source_unreadable`、`unsupported_runtime` 不能被包装成第二播放链入口；`no_peers` 只能让 contract 进入连接或无种子语义，不能把附件误删。
+
+关键边界：
+
+1. `heavy_playback` 和 `light_help` 必须分开；继续帮助后人不等于继续背前台重 reader。
+2. `source_ready` 只能证明当前 generation 下同一 WebTorrent 来源可读，不能升级成长期 `MEDIA_READY`。
+3. `locally_complete` 是做种和恢复帮助资格，不是播放器 owner。
+4. `draining` 是尾波排水，不是零引用重保活。
+5. 旧 generation 完成后禁止写回新 session；所有 locator、source、probe、reader、join ticket refresh 都必须受 generation / AbortSignal / 引用计数约束。
+
+### 5.5 默认重试节奏
 
 默认参数先写死：
 
@@ -394,7 +446,27 @@ A 可能刷新、关闭标签页、浏览器重启，过一阵子再回来。规
 2. 已持有片段的对外帮助。
 3. 帮助任务本身的继续生长。
 
-### 7.4 不主动裁掉旧帮助任务
+### 7.4 前端只允许一个 WebTorrent 运行时 owner
+
+前端唯一 WebTorrent 运行时 owner 应落在协作分发运行时边界内；现有实现对应 `frontend/媒体/资产协作分发运行时.ts` 这一层。`frontend/媒体/媒体协作分发.ts` 只作为 WebTorrent 官方 API、Service Worker stream server、listener、reader、route drain 的薄 adapter，不拥有业务可用性真相。
+
+这个 owner 的职责是：
+
+1. 创建并复用唯一浏览器 `WebTorrent client/createServer`。
+2. 管理每个 `swarmId / torrentInfoHash` 的 session 状态、consumer 引用、source generation、join ticket refresh、presence heartbeat 和退场清理。
+3. 把自动播放、查看器、全屏、预览、补齐这些消费者统一映射成同一 session 的不同消费模式。
+4. 让 `heavy_playback / light_help / locally_complete / draining` 之间的切换可观测、可测试、可取消。
+5. 在页面 hidden、viewer 关闭、owner 切换、消费者归零、运行时销毁时，按同一条状态转移释放 reader、listener、timer 和 source。
+
+禁止：
+
+1. 新增与协作分发运行时并列的 `全局唯一WebTorrent.ts` 大状态机，让两个 owner 同时解释同一 session。
+2. 让消息窗、查看器、播放器壳、媒体定位或缓存层直接创建 WebTorrent client、stream server、正式 source reader 或 presence heartbeat。
+3. 让前端状态机裁决 `MEDIA_READY / MEDIA_NO_ONLINE_SEED / MEDIA_DELETED` 的业务真相。
+4. 让状态机为了“恢复体验”绕回 `HLS / original_url / CDN / range` 第二正式字节链。
+5. 通过同步前后端内部状态来维持一致；前后端只能交换 contract 事件和稳定事实。
+
+### 7.5 不主动裁掉旧帮助任务
 
 活跃群里，一个用户可能自动播放过 `10` 条、`20` 条视频。产品层默认不主动写死：
 
@@ -405,7 +477,7 @@ A 可能刷新、关闭标签页、浏览器重启，过一阵子再回来。规
 
 底层如果确实需要资源仲裁，只能作为运行时硬边界存在，不能改变产品承诺，更不能包装成“默认只帮几条”的新产品哲学。
 
-### 7.5 图片也走同一真相
+### 7.6 图片也走同一真相
 
 本文覆盖图片，不只覆盖视频：
 
@@ -496,6 +568,10 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 13. 禁止把“当前没有人能发”和“内容已删除”混成一类。
 14. 禁止把底层协议/运行时硬边界上抬成产品退缩借口。
 15. 禁止以降质换取所谓秒开。
+16. 禁止新增与协作分发运行时并列的“全局唯一 WebTorrent”大状态机；唯一 owner 只能有一个，状态模型要收口到现有协作分发边界。
+17. 禁止后端为了形式对称引入前端式状态机框架，或把 `complete_at / web_seed_until / presence / availability / delete` 这些权威事实交给通用状态机黑箱。
+18. 禁止前后端同步彼此内部状态；只能交换 locator、join ticket、announce、presence、availability、删除事实和错误 code。
+19. 禁止用状态机名义保留旧 guard、旧 fallback、旧 owner 双活；新状态模型必须删除或压缩原有重复判断路径。
 
 ---
 
@@ -520,7 +596,11 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 15. 附件删除后，前端必须进入 `MEDIA_DELETED`；本地缓存不能继续伪装 ready。
 16. 图片冷启动不会偷偷请求服务器 thumbnail；不支持渐进式显示时进入稳定占位态。
 17. 全链路没有生成更糊的第二正式媒体版本。
-18. `chrome-devtools-cli` 真实烟测至少覆盖 `https://localhost` 或 `https://127.0.0.1`、房间 `1234b`、sender / A / B / C / D 多隔离上下文、图片和视频、前 `24 小时` 强 seed、后 `24 小时` 纯 peer、无在线种子与内容已删除。
+18. 前端 WebTorrent runtime 只有一个已登记 owner，架构门禁能拦住未登记的 `createMachine/createActor` 长生命周期 owner 和消息窗直接创建 WebTorrent 字节入口。
+19. session 生命周期测试必须覆盖 `cold -> locating -> joining -> swarm_active -> source_ready -> heavy_playback -> light_help -> locally_complete -> draining -> dropped` 的主路径，以及 `ticket_invalid / no_peers / source_unreadable / unsupported_runtime / deleted` 的降级路径。
+20. 测试必须证明 `heavy_playback` 退出后可以进入 `light_help`，但 `light_help` 不持有前台播放级 reader；`draining` 只保留浏览器尾波排水，不保留零引用重播放会话。
+21. 后端 availability 裁决必须用 Rust 强类型和表驱动测试覆盖 `SeederDecision / Availability / PeerKind`，不因为引入或不引入状态机框架而改变业务真相。
+22. `chrome-devtools-cli` 真实烟测至少覆盖 `https://localhost` 或 `https://127.0.0.1`、房间 `1234b`、sender / A / B / C / D 多隔离上下文、图片和视频、前 `24 小时` 强 seed、后 `24 小时` 纯 peer、无在线种子与内容已删除，并采样 WebTorrent runtime/session 状态、reader/listener 回落和 route drain。
 
 ---
 
@@ -664,3 +744,5 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 5. 新文档没有把 `24 小时` 后纯 peer 可用性写成绝对可播：有来源则接住，无来源则说真话。
 6. 新文档没有把删除态与无种子态混掉：删除永远是不可恢复终态。
 7. 新文档与 `项目视频播放要求` 的关系清晰：本文是 WebTorrent 分发细则，上层总纲继续拥有 canonical 资产、唯一播放器与播放视觉连续性总裁决。
+8. 新文档没有把“全局唯一 WebTorrent”写成新的巨型状态机：前端只收口唯一协作分发 owner 内部生命周期，后端只做 Rust 权威裁决，前后端通过 contract 配合。
+9. 新文档没有把状态机当成银弹：它只用于消灭多处共写、隐式保活、reader/listener 泄漏和退场竞态，不能替代 WebTorrent 官方 runtime、后端业务事实或唯一播放器 owner。
