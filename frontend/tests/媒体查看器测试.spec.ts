@@ -1704,7 +1704,7 @@ describe("媒体查看器适配器", () => {
     });
   });
 
-  it("移动端全屏策略仍复用同一个播放器会话，不会额外创建第二颗 video", async () => {
+  it("移动端应用内沉浸策略仍复用同一个播放器会话，不会额外创建第二颗 video", async () => {
     const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       isMobileViewport: () => true,
@@ -1729,11 +1729,51 @@ describe("媒体查看器适配器", () => {
     const video = document.body.querySelector("video");
     const mediaContainer = 读取VideoJs媒体容器();
     expect(video).toBeInstanceOf(HTMLVideoElement);
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(document.fullscreenElement).toBe(mediaContainer);
+    expect(mediaContainer).not.toBeNull();
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
+    expect(document.fullscreenElement).toBeNull();
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
     expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
       1
+    );
+  });
+
+  it("移动端查看器默认走应用内沉浸全屏，不触发浏览器系统全屏提示", async () => {
+    const pushState = vi.spyOn(history, "pushState");
+    const { requestFullscreen, exitFullscreen } = 安装全屏DOM模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-app-fullscreen-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-app-fullscreen-1",
+          src: "blob:http://media.local/mobile-app-fullscreen-video-1",
+          posterSrc: "http://media.local/poster-mobile-app-fullscreen-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
+
+    const overlay = document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]');
+    const video = document.body.querySelector("video");
+
+    expect(video).toBeInstanceOf(HTMLVideoElement);
+    expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
+    expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
+    expect(document.fullscreenElement).toBeNull();
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
+    expect(exitFullscreen).toHaveBeenCalledTimes(0);
+    expect(pushState).toHaveBeenCalledWith(
+      expect.objectContaining({ __kokoMediaFullscreenSession: expect.any(String) }),
+      "",
+      expect.any(String)
     );
   });
 
@@ -1765,7 +1805,7 @@ describe("媒体查看器适配器", () => {
     expect(mount?.style.height).toBe("100%");
   });
 
-  it("移动端异步壳场景下，全屏请求只会在容器就绪后触发一次", async () => {
+  it("移动端异步壳场景下，会等容器就绪后进入应用内沉浸而不请求系统全屏", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1826,14 +1866,14 @@ describe("媒体查看器适配器", () => {
 
     const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
     expect(container).not.toBeNull();
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(requestFullscreen.mock.instances.at(0)).toBe(container);
-    expect(激活快照).toEqual([false]);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
+    expect(requestFullscreen.mock.instances).not.toContain(container);
+    expect(激活快照).toEqual([]);
 
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
-  it("异步壳就绪前不会触发 overlay 预请求，且就绪后只会对容器发起一次全屏请求", async () => {
+  it("移动端异步壳就绪前不亮空黑层，壳就绪后直接进入应用内沉浸", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1865,7 +1905,7 @@ describe("媒体查看器适配器", () => {
 
     try {
       const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
-      const { 待完成进入请求, 完成进入 } = 安装手动进入全屏模拟();
+      const { 待完成进入请求 } = 安装手动进入全屏模拟();
       const viewer = 创建媒体查看器({
         isMobileViewport: () => true,
       });
@@ -1901,19 +1941,7 @@ describe("媒体查看器适配器", () => {
       const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
       expect(container).not.toBeNull();
 
-      expect(待完成进入请求).toHaveLength(1);
-      expect(待完成进入请求[0]?.target).toBe(container);
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
-      expect(overlay?.style.opacity).toBe("0");
-      expect(overlay?.style.pointerEvents).toBe("none");
-      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
-      expect(
-        overlay?.querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
-      ).toBeNull();
-
-      完成进入(0);
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(待完成进入请求).toHaveLength(0);
       expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
       expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
       expect(overlay?.style.opacity).toBe("1");
@@ -1930,7 +1958,7 @@ describe("媒体查看器适配器", () => {
     }
   });
 
-  it("移动端缺少标准 Fullscreen API 时，会退回 video 原生 webkit fullscreen 真全屏", async () => {
+  it("移动端缺少标准 Fullscreen API 时，也只进入应用内沉浸而不触发 webkit 原生全屏", async () => {
     const play = vi.fn(() => Promise.resolve());
     const pause = vi.fn();
     const webkitEnterFullscreen = vi.fn();
@@ -1969,12 +1997,16 @@ describe("媒体查看器适配器", () => {
     await 等待查询元素("video-player[data-player-shell='videojs']");
     await 等待查看器任务完成();
 
-    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
+    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(0);
     expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
+    expect(
+      document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]')?.dataset
+        .mediaViewerFullscreenPhase
+    ).toBe("active");
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
-  it("移动端原生 webkit 全屏退出时，会沿同一条关闭链回收查看器", async () => {
+  it("移动端迟到的 webkit 全屏退出事件不会误关应用内沉浸查看器", async () => {
     const play = vi.fn(() => Promise.resolve());
     const pause = vi.fn();
     const webkitEnterFullscreen = vi.fn();
@@ -2014,18 +2046,18 @@ describe("媒体查看器适配器", () => {
     await 等待查看器任务完成();
     const 已打开视频 = document.body.querySelector<HTMLVideoElement>("video");
 
-    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
+    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(0);
     expect(已打开视频).not.toBeNull();
 
     已打开视频?.dispatchEvent(new Event("webkitendfullscreen"));
     await Promise.resolve();
 
-    expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
-    expect(document.body.querySelector("video")).toBeNull();
-    expect(pause).toHaveBeenCalled();
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+    expect(document.body.querySelector("video")).not.toBeNull();
+    expect(pause).not.toHaveBeenCalled();
   });
 
-  it("移动端原生 webkit 全屏活跃时，关闭请求会先退出原生全屏再回收查看器", async () => {
+  it("移动端关闭应用内沉浸查看器时，不会再调用 webkit 原生退出造成黑场", async () => {
     const play = vi.fn(() => Promise.resolve());
     const pause = vi.fn();
     const webkitEnterFullscreen = vi.fn(function (this: HTMLVideoElement) {
@@ -2073,7 +2105,8 @@ describe("媒体查看器适配器", () => {
     ;(await 等待查询查看器关闭按钮())?.click();
     await Promise.resolve();
 
-    expect(webkitExitFullscreen).toHaveBeenCalledTimes(1);
+    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(0);
+    expect(webkitExitFullscreen).toHaveBeenCalledTimes(0);
     expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
     expect(document.body.querySelector("video")).toBeNull();
     expect(pause).toHaveBeenCalled();
@@ -2150,16 +2183,16 @@ describe("媒体查看器适配器", () => {
       "",
       expect.any(String)
     );
-    expect(exitFullscreen).toHaveBeenCalled();
+    expect(exitFullscreen).toHaveBeenCalledTimes(0);
     expect(unlock).toHaveBeenCalled();
     expect(pause).toHaveBeenCalled();
     expect(document.body.querySelector("video")).toBeNull();
   });
 
-  it("系统全屏元素落到 shadow host 时，一次系统退出也会直接回到群聊", async () => {
+  it("桌面端系统全屏元素落到 shadow host 时，一次系统退出也会直接回到群聊", async () => {
     const { requestFullscreen, exitFullscreen } = 安装ShadowHost全屏DOM模拟();
     const viewer = 创建媒体查看器({
-      isMobileViewport: () => true,
+      isMobileViewport: () => false,
     });
 
     viewer.打开({
@@ -2192,7 +2225,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector("video")).toBeNull();
   });
 
-  it("移动端关闭上一条视频后，下一条视频仍沿同一容器链一次触发全屏请求", async () => {
+  it("移动端关闭上一条视频后，下一条视频仍沿同一应用内沉浸链路打开", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -2243,7 +2276,7 @@ describe("媒体查看器适配器", () => {
     expect(requestFullscreen).toHaveBeenCalledTimes(0);
     延迟壳解析器.at(0)?.();
     await 等待查看器任务完成();
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
 
     const closeButton = await 等待查询查看器关闭按钮();
     closeButton?.click();
@@ -2263,16 +2296,16 @@ describe("媒体查看器适配器", () => {
       ],
     });
 
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
     expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
 
     延迟壳解析器.at(1)?.();
     await 等待查看器任务完成(6);
-    expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
-  it("移动端上一条视频仍在退出系统全屏时，下一条视频首击也不会退化成等待后二次点击", async () => {
+  it("移动端上一条应用内沉浸会话关闭后，下一条首击不会退化成等待后二次点击", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(
       (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
@@ -2321,7 +2354,7 @@ describe("媒体查看器适配器", () => {
     document.body
       .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
       ?.click();
-    expect(exitFullscreen).toHaveBeenCalled();
+    expect(exitFullscreen).toHaveBeenCalledTimes(0);
 
     viewer.打开({
       startAttachmentId: "att-video-mobile-close-pending-2",
@@ -2341,10 +2374,10 @@ describe("媒体查看器适配器", () => {
     expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
     expect(document.body.querySelectorAll('[aria-label="视频查看器"]')).toHaveLength(1);
     /**
-     * 即使上一会话 exitFullscreen 仍在 pending，新会话首击也必须继续尝试系统全屏。
-     * 否则移动端就会退化成“第一次点只进假全屏，第二次再点才真全屏”。
+     * 移动端不再依赖系统 fullscreen，因此没有“退出 pending”窗口。
+     * 下一条首击只需要打开新的应用内沉浸会话，不能要求用户再点第二次。
      */
-    expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
 
     完成退出();
     await Promise.resolve();
@@ -2404,7 +2437,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector("video")).toBeInstanceOf(HTMLVideoElement);
   });
 
-  it("异步壳路径不会形成 overlay/container 双层全屏栈，一次退出就直接回到群聊", async () => {
+  it("桌面端异步壳路径不会形成 overlay/container 双层全屏栈，一次退出就直接回到群聊", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -2436,7 +2469,7 @@ describe("媒体查看器适配器", () => {
     const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
     const { requestFullscreen, exitFullscreen } = 安装可回退全屏堆栈模拟();
     const viewer = 创建媒体查看器({
-      isMobileViewport: () => true,
+      isMobileViewport: () => false,
     });
 
     viewer.打开({

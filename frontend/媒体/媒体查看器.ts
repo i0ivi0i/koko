@@ -207,6 +207,7 @@ const 启动同会话全屏策略 = (
   请求播放器壳进入全屏: () => Promise<VideoJs全屏进入结果>,
   回收查看器: () => void,
   options: {
+    允许系统全屏?: boolean;
     同步沉浸查看器显示阶段?: (phase: "pending" | "active") => void;
   } = {}
 ): 同会话全屏策略控制器 => {
@@ -258,6 +259,7 @@ const 启动同会话全屏策略 = (
   let historyCleanupInProgress = false;
   let historyCleanupTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   let videoOrientation = 读取视频方向锁(读取当前项目());
+  const 允许系统全屏 = options.允许系统全屏 !== false;
 
   const startPlayback = (): void => {
     const currentItem = 读取当前项目();
@@ -368,7 +370,10 @@ const 启动同会话全屏策略 = (
     removePopStateListener();
   };
   const closeFullscreen = (): void => {
-    if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
+    if (
+      是本会话全屏元素(document.fullscreenElement) &&
+      typeof document.exitFullscreen === "function"
+    ) {
       /**
        * 标准 Fullscreen API 的迟到 `fullscreenchange` 需要继续走全局“待结算退出”保护，
        * 否则上一条视频的退出事件会误打到下一条会话。
@@ -480,7 +485,8 @@ const 启动同会话全屏策略 = (
    * 具体的 container-first / media-fallback 进入动作交给 Video.js 播放器壳，
    * viewer 这里只维护聊天应用需要的会话、history、显示阶段和回收顺序。
    */
-  const 标准全屏可能挂起 = typeof container.requestFullscreen === "function";
+  const 标准全屏可能挂起 =
+    允许系统全屏 && typeof container.requestFullscreen === "function";
   const 当前明确缺少用户激活 = globalThis.navigator?.userActivation?.isActive === false;
   /**
    * 自动化脚本触发的 click 没有浏览器瞬时激活，继续 requestFullscreen 只会制造控制台噪音；
@@ -494,7 +500,15 @@ const 启动同会话全屏策略 = (
       ? "pending"
       : "active"
   );
-  if (!当前明确缺少用户激活) {
+  if (!允许系统全屏) {
+    /**
+     * 移动端的“全屏”是应用内沉浸会话，不进入浏览器系统 fullscreen。
+     * 这样不会触发手机浏览器自带退出提示，也不会在退出时经过系统黑场；
+     * 方向锁仍作为最佳努力增强，失败时浏览器会安静拒绝。
+     */
+    lockScreenOrientation();
+  }
+  if (允许系统全屏 && !当前明确缺少用户激活) {
     void 请求播放器壳进入全屏()
       .then(处理播放器壳进入全屏结果)
       .catch(() => {
@@ -515,6 +529,7 @@ const 创建默认VideoJs播放器层 = async (
   playerOwner: 全局唯一播放器端口,
   options: {
     shouldAutoEnterFullscreen: boolean;
+    shouldRequestSystemFullscreen?: boolean;
   }
 ): Promise<媒体查看器实例> => {
   if (typeof document === "undefined" || !document.body) {
@@ -732,6 +747,7 @@ const 创建默认VideoJs播放器层 = async (
         () => 当前查看器会话?.进入全屏() ?? Promise.resolve("unsupported"),
         cleanup,
         {
+          允许系统全屏: options.shouldRequestSystemFullscreen !== false,
           同步沉浸查看器显示阶段,
         }
       );
@@ -783,6 +799,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   void 预热默认VideoJs元素().catch(() => undefined);
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
+  const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
   const globalVideoPlayer =
     deps.globalVideoPlayer ??
     (deps.createVideoJsPlayerShell
@@ -1051,11 +1068,13 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
         globalVideoPlayer,
         {
           /**
-           * 从消息流显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
-           * 真全屏不该只在移动端成立；桌面端也沿同一条容器 owner 链尝试系统 fullscreen，
-           * 失败时再自然回落到同一个查看器表面，而不是另起一套“桌面放大卡片”的假分支。
+           * 显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
+           * 但手机浏览器的系统 fullscreen 会弹出无法由页面控制的退出提示，
+           * 退出时还可能经过浏览器黑场；移动端因此默认走应用内沉浸全屏。
+           * 桌面端仍可沿同一条 container owner 链尝试系统 fullscreen。
            */
           shouldAutoEnterFullscreen: true,
+          shouldRequestSystemFullscreen: !isMobileViewport(),
         }
       )
     );
