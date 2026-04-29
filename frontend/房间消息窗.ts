@@ -18,6 +18,7 @@ import type { 消息视频自动播候选 } from "./媒体/消息视频自动播
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import { 读取默认全局唯一播放器 } from "./媒体/全局唯一播放器.js";
+import { 判定播放连续性表面 } from "./媒体/全局丝滑自动播.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 type 消息虚拟项 = {
@@ -2072,6 +2073,56 @@ export class 房间消息窗 extends LitElement {
               previewVideoSrc
             );
             const hasCurrentDomPreviewFrame = hasExistingSameSourcePreviewFrame;
+            const normalizedPreviewVideoSrc =
+              this.归一化时间线视频播放源(previewVideoSrc);
+            const normalizedSavedTimelineFrameSrc =
+              this.归一化时间线视频播放源(savedTimelineFrameSrc);
+            const normalizedOwnerCanonicalVideoSrc =
+              this.归一化时间线视频播放源(ownerCanonicalVideoSrc);
+            const hasHistoricalCanonicalReveal =
+              Boolean(normalizedOwnerCanonicalVideoSrc) &&
+              this.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
+                normalizedOwnerCanonicalVideoSrc;
+            const hasSameSourceSavedTimelineFrame = Boolean(
+              normalizedPreviewVideoSrc &&
+                normalizedSavedTimelineFrameSrc &&
+                normalizedPreviewVideoSrc === normalizedSavedTimelineFrameSrc
+            );
+            const playbackContinuityDecision = 判定播放连续性表面({
+              attachmentId: attachment.attachmentId,
+              ownerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+              surface: "timeline",
+              source: { src: previewVideoSrc ?? ownerCanonicalVideoSrc },
+              savedPosition: savedTimelineFrame,
+              dom: {
+                previewReadyState: hasExistingSameSourcePreviewFrame ? 2 : 0,
+                canonicalReadyState: shouldRevealCanonicalHost ? 3 : 0,
+                sourceMatches:
+                  hasSameSourceSavedTimelineFrame ||
+                  hasExistingSameSourcePreviewFrame ||
+                  hasHistoricalCanonicalReveal,
+              },
+              host: {
+                exists: true,
+                hasStableFrame:
+                  hasExistingSameSourcePreviewFrame ||
+                  hasKnownReadyPreviewFrame ||
+                  shouldReuseSavedTimelineFrameAsPreview ||
+                  hasHistoricalCanonicalReveal,
+              },
+              intent: { viewerOpen: false, fullscreen: false },
+            });
+            /**
+             * 同源续播证据已经存在时，poster 不再是“安全兜底”，而是闪烁源：
+             * 1. 保存位置、当前首帧、历史 canonical 接管都属于同一条播放连续性；
+             * 2. 外层 poster 会把“滑回续播”拆成 poster -> video 两拍；
+             * 3. 没有同源连续性证据的普通冷预览仍保留 poster，避免裸露黑色 video。
+             */
+            const shouldSuppressPosterForContinuity =
+              (shouldReuseSavedTimelineFrameAsPreview || hasHistoricalCanonicalReveal) &&
+              (playbackContinuityDecision.kind === "hidden_handoff" ||
+                playbackContinuityDecision.kind === "hold_frame" ||
+                playbackContinuityDecision.kind === "visible_canonical");
             /**
              * 续播暂停帧是时间线自动播的视觉连续性底板，不是“等待用户点击播放”的静态封面。
              * 如果这里继续叠播放图标，owner 交接第一拍会先露一个中心图标再切成播放画面，
@@ -2096,14 +2147,15 @@ export class 房间消息窗 extends LitElement {
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
+              !shouldSuppressPosterForContinuity &&
               !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             /**
              * 源级首帧缓存只说明“这个 WebTorrent src 曾经成功出帧”，
              * 不说明“这颗刚重新挂载的 DOM video 当前已经有像素”：
-             * 1. 有当前 DOM 首帧时才揭开 poster，避免 poster -> 视频帧跳变；
-             * 2. 只有源级缓存但当前 DOM 还没 `loadeddata` 时，poster/guard 必须继续顶住；
-             * 3. 否则高速虚拟回滑会把 readyState=0 的 video 裸露成黑块。
+             * 1. 有当前 DOM 首帧时才移除 video 自身 poster，避免首帧前裸露黑块；
+             * 2. 外层 `<img class="message-video-poster">` 会造成 img/video 两个表面互换，连续性链路中必须压掉；
+             * 3. `<video poster>` 属于同一个 DOM 表面的冷保护，不会制造外层卡片闪回。
              */
             const previewVideoPoster =
               !hasCurrentDomPreviewFrame &&
@@ -2117,12 +2169,6 @@ export class 房间消息窗 extends LitElement {
             const hasReadyPreviewSurface =
               hasStablePreviewPosterSurface ||
               hasCurrentDomPreviewFrame;
-            const normalizedOwnerCanonicalVideoSrc =
-              this.归一化时间线视频播放源(ownerCanonicalVideoSrc);
-            const hasHistoricalCanonicalReveal =
-              Boolean(normalizedOwnerCanonicalVideoSrc) &&
-              this.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
-                normalizedOwnerCanonicalVideoSrc;
             /**
              * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
              * 1. 明确跨附件 handoff 时，先保留现有预览帧，让 canonical player 在隐藏宿主完成 source/time 对齐；

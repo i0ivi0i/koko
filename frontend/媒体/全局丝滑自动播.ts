@@ -43,7 +43,13 @@ const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性
   if (!input.source.src || !input.savedPosition) {
     return null;
   }
-  if (input.savedPosition.src !== input.source.src) {
+  /**
+   * WebTorrent runtime 常保留 `/webtorrent/...` 相对地址，而浏览器事件会把
+   * `currentSrc` 回报成绝对地址。状态机不直接碰 `window`，只消费上层已经归一化过的
+   * `sourceMatches` 事实，避免把 URL 解析这类壳层细节塞进全局播放连续性领域模型。
+   */
+  const isSameSource = input.savedPosition.src === input.source.src || input.dom.sourceMatches;
+  if (!isSameSource) {
     return null;
   }
   if (
@@ -57,6 +63,9 @@ const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性
 
 const 读取目标时间 = (input: 播放连续性输入): number =>
   读取同源保存位置(input)?.currentTime ?? 0;
+
+const 有同源连续性证据 = (input: 播放连续性输入): boolean =>
+  Boolean(读取同源保存位置(input)) || (input.dom.sourceMatches && input.host.hasStableFrame);
 
 const 读取冷占位理由 = (
   input: 播放连续性输入
@@ -79,7 +88,7 @@ export const 播放连续性机 = setup({
     需要退场: ({ context }) => context.input.intent.retire === true,
     缺少正式源: ({ context }) => !context.input.source.src,
     宿主缺失: ({ context }) => !context.input.host.exists,
-    缺少同源保存位置: ({ context }) => !读取同源保存位置(context.input),
+    缺少同源连续性证据: ({ context }) => !有同源连续性证据(context.input),
     需要全屏接管: ({ context }) => context.input.intent.fullscreen,
     需要查看器接管: ({ context }) => context.input.intent.viewerOpen,
     可露出Canonical: ({ context }) =>
@@ -99,7 +108,7 @@ export const 播放连续性机 = setup({
         { guard: "需要退场", target: "retired" },
         { guard: "缺少正式源", target: "coldPlaceholder" },
         { guard: "宿主缺失", target: "coldPlaceholder" },
-        { guard: "缺少同源保存位置", target: "coldPlaceholder" },
+        { guard: "缺少同源连续性证据", target: "coldPlaceholder" },
         { guard: "需要全屏接管", target: "fullscreenHandoff" },
         { guard: "需要查看器接管", target: "viewerHandoff" },
         { guard: "可露出Canonical", target: "visible" },

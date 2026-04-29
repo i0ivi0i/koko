@@ -56,6 +56,40 @@ describe("全局丝滑自动播", () => {
     });
   });
 
+  it("调用方已确认同源时允许相对 WebTorrent 源承接 currentSrc 绝对地址保存位置", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      source: { src: "/webtorrent/demo-infohash/content-demo.mp4" },
+      savedPosition: {
+        src: "https://127.0.0.1/webtorrent/demo-infohash/content-demo.mp4",
+        currentTime: 19.75,
+        updatedAt: 2,
+      },
+      dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "hiddenHandoff",
+      kind: "hidden_handoff",
+      targetCurrentTime: 19.75,
+    });
+  });
+
+  it("同源稳定帧已经存在时，即使暂无保存位置也不能退成冷占位", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      savedPosition: null,
+      dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
+      host: { exists: true, hasStableFrame: true },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "hiddenHandoff",
+      kind: "hidden_handoff",
+      targetCurrentTime: 0,
+    });
+  });
+
   it("查看器和全屏意图会变成同一条会话 handoff，而不是冷启动", () => {
     expect(
       判定播放连续性表面({
