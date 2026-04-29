@@ -10,6 +10,7 @@ export * from "./媒体定位.js";
 export * from "./媒体播放.js";
 export * from "./videojs播放器壳.js";
 export * from "./全局唯一播放器.js";
+export * from "./全局丝滑自动播.js";
 export * from "./媒体查看器.js";
 export * from "./图片预处理.js";
 export * from "./预览缓存.js";
