@@ -723,6 +723,10 @@ describe("房间消息窗媒体查看器", () => {
     expect(firstFrameGuard).not.toBeNull();
     expect(firstFrameGuard?.getAttribute("src")).toContain("data:image/svg+xml");
 
+    Object.defineProperty(previewVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
     previewVideo?.dispatchEvent(new Event("loadeddata"));
     await Promise.resolve();
     await pane.updateComplete;
@@ -1996,13 +2000,24 @@ describe("房间消息窗媒体查看器", () => {
     );
     expect(releasedVideo).not.toBeNull();
     expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+      pane.querySelector<HTMLImageElement>(
+        'img.message-video-poster[data-attachment-id="att-video-1"]'
+      )?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
     expect(releasedVideo?.autoplay).toBe(false);
-    expect(releasedVideo?.getAttribute("poster")).toBeNull();
 
     releasedVideo!.dispatchEvent(new Event("loadedmetadata"));
     expect(releasedVideo!.currentTime).toBeCloseTo(24.5, 2);
+    Object.defineProperty(releasedVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    releasedVideo!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(releasedVideo?.getAttribute("poster")).toBeNull();
 
     pane.remove();
   });
@@ -2062,6 +2077,46 @@ describe("房间消息窗媒体查看器", () => {
     expect(ownerPreviewAfterCanonical?.dataset.canonicalPlayer).toBeUndefined();
     expect(ownerPreviewAfterCanonical?.autoplay).toBe(false);
     expect(ownerPreviewAfterCanonical?.currentTime).toBeCloseTo(24.5, 2);
+
+    pane.remove();
+  });
+
+  it("canonical 历史接管缓存不能让未 ready 的当前 DOM 直接可见", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    (
+      pane as unknown as {
+        时间线唯一播放器可见接管就绪源: Map<string, string>;
+      }
+    ).时间线唯一播放器可见接管就绪源.set("att-video-1", playback.src);
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(
+      pane.querySelector<HTMLImageElement>(
+        'img.message-video-poster[data-attachment-id="att-video-1"]'
+      )?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
 
     pane.remove();
   });
@@ -2378,12 +2433,23 @@ describe("房间消息窗媒体查看器", () => {
     );
     expect(preview).not.toBeNull();
     expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+      pane.querySelector<HTMLImageElement>(
+        'img.message-video-poster[data-attachment-id="att-video-1"]'
+      )?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
     expect(preview?.autoplay).toBe(false);
 
     preview!.dispatchEvent(new Event("loadedmetadata"));
     expect(preview!.currentTime).toBeCloseTo(19.75, 2);
+    Object.defineProperty(preview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    preview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
 
     pane.remove();
   });
@@ -3388,6 +3454,10 @@ describe("房间消息窗媒体查看器", () => {
       configurable: true,
       value: new URL(playback.src, window.location.href).href,
     });
+    Object.defineProperty(previewVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
     previewVideo!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
 
@@ -3466,13 +3536,24 @@ describe("房间消息窗媒体查看器", () => {
     expect(restoredVideo).not.toBeNull();
     expect(restoredVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(restoredVideo?.autoplay).toBe(false);
+    expect(
+      pane.querySelector<HTMLImageElement>(
+        'img.message-video-poster[data-attachment-id="att-video-1"]'
+      )?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
+
+    restoredVideo!.dispatchEvent(new Event("loadedmetadata"));
+    expect(restoredVideo!.currentTime).toBeCloseTo(31.25, 2);
+    Object.defineProperty(restoredVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    restoredVideo!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
     expect(restoredVideo?.getAttribute("poster")).toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).toBeNull();
-
-    restoredVideo!.dispatchEvent(new Event("loadedmetadata"));
-    expect(restoredVideo!.currentTime).toBeCloseTo(31.25, 2);
 
     pane.remove();
   });
@@ -4474,6 +4555,17 @@ describe("房间消息窗媒体查看器", () => {
     preview!.dispatchEvent(new Event("loadedmetadata"));
     expect(preview?.currentTime).toBeCloseTo(27.75, 2);
     expect(
+      pane.querySelector<HTMLImageElement>(
+        'img.message-video-poster[data-attachment-id="att-video-1"]'
+      )?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
+    Object.defineProperty(preview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    preview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+    expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).toBeNull();
     expect(
@@ -5069,7 +5161,79 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("高速回滑时，已保存的同源 WebTorrent 播放位置应优先恢复为暂停帧而不是占位", async () => {
+  it("高速换窗时只有 currentTime 但 DOM 未持有当前帧，不能裸露成黑色 preview", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `att-fast-metadata-only-${index + 1}`
+    );
+    pane.items = attachmentIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const targetId = attachmentIds[0]!;
+    const existingPreview = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${targetId}"]:not([data-canonical-player="true"])`
+    );
+    expect(existingPreview).not.toBeNull();
+    existingPreview!.currentTime = 6.25;
+    Object.defineProperty(existingPreview!, "readyState", {
+      configurable: true,
+      value: 1,
+    });
+
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    内部面板.自动播候选可见条目.clear();
+    for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+    pane.requestUpdate();
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const preservedPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    if (preservedPreview) {
+      expect(preservedPreview.getAttribute("poster")).toBe(
+        `http://media.local/poster-${targetId}`
+      );
+    }
+    expect(
+      videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
+    ).toBe(`http://media.local/poster-${targetId}`);
+
+    pane.remove();
+  });
+
+  it("高速回滑时，已保存的同源 WebTorrent 播放位置应先守住 poster 再恢复暂停帧", async () => {
     const pane = 创建媒体消息窗();
     const attachmentIds = Array.from(
       { length: 8 },
@@ -5130,6 +5294,15 @@ describe("房间消息窗媒体查看器", () => {
     );
     restoredPreview?.dispatchEvent(new Event("loadedmetadata"));
     expect(restoredPreview?.currentTime).toBeCloseTo(19.5, 2);
+    expect(
+      videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
+    ).toBe(`http://media.local/poster-${targetId}`);
+    Object.defineProperty(restoredPreview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    restoredPreview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
     expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
@@ -5226,6 +5399,15 @@ describe("房间消息窗媒体查看器", () => {
     expect(restoredPreview?.getAttribute("src")).toBe(
       `/webtorrent/hash-${targetId}/content-${targetId}.mp4`
     );
+    expect(
+      videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
+    ).toBe(`http://media.local/poster-${targetId}`);
+    Object.defineProperty(restoredPreview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    restoredPreview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
     expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
@@ -5330,8 +5512,119 @@ describe("房间消息窗媒体查看器", () => {
     );
     expect(restoredPreview).not.toBeNull();
     expect(restoredPreview?.getAttribute("src")).toBe(new URL(targetSrc, window.location.href).href);
+    expect(
+      videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
+    ).toBe(`http://media.local/poster-${targetId}`);
+    Object.defineProperty(restoredPreview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    restoredPreview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
     expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    pane.remove();
+  });
+
+  it("高速回滑只有源级首帧缓存但当前 DOM 未出帧时，不能裸露黑色 preview", async () => {
+    const pane = 创建媒体消息窗();
+    const targetId = "att-fast-remount-black-guard-1";
+    const otherIds = Array.from(
+      { length: 7 },
+      (_, index) => `att-fast-remount-black-guard-other-${index + 1}`
+    );
+    const allIds = [targetId, ...otherIds];
+    const targetSrc = `/webtorrent/hash-${targetId}/content-${targetId}.mp4`;
+    const targetPoster = `http://media.local/poster-${targetId}`;
+    pane.items = allIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      allIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 创建虚拟项 = (indexes: number[]): 测试虚拟项[] =>
+      indexes.map((index) => ({
+        key: `m-${allIds[index]}`,
+        index,
+        start: index * 240,
+      }));
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    const 读取虚拟项 = vi.spyOn(内部虚拟器, "getVirtualItems");
+
+    const firstPreview = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${targetId}"]:not([data-canonical-player="true"])`
+    );
+    expect(firstPreview).not.toBeNull();
+    Object.defineProperty(firstPreview!, "currentSrc", {
+      configurable: true,
+      value: targetSrc,
+    });
+    firstPreview!.dispatchEvent(new Event("loadeddata"));
+
+    读取虚拟项.mockReturnValue(创建虚拟项([1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "黑底测试虚拟卸载";
+    await pane.updateComplete;
+
+    const 内部面板 = pane as unknown as {
+      自动播候选可见条目: Map<
+        string,
+        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
+      >;
+    };
+    内部面板.自动播候选可见条目.clear();
+    for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
+      内部面板.自动播候选可见条目.set(attachmentId, {
+        attachmentId,
+        visibilityRatio: 1,
+        distanceToViewportCenter: index,
+      });
+    }
+    读取虚拟项.mockReturnValue(创建虚拟项([0, 1, 2, 3, 4, 5, 6, 7]));
+    pane.jumpToLatestLabel = "黑底测试高速回滑";
+    await pane.updateComplete;
+
+    const videoCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${targetId}"]`
+    );
+    const remountedPreview = videoCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    expect(remountedPreview).not.toBeNull();
+    expect(remountedPreview?.readyState).toBe(0);
+    expect(remountedPreview?.getAttribute("poster")).toBe(targetPoster);
+    expect(
+      videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
+    ).toBe(targetPoster);
+    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    Object.defineProperty(remountedPreview!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    remountedPreview!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(remountedPreview?.getAttribute("poster")).toBeNull();
 
     pane.remove();
   });

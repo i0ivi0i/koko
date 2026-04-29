@@ -134,10 +134,10 @@ export class 房间消息窗 extends LitElement {
    */
   private readonly 时间线唯一播放器可见接管就绪源 = new Map<string, string>();
   /**
-   * 只记录“正在进行跨附件 handoff 的那一条 owner”：
-   * 1. 初次拿到 owner 或同附件重新拿回 owner，不需要强制 hidden stage；
-   * 2. 真正会让用户看到抽搐的，是 A 附件退场、B 附件接管时把 canonical player 直接显露到 B 卡片；
-   * 3. 因此 hidden stage 必须只在跨附件 handoff 期间生效，不能把所有 owner 获取都拖进隐藏预热。
+   * 记录“必须先在隐藏宿主里追上 source/time 的 owner”：
+   * 1. 跨附件 handoff 必须走 hidden stage，避免在可见卡片上现场换源/seek；
+   * 2. 同附件高速回滑若历史 reveal 缓存还在但当前 DOM 已不 ready，也要重新隐藏校验；
+   * 3. 普通初次 owner 获取不强制 hidden stage，避免把自动播拖成长时间静止态。
    */
   private 时间线隐藏接管附件Id: string | null = null;
   /**
@@ -547,6 +547,12 @@ export class 房间消息窗 extends LitElement {
       return;
     }
     if (this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc) {
+      /**
+       * 同一个 src 可能对应高速虚拟卸载后重新挂载的一颗新 `<video>`：
+       * 源级缓存已经命中，但当前 DOM 刚刚 `loadeddata`，仍需要重新渲染一次，
+       * 让 poster/guard 按“当前 DOM 已出帧”退场，避免卡在遮挡态。
+       */
+      this.requestUpdate();
       return;
     }
     this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
@@ -561,7 +567,29 @@ export class 房间消息窗 extends LitElement {
     if (!normalizedSrc) {
       return false;
     }
-    return this.时间线唯一播放器可见接管就绪源.get(attachmentId) === normalizedSrc;
+    if (this.时间线唯一播放器可见接管就绪源.get(attachmentId) !== normalizedSrc) {
+      return false;
+    }
+    const canonicalVideo = this.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
+    );
+    if (!canonicalVideo || !canonicalVideo.isConnected || canonicalVideo.seeking) {
+      return false;
+    }
+    const normalizedCurrentSrc = this.归一化时间线视频播放源(
+      this.读取视频当前播放源(canonicalVideo)
+    );
+    if (normalizedCurrentSrc !== normalizedSrc) {
+      return false;
+    }
+    /**
+     * 可见接管缓存只是“这个 src 曾经可揭帘”的历史事实；
+     * 高速虚拟回滑后，当前这颗唯一播放器 DOM 可能已经重新 load 到 readyState=0。
+     * reveal 必须同时看当前 DOM 的 canplay 级证据，否则会把黑色播放器壳直接暴露给用户。
+     */
+    const 最低可见接管就绪状态 =
+      typeof canonicalVideo.HAVE_FUTURE_DATA === "number" ? canonicalVideo.HAVE_FUTURE_DATA : 3;
+    return canonicalVideo.readyState >= 最低可见接管就绪状态;
   }
 
   private 标记时间线唯一播放器可见接管已就绪(
@@ -808,11 +836,9 @@ export class 房间消息窗 extends LitElement {
      * 真实浏览器里，非 owner 的 preview `<video>` 可能已经拿到首帧，
      * 但 `loadeddata/canplay` 还没来得及把缓存写回本轮 render。
      * 这里补看 DOM 现状，避免“明明已经有稳定可见帧，却因为缓存慢一拍而直接显露 canonical host”。
+     * `currentTime > 0` 只能说明 seek 目标已写入，不能证明当前 DOM 已有可展示像素。
      */
-    return (
-      previewVideo.readyState >= 2 ||
-      previewVideo.currentTime > 0
-    );
+    return previewVideo.readyState >= 2;
   }
 
   private 恢复时间线自动播播放位置(
@@ -2041,10 +2067,11 @@ export class 房间消息窗 extends LitElement {
                 attachment.attachmentId,
                 previewVideoSrc
               );
-            const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
+            const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
               attachment.attachmentId,
               previewVideoSrc
             );
+            const hasCurrentDomPreviewFrame = hasExistingSameSourcePreviewFrame;
             /**
              * 续播暂停帧是时间线自动播的视觉连续性底板，不是“等待用户点击播放”的静态封面。
              * 如果这里继续叠播放图标，owner 交接第一拍会先露一个中心图标再切成播放画面，
@@ -2054,56 +2081,61 @@ export class 房间消息窗 extends LitElement {
               !shouldRenderInlineVideo &&
               !restorableTimelineFrame &&
               !hasExistingSameSourcePreviewFrame &&
-              !isFirstFrameReady;
+              !hasKnownReadyPreviewFrame;
             const shouldRenderPreviewVideo =
               Boolean(previewVideoSrc) &&
               this.读取时间线预览视频是否允许渲染(videoBudget, {
                 hasExistingSameSourcePreviewFrame,
-                hasKnownReadyPreviewFrame: isFirstFrameReady,
+                hasKnownReadyPreviewFrame,
                 previewVideoSrc,
                 shouldReuseSavedTimelineFrameAsPreview,
               }) &&
               (可渲染真实预览视频附件.has(attachment.attachmentId) ||
                 hasExistingSameSourcePreviewFrame ||
-                isFirstFrameReady);
+                hasKnownReadyPreviewFrame);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
-              !restorableTimelineFrame &&
-              !hasExistingSameSourcePreviewFrame &&
-              !isFirstFrameReady &&
+              !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             /**
-             * 时间线 `<video>` 一旦已经拿到首帧，就不能继续把 `poster` 当正式画面：
-             * 1. 让非 owner 长期挂着 poster，等 owner 接管时再移除，会在 Chrome 里形成一次可见的“海报 -> 真视频帧”跳变；
-             * 2. 真正丝滑的体验应该是：首帧 ready 之后，非 owner 也已经在展示真实视频像素，只是暂停着；
-             * 3. `poster` 仍然保留为首帧未就绪前的临时遮挡，不改写无源/未 ready 时的兜底语义。
+             * 源级首帧缓存只说明“这个 WebTorrent src 曾经成功出帧”，
+             * 不说明“这颗刚重新挂载的 DOM video 当前已经有像素”：
+             * 1. 有当前 DOM 首帧时才揭开 poster，避免 poster -> 视频帧跳变；
+             * 2. 只有源级缓存但当前 DOM 还没 `loadeddata` 时，poster/guard 必须继续顶住；
+             * 3. 否则高速虚拟回滑会把 readyState=0 的 video 裸露成黑块。
              */
             const previewVideoPoster =
-              !restorableTimelineFrame &&
-              !isFirstFrameReady &&
+              !hasCurrentDomPreviewFrame &&
               (hasSourcePoster || hasRuntimePreview)
                 ? previewPosterSrc
                 : undefined;
-            const shouldGateVideoUntilFirstFrame =
-              shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
-            const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
+            const shouldShowFirstFrameGuard =
+              shouldRenderPreviewVideo &&
+              !hasCurrentDomPreviewFrame &&
+              !hasStablePreviewPosterSurface;
             const hasReadyPreviewSurface =
-              Boolean(restorableTimelineFrame) ||
               hasStablePreviewPosterSurface ||
-              isFirstFrameReady ||
-              hasExistingSameSourcePreviewFrame;
+              hasCurrentDomPreviewFrame;
+            const normalizedOwnerCanonicalVideoSrc =
+              this.归一化时间线视频播放源(ownerCanonicalVideoSrc);
+            const hasHistoricalCanonicalReveal =
+              Boolean(normalizedOwnerCanonicalVideoSrc) &&
+              this.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
+                normalizedOwnerCanonicalVideoSrc;
             /**
              * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
-             * 1. 有保存续播点、首帧缓存，或 DOM 上那张 preview `<video>` 自己已经 ready，都算“可继续显示”；
-             * 2. 这时必须先保留现有预览帧，让 canonical player 在隐藏宿主里完成 source/time 对齐；
-             * 3. 如果当前卡片其实还没有任何可显示帧，再强行 hidden stage 只会把 autoplay 体验拖成长时间静止态；
-             * 4. 因此真正的裁决不是“所有 owner 都 hidden stage”，而是“已有稳定可见帧时才 hidden stage”。
+             * 1. 明确跨附件 handoff 时，先保留现有预览帧，让 canonical player 在隐藏宿主完成 source/time 对齐；
+             * 2. 历史 reveal 缓存存在但当前 DOM 不 ready 时，也要回到隐藏宿主重新校验；
+             * 3. 普通初次 owner 获取不走这条路，避免把自动播体验拖成长时间静止态；
+             * 4. 没有稳定 poster/preview 底板时也不启用 hidden stage，因为没有可继续顶住的像素。
              */
             const shouldUseHiddenStageCover =
               shouldRenderInlineVideo &&
-              this.时间线隐藏接管附件Id === attachment.attachmentId &&
-              hasReadyPreviewSurface;
+              hasReadyPreviewSurface &&
+              !shouldRevealCanonicalHost &&
+              (this.时间线隐藏接管附件Id === attachment.attachmentId ||
+                hasHistoricalCanonicalReveal);
             const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
             const shouldRenderVisibleCanonicalHost =
               shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
