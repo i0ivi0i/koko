@@ -1806,12 +1806,10 @@ export class 房间消息窗 extends LitElement {
       return false;
     }
     /**
-     * 统一预算快照有时会比消息窗本地续播帧慢一拍：
-     * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二正式播放链；
-     * 2. 高速滚动时最多只允许一颗 preview 桥保活，避免旧的 6 路预览视频抢解码和追 range；
-     * 3. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
+     * 续播/首帧缓存只能桥接仍归 WebTorrent 主链拥有的正式字节：
+     * `none` 代表当前预算只允许静态表达，不能因为历史 src 曾经出帧就重新挂真实 `<video>`。
      */
-    return budget.formalByteSource !== "non_webtorrent_bypass";
+    return budget.formalByteSource === "webtorrent_official_stream";
   }
 
   private 读取保存续帧是否允许承接时间线预览底板(input: {

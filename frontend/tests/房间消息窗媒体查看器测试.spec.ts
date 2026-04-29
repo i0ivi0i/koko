@@ -4681,7 +4681,7 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
-  it("统一预算暂时降成冷态时，也不能删除同源 WebTorrent 续播暂停帧底板", async () => {
+  it("统一预算降成冷态且无正式字节时，历史保存位置不能复活真实 preview video", async () => {
     const pane = 创建媒体消息窗();
     const swarmSrc =
       "/webtorrent/2fac1903a210aa9d28426a0d6dad1b8acd431336/content-video.mp4";
@@ -4746,30 +4746,17 @@ describe("房间消息窗媒体查看器", () => {
     const preview = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
-    expect(preview).not.toBeNull();
-    expect(preview?.getAttribute("src")).toBe(swarmSrc);
-    preview!.dispatchEvent(new Event("loadedmetadata"));
-    expect(preview?.currentTime).toBeCloseTo(27.75, 2);
+    expect(preview).toBeNull();
     expect(
-      pane.querySelector<HTMLImageElement>(
-        'img.message-video-poster[data-attachment-id="att-video-1"]'
-      )
-    ).toBeNull();
-    expect(preview?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
-    Object.defineProperty(preview!, "readyState", {
-      configurable: true,
-      value: 4,
-    });
-    preview!.dispatchEvent(new Event("loadeddata"));
-    await pane.updateComplete;
-    expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+      pane
+        .querySelector<HTMLImageElement>('img.message-video-poster[data-attachment-id="att-video-1"]')
+        ?.getAttribute("src")
+    ).toBe("http://media.local/poster-video-1");
     expect(
       pane.querySelector(
         '.message-video-card[data-attachment-id="att-video-1"] .message-video-play-indicator'
       )
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });
@@ -5613,7 +5600,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("高速回滑遇到编排冷快照时，首帧缓存仍应接住同源 WebTorrent preview", async () => {
+  it("高速回滑遇到编排冷快照时，源级首帧缓存不能重挂真实 preview video", async () => {
     const pane = 创建媒体消息窗();
     const targetId = "att-fast-cold-budget-1";
     const otherIds = Array.from(
@@ -5709,19 +5696,12 @@ describe("房间消息窗媒体查看器", () => {
     const restoredPreview = videoCard?.querySelector<HTMLVideoElement>(
       'video.message-video-preview:not([data-canonical-player="true"])'
     );
-    expect(restoredPreview).not.toBeNull();
-    expect(restoredPreview?.getAttribute("src")).toBe(new URL(targetSrc, window.location.href).href);
+    expect(videoCard?.dataset.budgetTier).toBe("cold_expression");
+    expect(videoCard?.dataset.formalByteSource).toBe("none");
+    expect(restoredPreview).toBeNull();
     expect(
       videoCard?.querySelector<HTMLImageElement>(".message-video-poster")?.getAttribute("src")
     ).toBe(`http://media.local/poster-${targetId}`);
-    Object.defineProperty(restoredPreview!, "readyState", {
-      configurable: true,
-      value: 4,
-    });
-    restoredPreview!.dispatchEvent(new Event("loadeddata"));
-    await pane.updateComplete;
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
-    expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
   });
