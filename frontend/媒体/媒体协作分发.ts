@@ -1,6 +1,8 @@
 import type { 媒体协作分发定位片段, 媒体定位结果, 媒体种类 } from "../契约.js";
 import { 获取默认浏览器应用平台 } from "../平台/index.js";
 import type { 协作分发Torrent缓存快照 } from "./媒体协作分发缓存.js";
+import IndexedDBChunkStore from "idb-chunk-store";
+import { Buffer } from "buffer";
 
 export interface WebTorrent文件 {
   readonly streamURL: string;
@@ -59,6 +61,8 @@ export interface WebTorrent浏览器客户端 {
       private?: boolean;
       maxWebConns?: number;
       destroyStoreOnDestroy?: boolean;
+      store?: WebTorrentChunkStore构造器;
+      storeCacheSlots?: number;
       noPeersIntervalTime?: number;
       getAnnounceOpts?: () => Record<string, string | undefined>;
     },
@@ -72,6 +76,15 @@ export interface WebTorrent浏览器客户端 {
 }
 
 type WebTorrent浏览器构造器 = new () => WebTorrent浏览器客户端;
+
+type WebTorrentChunkStore构造器 = new (
+  chunkLength: number,
+  opts?: Record<string, unknown>
+) => unknown;
+
+type 可挂Buffer的全局对象 = typeof globalThis & {
+  Buffer?: typeof Buffer;
+};
 
 const 协作分发WebRtc关闭降噪安装标记 = Symbol.for(
   "koko.media.webrtc.expected-close-dampening.installed"
@@ -671,6 +684,46 @@ const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位�
   return Math.floor(retryAfter);
 };
 
+const 规范化协作分发Store名称 = (torrentInfoHash: string): string =>
+  `koko-webtorrent-${torrentInfoHash.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
+const 确保IndexedDBChunkStoreBuffer兼容 = (): void => {
+  const target = globalThis as 可挂Buffer的全局对象;
+  target.Buffer ??= Buffer;
+};
+
+const 创建协作分发IndexedDBChunkStore = (
+  torrentInfoHash: string
+): WebTorrentChunkStore构造器 => {
+  const storeName = 规范化协作分发Store名称(torrentInfoHash);
+  return class 协作分发IndexedDBChunkStore extends IndexedDBChunkStore {
+    constructor(chunkLength: number, opts: Record<string, unknown> = {}) {
+      // IndexedDB store 仍由 WebTorrent 持有：同一 infohash 复用 piece，并继续按 swarm 上传给后来者。
+      super(chunkLength, {
+        ...opts,
+        name: storeName,
+      });
+    }
+  };
+};
+
+const 读取协作分发持久ChunkStore选项 = (
+  distribution: 媒体协作分发定位片段
+): { store?: WebTorrentChunkStore构造器 } => {
+  const store能力 =
+    获取默认浏览器应用平台().storage.读取协作分发字节Store能力?.() ?? null;
+  if (
+    store能力?.webTorrent默认OPFSStore可用 === true ||
+    store能力?.indexedDBStore可用 !== true
+  ) {
+    return {};
+  }
+  确保IndexedDBChunkStoreBuffer兼容();
+  return {
+    store: 创建协作分发IndexedDBChunkStore(distribution.torrent_info_hash!),
+  };
+};
+
 const 调高协作分发监听器预算 = (
   target: 可调监听器预算Emitter | null | undefined
 ): void => {
@@ -905,6 +958,7 @@ export async function 接入协作分发种子(
         private: true,
         maxWebConns: 4,
         destroyStoreOnDestroy: false,
+        ...读取协作分发持久ChunkStore选项(distribution),
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {
           if (!joinTicketRef.value) {

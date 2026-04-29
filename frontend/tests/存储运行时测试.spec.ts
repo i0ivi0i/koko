@@ -122,6 +122,27 @@ describe("存储运行时", () => {
     });
   });
 
+  it("平台存储运行时统一投影 WebTorrent 字节 store 能力，媒体层不直接摸浏览器全局", () => {
+    const runtime = 创建存储运行时({
+      navigator: {
+        storage: {
+          getDirectory: vi.fn(),
+        },
+      },
+      fileSystemFileHandleCtor: {
+        prototype: {
+          createWritable: vi.fn(),
+        },
+      },
+      indexedDB: {},
+    });
+
+    expect(runtime.读取协作分发字节Store能力?.()).toEqual({
+      webTorrent默认OPFSStore可用: true,
+      indexedDBStore可用: true,
+    });
+  });
+
   it("请求持久化存储时会先读取 persisted/estimate，并把结果作为 best-effort 平台事件发布", async () => {
     const storage = createFakeStorage();
     const persisted = vi.fn().mockResolvedValue(true);

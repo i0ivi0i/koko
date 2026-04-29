@@ -200,6 +200,37 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("不支持 OPFS 的浏览器必须显式使用 IndexedDB chunk store，避免刷新后退回内存缓存", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    vi.stubGlobal("navigator", {
+      storage: {
+        persist: vi.fn(async () => true),
+      },
+    });
+    vi.stubGlobal("FileSystemFileHandle", undefined);
+    vi.stubGlobal("indexedDB", {});
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-idb-cache-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-idb-cache-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-idb-cache-1"),
+      consumerId: "inline_autoplay:att-idb-cache-1",
+    });
+
+    const options = add.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(options?.destroyStoreOnDestroy).toBe(false);
+    expect(options?.store).toEqual(expect.any(Function));
+  });
+
   it("协作分发 session 会按唯一 owner 流转并在退出重播放后降为轻帮助", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(

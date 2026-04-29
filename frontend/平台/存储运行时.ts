@@ -24,12 +24,15 @@ type 可持久化导航器 = {
     persist?(): Promise<unknown>;
     persisted?(): Promise<unknown>;
     estimate?(): Promise<unknown>;
+    getDirectory?: unknown;
   };
 };
 
 export interface 存储运行时依赖 {
   storage?: Partial<Storage>;
   navigator?: 可持久化导航器;
+  indexedDB?: unknown;
+  fileSystemFileHandleCtor?: { prototype?: { createWritable?: unknown } };
 }
 
 export type 存储运行时事件 =
@@ -42,6 +45,10 @@ export interface 存储运行时 {
   媒体定位仓库?(): 媒体定位缓存仓库;
   视频预览仓库?(): 预览缓存端口;
   协作分发缓存仓库?(): 协作分发Torrent缓存仓库;
+  读取协作分发字节Store能力?(): {
+    webTorrent默认OPFSStore可用: boolean;
+    indexedDBStore可用: boolean;
+  };
   订阅事件?(listener: (event: 存储运行时事件) => void): () => void;
   请求持久化存储?(): Promise<boolean>;
   报告加速层丢失?(): void;
@@ -62,6 +69,15 @@ export function 创建存储运行时(
   const 读取当前导航器 = (): 可持久化导航器 | undefined =>
     deps.navigator ??
     (typeof navigator !== "undefined" ? (navigator as 可持久化导航器) : undefined);
+  const 读取IndexedDB = (): unknown =>
+    deps.indexedDB ?? (typeof indexedDB !== "undefined" ? indexedDB : undefined);
+  const 读取FileSystemFileHandleCtor = ():
+    | { prototype?: { createWritable?: unknown } }
+    | undefined =>
+    deps.fileSystemFileHandleCtor ??
+    (globalThis as typeof globalThis & {
+      FileSystemFileHandle?: { prototype?: { createWritable?: unknown } };
+    }).FileSystemFileHandle;
   const 读取当前存储源 = (): Partial<Storage> | undefined => {
     if (deps.storage) {
       return deps.storage;
@@ -159,6 +175,18 @@ export function 创建存储运行时(
       return 创建浏览器协作分发Torrent缓存仓库(
         读取当前存储源() as Pick<Storage, "getItem" | "setItem"> | undefined
       );
+    },
+
+    读取协作分发字节Store能力() {
+      const storageManager = 读取当前导航器()?.storage;
+      const fileHandleCtor = 读取FileSystemFileHandleCtor();
+      return {
+        // WebTorrent 官方浏览器默认会在 OPFS/FSA 可用时使用 fsa-chunk-store；这里仅把能力事实投影给媒体层。
+        webTorrent默认OPFSStore可用:
+          typeof storageManager?.getDirectory === "function" &&
+          typeof fileHandleCtor?.prototype?.createWritable === "function",
+        indexedDBStore可用: 读取IndexedDB() !== undefined,
+      };
     },
 
     订阅事件(listener: (event: 存储运行时事件) => void): () => void {

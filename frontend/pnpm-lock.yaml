@@ -20,9 +20,15 @@ importers:
       '@uppy/tus':
         specifier: ^5.1.1
         version: 5.1.1(@uppy/core@5.2.0)
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       debug:
         specifier: ^4.4.3
         version: 4.4.3
+      events:
+        specifier: ^3.3.0
+        version: 3.3.0
       hash-wasm:
         specifier: 4.12.0
         version: 4.12.0
@@ -32,6 +38,9 @@ importers:
       idb:
         specifier: ^8.0.3
         version: 8.0.3
+      idb-chunk-store:
+        specifier: 1.0.1
+        version: 1.0.1
       lit:
         specifier: ^3.3.2
         version: 3.3.2
@@ -1511,6 +1520,9 @@ packages:
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
 
+  buffer@6.0.3:
+    resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
+
   bufferutil@4.1.0:
     resolution: {integrity: sha512-ZMANVnAixE6AWWnPzlW2KpUrxhm9woycYvPOo67jWHyFowASTEd9s+QN1EIMsSDtwhIxN4sWE1jotpuDUIgyIw==}
     engines: {node: '>=6.14.2'}
@@ -1754,6 +1766,10 @@ packages:
   events-universal@1.0.1:
     resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
 
+  events@3.3.0:
+    resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
+    engines: {node: '>=0.8.x'}
+
   execa@7.2.0:
     resolution: {integrity: sha512-UduyVP7TLB5IcAQl+OzLyLcS/l32W/GLg+AhHJ+ow40FOk2U3SAllPwR44v4vmdFwIWqpdwxxpQbF1n5ta9seA==}
     engines: {node: ^14.18.0 || ^16.14.0 || >=18.0.0}
@@ -1942,6 +1958,12 @@ packages:
   human-signals@4.3.1:
     resolution: {integrity: sha512-nZXjEF2nbo7lIw3mgYjItAfgQXog3OjJogSbKa2CQIIvSGWcKgeJnQlNXip6NglNzYH45nSRiEVimMvYL8DDqQ==}
     engines: {node: '>=14.18.0'}
+
+  idb-chunk-store@1.0.1:
+    resolution: {integrity: sha512-1OtzeUFLfvK/PSMPs6DJumwfgQgGDiYW2owxdAJpra44/EaXsGcrHzyvdTCTulzunS/xf22woZOIqyk2PfWWfA==}
+
+  idb@6.1.5:
+    resolution: {integrity: sha512-IJtugpKkiVXQn5Y+LteyBCNk1N8xpGV3wWZk9EVtZWH8DYkjBn0bX1XnGP9RkyZF0sAcywa6unHqSWKe7q4LGw==}
 
   idb@7.1.1:
     resolution: {integrity: sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==}
@@ -4655,6 +4677,11 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
+  buffer@6.0.3:
+    dependencies:
+      base64-js: 1.5.1
+      ieee754: 1.2.1
+
   bufferutil@4.1.0:
     dependencies:
       node-gyp-build: 4.8.4
@@ -5020,6 +5047,8 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
 
+  events@3.3.0: {}
+
   execa@7.2.0:
     dependencies:
       cross-spawn: 7.0.6
@@ -5227,6 +5256,13 @@ snapshots:
   http-parser-js@0.4.13: {}
 
   human-signals@4.3.1: {}
+
+  idb-chunk-store@1.0.1:
+    dependencies:
+      idb: 6.1.5
+      queue-microtask: 1.2.3
+
+  idb@6.1.5: {}
 
   idb@7.1.1: {}
 
