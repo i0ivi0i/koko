@@ -74,7 +74,7 @@ const 默认图片清单占位图 =
 
 const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
 const 自动播时间戳常规上报最小变化秒 = 0.75;
-const 近视口真实预览视频预算上限 = 6;
+const 近视口真实预览视频预算上限 = 2;
 const 近视口活媒体会话预算上限 = 24;
 const 近视口活视频会话预算上限 = 12;
 const 消息虚拟列表overscan消息数 = 4;
@@ -335,6 +335,7 @@ export class 房间消息窗 extends LitElement {
       this.同步时间线视频首帧就绪缓存();
     }
     this.同步时间线自动播播放状态(changedProperties);
+    this.揭开已就绪的时间线隐藏接管宿主();
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
       return;
@@ -759,6 +760,34 @@ export class 房间消息窗 extends LitElement {
     });
   }
 
+  private 揭开已就绪的时间线隐藏接管宿主(): void {
+    const ownerAttachmentId = this.inlineAutoplayOwnerAttachmentId;
+    if (!ownerAttachmentId) {
+      return;
+    }
+    const stageHost = this.querySelector<HTMLElement>(
+      `.message-video-canonical-stage-host[data-attachment-id="${ownerAttachmentId}"]`
+    );
+    const src = stageHost?.dataset.videoSrc?.trim() ?? "";
+    if (
+      !stageHost ||
+      !src ||
+      !this.读取时间线唯一播放器是否可见接管就绪(ownerAttachmentId, src)
+    ) {
+      return;
+    }
+    /**
+     * hidden-stage ready 事实可能发生在上一轮 DOM 提交之后：
+     * - canonical video 已经 canplay/seeked，reveal gate 也已经写入；
+     * - 但没有新的 Lit 更新时，可见 preview 会和隐藏 canonical 长时间并存；
+     * - 这里用 owner 层事实触发一次揭帘更新，避免靠滚动/下一条消息的偶然更新救场。
+     */
+    this.requestUpdate();
+    void this.updateComplete.then(() => {
+      this.同步时间线唯一播放器宿主();
+    });
+  }
+
   /**
    * 自动播候选一进入预热窗口，就要用现有这颗 `<video>` 把首帧热出来：
    * 1. 目标不是提前播放，而是让 Chrome 在 owner 接管前先拿到真实视频帧；
@@ -894,14 +923,12 @@ export class 房间消息窗 extends LitElement {
     const canonicalVideo = this.querySelector<HTMLVideoElement>(
       `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
     );
-    if (!previewVideo || !canonicalVideo) {
+    if (!canonicalVideo) {
       return;
     }
     const canonicalSrc = this.读取视频当前播放源(canonicalVideo);
-    const previewSrc = this.读取视频当前播放源(previewVideo);
     const normalizedCanonicalSrc = this.归一化时间线视频播放源(canonicalSrc);
-    const normalizedPreviewSrc = this.归一化时间线视频播放源(previewSrc);
-    if (!normalizedCanonicalSrc || normalizedCanonicalSrc !== normalizedPreviewSrc) {
+    if (!normalizedCanonicalSrc) {
       return;
     }
     const localBridge = this.自动播位置上报记录.get(attachmentId);
@@ -915,15 +942,23 @@ export class 房间消息窗 extends LitElement {
       ? (localBridge?.currentTime ?? canonicalVideo.currentTime)
       : canonicalVideo.currentTime;
     /**
-     * 旧 owner 退场前先把底板 preview 刷到当前 canonical 的最新帧：
-     * 1. 这样 DOM 一旦把覆盖层拿走，露出来的就是同一张已经对齐的预览帧；
+     * 旧 owner 退场前只认 canonical player 这一颗真实视频：
+     * 1. 先从 canonical 捕获暂停帧，退场后用只读图片承接像素；
      * 2. 同时强制刷新一把本地位置桥，兜住 runtime snapshot 慢一拍的窗口；
-     * 3. 这不是第二条播放链，仍然只有同一 attachment 的暂停底板在承接像素。
+     * 3. 如果旧版本 DOM 里还残留 preview video，只允许顺手对齐它，不能再依赖它做第二播放表面。
      */
     this.标记时间线视频首帧已就绪(attachmentId, canonicalSrc);
     this.捕获时间线自动播冻结帧(attachmentId, canonicalVideo);
     if (!hasNewerLocalBridge) {
       this.广播自动播播放位置(attachmentId, canonicalVideo, true, true);
+    }
+    if (!previewVideo) {
+      return;
+    }
+    const previewSrc = this.读取视频当前播放源(previewVideo);
+    const normalizedPreviewSrc = this.归一化时间线视频播放源(previewSrc);
+    if (normalizedCanonicalSrc !== normalizedPreviewSrc) {
+      return;
     }
     if (Math.abs(previewVideo.currentTime - targetCurrentTime) < 0.25) {
       return;
@@ -1772,12 +1807,9 @@ export class 房间消息窗 extends LitElement {
     }
     /**
      * 统一预算快照有时会比消息窗本地续播帧慢一拍：
-     * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二播放链；
-     * 2. 高速滚动时，已经出过首帧的同源 preview 也允许多活一拍，兜住 IO/虚拟窗口预算抖动；
-     * 3. 如果那颗 DOM 已被虚拟列表卸载，首帧就绪缓存仍可证明同源像素已经真实出过帧；
-     * 4. 冻结帧只来自刚才真实播放的同源 video，是高速回滑时顶住像素的 UI 表面；
-     * 5. 这些桥只负责避免 DOM 退回 poster/play 占位，不拥有新的播放真相；
-     * 6. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
+     * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二正式播放链；
+     * 2. 高速滚动时最多只允许一颗 preview 桥保活，避免旧的 6 路预览视频抢解码和追 range；
+     * 3. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
      */
     return budget.formalByteSource !== "non_webtorrent_bypass";
   }
@@ -2196,6 +2228,8 @@ export class 房间消息窗 extends LitElement {
               attachment.attachmentId,
               previewVideoSrc
             );
+            const isRecentlyReleasedOwnerWithPosition =
+              attachment.attachmentId === this.最近退场Owner附件Id;
             const hasExistingSameSourcePreviewFrame =
               this.读取时间线现有预览视频是否可继续显示(
                 attachment.attachmentId,
@@ -2274,11 +2308,14 @@ export class 房间消息窗 extends LitElement {
              */
             const shouldShowTimelinePlayIndicator =
               !shouldRenderInlineVideo &&
+              !isRecentlyReleasedOwnerWithPosition &&
+              !shouldReuseSavedTimelineFrameAsPreview &&
+              !hasSameSourceSavedTimelineFrame &&
               !restorableTimelineFrame &&
               !hasExistingSameSourcePreviewFrame &&
               !hasFrozenTimelineFrame &&
               !hasKnownReadyPreviewFrame;
-            const shouldRenderPreviewVideo =
+            const shouldRenderPreviewVideoByBudget =
               Boolean(previewVideoSrc) &&
               this.读取时间线预览视频是否允许渲染(videoBudget, {
                 hasExistingSameSourcePreviewFrame,
@@ -2295,6 +2332,9 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
               !shouldSuppressPosterForContinuity &&
+              !isRecentlyReleasedOwnerWithPosition &&
+              !shouldReuseSavedTimelineFrameAsPreview &&
+              !hasSameSourceSavedTimelineFrame &&
               !hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
@@ -2312,7 +2352,7 @@ export class 房间消息窗 extends LitElement {
                 ? previewPosterSrc
                 : undefined;
             const shouldShowFirstFrameGuard =
-              shouldRenderPreviewVideo &&
+              shouldRenderPreviewVideoByBudget &&
               !hasCurrentDomPreviewFrame &&
               !hasFrozenTimelineFrame &&
               !hasStablePreviewPosterSurface;
@@ -2336,6 +2376,10 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
             const shouldRenderVisibleCanonicalHost =
               shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
+            const shouldRenderPreviewVideo =
+              shouldRenderPreviewVideoByBudget &&
+              !shouldRenderVisibleCanonicalHost &&
+              attachment.attachmentId !== this.最近退场Owner附件Id;
             const shouldRenderFrozenTimelineFrame =
               hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&

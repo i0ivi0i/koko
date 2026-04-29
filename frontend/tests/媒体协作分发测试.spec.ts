@@ -606,6 +606,49 @@ describe("媒体协作分发", () => {
     ]);
   });
 
+  it("接入协作分发种子时会优先交给项目可控的 IndexedDB chunk store，避免看过的 WebTorrent 字节在刷新后漂移", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    vi.stubGlobal("indexedDB", {});
+    vi.stubGlobal("navigator", {
+      storage: {
+        getDirectory: vi.fn(),
+      },
+    });
+    vi.stubGlobal("FileSystemFileHandle", {
+      prototype: {
+        createWritable: vi.fn(),
+      },
+    });
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-persistent-store"
+    );
+    const addOptionsList: Array<Parameters<WebTorrent浏览器客户端["add"]>[1]> = [];
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      addOptionsList.push(options);
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-persistent-store");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+
+    await 接入协作分发种子(
+      {
+        client: new ctor(),
+        streamServer: { close: vi.fn() },
+      },
+      locator.distribution
+    );
+
+    const addOptions = addOptionsList[0];
+    expect(addOptions?.store).toBeTypeOf("function");
+    expect(addOptions?.destroyStoreOnDestroy).toBe(false);
+  });
+
   it("接入 WebTorrent 种子时会同时调高 torrent 与共享 tracker socket 监听器预算，避免高并发 swarm 冷启动被误报成泄漏", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(

@@ -12,6 +12,7 @@ import {
   创建媒体发布器,
   构造媒体Tus传输选项,
   大视频高吞吐阈值字节数,
+  媒体单条消息附件上限,
   媒体Tus单请求体分块字节数,
   媒体Tus文件并发上限,
   媒体Tus重试延迟毫秒数组,
@@ -349,6 +350,7 @@ describe("媒体发布器", () => {
 
   it("默认 Tus 参数保持显式并发与重试策略", () => {
     expect(媒体Tus文件并发上限).toBe(8);
+    expect(媒体单条消息附件上限).toBe(9);
     expect(大视频高吞吐阈值字节数).toBe(32 * 1024 * 1024);
     expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
   });
@@ -495,6 +497,54 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([firstFile, secondFile]);
 
     expect(场景.yieldToMainThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("统一媒体入口会在进入上传主链前按单条消息附件上限截断超量选择", async () => {
+    const 场景 = 创建场景();
+    const files = Array.from(
+      { length: 12 },
+      (_, index) =>
+        new File([new Uint8Array([index + 1])], `batch-${index + 1}.mp4`, {
+          type: "video/mp4",
+        })
+    );
+
+    await 场景.发布器.处理选择媒体文件(files);
+
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(9);
+    expect(场景.默认上传器.addFileCalls).toHaveLength(9);
+    expect(场景.drafts.readDrafts()).toHaveLength(9);
+  });
+
+  it("统一媒体入口会把已有草稿计入单条消息附件上限，避免重复选择挤爆发送区", async () => {
+    const 场景 = 创建场景();
+    for (let index = 0; index < 8; index += 1) {
+      场景.drafts.writeDraft({
+        localId: `existing-${index + 1}`,
+        kind: "video",
+        attachmentId: `existing-${index + 1}`,
+        previewUrl: "",
+        width: 1280,
+        height: 720,
+        status: "ready",
+        fileName: `existing-${index + 1}.mp4`,
+        errorCode: "",
+        sourceFile: null,
+      });
+    }
+    const files = Array.from(
+      { length: 3 },
+      (_, index) =>
+        new File([new Uint8Array([index + 1])], `extra-${index + 1}.jpg`, {
+          type: "image/jpeg",
+        })
+    );
+
+    await 场景.发布器.处理选择媒体文件(files);
+
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(1);
+    expect(场景.默认上传器.addFileCalls).toHaveLength(1);
+    expect(场景.drafts.readDrafts()).toHaveLength(9);
   });
 
   it("统一媒体入口遇到不支持文件时不会误进 prepare/upload 主链", async () => {

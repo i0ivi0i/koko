@@ -805,6 +805,8 @@ export class 聊天壳 extends LitElement {
     .composer-bar {
       display: grid;
       gap: 6px;
+      max-height: min(42vh, 360px);
+      overflow: hidden;
       padding: 4px 8px;
       border: 1px solid var(--line-soft);
       border-radius: 20px;
@@ -819,6 +821,10 @@ export class 聊天壳 extends LitElement {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
       gap: 10px;
+      max-height: min(28vh, 220px);
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .composer-draft {

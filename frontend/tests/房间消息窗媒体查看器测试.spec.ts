@@ -1402,11 +1402,8 @@ describe("房间消息窗媒体查看器", () => {
     const releasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(releasedVideo).not.toBe(ownerVideo);
-    expect(releasedVideo?.dataset.canonicalPlayer).toBeUndefined();
-    expect(releasedVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
-    expect(releasedVideo?.autoplay).toBe(false);
-    expect(pane.querySelector(".message-video-play-indicator")).toBeNull();
+    expect(releasedVideo).toBeNull();
+    expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
 
     pane.remove();
   });
@@ -2103,30 +2100,18 @@ describe("房间消息窗媒体查看器", () => {
     const releasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(releasedVideo).not.toBeNull();
+    expect(releasedVideo).toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
-    expect(releasedVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
-    expect(releasedVideo?.autoplay).toBe(false);
-
-    releasedVideo!.dispatchEvent(new Event("loadedmetadata"));
-    expect(releasedVideo!.currentTime).toBeCloseTo(24.5, 2);
-    Object.defineProperty(releasedVideo!, "readyState", {
-      configurable: true,
-      value: 4,
-    });
-    releasedVideo!.dispatchEvent(new Event("loadeddata"));
-    await pane.updateComplete;
+    ).not.toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
-    expect(releasedVideo?.getAttribute("poster")).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });
 
-  it("视频已经成为自动播 owner 且 canonical 就绪后，卡片仍保留同一张暂停 preview 底板", async () => {
+  it("视频已经成为自动播 owner 后，卡片只保留 canonical player 这一颗真实视频", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
       mode: "swarm",
@@ -2159,10 +2144,7 @@ describe("房间消息窗媒体查看器", () => {
     const ownerPreviewBeforeCanonical = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
-    expect(ownerPreviewBeforeCanonical).not.toBeNull();
-    ownerPreviewBeforeCanonical!.dispatchEvent(new Event("loadedmetadata"));
-    expect(ownerPreviewBeforeCanonical?.autoplay).toBe(false);
-    expect(ownerPreviewBeforeCanonical?.currentTime).toBeCloseTo(24.5, 2);
+    expect(ownerPreviewBeforeCanonical).toBeNull();
 
     const canonicalVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
     const ownerPreviewAfterCanonical = pane.querySelector<HTMLVideoElement>(
@@ -2170,17 +2152,14 @@ describe("房间消息窗媒体查看器", () => {
     );
 
     /**
-     * 真实房间里旧 owner 退场的闪烁，根因就是 canonical 就绪后把底板 preview 整个删掉了。
-     * 这里必须先锁死：owner 期间 preview 底板也要继续活着，后续退场时才能直接露出来。
+     * 真实房间里的卡顿来自 canonical 与 preview 双 `<video>` 同时存在。
+     * owner 期间只允许唯一播放器这一颗真实视频，退场连续性改由 canonical 捕获的冻结帧承接。
      */
     expect(canonicalVideo?.dataset.canonicalPlayer).toBe("true");
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
-    expect(ownerPreviewAfterCanonical).toBe(ownerPreviewBeforeCanonical);
-    expect(ownerPreviewAfterCanonical?.dataset.canonicalPlayer).toBeUndefined();
-    expect(ownerPreviewAfterCanonical?.autoplay).toBe(false);
-    expect(ownerPreviewAfterCanonical?.currentTime).toBeCloseTo(24.5, 2);
+    expect(ownerPreviewAfterCanonical).toBeNull();
 
     pane.remove();
   });
@@ -2227,7 +2206,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("双视频 owner 交接时，旧 owner 退场后会直接复用原底板 preview", async () => {
+  it("双视频 owner 交接时，旧 owner 退场后不会留下第二颗真实 preview video", async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {
       mode: "swarm",
@@ -2307,8 +2286,7 @@ describe("房间消息窗媒体查看器", () => {
     const oldOwnerPreview = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
-    expect(oldOwnerPreview).not.toBeNull();
-    oldOwnerPreview!.dispatchEvent(new Event("loadedmetadata"));
+    expect(oldOwnerPreview).toBeNull();
     await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
@@ -2323,13 +2301,11 @@ describe("房间消息窗媒体查看器", () => {
 
     /**
      * 这条回归直接锁真实 root cause：
-     * 1. 旧 owner 退场时不能重建 preview 节点；
-     * 2. runtime snapshot 晚一拍时，也必须优先拿到本地刚 flush 的更近时间；
-     * 3. 否则用户看到的就是“先闪一下新 preview，再跳回正确位置”。
+     * 1. 旧 owner 退场时不能重建 preview `<video>` 节点；
+     * 2. runtime snapshot 晚一拍时，只能靠位置桥和冻结帧承接；
+     * 3. 否则用户看到的就是双视频表面互相抢像素。
      */
-    expect(releasedPreview).toBe(oldOwnerPreview);
-    expect(releasedPreview?.dataset.canonicalPlayer).toBeUndefined();
-    expect(releasedPreview?.autoplay).toBe(false);
+    expect(releasedPreview).toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
     ).toBeNull();
@@ -2418,8 +2394,7 @@ describe("房间消息窗媒体查看器", () => {
     const oldOwnerPreview = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
-    expect(oldOwnerPreview).not.toBeNull();
-    oldOwnerPreview!.dispatchEvent(new Event("loadedmetadata"));
+    expect(oldOwnerPreview).toBeNull();
     await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const pane内部探针 = pane as any as {
@@ -2449,13 +2424,13 @@ describe("房间消息窗媒体查看器", () => {
     );
 
     /**
-     * 这条测试直接锁 sequecing root cause：
-     * 1. 如果不先 flush，旧 preview 会先按旧时间露出来；
-     * 2. 然后再吃到更近位置，用户就看到“退场时抽一下”；
-     * 3. 正确顺序必须是：先 flush -> 再对齐底板 -> 再撤可见 canonical host。
+     * 这条测试直接锁 sequencing root cause：
+     * 1. 如果不先 flush，旧 owner 的位置桥会慢一拍；
+     * 2. 退场后不能再靠 preview video 补救；
+     * 3. 正确顺序必须是：先 flush -> 捕获冻结帧/位置 -> 再撤可见 canonical host。
      */
     expect(冲刷时间线位置Spy).toHaveBeenCalledTimes(1);
-    expect(releasedPreview).toBe(oldOwnerPreview);
+    expect(releasedPreview).toBeNull();
 
     冲刷时间线位置Spy.mockRestore();
     pane.remove();
@@ -2603,10 +2578,7 @@ describe("房间消息窗媒体查看器", () => {
     const releasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(releasedVideo).not.toBe(ownerVideo);
-    expect(releasedVideo?.dataset.canonicalPlayer).toBeUndefined();
-    expect(releasedVideo?.autoplay).toBe(false);
-    expect(releasedVideo?.getAttribute("src")).toBe(playback.src);
+    expect(releasedVideo).toBeNull();
 
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
@@ -2630,10 +2602,7 @@ describe("房间消息窗媒体查看器", () => {
     expect(reacquireStageHost).not.toBeNull();
     expect(reacquireStageHost?.dataset.stageHost).toBe("true");
     expect(reacquireStageHost?.dataset.videoSrc).toBe(playback.src);
-    expect(reacquirePreviewVideo).not.toBeNull();
-    expect(reacquirePreviewVideo?.dataset.canonicalPlayer).toBeUndefined();
-    expect(reacquirePreviewVideo?.autoplay).toBe(false);
-    expect(reacquirePreviewVideo?.getAttribute("src")).toBe(playback.src);
+    expect(reacquirePreviewVideo).toBeNull();
 
     const reacquiredVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
     expect(
@@ -2755,10 +2724,7 @@ describe("房间消息窗媒体查看器", () => {
     const secondOwnerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
     );
-    expect(firstReleasedVideo).not.toBe(firstOwnerVideo);
-    expect(firstReleasedVideo?.dataset.canonicalPlayer).toBeUndefined();
-    expect(firstReleasedVideo?.autoplay).toBe(false);
-    expect(firstReleasedVideo?.getAttribute("src")).toBe(playback1.src);
+    expect(firstReleasedVideo).toBeNull();
     /**
      * 新 owner 这侧允许继续复用原来的预览节点，把 canonical 标记和 autoplay 直接提升上去；
      * 只要 swarm src 没抖、且最终只有一颗 canonical player，就比“先删预览再插入新节点”更丝滑。
@@ -3465,8 +3431,7 @@ describe("房间消息窗媒体查看器", () => {
     expect(揭帘后Canonical视频).toBe(隐藏预热视频);
     expect(揭帘后Canonical视频?.autoplay).toBe(true);
     expect(揭帘后Canonical视频?.currentTime).toBeCloseTo(22.5, 2);
-    expect(揭帘后预览视频).not.toBeNull();
-    expect(揭帘后预览视频?.autoplay).toBe(false);
+    expect(揭帘后预览视频).toBeNull();
 
       pane.remove();
     },
@@ -4621,7 +4586,7 @@ describe("房间消息窗媒体查看器", () => {
       expect(document.fullscreenElement).toBeNull();
       expect(
         pane.querySelectorAll('video.message-video-preview[data-attachment-id="att-video-1"]')
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(
         pane.querySelector(
           'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
@@ -4631,7 +4596,7 @@ describe("房间消息窗媒体查看器", () => {
         pane.querySelector(
           'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
         )
-      ).not.toBeNull();
+      ).toBeNull();
       expect(preview?.controls).toBe(false);
       expect(preview?.muted).toBe(true);
       expect(preview?.loop).toBe(true);
@@ -5282,7 +5247,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("近视口预算收紧前，房间会把过多非 owner 历史视频一起挂成真实 preview video", async () => {
+  it("近视口预算收紧后，非 owner 历史视频最多只保留两颗真实 preview video", async () => {
     const pane = 创建媒体消息窗();
     const attachmentIds = Array.from({ length: 8 }, (_, index) => `att-budget-${index + 1}`);
     pane.items = attachmentIds.map((attachmentId, index) =>
@@ -5315,7 +5280,9 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    expect(pane.querySelectorAll("video.message-video-preview").length).toBeLessThanOrEqual(6);
+    expect(
+      pane.querySelectorAll('video.message-video-preview:not([data-canonical-player="true"])')
+    ).toHaveLength(2);
 
     pane.remove();
   });

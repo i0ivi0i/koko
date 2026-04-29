@@ -32,6 +32,7 @@ type 视频元数据依赖 = {
 const 默认视频元数据探测超时毫秒 = 10_000;
 const 视频预览导出Mime类型 = "image/webp";
 const 视频预览导出质量 = 0.92;
+const 视频预览导出最大边长 = 960;
 
 export const 读取预览采样时间 = (durationSeconds: number): number => {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -52,6 +53,27 @@ type 预览画布依赖 = {
   createCanvasElement?: () => HTMLCanvasElement;
 };
 
+const 计算预览导出尺寸 = (
+  width: number,
+  height: number
+): { width: number; height: number } | null => {
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+  const maxEdge = Math.max(width, height);
+  if (maxEdge <= 视频预览导出最大边长) {
+    return {
+      width,
+      height,
+    };
+  }
+  const scale = 视频预览导出最大边长 / maxEdge;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+};
+
 /**
  * 预览图生成逻辑要收口成单一原语：
  * 1. 发送侧 metadata 探测可以复用；
@@ -62,7 +84,8 @@ export function 从视频探针导出静态预览图(
   probe: Pick<HTMLVideoElement, "videoWidth" | "videoHeight"> & CanvasImageSource,
   deps: 预览画布依赖 = {}
 ): string | null {
-  if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
+  const exportSize = 计算预览导出尺寸(probe.videoWidth, probe.videoHeight);
+  if (!exportSize) {
     return null;
   }
   let canvas: HTMLCanvasElement;
@@ -71,8 +94,13 @@ export function 从视频探针导出静态预览图(
   } catch {
     return null;
   }
-  canvas.width = probe.videoWidth;
-  canvas.height = probe.videoHeight;
+  /**
+   * 这里导出的是 UI 预览帧，不是正式媒体字节。
+   * 不能把手机 4K/8K 视频帧原尺寸转成 dataURL 写进同步 localStorage；
+   * 否则滚动读取预览缓存时会制造大 JSON 解析和长任务，直接破坏消息流丝滑性。
+   */
+  canvas.width = exportSize.width;
+  canvas.height = exportSize.height;
   const context = canvas.getContext("2d");
   if (!context) {
     return null;

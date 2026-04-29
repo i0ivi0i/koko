@@ -378,6 +378,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain(".composer-bar");
     expect(styles).toContain("padding: 4px 8px");
     expect(styles).toContain("gap: 6px");
+    expect(styles).toMatch(/\.composer-bar[\s\S]*max-height:\s*min\(42vh,\s*360px\)/);
+    expect(styles).toMatch(/\.composer-bar[\s\S]*overflow:\s*hidden/);
+    expect(styles).toMatch(/\.composer-drafts[\s\S]*max-height:\s*min\(28vh,\s*220px\)/);
+    expect(styles).toMatch(/\.composer-drafts[\s\S]*overflow-y:\s*auto/);
     expect(styles).toMatch(/#shellConsoleStatus[\s\S]*min-height:\s*0/);
   });
 

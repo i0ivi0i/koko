@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   可选择视频文件类型,
+  从视频探针导出静态预览图,
   读取视频文件元数据,
   解析视频元数据失败代码,
   视频附件上传上限字节数,
@@ -174,6 +175,35 @@ describe("视频元数据", () => {
     expect(drawImage).toHaveBeenCalledTimes(1);
     expect(toDataUrl).toHaveBeenCalledWith("image/webp", 0.92);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:cover.mp4");
+  });
+
+  it("静态预览导出会按应用级封面尺寸降采样，避免 4K 帧转成巨大 dataURL 卡住消息流", () => {
+    const drawImage = vi.fn();
+    const toDataUrl = vi.fn(() => "data:image/webp;base64,preview-frame");
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () =>
+        ({
+          drawImage,
+        }) as unknown as CanvasRenderingContext2D,
+      toDataURL: toDataUrl,
+    } as unknown as HTMLCanvasElement;
+
+    const result = 从视频探针导出静态预览图(
+      {
+        videoWidth: 3840,
+        videoHeight: 2160,
+      } as HTMLVideoElement,
+      {
+        createCanvasElement: () => canvas,
+      }
+    );
+
+    expect(result).toBe("data:image/webp;base64,preview-frame");
+    expect(canvas.width).toBe(960);
+    expect(canvas.height).toBe(540);
+    expect(drawImage).toHaveBeenCalledWith(expect.any(Object), 0, 0, 960, 540);
   });
 
   it("浏览器不支持 WebP 导出时会返回空预览，避免回落成非 WebP 图片", async () => {

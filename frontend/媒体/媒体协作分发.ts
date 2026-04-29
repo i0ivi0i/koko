@@ -712,12 +712,16 @@ const 读取协作分发持久ChunkStore选项 = (
 ): { store?: WebTorrentChunkStore构造器 } => {
   const store能力 =
     获取默认浏览器应用平台().storage.读取协作分发字节Store能力?.() ?? null;
-  if (
-    store能力?.webTorrent默认OPFSStore可用 === true ||
-    store能力?.indexedDBStore可用 !== true
-  ) {
+  if (store能力?.indexedDBStore可用 !== true) {
     return {};
   }
+  /**
+   * WebTorrent 官方支持自定义 abstract-chunk-store。这里用成熟的
+   * idb-chunk-store 把 piece 字节锚定到完整 infohash 名称：
+   * - 看过/补齐过的字节继续留在 WebTorrent store 里，而不是旁路缓存；
+   * - 刷新、重新进房后同一 torrent 能按同一 store owner 复用 piece；
+   * - 浏览器默认 OPFS/FSA 能力仍是有价值事实，但不能让项目失去可测试的持久化 owner。
+   */
   确保IndexedDBChunkStoreBuffer兼容();
   return {
     store: 创建协作分发IndexedDBChunkStore(distribution.torrent_info_hash!),

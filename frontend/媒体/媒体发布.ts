@@ -97,6 +97,15 @@ export interface 媒体上传器 {
 export const 媒体Tus文件并发上限 = 8;
 
 /**
+ * 单条消息最多承载 9 个媒体附件。
+ * 这个上限必须在进入 prepare / Tus 主链前先裁决：
+ * - Uppy 的 `maxNumberOfFiles` 只能约束单个 uploader 队列，不能理解当前发送草稿已经占了几个槽；
+ * - 如果让超量文件先进上传链再失败，失败草稿会把输入区撑爆，直接挤占消息流滚动预算；
+ * - 所以入口层先按当前草稿数截断，超出的文件不生成第二套失败态。
+ */
+export const 媒体单条消息附件上限 = 9;
+
+/**
  * 32 MiB 以下的视频继续走默认档；从这个阈值往上，就切到独立的 large-video uploader profile。
  * 当前 profile 的价值主要是：
  * 1. 把大视频和图片/小视频拆到不同上传器队列里，避免它们共用同一个本地并发池；
@@ -349,7 +358,7 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
     autoProceed: true,
     allowMultipleUploadBatches: true,
     restrictions: {
-      maxNumberOfFiles: 9,
+      maxNumberOfFiles: 媒体单条消息附件上限,
       allowedFileTypes: [...可选择图片文件类型, ...可选择视频文件类型],
       maxFileSize: 视频附件上传上限字节数,
     },
@@ -1039,7 +1048,25 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       if (selectedFiles.length === 0) {
         return;
       }
-      for (const [index, sourceFile] of selectedFiles.entries()) {
+      const remainingSlots = Math.max(0, 媒体单条消息附件上限 - deps.readDrafts().length);
+      if (remainingSlots <= 0) {
+        console.warn("[koko:media-upload:reject]", {
+          selectedCount: selectedFiles.length,
+          maxDraftCount: 媒体单条消息附件上限,
+          errorCode: "attachment_count_limit_exceeded",
+        });
+        return;
+      }
+      const acceptedFiles = selectedFiles.slice(0, remainingSlots);
+      if (acceptedFiles.length < selectedFiles.length) {
+        console.warn("[koko:media-upload:reject]", {
+          selectedCount: selectedFiles.length,
+          acceptedCount: acceptedFiles.length,
+          maxDraftCount: 媒体单条消息附件上限,
+          errorCode: "attachment_count_limit_exceeded",
+        });
+      }
+      for (const [index, sourceFile] of acceptedFiles.entries()) {
         /**
          * 某些移动浏览器在连续处理多张图/多个视频时，系统 picker 返回后马上进入一串重任务，
          * 容易让页面长时间失去响应。这里在批量文件之间主动让出一次主线程，

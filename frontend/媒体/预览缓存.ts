@@ -132,39 +132,57 @@ export interface 预览缓存端口 {
 export function 创建浏览器预览缓存(
   storage: 预览缓存存储源
 ): 预览缓存端口 {
+  let recordsCache: 预览缓存快照 | null = null;
+  let attachmentIndexCache: 附件预览索引快照 | null = null;
+  const 读取缓存内记录快照 = (): 预览缓存快照 => {
+    recordsCache ??= 读取记录快照(storage);
+    return recordsCache;
+  };
+  const 读取缓存内附件索引快照 = (): 附件预览索引快照 => {
+    attachmentIndexCache ??= 读取附件索引快照(storage);
+    return attachmentIndexCache;
+  };
+
   return {
     async 保存(record: 预览缓存记录): Promise<void> {
-      const current = 读取记录快照(storage);
-      写入记录快照(storage, {
+      /**
+       * 预览缓存里可能含 dataURL。浏览器 localStorage 是同步 API，滚动热路径上
+       * 反复 getItem + JSON.parse 大字符串会直接造成长任务。仓库实例内保留一次
+       * 规范化快照，写入时同步更新内存 owner，再落本地持久化。
+       */
+      const current = 读取缓存内记录快照();
+      recordsCache = {
         ...current,
         [record.contentHash]: record,
-      });
+      };
+      写入记录快照(storage, recordsCache);
     },
 
     async 写入附件索引(attachmentId: string, contentHash: string): Promise<void> {
-      const current = 读取附件索引快照(storage);
-      写入附件索引快照(storage, {
+      const current = 读取缓存内附件索引快照();
+      attachmentIndexCache = {
         ...current,
         [attachmentId]: contentHash,
-      });
+      };
+      写入附件索引快照(storage, attachmentIndexCache);
     },
 
     async 按内容读取(contentHash: string): Promise<预览缓存记录 | null> {
-      return 读取记录快照(storage)[contentHash] ?? null;
+      return 读取缓存内记录快照()[contentHash] ?? null;
     },
 
     async 按附件读取(attachmentId: string): Promise<预览缓存记录 | null> {
-      const contentHash = 读取附件索引快照(storage)[attachmentId];
+      const contentHash = 读取缓存内附件索引快照()[attachmentId];
       if (!contentHash) {
         return null;
       }
-      return 读取记录快照(storage)[contentHash] ?? null;
+      return 读取缓存内记录快照()[contentHash] ?? null;
     },
 
     snapshot() {
       return {
-        recordsByContentHash: 读取记录快照(storage),
-        attachmentToContentHash: 读取附件索引快照(storage),
+        recordsByContentHash: 读取缓存内记录快照(),
+        attachmentToContentHash: 读取缓存内附件索引快照(),
       };
     },
   };
