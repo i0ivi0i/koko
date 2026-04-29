@@ -2943,6 +2943,81 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("高速回滑时有同源冻结帧，就用冻结帧顶住重新挂载的 video，禁止先露 poster 或首帧", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const frozenFrameSrc = "data:image/webp;base64,ZmFrZQ==";
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: playback.src,
+        currentTime: 18.6,
+        updatedAt: 1_715_000_000_000,
+      },
+    };
+    Object.defineProperty(pane, "时间线自动播冻结帧", {
+      configurable: true,
+      value: new Map([
+        [
+          "att-video-1",
+          {
+            src: playback.src,
+            currentTime: 18.6,
+            dataUrl: frozenFrameSrc,
+            updatedAt: 1_715_000_000_001,
+          },
+        ],
+      ]),
+    });
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const frozenFrame = pane.querySelector<HTMLImageElement>(
+      'img.message-video-frozen-frame[data-attachment-id="att-video-1"]'
+    );
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+
+    expect(frozenFrame?.getAttribute("src")).toBe(frozenFrameSrc);
+    expect(previewVideo?.getAttribute("src")).toBe(playback.src);
+    expect(previewVideo?.getAttribute("poster")).toBeNull();
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    pane.remove();
+  });
+
   it("双视频自动播 owner 交接时，只要目标卡片已经有同源预览视频，也必须先走隐藏预热宿主而不是直接显露 canonical host", async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {

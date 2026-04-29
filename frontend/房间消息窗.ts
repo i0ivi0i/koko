@@ -27,6 +27,13 @@ type 消息虚拟项 = {
   start: number;
 };
 
+type 时间线自动播冻结帧 = {
+  src: string;
+  currentTime: number;
+  dataUrl: string;
+  updatedAt: number;
+};
+
 /**
  * 时间线卡片对“当前没有正式视频源”的表达只保留静态 poster。
  * 1. 旧 manifest/HLS 地址不能再塞进时间线原生 `<video>`；
@@ -58,6 +65,8 @@ const 首帧兜底消息预算上限 = 12;
 const 首帧兜底最小消息数量 = 6;
 const 首帧兜底默认视口高度 = 720;
 const 首帧兜底视口覆盖倍率 = 1.25;
+const 时间线自动播冻结帧最大边长 = 480;
+const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
 
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
@@ -123,6 +132,13 @@ export class 房间消息窗 extends LitElement {
    * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
    */
   private readonly 时间线视频首帧就绪源 = new Map<string, string>();
+  /**
+   * 时间线自动播冻结帧：
+   * 1. 这不是媒体字节真相，也不是第二播放器，只是从“刚刚真实播放过的同一颗 video”截下来的 UI 暂停帧；
+   * 2. 它只负责高速/远距离回滑时，在新 `<video>` 完成 metadata/seek/canplay 前顶住像素；
+   * 3. 匹配必须同时满足同源 src 与续播时间接近，避免把旧附件、旧 source 或首帧封面误当续播画面。
+   */
+  private readonly 时间线自动播冻结帧 = new Map<string, 时间线自动播冻结帧>();
   /**
    * canonical player 可见接管就绪缓存：
    * - key: attachmentId
@@ -191,6 +207,7 @@ export class 房间消息窗 extends LitElement {
     读取默认全局唯一播放器().同步时间线自动播(null);
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
+    this.时间线自动播冻结帧.clear();
     this.时间线唯一播放器可见接管就绪源.clear();
     this.时间线隐藏接管附件Id = null;
     this.自动播位置上报记录.clear();
@@ -340,6 +357,11 @@ export class 房间消息窗 extends LitElement {
     for (const attachmentId of this.时间线视频首帧就绪源.keys()) {
       if (!当前视频附件.has(attachmentId)) {
         this.时间线视频首帧就绪源.delete(attachmentId);
+      }
+    }
+    for (const attachmentId of this.时间线自动播冻结帧.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.时间线自动播冻结帧.delete(attachmentId);
       }
     }
     for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
@@ -558,6 +580,88 @@ export class 房间消息窗 extends LitElement {
     }
     this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
     this.requestUpdate();
+  }
+
+  private 读取时间线自动播冻结帧(
+    attachmentId: string,
+    src: string | null,
+    position: 媒体播放位置 | null
+  ): 时间线自动播冻结帧 | null {
+    if (!position) {
+      return null;
+    }
+    const frame = this.时间线自动播冻结帧.get(attachmentId) ?? null;
+    const normalizedExpectedSrc = this.归一化时间线视频播放源(src);
+    const normalizedFrameSrc = this.归一化时间线视频播放源(frame?.src ?? null);
+    if (
+      !frame ||
+      !normalizedExpectedSrc ||
+      !normalizedFrameSrc ||
+      normalizedExpectedSrc !== normalizedFrameSrc ||
+      !frame.dataUrl.startsWith("data:image/")
+    ) {
+      return null;
+    }
+    if (
+      Math.abs(frame.currentTime - position.currentTime) >
+      时间线自动播冻结帧允许时间偏差秒
+    ) {
+      return null;
+    }
+    return frame;
+  }
+
+  private 捕获时间线自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void {
+    const src = this.读取视频当前播放源(video);
+    if (
+      !attachmentId ||
+      !src ||
+      !Number.isFinite(video.currentTime) ||
+      video.currentTime < 0 ||
+      video.readyState < video.HAVE_CURRENT_DATA ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      return;
+    }
+    try {
+      const scale = Math.min(
+        1,
+        时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
+      );
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return;
+      }
+      context.drawImage(video, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/webp", 0.82);
+      if (!dataUrl.startsWith("data:image/")) {
+        return;
+      }
+      const previousFrame = this.时间线自动播冻结帧.get(attachmentId);
+      const currentTime = video.currentTime;
+      if (
+        previousFrame?.src === src &&
+        Math.abs(previousFrame.currentTime - currentTime) < 0.05 &&
+        previousFrame.dataUrl === dataUrl
+      ) {
+        return;
+      }
+      this.时间线自动播冻结帧.set(attachmentId, {
+        src,
+        currentTime,
+        dataUrl,
+        updatedAt: Date.now(),
+      });
+      this.requestUpdate();
+    } catch {
+      // Canvas 可能因为解码器、浏览器策略或测试环境不可用而拒绝截图；失败时继续走原播放链，不扩大成业务错误。
+    }
   }
 
   private 读取时间线唯一播放器是否可见接管就绪(
@@ -800,6 +904,7 @@ export class 房间消息窗 extends LitElement {
      * 3. 这不是第二条播放链，仍然只有同一 attachment 的暂停底板在承接像素。
      */
     this.标记时间线视频首帧已就绪(attachmentId, canonicalSrc);
+    this.捕获时间线自动播冻结帧(attachmentId, canonicalVideo);
     if (!hasNewerLocalBridge) {
       this.广播自动播播放位置(attachmentId, canonicalVideo, true, true);
     }
@@ -910,6 +1015,9 @@ export class 房间消息窗 extends LitElement {
      * 消息窗只读取真实 video 的当前时间，并把事实上报给媒体运行时。
      * 这里的 Map 只做高频事件节流，不作为续播真相；真正恢复来源仍是外层回灌的 snapshot。
      */
+    if (force || allowReleasedOwner) {
+      this.捕获时间线自动播冻结帧(attachmentId, video);
+    }
     this.自动播位置上报记录.set(attachmentId, {
       src,
       currentTime: video.currentTime,
@@ -980,6 +1088,7 @@ export class 房间消息窗 extends LitElement {
         });
       }
       if (!video.paused) {
+        this.捕获时间线自动播冻结帧(attachmentId, video);
         this.广播自动播播放位置(
           attachmentId,
           video,
@@ -1626,6 +1735,7 @@ export class 房间消息窗 extends LitElement {
     budget: 信息流视频预算投影,
     input: {
       hasExistingSameSourcePreviewFrame?: boolean;
+      hasFrozenTimelineFrame?: boolean;
       hasKnownReadyPreviewFrame?: boolean;
       previewVideoSrc: string | null;
       shouldReuseSavedTimelineFrameAsPreview: boolean;
@@ -1640,6 +1750,7 @@ export class 房间消息窗 extends LitElement {
     if (
       !input.shouldReuseSavedTimelineFrameAsPreview &&
       !input.hasExistingSameSourcePreviewFrame &&
+      !input.hasFrozenTimelineFrame &&
       !input.hasKnownReadyPreviewFrame
     ) {
       return false;
@@ -1649,8 +1760,9 @@ export class 房间消息窗 extends LitElement {
      * 1. 这张续帧来自刚才真实 WebTorrent `<video>` 的同源 currentSrc，不是新开第二播放链；
      * 2. 高速滚动时，已经出过首帧的同源 preview 也允许多活一拍，兜住 IO/虚拟窗口预算抖动；
      * 3. 如果那颗 DOM 已被虚拟列表卸载，首帧就绪缓存仍可证明同源像素已经真实出过帧；
-     * 4. 三种桥都只负责避免 DOM 退回 poster/play 占位，不拥有新的播放真相；
-     * 5. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
+     * 4. 冻结帧只来自刚才真实播放的同源 video，是高速回滑时顶住像素的 UI 表面；
+     * 5. 这些桥只负责避免 DOM 退回 poster/play 占位，不拥有新的播放真相；
+     * 6. 如果预算已经明确判成非 WebTorrent 旁路，仍然无条件拒绝，防止连续性桥被滥用成绕主链入口。
      */
     return budget.formalByteSource !== "non_webtorrent_bypass";
   }
@@ -2074,6 +2186,12 @@ export class 房间消息窗 extends LitElement {
                 attachment.attachmentId,
                 previewVideoSrc
               );
+            const frozenTimelineFrame = this.读取时间线自动播冻结帧(
+              attachment.attachmentId,
+              previewVideoSrc ?? ownerCanonicalVideoSrc,
+              restorableTimelineFrame
+            );
+            const hasFrozenTimelineFrame = Boolean(frozenTimelineFrame);
             const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
               attachment.attachmentId,
               previewVideoSrc
@@ -2101,17 +2219,20 @@ export class 房间消息窗 extends LitElement {
               source: { src: previewVideoSrc ?? ownerCanonicalVideoSrc },
               savedPosition: savedTimelineFrame,
               dom: {
-                previewReadyState: hasExistingSameSourcePreviewFrame ? 2 : 0,
+                previewReadyState:
+                  hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame ? 2 : 0,
                 canonicalReadyState: shouldRevealCanonicalHost ? 3 : 0,
                 sourceMatches:
                   hasSameSourceSavedTimelineFrame ||
                   hasExistingSameSourcePreviewFrame ||
+                  hasFrozenTimelineFrame ||
                   hasHistoricalCanonicalReveal,
               },
               host: {
                 exists: true,
                 hasStableFrame:
                   hasExistingSameSourcePreviewFrame ||
+                  hasFrozenTimelineFrame ||
                   hasKnownReadyPreviewFrame ||
                   shouldReuseSavedTimelineFrameAsPreview ||
                   hasHistoricalCanonicalReveal,
@@ -2125,7 +2246,9 @@ export class 房间消息窗 extends LitElement {
              * 3. 没有同源连续性证据的普通冷预览仍保留 poster，避免裸露黑色 video。
              */
             const shouldSuppressPosterForContinuity =
-              (shouldReuseSavedTimelineFrameAsPreview || hasHistoricalCanonicalReveal) &&
+              (shouldReuseSavedTimelineFrameAsPreview ||
+                hasFrozenTimelineFrame ||
+                hasHistoricalCanonicalReveal) &&
               (playbackContinuityDecision.kind === "hidden_handoff" ||
                 playbackContinuityDecision.kind === "hold_frame" ||
                 playbackContinuityDecision.kind === "visible_canonical");
@@ -2138,22 +2261,26 @@ export class 房间消息窗 extends LitElement {
               !shouldRenderInlineVideo &&
               !restorableTimelineFrame &&
               !hasExistingSameSourcePreviewFrame &&
+              !hasFrozenTimelineFrame &&
               !hasKnownReadyPreviewFrame;
             const shouldRenderPreviewVideo =
               Boolean(previewVideoSrc) &&
               this.读取时间线预览视频是否允许渲染(videoBudget, {
                 hasExistingSameSourcePreviewFrame,
+                hasFrozenTimelineFrame,
                 hasKnownReadyPreviewFrame,
                 previewVideoSrc,
                 shouldReuseSavedTimelineFrameAsPreview,
               }) &&
               (可渲染真实预览视频附件.has(attachment.attachmentId) ||
                 hasExistingSameSourcePreviewFrame ||
+                hasFrozenTimelineFrame ||
                 hasKnownReadyPreviewFrame);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
               !shouldSuppressPosterForContinuity &&
+              !hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             /**
@@ -2164,6 +2291,7 @@ export class 房间消息窗 extends LitElement {
              * 3. `<video poster>` 属于同一个 DOM 表面的冷保护，不会制造外层卡片闪回。
              */
             const previewVideoPoster =
+              !hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
               (hasSourcePoster || hasRuntimePreview)
                 ? previewPosterSrc
@@ -2171,10 +2299,12 @@ export class 房间消息窗 extends LitElement {
             const shouldShowFirstFrameGuard =
               shouldRenderPreviewVideo &&
               !hasCurrentDomPreviewFrame &&
+              !hasFrozenTimelineFrame &&
               !hasStablePreviewPosterSurface;
             const hasReadyPreviewSurface =
               hasStablePreviewPosterSurface ||
-              hasCurrentDomPreviewFrame;
+              hasCurrentDomPreviewFrame ||
+              hasFrozenTimelineFrame;
             /**
              * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
              * 1. 明确跨附件 handoff 时，先保留现有预览帧，让 canonical player 在隐藏宿主完成 source/time 对齐；
@@ -2191,6 +2321,10 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
             const shouldRenderVisibleCanonicalHost =
               shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
+            const shouldRenderFrozenTimelineFrame =
+              hasFrozenTimelineFrame &&
+              !hasCurrentDomPreviewFrame &&
+              (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             const 时间线预览底板视频 = html`
               <video
                 class=${`message-video-preview${
@@ -2259,6 +2393,20 @@ export class 房间消息窗 extends LitElement {
               ></video>
             `;
             const 时间线视频预览内容 = html`
+              ${shouldRenderFrozenTimelineFrame
+                ? html`
+                    <img
+                      class="message-video-frozen-frame"
+                      data-attachment-id=${attachment.attachmentId}
+                      src=${frozenTimelineFrame?.dataUrl ?? ""}
+                      alt=""
+                      width=${attachment.displayWidth}
+                      height=${attachment.displayHeight}
+                      loading="eager"
+                      aria-hidden="true"
+                    />
+                  `
+                : null}
               ${shouldRenderVisibleCanonicalHost
                 ? html`
                     <div
@@ -2338,6 +2486,7 @@ export class 房间消息窗 extends LitElement {
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
                   ${shouldRenderPreviewVideo ||
+                  shouldRenderFrozenTimelineFrame ||
                   shouldRenderPreviewPosterSurface ||
                   shouldRenderInlineVideo
                     ? html`

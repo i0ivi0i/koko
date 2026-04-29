@@ -628,6 +628,7 @@ export class 聊天壳 extends LitElement {
      * 它必须和 poster 共用同一套尺寸、裁剪和命中规则，避免黑边和原生媒体误触。
      */
     .message-video-poster,
+    .message-video-frozen-frame,
     .message-video-preview {
       position: relative;
       z-index: 0;
@@ -641,6 +642,16 @@ export class 聊天壳 extends LitElement {
       background:
         radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.16), transparent 28%),
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
+    }
+
+    /*
+     * 冻结帧只负责高速回滑时顶住“刚才暂停的那一帧”：
+     * 它覆盖在重新挂载的 video 上，等当前 DOM 真正出帧后由模板自然移除。
+     */
+    .message-video-frozen-frame {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
     }
 
     /*
