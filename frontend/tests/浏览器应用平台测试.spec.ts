@@ -252,6 +252,14 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("streamURL");
   });
 
+  it("架构适应度门禁会拦住新增第二个全局 WebTorrent owner 文件", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "duplicate global WebTorrent owner file"');
+    expect(source).toContain("全局唯一WebTorrent");
+    expect(source).toContain("WebTorrent状态机");
+  });
+
   it("热点文件行数门禁预算会统一放宽到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 

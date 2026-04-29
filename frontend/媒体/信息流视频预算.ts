@@ -1,5 +1,9 @@
 import type { 媒体会话状态 } from "./媒体会话.js";
 import type { 媒体播放结果 } from "./媒体播放.js";
+import type {
+  WebTorrentSessionLifecycleSnapshot,
+  WebTorrentSessionLifecycleState,
+} from "./资产协作分发运行时.js";
 
 export type 信息流视频预算层级 =
   | "heavy_playback"
@@ -34,6 +38,7 @@ export type 信息流视频预算事实 = {
   sessionStatus: 媒体会话状态 | null;
   locallyComplete: boolean;
   formalByteSource: 正式媒体字节来源;
+  webTorrentLifecycle?: WebTorrentSessionLifecycleSnapshot | null;
 };
 
 export type 信息流视频预算投影 = {
@@ -45,6 +50,8 @@ export type 信息流视频预算投影 = {
   allowInlineCanonical: boolean;
   allowPreviewVideo: boolean;
   formalByteSource: 正式媒体字节来源;
+  webTorrentLifecycleState: WebTorrentSessionLifecycleState | null;
+  activeWebTorrentReaderCount: number;
 };
 
 const 读取视频正式播放源 = (playback: 媒体播放结果 | null): string | null =>
@@ -82,6 +89,13 @@ export const 投影信息流视频预算 = (
   const sessionCanonicalSrc = 读取视频正式播放源(facts.playback);
   const viewerCanonicalSrc = facts.viewerCanonicalVideoSrc?.trim() || null;
   const formalByteSource = facts.formalByteSource;
+  const webTorrentLifecycle = facts.webTorrentLifecycle ?? null;
+  const webTorrentLifecycleState = webTorrentLifecycle?.state ?? null;
+  const activeWebTorrentReaderCount = webTorrentLifecycle?.activeReaderCount ?? 0;
+  const lifecycleProjection = {
+    webTorrentLifecycleState,
+    activeWebTorrentReaderCount,
+  };
 
   if (formalByteSource === "non_webtorrent_bypass") {
     return {
@@ -93,10 +107,32 @@ export const 投影信息流视频预算 = (
       allowInlineCanonical: false,
       allowPreviewVideo: false,
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
   const 拥有WebTorrent正式字节 = formalByteSource === "webtorrent_official_stream";
+
+  if (
+    拥有WebTorrent正式字节 &&
+    webTorrentLifecycle &&
+    !facts.isViewerOwner &&
+    !facts.isInlineAutoplayOwner &&
+    (webTorrentLifecycle.state === "light_help" ||
+      webTorrentLifecycle.state === "locally_complete")
+  ) {
+    return {
+      attachmentId: facts.attachmentId,
+      tier: "light_help",
+      reason: "retained_media_session",
+      canonicalVideoSrc: null,
+      previewVideoSrc: null,
+      allowInlineCanonical: false,
+      allowPreviewVideo: false,
+      formalByteSource,
+      ...lifecycleProjection,
+    };
+  }
 
   if (facts.isViewerOwner && 拥有WebTorrent正式字节) {
     const canonicalVideoSrc =
@@ -113,6 +149,7 @@ export const 投影信息流视频预算 = (
       allowInlineCanonical: false,
       allowPreviewVideo: false,
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
@@ -134,6 +171,7 @@ export const 投影信息流视频预算 = (
        */
       allowPreviewVideo: Boolean(previewVideoSrc),
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
@@ -147,6 +185,7 @@ export const 投影信息流视频预算 = (
       allowInlineCanonical: false,
       allowPreviewVideo: true,
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
@@ -160,6 +199,7 @@ export const 投影信息流视频预算 = (
       allowInlineCanonical: false,
       allowPreviewVideo: true,
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
@@ -173,6 +213,7 @@ export const 投影信息流视频预算 = (
       allowInlineCanonical: false,
       allowPreviewVideo: false,
       formalByteSource,
+      ...lifecycleProjection,
     };
   }
 
@@ -185,6 +226,7 @@ export const 投影信息流视频预算 = (
     allowInlineCanonical: false,
     allowPreviewVideo: false,
     formalByteSource,
+    ...lifecycleProjection,
   };
 };
 

@@ -45,6 +45,36 @@ type 协作分发JoinTicket刷新器 = (input: {
   torrentInfoHash: string;
 }) => Promise<媒体定位结果 | null>;
 
+export type WebTorrentSessionLifecycleState =
+  | "cold"
+  | "locating"
+  | "joining"
+  | "swarm_active"
+  | "source_ready"
+  | "heavy_playback"
+  | "light_help"
+  | "locally_complete"
+  | "draining"
+  | "dropped";
+
+export type WebTorrentSessionTerminalReason =
+  | "ticket_invalid"
+  | "no_peers"
+  | "source_unreadable"
+  | "unsupported_runtime"
+  | "deleted"
+  | "destroyed"
+  | "stale_generation";
+
+export interface WebTorrentSessionLifecycleSnapshot {
+  state: WebTorrentSessionLifecycleState;
+  generation: number;
+  reason?: WebTorrentSessionTerminalReason;
+  activeReaderCount: number;
+  hasPresenceHeartbeat: boolean;
+  hasJoinTicketRefresh: boolean;
+}
+
 type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
   consumerBindings: Map<string, 协作分发消费者绑定>;
   previewPriorityApplied: boolean;
@@ -60,6 +90,15 @@ type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings
   joinTicketRefreshTimerId: ReturnType<typeof setTimeout> | null;
   joinTicketRefreshInFlight: boolean;
   refreshJoinTicket: 协作分发JoinTicket刷新器 | null;
+  /**
+   * 生命周期账本只属于唯一协作分发 owner：
+   * 1. generation 防止旧 source / listener / timer 在退场后写回新会话；
+   * 2. lifecycleState 只描述浏览器运行时重量，不覆盖后端 media_state；
+   * 3. terminalReason 记录退场根因，避免日志和 UI 只能猜“为什么消失”。
+   */
+  lifecycleState: WebTorrentSessionLifecycleState;
+  generation: number;
+  terminalReason?: WebTorrentSessionTerminalReason;
   /**
    * `sourcePromise` 只覆盖首次挂载；播放源交给查看器后，WebTorrent stream route 仍可能被底层退掉。
    * 后续复用必须重新确认，不能把已经 404 的本地地址继续交给播放器制造错误风暴。
@@ -78,11 +117,13 @@ export type 资产协作分发会话快照 = {
   eagerCompleting: boolean;
   locallyComplete: boolean;
   hint: 协作分发媒体源["hint"];
+  lifecycle: WebTorrentSessionLifecycleSnapshot;
 };
 
 interface 资产协作分发上下文 {
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   sessions: Record<string, 资产协作分发会话快照>;
+  lastDroppedReason: WebTorrentSessionTerminalReason | null;
 }
 
 export type 资产协作分发事件 =
@@ -94,6 +135,7 @@ export type 资产协作分发事件 =
       contentHash: string;
       consumerId: string;
       mode: 协作分发消费者模式;
+      lifecycle: WebTorrentSessionLifecycleSnapshot;
     }
   | {
       type: "BACKFILL_REQUESTED";
@@ -121,8 +163,14 @@ export type 资产协作分发事件 =
       consumerId: string;
     }
   | {
+      type: "SESSION_LIFECYCLE_CHANGED";
+      swarmId: string;
+      lifecycle: WebTorrentSessionLifecycleSnapshot;
+    }
+  | {
       type: "SESSION_DROPPED";
       swarmId: string;
+      reason?: WebTorrentSessionTerminalReason;
     }
   | {
       type: "LIFECYCLE_POLICY_CHANGED";
@@ -143,6 +191,7 @@ export interface 资产协作分发运行时端口 {
     eagerCompleting: boolean;
     locallyComplete: boolean;
     hint: 协作分发媒体源["hint"];
+    lifecycle: WebTorrentSessionLifecycleSnapshot;
   } | null;
   读取预算(
     snapshot?: 资产协作分发快照
@@ -179,6 +228,7 @@ export interface 资产协作分发运行时端口 {
 const 初始资产协作分发上下文: 资产协作分发上下文 = {
   heavyWorkPolicy: "normal",
   sessions: {},
+  lastDroppedReason: null,
 };
 
 const 复制会话表 = (
@@ -214,6 +264,33 @@ const 是否为零消费者冷协作分发会话 = (session: 底层协作分发�
   !session.eagerCompleting &&
   !session.locallyComplete;
 
+const 协作分发消费者持有前台播放Reader = (
+  mode: 协作分发消费者模式
+): boolean => mode === "viewer" || mode === "inline_autoplay";
+
+const 读取协作分发会话活动Reader数量 = (
+  session: 底层协作分发会话
+): number => {
+  for (const binding of session.consumerBindings.values()) {
+    if (协作分发消费者持有前台播放Reader(binding.mode)) {
+      return 1;
+    }
+  }
+  return 0;
+};
+
+const 读取协作分发会话生命周期 = (
+  session: 底层协作分发会话
+): WebTorrentSessionLifecycleSnapshot => ({
+  state: session.lifecycleState,
+  generation: session.generation,
+  ...(session.terminalReason ? { reason: session.terminalReason } : {}),
+  activeReaderCount: 读取协作分发会话活动Reader数量(session),
+  hasPresenceHeartbeat: session.presenceIntervalId !== null,
+  hasJoinTicketRefresh:
+    session.joinTicketRefreshTimerId !== null || session.joinTicketRefreshInFlight,
+});
+
 /**
  * AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整。
  * 浏览器里的 WebTorrent / stream server / 可读性探测仍由 adapter 负责，
@@ -248,6 +325,9 @@ const 资产协作分发机 = createMachine(
           },
           CONSUMER_RELEASED: {
             actions: "释放消费者占用",
+          },
+          SESSION_LIFECYCLE_CHANGED: {
+            actions: "同步会话生命周期",
           },
           SESSION_DROPPED: {
             actions: "删除失效会话",
@@ -290,6 +370,7 @@ const 资产协作分发机 = createMachine(
             (current?.eagerCompleting ?? false) || event.mode === "backfill",
           locallyComplete: current?.locallyComplete ?? false,
           hint: current?.hint ?? null,
+          lifecycle: event.lifecycle,
         };
         return {
           sessions: nextSessions,
@@ -417,6 +498,25 @@ const 资产协作分发机 = createMachine(
         delete nextSessions[event.swarmId];
         return {
           sessions: nextSessions,
+          ...(event.reason ? { lastDroppedReason: event.reason } : {}),
+        };
+      }),
+      同步会话生命周期: assign(({ context, event }) => {
+        if (event.type !== "SESSION_LIFECYCLE_CHANGED") {
+          return {};
+        }
+        const current = context.sessions[event.swarmId];
+        if (!current) {
+          return {};
+        }
+        return {
+          sessions: {
+            ...context.sessions,
+            [event.swarmId]: {
+              ...current,
+              lifecycle: event.lifecycle,
+            },
+          },
         };
       }),
       同步生命周期策略: assign(({ event }) => {
@@ -442,6 +542,35 @@ type 资产协作分发运行时内部 = {
   actor: 资产协作分发Actor;
   底层会话表: Map<string, 底层协作分发会话>;
   已销毁: boolean;
+};
+
+const 同步协作分发会话生命周期 = (
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话
+): void => {
+  if (runtime.已销毁 || runtime.底层会话表.get(session.swarmId) !== session) {
+    return;
+  }
+  runtime.actor.send({
+    type: "SESSION_LIFECYCLE_CHANGED",
+    swarmId: session.swarmId,
+    lifecycle: 读取协作分发会话生命周期(session),
+  });
+};
+
+const 设置协作分发会话生命周期 = (
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话,
+  state: WebTorrentSessionLifecycleState,
+  reason?: WebTorrentSessionTerminalReason
+): void => {
+  session.lifecycleState = state;
+  if (reason) {
+    session.terminalReason = reason;
+  } else {
+    delete session.terminalReason;
+  }
+  同步协作分发会话生命周期(runtime, session);
 };
 
 let 活跃资产协作分发运行时实例数 = 0;
@@ -484,6 +613,27 @@ const 推导消费者模式 = (input: {
 
 const 消费者拥有正式帮助资格 = (mode: 协作分发消费者模式): boolean =>
   mode === "viewer" || mode === "inline_autoplay" || mode === "backfill";
+
+const 推导协作分发会话当前生命周期 = (
+  session: 底层协作分发会话
+): WebTorrentSessionLifecycleState => {
+  if (读取协作分发会话活动Reader数量(session) > 0) {
+    return "heavy_playback";
+  }
+  if (session.locallyComplete) {
+    return "locally_complete";
+  }
+  if (session.consumerBindings.size === 0 && 协作分发会话可在零引用后保留(session)) {
+    return "light_help";
+  }
+  if (session.file) {
+    return "source_ready";
+  }
+  if (session.torrent) {
+    return "swarm_active";
+  }
+  return session.lifecycleState;
+};
 
 const 会话允许对外上报帮助真相 = (session: 底层协作分发会话): boolean =>
   session.已获得帮助资格 && session.曾连上真实群友;
@@ -652,6 +802,9 @@ function 绑定协作分发会话事件(
     }
     停止协作分发存活上报(session);
     session.terminalError = error;
+    session.terminalReason = "ticket_invalid";
+    session.generation += 1;
+    session.lifecycleState = "dropped";
     session.hint = null;
     发布协作分发会话事件(session, "SWARM_TICKET_INVALID");
     删除底层协作分发会话(runtime, session.swarmId, session);
@@ -659,6 +812,7 @@ function 绑定协作分发会话事件(
       runtime.actor.send({
         type: "SESSION_DROPPED",
         swarmId: session.swarmId,
+        reason: "ticket_invalid",
       });
     }
   };
@@ -677,6 +831,7 @@ function 绑定协作分发会话事件(
     }
     session.曾连上真实群友 = true;
     session.hint = session.已获得帮助资格 ? "正在协作分发" : null;
+    设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
     if (会话允许对外上报帮助真相(session)) {
       启动协作分发存活上报(
         session,
@@ -696,6 +851,7 @@ function 绑定协作分发会话事件(
   });
   torrent.on("noPeers", () => {
     session.hint = session.已获得帮助资格 ? "正在补块" : null;
+    设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
     if (session.已获得帮助资格) {
       发送事件(runtime, {
         type: "SWARM_NO_PEERS",
@@ -708,6 +864,7 @@ function 绑定协作分发会话事件(
     session.eagerCompleting = false;
     session.locallyComplete = true;
     退掉整附件重补齐(session);
+    设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
     /**
      * `done` 只证明“本地完整”：
      * 1. 如果此前已经连上真实群友，这里才允许升级成 complete_peer；
@@ -975,6 +1132,7 @@ async function 确保协作分发会话(
     if (应默认进入整附件补齐) {
       session.已获得帮助资格 = true;
     }
+    session.lifecycleState = 推导协作分发会话当前生命周期(session);
     发送事件(runtime, {
       type: "ACQUIRE_REQUESTED",
       attachmentId: consumerBinding.attachmentId,
@@ -983,6 +1141,7 @@ async function 确保协作分发会话(
       contentHash: session.contentHash,
       consumerId: consumerBinding.consumerId,
       mode: consumerBinding.mode,
+      lifecycle: 读取协作分发会话生命周期(session),
     });
     if (应默认进入整附件补齐 && !session.locallyComplete) {
       激活整附件补齐(runtime, session);
@@ -1036,6 +1195,10 @@ async function 确保协作分发会话(
     joinTicketRefreshTimerId: null,
     joinTicketRefreshInFlight: false,
     refreshJoinTicket: input.refreshJoinTicket ?? null,
+    lifecycleState: 协作分发消费者持有前台播放Reader(consumerBinding.mode)
+      ? "heavy_playback"
+      : "locating",
+    generation: 0,
     播放源已交付过: false,
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
@@ -1048,6 +1211,7 @@ async function 确保协作分发会话(
     contentHash: session.contentHash,
     consumerId: consumerBinding.consumerId,
     mode: consumerBinding.mode,
+    lifecycle: 读取协作分发会话生命周期(session),
   });
   if (session.eagerCompleting) {
     发送事件(runtime, {
@@ -1058,12 +1222,17 @@ async function 确保协作分发会话(
   void 请求协作分发持久化存储();
 
   session.sourcePromise = (async () => {
+    设置协作分发会话生命周期(runtime, session, "locating");
     const browserRuntime = await 获取或创建协作分发浏览器运行时();
+    设置协作分发会话生命周期(runtime, session, "joining");
     const torrent = await 接入协作分发种子(browserRuntime, input.distribution, {
       joinTicketRef: session.joinTicketRef,
     });
     session.torrent = torrent;
+    设置协作分发会话生命周期(runtime, session, "swarm_active");
     if (runtime.底层会话表.get(session.swarmId) !== session) {
+      session.generation += 1;
+      session.terminalReason = "stale_generation";
       清理协作分发底层会话(session, browserRuntime);
       return null;
     }
@@ -1083,13 +1252,23 @@ async function 确保协作分发会话(
       读取终止错误: () => session.terminalError,
     });
     if (runtime.底层会话表.get(session.swarmId) !== session) {
+      session.generation += 1;
+      session.terminalReason = "stale_generation";
       清理协作分发底层会话(session, browserRuntime);
       return null;
     }
+    设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
     return 标记WebTorrent官方媒体源({
       src: file.streamURL,
     });
   })().catch((error) => {
+    const reason: WebTorrentSessionTerminalReason =
+      是否为协作分发JoinTicket失效错误(error)
+        ? "ticket_invalid"
+        : "source_unreadable";
+    session.generation += 1;
+    session.terminalReason = reason;
+    session.lifecycleState = "dropped";
     停止协作分发存活上报(session);
     if (runtime.底层会话表.get(input.distribution.swarm_id) === session) {
       runtime.底层会话表.delete(input.distribution.swarm_id);
@@ -1097,6 +1276,7 @@ async function 确保协作分发会话(
         runtime.actor.send({
           type: "SESSION_DROPPED",
           swarmId: input.distribution.swarm_id,
+          reason,
         });
       }
     }
@@ -1123,6 +1303,7 @@ const 读取会话状态 = (
     eagerCompleting: session.eagerCompleting,
     locallyComplete: session.locallyComplete,
     hint: session.hint ?? (session.eagerCompleting ? "正在补块" : null),
+    lifecycle: 读取协作分发会话生命周期(session),
   };
 };
 
@@ -1243,17 +1424,27 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
             读取终止错误: () => session.terminalError,
           });
         } catch (error) {
+          const reason: WebTorrentSessionTerminalReason =
+            是否为协作分发JoinTicket失效错误(error)
+              ? "ticket_invalid"
+              : "source_unreadable";
+          session.generation += 1;
+          session.terminalReason = reason;
+          session.lifecycleState = "dropped";
           删除底层协作分发会话(runtime, session.swarmId, session);
           if (!runtime.已销毁) {
             runtime.actor.send({
               type: "SESSION_DROPPED",
               swarmId: session.swarmId,
+              reason,
             });
           }
           throw error;
         }
       }
       session.播放源已交付过 = true;
+      session.lifecycleState = 推导协作分发会话当前生命周期(session);
+      同步协作分发会话生命周期(runtime, session);
       return {
         src: source.src,
         hint: 推导协作分发提示(session),
@@ -1293,6 +1484,8 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
           continue;
         }
         让零引用会话降到轻帮助态(session);
+        session.lifecycleState = 推导协作分发会话当前生命周期(session);
+        同步协作分发会话生命周期(runtime, session);
         // 只要会话仍被产品层保留，presence 也要跟着保留：
         // 1. locallyComplete 继续报 complete_peer；
         // 2. eagerCompleting 且已接入 swarm 的会话继续报 partial_peer；

@@ -200,6 +200,143 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("协作分发 session 会按唯一 owner 流转并在退出重播放后降为轻帮助", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-owner-flow"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-owner-flow",
+      kind: "video",
+      locator: 准备好的定位结果("att-owner-flow"),
+      consumerId: "inline_autoplay:att-owner-flow",
+    });
+
+    expect(source?.formalByteSource).toBe("webtorrent_official_stream");
+    expect(读取协作分发会话状态("swarm-att-owner-flow")).toMatchObject({
+      lifecycle: {
+        state: "heavy_playback",
+        activeReaderCount: 1,
+      },
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-owner-flow",
+      consumerId: "inline_autoplay:att-owner-flow",
+    });
+
+    expect(读取协作分发会话状态("swarm-att-owner-flow")).toMatchObject({
+      refs: 0,
+      lifecycle: {
+        state: "light_help",
+        activeReaderCount: 0,
+      },
+    });
+    expect(读取资产协作分发预算()).toMatchObject({
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+  });
+
+  it("backfill 补齐不会冒充前台播放 reader", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-backfill-reader"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-backfill-reader",
+      kind: "video",
+      locator: 准备好的定位结果("att-backfill-reader"),
+      consumerId: "backfill:att-backfill-reader",
+      eagerCompleting: true,
+    });
+
+    expect(读取协作分发会话状态("swarm-att-backfill-reader")).toMatchObject({
+      lifecycle: {
+        state: "source_ready",
+        activeReaderCount: 0,
+      },
+    });
+  });
+
+  it("torrent done 不会把仍在播放的 owner 降成非重播放态", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-owner-done"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-owner-done",
+      kind: "video",
+      locator: 准备好的定位结果("att-owner-done"),
+      consumerId: "inline_autoplay:att-owner-done",
+    });
+
+    emit("done");
+
+    expect(读取协作分发会话状态("swarm-att-owner-done")).toMatchObject({
+      locallyComplete: true,
+      lifecycle: {
+        state: "heavy_playback",
+        activeReaderCount: 1,
+      },
+    });
+  });
+
+  it("tracker 拒绝 join_ticket 后会记录终止原因且不会生成第二播放来源", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-ticket-reason"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-reason",
+      kind: "video",
+      locator: 准备好的定位结果("att-ticket-reason"),
+      consumerId: "viewer:att-ticket-reason",
+    });
+
+    emit("error", new Error("join_ticket_invalid"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(读取协作分发会话状态("swarm-att-ticket-reason")).toBeNull();
+    expect(资产协作分发运行时.snapshot().context).toMatchObject({
+      lastDroppedReason: "ticket_invalid",
+    });
+    expect(
+      "fallbackByteSource" in
+        (资产协作分发运行时.snapshot().context as unknown as Record<string, unknown>)
+    ).toBe(false);
+  });
+
   it("普通 session consumer 只建立轻会话，不会默认推进 whole-file backfill", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const torrentHandle = 创建可观测假Torrent("blob:http://media.local/swarm-att-session-light-1");

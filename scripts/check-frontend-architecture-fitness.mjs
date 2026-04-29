@@ -68,6 +68,13 @@ const 前端禁回流片段规则 = [
   },
 ];
 
+const 禁止新增前端文件规则 = [
+  {
+    label: "duplicate global WebTorrent owner file",
+    pattern: /全局唯一WebTorrent|WebTorrent状态机|WebTorrent生命周期机/i,
+  },
+];
+
 const 热点文件行数上限 = [
   // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
@@ -243,6 +250,25 @@ const 检查禁回流片段 = (files) => {
   return violations;
 };
 
+const 检查禁用前端文件名 = (files) => {
+  const violations = [];
+  for (const absolutePath of files) {
+    const relativePath = 转成仓库相对路径(absolutePath);
+    for (const rule of 禁止新增前端文件规则) {
+      rule.pattern.lastIndex = 0;
+      if (!rule.pattern.test(relativePath)) {
+        continue;
+      }
+      violations.push({
+        file: relativePath,
+        label: rule.label,
+        detail: "WebTorrent 生命周期 owner 只能落在资产协作分发运行时，禁止新增第二 owner 文件",
+      });
+    }
+  }
+  return violations;
+};
+
 export const 检查热点文件增长 = (
   hotFiles = 热点文件行数上限,
   readSource = 读取源码
@@ -268,6 +294,7 @@ export const 收集架构适应度违规 = () => {
     ...检查Owner注册表(),
     ...检查未登记XStateOwner(files),
     ...检查禁回流片段(files),
+    ...检查禁用前端文件名(files),
     ...检查热点文件增长(),
   ];
 

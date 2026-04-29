@@ -21,6 +21,28 @@ pub(crate) const 无在线种子默认重试毫秒: i64 = 15_000;
 /// web_seed 刚过期时先给一次“连接群友”窗口，避免直接从 READY 突兀跳到 NO_ONLINE_SEED。
 pub(crate) const 连接群友窗口秒: i64 = 8;
 
+/// 媒体可用性是 application 层真相；`MEDIA_*` 字符串只是 contract 投影。
+/// 这样新入口不能绕过 reducer 自己拼状态码，也不能把 partial peer 误判成可正式播放来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum 协作分发媒体可用性 {
+    Ready,
+    ConnectingToPeers,
+    NoOnlineSeed,
+    Deleted,
+}
+
+/// reducer 的输入只放事实，不放 UI 文案、HTTP 状态或 shell 日志。
+/// 业务顺序固定为：删除态优先；完整来源 ready；片段/连接窗口 connecting；最后才 no seed。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct 协作分发可用性输入 {
+    pub web_seed仍可用: bool,
+    pub 完整peer新鲜: bool,
+    pub 片段peer新鲜: bool,
+    pub 后端强种子新鲜: bool,
+    pub 附件已删除: bool,
+    pub 仍在连接群友窗口内: bool,
+}
+
 /// 协作分发的内容哈希只认 canonical 共享载荷字节。
 /// 这样 Phase 1 就能稳定得到：
 /// 1. 与上传主链解耦的内容标识；
@@ -153,27 +175,27 @@ pub(crate) fn 读取协作分发tracker对外地址(
     trimmed.trim_end_matches('/').to_string()
 }
 
-pub(crate) fn 裁决协作分发可用性(
-    snapshot: &usecase::协作分发元数据快照,
-    web_seed仍可用: bool,
-    now_epoch秒: i64,
-    stale_seconds: i64,
-) -> &'static str {
-    let 有新鲜完整peer = 来源仍算活跃(
-        snapshot.最近完整peer存活时间戳秒,
-        now_epoch秒,
-        stale_seconds,
-    );
-    let 有新鲜后端强种子 = 来源仍算活跃(
-        snapshot.最近后端强种子存活时间戳秒,
-        now_epoch秒,
-        stale_seconds,
-    );
+pub(crate) fn 裁决协作分发媒体可用性(
+    input: 协作分发可用性输入,
+) -> 协作分发媒体可用性 {
+    if input.附件已删除 {
+        return 协作分发媒体可用性::Deleted;
+    }
+    if input.web_seed仍可用 || input.完整peer新鲜 || input.后端强种子新鲜 {
+        return 协作分发媒体可用性::Ready;
+    }
+    if input.片段peer新鲜 || input.仍在连接群友窗口内 {
+        return 协作分发媒体可用性::ConnectingToPeers;
+    }
+    协作分发媒体可用性::NoOnlineSeed
+}
 
-    if web_seed仍可用 || 有新鲜完整peer || 有新鲜后端强种子 {
-        "available"
-    } else {
-        "expired"
+fn 协作分发媒体可用性转状态码(availability: 协作分发媒体可用性) -> &'static str {
+    match availability {
+        协作分发媒体可用性::Ready => 媒体状态已就绪,
+        协作分发媒体可用性::ConnectingToPeers => 媒体状态连接群友中,
+        协作分发媒体可用性::NoOnlineSeed => 媒体状态无在线种子,
+        协作分发媒体可用性::Deleted => 媒体状态已删除,
     }
 }
 
@@ -188,26 +210,29 @@ fn 裁决协作分发媒体状态码(
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> &'static str {
-    if 附件已删除 {
-        return 媒体状态已删除;
-    }
-    let availability =
-        裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
-    if availability == "available" {
-        return 媒体状态已就绪;
-    }
-
-    // partial_peer 说明群友侧已经真实进入 swarm，只是还没补齐成 ready 来源。
-    let 有新鲜片段peer = 来源仍算活跃(
-        snapshot.最近片段peer存活时间戳秒,
-        now_epoch秒,
-        stale_seconds,
-    );
-    if 有新鲜片段peer || now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒)
-    {
-        return 媒体状态连接群友中;
-    }
-    媒体状态无在线种子
+    let availability = 裁决协作分发媒体可用性(协作分发可用性输入 {
+        web_seed仍可用,
+        完整peer新鲜: 来源仍算活跃(
+            snapshot.最近完整peer存活时间戳秒,
+            now_epoch秒,
+            stale_seconds,
+        ),
+        // partial_peer 说明群友侧已经真实进入 swarm，只是还没补齐成 ready 来源。
+        片段peer新鲜: 来源仍算活跃(
+            snapshot.最近片段peer存活时间戳秒,
+            now_epoch秒,
+            stale_seconds,
+        ),
+        后端强种子新鲜: 来源仍算活跃(
+            snapshot.最近后端强种子存活时间戳秒,
+            now_epoch秒,
+            stale_seconds,
+        ),
+        附件已删除,
+        仍在连接群友窗口内: now_epoch秒
+            <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒),
+    });
+    协作分发媒体可用性转状态码(availability)
 }
 
 /// 协作分发来源的新鲜度必须统一裁决，避免不同入口各自拍脑袋理解“最近还活着”。
@@ -459,6 +484,60 @@ mod tests {
                 attachment_id: Some("att-test".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn 可用性reducer不会把片段peer冒充成ready来源() {
+        let 输入 = 协作分发可用性输入 {
+            web_seed仍可用: false,
+            完整peer新鲜: false,
+            片段peer新鲜: true,
+            后端强种子新鲜: false,
+            附件已删除: false,
+            仍在连接群友窗口内: false,
+        };
+
+        assert_eq!(
+            裁决协作分发媒体可用性(输入),
+            协作分发媒体可用性::ConnectingToPeers,
+            "片段 peer 有协作价值，但还不能提供完整首播来源，禁止把它投影成 READY"
+        );
+    }
+
+    #[test]
+    fn 可用性reducer先按业务真相裁决再投影contract状态码() {
+        let 删除态 = 裁决协作分发媒体可用性(协作分发可用性输入 {
+            web_seed仍可用: true,
+            完整peer新鲜: true,
+            片段peer新鲜: true,
+            后端强种子新鲜: true,
+            附件已删除: true,
+            仍在连接群友窗口内: true,
+        });
+        assert_eq!(删除态, 协作分发媒体可用性::Deleted);
+        assert_eq!(协作分发媒体可用性转状态码(删除态), 媒体状态已删除);
+
+        let ready = 裁决协作分发媒体可用性(协作分发可用性输入 {
+            web_seed仍可用: false,
+            完整peer新鲜: true,
+            片段peer新鲜: false,
+            后端强种子新鲜: false,
+            附件已删除: false,
+            仍在连接群友窗口内: false,
+        });
+        assert_eq!(ready, 协作分发媒体可用性::Ready);
+        assert_eq!(协作分发媒体可用性转状态码(ready), 媒体状态已就绪);
+
+        let no_seed = 裁决协作分发媒体可用性(协作分发可用性输入 {
+            web_seed仍可用: false,
+            完整peer新鲜: false,
+            片段peer新鲜: false,
+            后端强种子新鲜: false,
+            附件已删除: false,
+            仍在连接群友窗口内: false,
+        });
+        assert_eq!(no_seed, 协作分发媒体可用性::NoOnlineSeed);
+        assert_eq!(协作分发媒体可用性转状态码(no_seed), 媒体状态无在线种子);
     }
 
     #[test]

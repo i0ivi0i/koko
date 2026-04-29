@@ -58,6 +58,7 @@ import {
   type 媒体播放位置,
   type 预览缓存端口,
   type 视频预览状态,
+  type WebTorrentSessionLifecycleSnapshot,
 } from "./媒体/index.js";
 
 type 程序滚动来源 = "media_viewer_open";
@@ -630,6 +631,22 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     };
   };
 
+  const 读取播放结果协作分发生命周期 = (
+    playback: 媒体播放结果 | null
+  ): WebTorrentSessionLifecycleSnapshot | null => {
+    const swarmId = playback?.mode === "swarm" ? playback.distribution?.swarm_id : null;
+    if (!swarmId) {
+      return null;
+    }
+    /**
+     * 聊天媒体编排只读取生命周期投影，不直接改 WebTorrent runtime：
+     * 1. swarm_id 仍来自后端 locator / playback distribution，不从 URL 文本反推；
+     * 2. budget 只消费 runtime owner 已裁决的轻重状态；
+     * 3. 这样消息窗不会继续用旧 preview src 自己猜“还能不能渲染真实 video”。
+     */
+    return 协作分发运行时.读取会话状态(swarmId)?.lifecycle ?? null;
+  };
+
   /**
    * 附件内容地址属于“当前会话下可访问的媒体资源定位结果”。
    * 这里按当前时间线里的附件集合现算现给，目的有两个：
@@ -713,6 +730,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         context.inlineAutoplayOwnerAttachmentId === attachmentId
           ? context.inlineAutoplayPlayback
           : null;
+      const webTorrentLifecycle = 读取播放结果协作分发生命周期(
+        runtimeAutoplayPlayback ?? session?.playback ?? null
+      );
       const formalByteSource: 正式媒体字节来源 =
         session?.playback?.mode === "swarm" ||
         runtimeAutoplayPlayback?.mode === "swarm" ||
@@ -739,6 +759,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         locallyComplete:
           Boolean(session?.locallyComplete) || Boolean(媒体缓存.snapshot()[attachmentId]?.complete),
         formalByteSource,
+        webTorrentLifecycle,
       });
     }
     return budgets;
@@ -755,7 +776,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     left.previewVideoSrc === right.previewVideoSrc &&
     left.allowInlineCanonical === right.allowInlineCanonical &&
     left.allowPreviewVideo === right.allowPreviewVideo &&
-    left.formalByteSource === right.formalByteSource;
+    left.formalByteSource === right.formalByteSource &&
+    left.webTorrentLifecycleState === right.webTorrentLifecycleState &&
+    left.activeWebTorrentReaderCount === right.activeWebTorrentReaderCount;
   const 缓存重点信息流视频预算 = (
     nextBudgets: Record<string, 信息流视频预算投影>
   ): 信息流视频预算投影[] => {

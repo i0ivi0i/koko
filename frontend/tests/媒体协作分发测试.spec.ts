@@ -456,6 +456,13 @@ describe("媒体协作分发", () => {
         },
         eagerCompleting: false,
         locallyComplete: false,
+        lifecycle: {
+          state: "heavy_playback",
+          generation: 0,
+          activeReaderCount: 1,
+          hasPresenceHeartbeat: false,
+          hasJoinTicketRefresh: false,
+        },
         hint: "正在协作分发",
       };
 

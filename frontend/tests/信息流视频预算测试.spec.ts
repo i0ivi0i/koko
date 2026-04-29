@@ -65,4 +65,37 @@ describe("信息流视频预算", () => {
       formalByteSource: "non_webtorrent_bypass",
     });
   });
+
+  it("WebTorrent lifecycle 已降为轻帮助时不会因为旧 preview src 继续保留前台视频面", () => {
+    const budget = 投影信息流视频预算({
+      attachmentId: "att-budget-light-help",
+      playback: null,
+      inlineAutoplayPlayback: null,
+      viewerCanonicalVideoSrc: null,
+      previewVideoSrc: "blob:http://media.local/swarm-att-budget-light-help",
+      inMediaWindow: true,
+      isAutoplayCandidate: true,
+      isInlineAutoplayOwner: false,
+      isViewerOwner: false,
+      sessionStatus: "backfilling",
+      locallyComplete: false,
+      formalByteSource: 正式WebTorrent来源,
+      webTorrentLifecycle: {
+        state: "light_help",
+        generation: 2,
+        activeReaderCount: 0,
+        hasPresenceHeartbeat: true,
+        hasJoinTicketRefresh: true,
+      },
+    });
+
+    expect(budget).toMatchObject({
+      tier: "light_help",
+      reason: "retained_media_session",
+      previewVideoSrc: null,
+      allowPreviewVideo: false,
+      webTorrentLifecycleState: "light_help",
+      activeWebTorrentReaderCount: 0,
+    });
+  });
 });
