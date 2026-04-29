@@ -22,10 +22,14 @@ export interface 媒体运行时上下文 {
   inlineAutoplayPendingAttachmentId: string | null;
   inlineAutoplayPlayback: 媒体播放结果 | null;
   /**
-   * 当前房间已加载消息里的附件集合，是自动播续播位置的生命周期边界。
-   * null 代表还没收到过消息集合同步；空数组代表已经同步过，但当前房间没有附件。
+   * 当前重资源媒体窗口，只负责 owner / pending / 候选和会话预算，不负责裁掉续播位置。
    */
   inlineAutoplayActiveAttachmentIds: string[] | null;
+  /**
+   * 自动播位置的保留集合必须按“房间消息是否仍存在”裁剪，不能按当前活跃窗口裁剪。
+   * A 刚离屏、B 正在播放时，A 不再是重资源窗口成员，但它仍然需要保留续播时间戳。
+   */
+  inlineAutoplayPositionRetentionAttachmentIds: string[] | null;
   inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
   inlineAutoplayConsecutiveEmptyObservedCount: number;
   lastInlineAutoplayCandidates: 消息视频自动播候选[];
@@ -77,6 +81,7 @@ export type 媒体运行时事件 =
   | {
       type: "MESSAGE_ATTACHMENTS_SYNCED";
       attachmentIds: string[];
+      positionRetentionAttachmentIds?: string[];
     }
   | {
       type: "MEDIA_SESSION_SIGNALLED";
@@ -109,6 +114,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
   inlineAutoplayActiveAttachmentIds: null,
+  inlineAutoplayPositionRetentionAttachmentIds: null,
   inlineAutoplayPositionByAttachmentId: {},
   inlineAutoplayConsecutiveEmptyObservedCount: 0,
   lastInlineAutoplayCandidates: [],
@@ -206,13 +212,13 @@ const 附件标识列表相同 = (
 };
 
 const 读取自动播位置保留附件集合 = (
-  activeAttachmentIds: string[] | null,
+  retentionAttachmentIds: string[] | null,
   reportingAttachmentId?: string
 ): Set<string> | undefined => {
-  if (!activeAttachmentIds) {
+  if (!retentionAttachmentIds) {
     return undefined;
   }
-  const retainedAttachmentIds = new Set(activeAttachmentIds);
+  const retainedAttachmentIds = new Set(retentionAttachmentIds);
   if (reportingAttachmentId) {
     retainedAttachmentIds.add(reportingAttachmentId);
   }
@@ -539,7 +545,7 @@ const 媒体运行时机 = createMachine(
               [event.attachmentId]: nextPosition,
             },
             读取自动播位置保留附件集合(
-              context.inlineAutoplayActiveAttachmentIds,
+              context.inlineAutoplayPositionRetentionAttachmentIds,
               event.attachmentId
             )
           ),
@@ -553,9 +559,15 @@ const 媒体运行时机 = createMachine(
           event.attachmentIds
         );
         const activeAttachmentIds = new Set(nextInlineAutoplayActiveAttachmentIds);
+        const nextInlineAutoplayPositionRetentionAttachmentIds = 归一化附件标识列表(
+          event.positionRetentionAttachmentIds ?? event.attachmentIds
+        );
+        const positionRetentionAttachmentIds = new Set(
+          nextInlineAutoplayPositionRetentionAttachmentIds
+        );
         const nextInlineAutoplayPositionByAttachmentId = 裁剪自动播播放位置表(
           context.inlineAutoplayPositionByAttachmentId,
-          activeAttachmentIds
+          positionRetentionAttachmentIds
         );
         const nextInlineAutoplayCandidates = context.lastInlineAutoplayCandidates.filter(
           (candidate) => activeAttachmentIds.has(candidate.attachmentId)
@@ -575,12 +587,17 @@ const 媒体运行时机 = createMachine(
           context.inlineAutoplayActiveAttachmentIds,
           nextInlineAutoplayActiveAttachmentIds
         );
+        const positionRetentionAttachmentIdsChanged = !附件标识列表相同(
+          context.inlineAutoplayPositionRetentionAttachmentIds,
+          nextInlineAutoplayPositionRetentionAttachmentIds
+        );
         if (
           ownerAlive &&
           pendingAlive &&
           !candidatesChanged &&
           !positionsChanged &&
-          !activeAttachmentIdsChanged
+          !activeAttachmentIdsChanged &&
+          !positionRetentionAttachmentIdsChanged
         ) {
           return {};
         }
@@ -595,6 +612,8 @@ const 媒体运行时机 = createMachine(
         };
         return {
           inlineAutoplayActiveAttachmentIds: nextInlineAutoplayActiveAttachmentIds,
+          inlineAutoplayPositionRetentionAttachmentIds:
+            nextInlineAutoplayPositionRetentionAttachmentIds,
           lastInlineAutoplayCandidates: nextInlineAutoplayCandidates,
           ...(!ownerAlive || !pendingAlive
             ? 重算自动播候选补丁(nextContext, nextInlineAutoplayCandidates)

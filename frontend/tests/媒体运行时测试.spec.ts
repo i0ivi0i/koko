@@ -454,6 +454,50 @@ describe("媒体运行时", () => {
     });
   });
 
+  it("A 退场后 B 继续播放时，只要 A 还在房间消息集合内，B 的位置上报不能裁掉 A 的续播时间戳", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: ["att-video-a"],
+      positionRetentionAttachmentIds: ["att-video-a", "att-video-b"],
+    });
+    actor.send({
+      type: "PLAYBACK_POSITION_CHANGED",
+      attachmentId: "att-video-a",
+      position: {
+        src: "http://media.local/swarm-video-a",
+        currentTime: 18.75,
+        updatedAt: 1_000,
+      },
+    });
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: ["att-video-b"],
+      positionRetentionAttachmentIds: ["att-video-a", "att-video-b"],
+    });
+    actor.send({
+      type: "PLAYBACK_POSITION_CHANGED",
+      attachmentId: "att-video-b",
+      position: {
+        src: "http://media.local/swarm-video-b",
+        currentTime: 6.25,
+        updatedAt: 2_000,
+      },
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId).toMatchObject({
+      "att-video-a": {
+        src: "http://media.local/swarm-video-a",
+        currentTime: 18.75,
+      },
+      "att-video-b": {
+        src: "http://media.local/swarm-video-b",
+        currentTime: 6.25,
+      },
+    });
+  });
+
   it("自动播播放位置在附件集合尚未同步时仍会兜底裁剪，避免异常事件把体验态撑成无界缓存", () => {
     const actor = 创建媒体运行时Actor();
 

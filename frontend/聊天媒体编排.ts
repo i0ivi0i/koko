@@ -1095,9 +1095,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     if (清理失活媒体会话(activeAttachmentIds)) {
       deps.请求重渲染();
     }
+    const positionRetentionAttachmentIds = attachments.map((item) => item.attachmentId);
     接收媒体运行时事实({
       type: "MESSAGE_ATTACHMENTS_SYNCED",
       attachmentIds: Array.from(activeAttachmentIds),
+      positionRetentionAttachmentIds,
     });
     const hasSessionSetChanged = 补齐当前房间媒体会话(activeWindowAttachments);
     协作补齐协作.恢复当前房间缓存帮助任务(helpAttachments);
