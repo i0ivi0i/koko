@@ -85,7 +85,6 @@ export type 媒体查看器依赖 = {
   createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
   createVideoJsPlayerShell?: VideoJs播放器壳工厂;
   globalVideoPlayer?: 全局唯一播放器端口;
-  isMobileViewport?: () => boolean;
   onMediaSessionSignal?: (attachmentId: string, signal: 媒体会话信号) => void;
   onPlaybackPositionChanged?: (attachmentId: string, position: 媒体播放位置) => void;
   onViewportCaptureStart?: () => void;
@@ -156,12 +155,6 @@ const 是异步媒体查看器结果 = (
 ): result is Promise<媒体查看器实例> =>
   typeof (result as Promise<媒体查看器实例>).then === "function";
 
-const 是移动触屏视口 = (): boolean => {
-  const hasCoarsePointer = globalThis.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const touchPoints = globalThis.navigator?.maxTouchPoints ?? 0;
-  return hasCoarsePointer || touchPoints > 0;
-};
-
 const 读取宽高方向锁 = (width: number, height: number): 媒体方向锁 | null => {
   if (height > width) {
     return "portrait";
@@ -177,8 +170,8 @@ const 读取视频方向锁 = (item: 媒体查看器视频项目): 媒体方向�
 
 /**
  * 显式关闭旧查看器后，浏览器的系统全屏退场可能会晚于壳层 owner 收尾。
- * 在这段窗口里，新会话必须先保证应用内沉浸布局可用，而不是继续把“马上再拿到系统全屏”
- * 当成唯一真相，否则移动端就会出现首击像没进全屏、等一会再点一次才恢复的错觉。
+ * 在这段窗口里，新会话仍要尝试 Video.js container-first 真全屏，
+ * 同时保证沉浸布局先可用；否则首击会像没进全屏，等一会再点一次才恢复。
  */
 let 存在待结算的系统全屏退出 = false;
 
@@ -502,8 +495,7 @@ const 启动同会话全屏策略 = (
   );
   if (!允许系统全屏) {
     /**
-     * 移动端的“全屏”是应用内沉浸会话，不进入浏览器系统 fullscreen。
-     * 这样不会触发手机浏览器自带退出提示，也不会在退出时经过系统黑场；
+     * 只有系统 fullscreen 不可用或被调用方显式关闭时，才退回应用内沉浸会话。
      * 方向锁仍作为最佳努力增强，失败时浏览器会安静拒绝。
      */
     lockScreenOrientation();
@@ -801,7 +793,6 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   void 预热默认VideoJs元素().catch(() => undefined);
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
-  const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
   const globalVideoPlayer =
     deps.globalVideoPlayer ??
     (deps.createVideoJsPlayerShell
@@ -1071,12 +1062,12 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
         {
           /**
            * 显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
-           * 但手机浏览器的系统 fullscreen 会弹出无法由页面控制的退出提示，
-           * 退出时还可能经过浏览器黑场；移动端因此默认走应用内沉浸全屏。
-           * 桌面端仍可沿同一条 container owner 链尝试系统 fullscreen。
+           * Video.js v10 的官方 fullscreen 模型是 container-first、media element fallback：
+           * 只要浏览器允许，就应让同一颗 player/container 进入系统真全屏；
+           * 只有缺少系统 fullscreen 能力或失去用户激活时，才退回应用内沉浸兜底。
            */
           shouldAutoEnterFullscreen: true,
-          shouldRequestSystemFullscreen: !isMobileViewport(),
+          shouldRequestSystemFullscreen: true,
         }
       )
     );
