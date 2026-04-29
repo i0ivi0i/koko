@@ -23,6 +23,11 @@ type 协作补齐协作依赖 = {
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
   }): Promise<void>;
+  释放协作补齐(input: {
+    attachmentId: string;
+    consumerId?: string;
+    丢弃未完成补齐?: boolean;
+  }): void;
   应用缓存完整度到会话(attachmentId: string): void;
   标记媒体定位过期(attachmentId: string): void;
   标记附件完整并持久化(
@@ -32,7 +37,7 @@ type 协作补齐协作依赖 = {
   读取当前房间媒体附件(): 媒体附件条目[];
   读取附件条目(attachmentId: string): 媒体附件条目 | null;
   读取当前查看器起始附件标识(): string | null;
-  构造媒体会话ConsumerId(attachmentId: string): string;
+  构造协作补齐ConsumerId(attachmentId: string): string;
 };
 
 export interface 协作补齐协作端口 {
@@ -107,7 +112,7 @@ export function 创建协作补齐协作(
       .激活协作补齐({
         attachmentId,
         kind: metadata.kind,
-        consumerId: deps.构造媒体会话ConsumerId(attachmentId),
+        consumerId: deps.构造协作补齐ConsumerId(attachmentId),
         onSessionEvent: (event) =>
           处理协作分发事件(
             {
@@ -118,6 +123,34 @@ export function 创建协作补齐协作(
           ),
       })
       .catch(() => undefined);
+  };
+
+  const 释放附件协作补齐 = (attachmentId: string): void => {
+    if (!已进入帮助链附件.has(attachmentId) && !已恢复帮助任务附件.has(attachmentId)) {
+      return;
+    }
+    deps.释放协作补齐({
+      attachmentId,
+      consumerId: deps.构造协作补齐ConsumerId(attachmentId),
+    });
+    已进入帮助链附件.delete(attachmentId);
+    已恢复帮助任务附件.delete(attachmentId);
+  };
+
+  const 清理已离开当前房间的帮助任务 = (): void => {
+    for (const attachmentId of new Set([
+      ...已进入帮助链附件,
+      ...已恢复帮助任务附件,
+    ])) {
+      if (deps.读取附件条目(attachmentId)) {
+        continue;
+      }
+      /**
+       * 后台补齐 consumer 已经从 UI 会话 consumer 中拆出；
+       * 因此“滚远”不能清它，但附件不再属于当前房间时必须清，避免帮助任务泄漏到旧房间。
+       */
+      释放附件协作补齐(attachmentId);
+    }
   };
 
   return {
@@ -132,6 +165,7 @@ export function 创建协作补齐协作(
       for (const attachment of attachments) {
         当前帮助窗口附件.add(attachment.attachmentId);
       }
+      清理已离开当前房间的帮助任务();
     },
 
     恢复当前房间缓存帮助任务(
@@ -204,11 +238,16 @@ export function 创建协作补齐协作(
     },
 
     清理附件(attachmentId: string): void {
-      已进入帮助链附件.delete(attachmentId);
-      已恢复帮助任务附件.delete(attachmentId);
+      释放附件协作补齐(attachmentId);
     },
 
     清空(): void {
+      for (const attachmentId of new Set([
+        ...已进入帮助链附件,
+        ...已恢复帮助任务附件,
+      ])) {
+        释放附件协作补齐(attachmentId);
+      }
       已进入帮助链附件.clear();
       已恢复帮助任务附件.clear();
       当前帮助窗口附件.clear();

@@ -184,6 +184,7 @@ type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
 const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
+const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -947,6 +948,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       媒体缓存.snapshot()[attachmentId]?.complete === true,
     读取媒体缓存已启动: () => 媒体缓存已启动,
     激活协作补齐: (input) => 媒体播放器.激活协作补齐?.(input) ?? Promise.resolve(),
+    释放协作补齐: (input) => {
+      媒体播放器.释放附件播放资源?.(input);
+    },
     应用缓存完整度到会话: (attachmentId) => {
       应用缓存完整度到会话(attachmentId);
     },
@@ -958,7 +962,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     读取附件条目,
     读取当前查看器起始附件标识: () =>
       读取媒体运行时上下文().currentViewerRequest?.startAttachmentId ?? null,
-    构造媒体会话ConsumerId,
+    构造协作补齐ConsumerId,
   });
 
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
@@ -1114,7 +1118,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       if (
         释放媒体附件会话(attachmentId, {
           丢弃未完成预览补齐: true,
-          清理协作补齐: true,
+          清理协作补齐: 读取附件条目(attachmentId) === null,
           清理视频预览: true,
         })
       ) {

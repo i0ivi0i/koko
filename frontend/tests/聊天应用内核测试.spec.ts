@@ -831,7 +831,7 @@ describe("聊天应用内核", () => {
     });
     expect(恢复帮助任务).toHaveBeenCalledWith({
       attachmentId: "att-video-cache-1",
-      consumerId: "session:att-video-cache-1",
+      consumerId: "backfill:att-video-cache-1",
       kind: "video",
       onSessionEvent: expect.any(Function),
     });
@@ -1261,7 +1261,7 @@ describe("聊天应用内核", () => {
 
     expect(激活协作补齐).toHaveBeenCalledWith({
       attachmentId: "att-image-backfill-1",
-      consumerId: "session:att-image-backfill-1",
+      consumerId: "backfill:att-image-backfill-1",
       kind: "image",
       onSessionEvent: expect.any(Function),
     });
@@ -3182,7 +3182,7 @@ describe("聊天应用内核", () => {
     expect(激活协作补齐).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-viewer-close-1",
-        consumerId: "session:att-video-viewer-close-1",
+        consumerId: "backfill:att-video-viewer-close-1",
       })
     );
 
