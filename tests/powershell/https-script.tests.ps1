@@ -76,8 +76,16 @@ Assert-True -Condition $cmd.Contains(" start ") -Message "开机自启命令应�
 Assert-True -Condition $cmd.Contains("--config") -Message "开机自启命令应包含 --config。"
 Assert-True -Condition $cmd.Contains("--adapter caddyfile") -Message "开机自启命令应包含 caddyfile adapter。"
 
-# 用例5：Caddy 原生命令必须显式重定向 stdout/stderr，避免 WinPS NativeCommandError 打断 HTTPS 启动。
+# 用例5：局域网 HTTPS 入口必须有明确的 Windows 入站防火墙 owner。
 $scriptContent = Get-Content -LiteralPath $scriptPath -Raw
+$firewallRule = Build-HttpsFirewallRuleSpec -Port 443
+Assert-Equal -Actual $firewallRule.DisplayName -Expected "koko HTTPS LAN入口 (TCP 443)" -Message "HTTPS 防火墙规则名必须稳定，避免继续依赖系统弹窗或 caddy.exe 路径规则。"
+Assert-Equal -Actual $firewallRule.Protocol -Expected "TCP" -Message "HTTPS 局域网入口只需要开放 TCP。"
+Assert-Equal -Actual $firewallRule.LocalPort -Expected 443 -Message "HTTPS 局域网入口必须固定收口到 443。"
+Assert-True -Condition ($scriptContent -match 'Ensure-HttpsLanFirewallRule') -Message "https.ps1 必须在启动链路中确保 LAN HTTPS 入站规则。"
+Assert-True -Condition ($scriptContent -match 'Launcher 模式：跳过 caddy trust 与开机自启任务；HTTPS 入站防火墙已单独处理。') -Message "Launcher 模式不能再把防火墙入口和 trust/autostart 一起跳过。"
+
+# 用例6：Caddy 原生命令必须显式重定向 stdout/stderr，避免 WinPS NativeCommandError 打断 HTTPS 启动。
 Assert-True -Condition ($scriptContent -match 'validate[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy validate 应显式重定向 stdout/stderr。"
 Assert-True -Condition ($scriptContent -match 'reload[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy reload 应显式重定向 stdout/stderr。"
 Assert-True -Condition ($scriptContent -match 'start --config[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy start 应显式重定向 stdout/stderr。"
@@ -91,13 +99,13 @@ Assert-True -Condition ($scriptContent -match 'Write-HttpsAccessSummary') -Messa
 Assert-True -Condition ($scriptContent -match 'Enable-CaddyTrustAndAutoStart') -Message "https.ps1 应把证书信任与开机自启收口到独立 helper，避免 Invoke-HttpsBootstrap 混杂太多步骤。"
 Assert-False -Condition ($scriptContent -match 'cargo\s+run') -Message "https.ps1 不应自己直接拉起 cargo 主链。"
 
-# 用例5：HTTPS 运行时目录默认不应在仓库内。
+# 用例7：HTTPS 运行时目录默认不应在仓库内。
 $runtimeDir = Resolve-HttpsRuntimeDirectory
 $normalizedRuntimeDir = $runtimeDir.TrimEnd('\').ToLowerInvariant()
 $normalizedRepoRoot = $repoRoot.TrimEnd('\').ToLowerInvariant()
 Assert-False -Condition $normalizedRuntimeDir.StartsWith($normalizedRepoRoot) -Message "运行时目录不应落在仓库里。"
 
-# 用例6：bootstrap 日志目录默认也不应落在仓库内，避免 https.ps1 再维护一套 repo 内运行时状态。
+# 用例8：bootstrap 日志目录默认也不应落在仓库内，避免 https.ps1 再维护一套 repo 内运行时状态。
 $bootstrapLogDir = Resolve-HttpsBootstrapLogDirectory
 $normalizedBootstrapLogDir = $bootstrapLogDir.TrimEnd('\').ToLowerInvariant()
 Assert-False -Condition $normalizedBootstrapLogDir.StartsWith($normalizedRepoRoot) -Message "bootstrap 日志目录不应落在仓库里。"

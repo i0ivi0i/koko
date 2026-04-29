@@ -281,6 +281,85 @@ function Start-OrReload-Caddy {
     return "started"
 }
 
+function Build-HttpsFirewallRuleSpec {
+    param(
+        [int]$Port = 443
+    )
+
+    return [pscustomobject]@{
+        Name = "koko-https-lan-tcp-$Port"
+        DisplayName = "koko HTTPS LAN入口 (TCP $Port)"
+        Direction = "Inbound"
+        Action = "Allow"
+        Protocol = "TCP"
+        LocalPort = $Port
+        Profile = "Any"
+    }
+}
+
+function Test-HttpsLanFirewallRuleMatches {
+    param(
+        [Parameter(Mandatory = $true)]$Rule,
+        [Parameter(Mandatory = $true)]$Spec
+    )
+
+    if ($Rule.Enabled -ne "True" -or $Rule.Direction -ne $Spec.Direction -or $Rule.Action -ne $Spec.Action) {
+        return $false
+    }
+
+    $portFilters = @($Rule | Get-NetFirewallPortFilter -ErrorAction Stop)
+    foreach ($filter in $portFilters) {
+        $protocolMatches = ($filter.Protocol -eq $Spec.Protocol)
+        $portMatches = ($filter.LocalPort -eq [string]$Spec.LocalPort -or $filter.LocalPort -eq "Any")
+        if ($protocolMatches -and $portMatches) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Ensure-HttpsLanFirewallRule {
+    param(
+        [int]$Port = 443
+    )
+
+    $spec = Build-HttpsFirewallRuleSpec -Port $Port
+    $repairCommand = "New-NetFirewallRule -Name '$($spec.Name)' -DisplayName '$($spec.DisplayName)' -Direction $($spec.Direction) -Action $($spec.Action) -Protocol $($spec.Protocol) -LocalPort $($spec.LocalPort) -Profile $($spec.Profile)"
+
+    try {
+        $existing = Get-NetFirewallRule -Name $spec.Name -ErrorAction SilentlyContinue
+        if ($null -ne $existing -and (Test-HttpsLanFirewallRuleMatches -Rule $existing -Spec $spec)) {
+            Write-Host "HTTPS 局域网入站防火墙规则已存在: $($spec.DisplayName)"
+            return $true
+        }
+
+        if ($null -ne $existing) {
+            Remove-NetFirewallRule -Name $spec.Name -ErrorAction Stop
+        }
+
+        # 这里是局域网 HTTPS 单入口的 Windows 适配层 owner：
+        # Caddy 负责监听 443；这个规则负责允许同网段设备真正连进 443。
+        # 不能继续依赖 Windows 首次弹窗或 caddy.exe 安装路径规则，否则 WinGet 升级、
+        # Launcher 隐藏启动、网络 profile 变化都会让“本机能开、手机恢复失败”反复出现。
+        New-NetFirewallRule `
+            -Name $spec.Name `
+            -DisplayName $spec.DisplayName `
+            -Direction $spec.Direction `
+            -Action $spec.Action `
+            -Protocol $spec.Protocol `
+            -LocalPort $spec.LocalPort `
+            -Profile $spec.Profile `
+            -ErrorAction Stop | Out-Null
+        Write-Host "已确保 HTTPS 局域网入站防火墙规则: $($spec.DisplayName)"
+        return $true
+    }
+    catch {
+        Write-Warning "无法自动写入 HTTPS 局域网入站防火墙规则（通常需要管理员权限）。局域网设备若打不开或只看到离线缓存恢复失败，请以管理员 PowerShell 执行：$repairCommand"
+        return $false
+    }
+}
+
 function Ensure-CaddyAutoStartTask {
     param(
         [Parameter(Mandatory = $true)][string]$CaddyPath,
@@ -411,8 +490,10 @@ function Invoke-HttpsBootstrap {
     $result = Start-OrReload-Caddy -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
     Write-Host "Caddy 已$result。"
 
+    $null = Ensure-HttpsLanFirewallRule -Port 443
+
     if ($IsLauncherMode) {
-        Write-Host "Launcher 模式：跳过 caddy trust 与开机自启任务。"
+        Write-Host "Launcher 模式：跳过 caddy trust 与开机自启任务；HTTPS 入站防火墙已单独处理。"
         return
     }
 
