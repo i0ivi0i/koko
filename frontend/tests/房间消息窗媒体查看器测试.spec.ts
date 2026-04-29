@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放";
-import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
+import type { 媒体查看器打开请求, 媒体查看器项目 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
 import { 创建VideoJs播放器壳 } from "../媒体/videojs播放器壳.js";
@@ -3555,6 +3555,56 @@ describe("房间消息窗媒体查看器", () => {
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).toBeNull();
+
+    pane.remove();
+  });
+
+  it("打开查看器时会携带同源时间线保存位置，供唯一播放器续播", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "/webtorrent/demo-infohash/content-demo.mp4",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: new URL(playback.src, window.location.href).href,
+        currentTime: 23.5,
+        updatedAt: 2,
+      },
+    };
+
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    const viewerVideoItem = details[0]?.items.find(
+      (item): item is Extract<媒体查看器项目, { kind: "video" }> =>
+        item.kind === "video" && item.attachmentId === "att-video-1"
+    );
+    expect(viewerVideoItem?.resumePosition).toEqual({
+      src: new URL(playback.src, window.location.href).href,
+      currentTime: 23.5,
+      updatedAt: 2,
+    });
 
     pane.remove();
   });

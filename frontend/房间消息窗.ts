@@ -1797,16 +1797,22 @@ export class 房间消息窗 extends LitElement {
           });
           continue;
         }
+        const viewerVideoSrc = this.读取附件播放源(attachment);
+        const viewerResumePosition = this.读取自动播恢复位置(
+          attachment.attachmentId,
+          viewerVideoSrc
+        );
         items.push({
           kind: "video",
           attachmentId: attachment.attachmentId,
-          src: this.读取附件播放源(attachment),
+          src: viewerVideoSrc,
           // 播放链拿到的新 thumbnail 可能已经完成重签；应优先覆盖消息快照里可能失效的旧 poster。
           posterSrc:
             playback?.thumbnailUrl ??
             this.读取时间线视频运行时预览(attachment.attachmentId)?.src ??
             attachment.posterSrc ??
             null,
+          ...(viewerResumePosition ? { resumePosition: viewerResumePosition } : {}),
           width: attachment.width,
           height: attachment.height,
         });

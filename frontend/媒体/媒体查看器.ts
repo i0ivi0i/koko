@@ -13,6 +13,7 @@ import {
   type 全局唯一播放器端口,
   type 全局唯一播放器查看器会话,
 } from "./全局唯一播放器.js";
+import { 判定播放连续性表面 } from "./全局丝滑自动播.js";
 
 export type 媒体查看器项目 =
   | {
@@ -30,6 +31,7 @@ export type 媒体查看器项目 =
       attachmentId: string;
       src: string;
       posterSrc: string | null;
+      resumePosition?: 媒体播放位置 | null;
       width: number;
       height: number;
     };
@@ -258,6 +260,37 @@ const 启动同会话全屏策略 = (
   let videoOrientation = 读取视频方向锁(读取当前项目());
 
   const startPlayback = (): void => {
+    const currentItem = 读取当前项目();
+    const currentSrc = video.currentSrc || video.getAttribute("src") || currentItem.src;
+    const currentPosition =
+      currentSrc && Number.isFinite(video.currentTime) && video.currentTime >= 0
+        ? { src: currentSrc, currentTime: video.currentTime, updatedAt: Date.now() }
+        : null;
+    const decision = 判定播放连续性表面({
+      attachmentId: currentItem.attachmentId,
+      ownerAttachmentId: currentItem.attachmentId,
+      surface: "fullscreen",
+      source: { src: currentSrc },
+      savedPosition: currentPosition,
+      dom: {
+        previewReadyState: video.readyState,
+        canonicalReadyState: video.readyState,
+        sourceMatches: Boolean(currentSrc),
+      },
+      host: {
+        exists: container.isConnected,
+        hasStableFrame: video.readyState >= 2 || Boolean(currentPosition),
+      },
+      intent: { viewerOpen: false, fullscreen: true },
+    });
+    if (decision.kind === "cold_placeholder" || decision.kind === "retire") {
+      return;
+    }
+    /**
+     * 全屏不是第二套播放模型，只是当前 viewer 会话的展示意图。
+     * 因此是否继续播放也先过全局连续性状态链：无源、宿主未挂载或退场时不抢播；
+     * 有同源当前位置时继续同一颗 video，不重建、不清零、不另开原生旁路。
+     */
     void video.play().catch(() => undefined);
   };
   const lockScreenOrientation = (): void => {
@@ -626,6 +659,7 @@ const 创建默认VideoJs播放器层 = async (
       attachmentId: item.attachmentId,
       mountTarget: mount,
       source: 映射VideoJs播放源(item),
+      resumePosition: item.resumePosition ?? null,
       回调: {
         广播媒体会话信号: (signal) => {
           hooks.发出媒体会话信号(item.attachmentId, signal);
@@ -719,6 +753,7 @@ const 创建默认VideoJs播放器层 = async (
         void 当前查看器会话?.同步({
           attachmentId: nextItem.attachmentId,
           source: 映射VideoJs播放源(nextItem),
+          resumePosition: nextItem.resumePosition ?? null,
           回调: {
             广播媒体会话信号: (signal) => {
               hooks.发出媒体会话信号(nextItem.attachmentId, signal);

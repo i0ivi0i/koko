@@ -629,6 +629,45 @@ describe("媒体查看器适配器", () => {
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
   });
 
+  it("视频查看器冷开时会用时间线传入的同源保存位置续播", async () => {
+    const video = document.createElement("video");
+    Object.assign(video, {
+      play: vi.fn(() => Promise.resolve()),
+      pause: vi.fn(),
+    });
+    const viewer = 创建媒体查看器({
+      createVideoJsPlayerShell: vi.fn((source, deps = {}) =>
+        创建测试VideoJs播放器壳({
+          初始源: source,
+          mountTarget: deps.mountTarget ?? undefined,
+          video,
+        })
+      ),
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-viewer-resume-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-viewer-resume-1",
+          src: "/webtorrent/viewer-resume/content.mp4",
+          posterSrc: "http://media.local/poster-viewer-resume-1",
+          width: 1280,
+          height: 720,
+          resumePosition: {
+            src: new URL("/webtorrent/viewer-resume/content.mp4", window.location.href).href,
+            currentTime: 42.5,
+            updatedAt: 1,
+          },
+        },
+      ],
+    });
+    await 等待查看器任务完成(6);
+
+    expect(video.currentTime).toBeCloseTo(42.5, 2);
+  });
+
   it("桌面端显式打开视频时，会直接进入真全屏查看器而不是停在放大卡片", async () => {
     const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({

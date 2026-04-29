@@ -1,5 +1,6 @@
 import type { 媒体会话信号 } from "./媒体会话.js";
-import { 媒体是否默认循环播放 } from "./媒体播放.js";
+import { 媒体是否默认循环播放, type 媒体播放位置 } from "./媒体播放.js";
+import { 判定播放连续性表面 } from "./全局丝滑自动播.js";
 import {
   创建VideoJs播放器壳,
   type VideoJs全屏进入结果,
@@ -36,6 +37,7 @@ export type 全局唯一播放器查看器输入 = {
   attachmentId: string;
   mountTarget: HTMLElement;
   source: VideoJs播放器源描述;
+  resumePosition?: 媒体播放位置 | null;
   回调: 查看器媒体回调;
 };
 
@@ -89,6 +91,73 @@ const 同步播放器展示模式 = (
 
 const 是时间线隐藏预热宿主 = (mountTarget: HTMLElement | null | undefined): boolean =>
   mountTarget?.dataset.stageHost === "true";
+
+const 归一化播放器播放源 = (src: string | null): string | null => {
+  if (!src) {
+    return null;
+  }
+  try {
+    const base =
+      typeof window !== "undefined" && window.location?.href
+        ? window.location.href
+        : "http://localhost/";
+    return new URL(src, base).href;
+  } catch {
+    return src;
+  }
+};
+
+const 是同一播放器播放源 = (left: string | null, right: string | null): boolean => {
+  const normalizedLeft = 归一化播放器播放源(left);
+  const normalizedRight = 归一化播放器播放源(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+};
+
+const 应用查看器播放连续性 = (
+  input: 全局唯一播放器查看器输入,
+  video: HTMLVideoElement
+): void => {
+  const currentSrc = video.currentSrc || video.getAttribute("src") || input.source.src;
+  const sourceMatches = 是同一播放器播放源(input.resumePosition?.src ?? null, currentSrc);
+  const decision = 判定播放连续性表面({
+    attachmentId: input.attachmentId,
+    ownerAttachmentId: input.attachmentId,
+    surface: "viewer",
+    source: { src: currentSrc },
+    savedPosition: input.resumePosition ?? null,
+    dom: {
+      previewReadyState: video.readyState,
+      canonicalReadyState: video.readyState,
+      sourceMatches,
+    },
+    host: {
+      exists: video.isConnected,
+      hasStableFrame: sourceMatches || video.readyState >= 2,
+    },
+    intent: { viewerOpen: true, fullscreen: false },
+  });
+  if (
+    decision.kind !== "viewer_handoff" ||
+    !Number.isFinite(decision.targetCurrentTime) ||
+    decision.targetCurrentTime <= 0
+  ) {
+    return;
+  }
+  if (Math.abs(video.currentTime - decision.targetCurrentTime) < 0.05) {
+    return;
+  }
+  /**
+   * 查看器冷开和时间线归位复用同一条位置真相：
+   * 1. 只吃外层已经按同源校验过的 `resumePosition`；
+   * 2. 只在全局状态链判定为 viewer handoff 时 seek；
+   * 3. 不在查看器里另存“退出前位置”，位置 owner 仍是唯一播放器回调。
+   */
+  try {
+    video.currentTime = decision.targetCurrentTime;
+  } catch {
+    // 少数浏览器在 metadata 前拒绝 seek；后续 loadedmetadata 会继续由壳层事件回灌。
+  }
+};
 
 const 绑定查看器媒体信号 = (
   video: HTMLVideoElement,
@@ -596,6 +665,7 @@ export function 创建全局唯一播放器(
       activeShell.同步(input.source);
       const video = activeShell.读取视频元素();
       配置查看器视频(video);
+      应用查看器播放连续性(input, video);
       当前绑定清理 = 绑定查看器媒体信号(video, input.回调);
       当前表面 = "viewer";
       return {
@@ -612,12 +682,14 @@ export function 创建全局唯一播放器(
             attachmentId: nextInput.attachmentId,
             mountTarget: input.mountTarget,
             source: nextInput.source,
+            resumePosition: nextInput.resumePosition ?? null,
             回调: nextInput.回调,
           };
           解绑当前绑定();
           activeShell.挂载到宿主(input.mountTarget);
           activeShell.同步(nextInput.source);
           配置查看器视频(video);
+          应用查看器播放连续性(当前查看器输入, video);
           当前绑定清理 = 绑定查看器媒体信号(video, nextInput.回调);
           当前表面 = "viewer";
         },
