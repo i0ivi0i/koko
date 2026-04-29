@@ -184,6 +184,25 @@ export function 创建查看器会话协作(
     return playback?.mode === "expired" || playback?.mode === "degraded";
   };
 
+  const 起始图片会话当前不可打开 = (request: 媒体查看器打开请求): boolean => {
+    const startItem = request.items.find(
+      (item) => item.attachmentId === request.startAttachmentId
+    );
+    if (!startItem || startItem.kind !== "image") {
+      return false;
+    }
+    if (startItem.src.length > 0) {
+      return false;
+    }
+    /**
+     * 图片查看器不能拿空 src 或 original 冷源抢跑：
+     * 1. 房间消息窗已经把“未拿到 playback”的图片 request 收成空 src；
+     * 2. 这里等待同一条媒体会话把 WebTorrent/受控 anchor 真相投影回来；
+     * 3. PhotoSwipe 只负责展示，不再成为第二套图片读取 owner。
+     */
+    return true;
+  };
+
   const 是否应等待本地完整视频会话真相 = (
     request: 媒体查看器打开请求
   ): boolean => {
@@ -265,6 +284,9 @@ export function 创建查看器会话协作(
       }
       if (!deps.读取查看器是否已打开()) {
         if (起始视频会话当前不可打开(nextRequest)) {
+          return;
+        }
+        if (起始图片会话当前不可打开(nextRequest)) {
           return;
         }
         if (是否应等待本地完整视频会话真相(nextRequest)) {

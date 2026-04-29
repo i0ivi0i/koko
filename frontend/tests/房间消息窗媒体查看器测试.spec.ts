@@ -508,7 +508,7 @@ describe("房间消息窗媒体查看器", () => {
       {
         attachmentId: "att-image-1",
         kind: "image",
-        src: "http://media.local/original-image-1",
+        src: "",
         alt: "图片附件原图",
         width: 1200,
         height: 800,
@@ -562,6 +562,59 @@ describe("房间消息窗媒体查看器", () => {
 
     // 消息窗只负责预览与查看器意图，不允许自己长成第二套正式播放器实现。
     expect(pane.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
+
+    pane.remove();
+  });
+
+  it("图片时间线一旦拿到 WebTorrent 播放真相，就直接显示 swarm 源而不是继续吃缩略图冷源", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-image-1": {
+        mode: "swarm",
+        attachmentId: "att-image-1",
+        kind: "image",
+        src: "blob:http://media.local/webtorrent-image-1",
+        thumbnailUrl: "http://media.local/thumb-image-1",
+        contentHash: "hash-image-1",
+        distribution: {
+          swarm_id: "swarm-image-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-1/original.png",
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "server_assisted" as const,
+        },
+        hint: null,
+        formalByteSource: "webtorrent_official_stream",
+      } satisfies 媒体播放结果,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLImageElement>(
+      'img.message-image[data-attachment-id="att-image-1"]'
+    );
+
+    expect(preview?.getAttribute("src")).toBe(
+      "blob:http://media.local/webtorrent-image-1"
+    );
+
+    pane.remove();
+  });
+
+  it("图片尚未拿到播放真相时，时间线保持本地占位而不是抢跑 original 冷源", async () => {
+    const pane = 创建媒体消息窗();
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLImageElement>(
+      'img.message-image[data-attachment-id="att-image-1"]'
+    );
+
+    expect(preview?.getAttribute("src")).not.toBe("http://media.local/original-image-1");
+    expect(preview?.getAttribute("src")).not.toBe("http://media.local/thumb-image-1");
+    expect(preview?.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
 
     pane.remove();
   });
@@ -1074,6 +1127,58 @@ describe("房间消息窗媒体查看器", () => {
           posterSrc: null,
           width: 1280,
           height: 720,
+        },
+      ],
+    });
+
+    pane.remove();
+  });
+
+  it("图片在没有 playback 真相时，抛出的 viewer request 也不会偷带 originalSrc", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "image",
+            attachmentId: "att-image-1",
+            width: 1200,
+            height: 800,
+            displayWidth: 320,
+            displayHeight: 213,
+            thumbnailSrc: "http://media.local/thumb-image-1",
+            originalSrc: "http://media.local/original-image-1",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {};
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-image-preview-trigger[data-attachment-id="att-image-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]).toEqual({
+      startAttachmentId: "att-image-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-1",
+          src: "",
+          alt: "图片附件原图",
+          width: 1200,
+          height: 800,
         },
       ],
     });
@@ -4358,7 +4463,7 @@ describe("房间消息窗媒体查看器", () => {
       {
         attachmentId: "att-image-1",
         kind: "image",
-        src: "http://media.local/original-image-1",
+        src: "",
         alt: "图片附件原图",
         width: 1200,
         height: 800,

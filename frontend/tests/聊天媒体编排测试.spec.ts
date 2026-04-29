@@ -229,7 +229,7 @@ describe("聊天媒体编排", () => {
       }
     ).设置媒体播放器供测试({ 解析播放结果 });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
     expect(解析播放结果).toHaveBeenCalledTimes(0);
 
@@ -1376,6 +1376,161 @@ describe("聊天媒体编排", () => {
         },
       ],
     });
+
+    编排.销毁();
+  });
+
+  it("图片查看器在播放真相未到达时等待会话，不会打开 original 或空 src", async () => {
+    const attachmentId = "att-image-wait-swarm-1";
+    const transport: 前端传输端口 = {
+      loadMediaLocator: vi.fn(async () => ({
+        attachment_id: attachmentId,
+        kind: "image" as const,
+        status: "ready" as const,
+        original_url: `http://media.local/original-${attachmentId}`,
+        thumbnail_url: null,
+        distribution: null,
+        blob_asset: null,
+      })),
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+
+    const 图片恢复 = 创建延后Promise<媒体播放结果>();
+    const 解析播放结果 = vi.fn(() => 图片恢复.promise);
+    const viewerOpenCalls: Array<{ startAttachmentId: string; items: unknown[] }> = [];
+
+    const 编排 = 创建聊天媒体编排({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => [生成图片消息(attachmentId)],
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: null,
+        source: "none" as const,
+        width: null,
+        height: null,
+      })),
+    });
+
+    (
+      编排 as unknown as {
+        设置媒体播放器供测试(player: {
+          解析播放结果(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            surface?: "viewer" | "inline_autoplay";
+            consumerId?: string;
+          }): Promise<媒体播放结果>;
+          激活协作补齐?(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            consumerId?: string;
+          }): Promise<void>;
+          释放附件播放资源?(input: {
+            attachmentId: string;
+            consumerId?: string;
+            丢弃未完成补齐?: boolean;
+          }): void;
+        }): void;
+      }
+    ).设置媒体播放器供测试({ 解析播放结果 });
+
+    (
+      编排 as unknown as {
+        设置媒体查看器供测试(viewer: {
+          打开(input: { startAttachmentId: string; items: unknown[] }): void;
+          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
+          销毁(): void;
+        }): void;
+      }
+    ).设置媒体查看器供测试({
+      打开: (input) => {
+        viewerOpenCalls.push(input);
+      },
+      同步: () => undefined,
+      销毁: () => undefined,
+    });
+
+    编排.同步媒体窗口附件([attachmentId]);
+    await Promise.resolve();
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+    编排.打开查看器({
+      startAttachmentId: attachmentId,
+      items: [
+        {
+          kind: "image",
+          attachmentId,
+          src: "",
+          alt: "图片附件原图",
+          width: 1200,
+          height: 800,
+        },
+      ],
+    });
+    await 刷新异步队列();
+
+    expect(viewerOpenCalls).toHaveLength(0);
+
+    图片恢复.resolve({
+      mode: "swarm",
+      attachmentId,
+      kind: "image",
+      src: `blob:http://media.local/swarm-${attachmentId}`,
+      thumbnailUrl: null,
+      contentHash: `hash-${attachmentId}`,
+      distribution: {
+        swarm_id: `swarm-${attachmentId}`,
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+        join_ticket: null,
+        ticket_expires_at: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+      formalByteSource: "webtorrent_official_stream",
+    });
+    await 刷新异步队列();
+
+    expect(viewerOpenCalls).toEqual([
+      {
+        startAttachmentId: attachmentId,
+        items: [
+          {
+            kind: "image",
+            attachmentId,
+            src: `blob:http://media.local/swarm-${attachmentId}`,
+            alt: "图片附件原图",
+            width: 1200,
+            height: 800,
+            contentHash: `hash-${attachmentId}`,
+            distribution: {
+              swarm_id: `swarm-${attachmentId}`,
+              announce_urls: ["wss://tracker.koko.local/announce"],
+              web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+              join_ticket: null,
+              ticket_expires_at: null,
+              survival_mode: "server_assisted" as const,
+            },
+          },
+        ],
+      },
+    ]);
 
     编排.销毁();
   });

@@ -996,13 +996,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   const 启动查看器起始附件会话 = (request: 媒体查看器打开请求): void => {
     const startAttachment = 读取附件条目(request.startAttachmentId);
-    if (!startAttachment || startAttachment.kind !== "video") {
+    if (!startAttachment) {
       return;
     }
     const session = 读取或创建媒体会话(startAttachment);
     const snapshot = session.snapshot();
     if (!snapshot.playback) {
       void session.启动();
+      return;
+    }
+    if (startAttachment.kind !== "video") {
       return;
     }
     /**

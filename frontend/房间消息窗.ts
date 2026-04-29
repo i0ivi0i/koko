@@ -55,6 +55,23 @@ const 默认视频清单占位Poster =
     </svg>
   `);
 
+/**
+ * 图片时间线在正式播放真相到达前只允许本地轻占位：
+ * 1. 不能把 attachment.originalSrc / thumbnailSrc 抢先塞进 `<img>`；
+ * 2. 否则刷新或重进房第一屏会先绕过 WebTorrent 读冷源；
+ * 3. 真图到达后再由同一条媒体会话 playback 替换，不在消息窗另造缓存 owner。
+ */
+const 默认图片清单占位图 =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
+      <rect width="320" height="240" fill="#17202c"/>
+      <rect x="78" y="58" width="164" height="124" rx="10" fill="rgba(255,255,255,0.12)"/>
+      <circle cx="122" cy="98" r="18" fill="rgba(255,255,255,0.18)"/>
+      <path d="M86 168l58-54 34 32 26-24 30 46z" fill="rgba(255,255,255,0.2)"/>
+    </svg>
+  `);
+
 const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
 const 自动播时间戳常规上报最小变化秒 = 0.75;
 const 近视口真实预览视频预算上限 = 6;
@@ -1617,9 +1634,7 @@ export class 房间消息窗 extends LitElement {
     return playback?.mode === "swarm" ||
       playback?.mode === "anchor"
       ? playback.src
-      : attachment.kind === "image"
-        ? attachment.originalSrc
-        : "";
+      : "";
   }
 
   private 读取图片查看器播放源(
@@ -2545,11 +2560,14 @@ export class 房间消息窗 extends LitElement {
             >
               ${(() => {
                 const imagePreviewSrc =
-                  playback?.thumbnailUrl ??
-                  attachment.thumbnailSrc ??
-                  (playback?.mode === "swarm" || playback?.mode === "anchor"
+                  // 图片一旦有正式 WebTorrent 播放源，时间线可见像素必须直接吃这条源；
+                  // thumbnail/original 只能服务未拿到 swarm 的冷启动或 legacy 表达，不能继续浪费已缓存 piece。
+                  playback?.mode === "swarm"
                     ? playback.src
-                    : attachment.originalSrc);
+                    : playback?.thumbnailUrl ??
+                      (playback?.mode === "anchor"
+                        ? playback.src
+                        : 默认图片清单占位图);
                 return html`
                   <button
                     class="message-image-preview-trigger"
