@@ -170,8 +170,11 @@ const 选择种子来源 = (payload, normalizedInfoHash) => {
 };
 
 export const 刷新已有做种会话 = (existing, input) => {
-  const nextTicket = input.joinTicket ?? null;
-  const refreshedTicket = existing.joinTicket !== nextTicket;
+  const nextTicket =
+    typeof input.joinTicket === "string" && input.joinTicket.trim().length > 0
+      ? input.joinTicket.trim()
+      : null;
+  const refreshedTicket = Boolean(nextTicket) && existing.joinTicket !== nextTicket;
   const sourceChanged = existing.source !== input.source;
   if (refreshedTicket) {
     existing.joinTicket = nextTicket;
@@ -186,7 +189,7 @@ export const 刷新已有做种会话 = (existing, input) => {
   return { created: false, refreshedTicket, restarted: false, sourceChanged };
 };
 
-const 启动做种会话 = async (payload) => {
+export const 启动做种会话 = async (payload) => {
   const normalizedInfoHash = 归一化InfoHash(payload.infoHash);
   if (!normalizedInfoHash) {
     throw new Error("infoHash 非法或缺失");
@@ -206,6 +209,14 @@ const 启动做种会话 = async (payload) => {
      */
     const refreshed = 刷新已有做种会话(existing, { source, joinTicket });
     return { session: existing, ...refreshed };
+  }
+  if (!joinTicket) {
+    /**
+     * seeder 是后端 strong seed 的执行器，不拥有 tracker 门禁真相。
+     * 新会话缺票时必须在控制面拒绝，不能让 WebTorrent 发出无票 announce，
+     * 否则 Rust 同源代理只能在日志里反复报 missing_ticket。
+     */
+    throw new Error("缺少 join ticket，拒绝启动受保护 tracker 做种会话");
   }
 
   if (!client) {
@@ -261,7 +272,7 @@ const 启动做种会话 = async (payload) => {
         /**
          * ticket 由 announceTicketRef 提供，允许同一会话在后续 /seed/start 时原地续租：
          * - 有票时透传 `ticket`；
-         * - 无票时返回空对象，保持与 tracker 门禁配置一致。
+         * - 新会话缺票已在控制面拒绝，活跃会话缺票续租也不会清空旧票。
          */
         return announceTicketRef.value ? { ticket: announceTicketRef.value } : {};
       },

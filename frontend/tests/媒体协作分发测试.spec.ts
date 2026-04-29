@@ -535,6 +535,31 @@ describe("媒体协作分发", () => {
     expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
   });
 
+  it("受控 announce 缺少 join_ticket 时会直接按门禁失效收口，而不是继续无票入群", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const add = vi.fn();
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-missing-ticket");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.announce_urls = ["wss://im.example.com/api/swarm/announce"];
+    locator.distribution.join_ticket = null;
+
+    await expect(
+      接入协作分发种子(
+        {
+          client: new ctor(),
+          streamServer: { close: vi.fn() },
+        },
+        locator.distribution
+      )
+    ).rejects.toBeInstanceOf(协作分发JoinTicket失效错误);
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it("接入协作分发种子时会把已经收口好的 websocket announce 原样交给 WebTorrent", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(
@@ -557,6 +582,7 @@ describe("媒体协作分发", () => {
       "wss://localhost/api/swarm/announce",
       "wss://tracker.koko.local/announce",
     ];
+    locator.distribution.join_ticket = "ticket-att-announce-forward";
 
     await 接入协作分发种子(
       {

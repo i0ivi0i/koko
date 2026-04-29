@@ -1417,11 +1417,15 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
 #[serial]
 async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
     let (fake_seeder_base_url, _seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
-    let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
+    let backup = 备份并清空环境变量(&[
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        "SWARM_TICKET_SECRET",
+    ]);
     env::set_var(
         "SWARM_SEEDER_CONTROL_BASE_URL",
         fake_seeder_base_url.as_str(),
     );
+    env::set_var("SWARM_TICKET_SECRET", "active-backend-strong-seed-ticket-secret");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -1537,6 +1541,7 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         "SWARM_SEEDER_CONTROL_BASE_URL",
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_SEEDER_TRACKER_URL",
+        "SWARM_TICKET_SECRET",
     ]);
     env::set_var("APP_PORT", "18080");
     env::set_var(
@@ -1547,6 +1552,7 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
+    env::set_var("SWARM_TICKET_SECRET", "seed-reconcile-ticket-secret");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -1631,6 +1637,13 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
             .and_then(|value| value.as_str()),
         Some("ws://127.0.0.1:18080/api/swarm/announce"),
         "后台做种对账必须走后端同源认证入口，禁止直连裸 tracker 绕过 join_ticket 门禁"
+    );
+    assert!(
+        matched_start_payload["joinTicket"]
+            .as_str()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        "后台做种对账触发 sidecar start 时必须携带非空 joinTicket，避免无票 announce"
     );
     assert!(
         matched_start_payload["torrentUrl"]

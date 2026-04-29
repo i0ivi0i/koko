@@ -624,8 +624,9 @@ fn 归一化sidecar媒体地址(raw: Option<&str>) -> Option<String> {
 /// 把 runtime 分发响应收口成 sidecar 可执行命令。
 /// 约束：
 /// 1. 缺少 `torrent_info_hash` 时不能启动做种；
-/// 2. sidecar 只吃 transport 线索，不承载页面态字段；
-/// 3. 浏览器 public announce 已在 locator contract 里返回，这里只能使用 sidecar 私有 announce。
+/// 2. 缺少 `join_ticket` 时不能启动做种；后端 strong seed 也必须走同源 tracker 门禁；
+/// 3. sidecar 只吃 transport 线索，不承载页面态字段；
+/// 4. 浏览器 public announce 已在 locator contract 里返回，这里只能使用 sidecar 私有 announce。
 pub(super) fn 从协作分发响应构造做种启动命令(
     runtime_distribution: &serde_json::Value,
     seeder_tracker_url: &str,
@@ -649,13 +650,13 @@ pub(super) fn 从协作分发响应构造做种启动命令(
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_string);
+        .map(str::to_string)?;
     Some(协作分发做种启动命令 {
         info_hash,
         announce_urls,
         web_seed_url,
         torrent_url,
-        join_ticket,
+        join_ticket: Some(join_ticket),
     })
 }
 
@@ -1489,4 +1490,47 @@ fn err_resp(
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 做种启动命令缺少join_ticket时不得启动受保护tracker() {
+        let runtime_distribution = serde_json::json!({
+            "torrent_info_hash": "0123456789abcdef0123456789abcdef01234567",
+            "torrent_url": "/api/media/att-test/torrent?session_id=s-test",
+            "web_seed_url": "/api/attachments/att-test/content?session_id=s-test&variant=original",
+            "join_ticket": null,
+        });
+
+        let 命令 = 从协作分发响应构造做种启动命令(
+            &runtime_distribution,
+            "ws://127.0.0.1:18080/api/swarm/announce",
+        );
+
+        assert!(
+            命令.is_none(),
+            "sidecar 强种子也必须持票入群；缺票时不能构造 start 命令再让 tracker 打 missing_ticket"
+        );
+    }
+
+    #[test]
+    fn 做种启动命令会保留有效join_ticket() {
+        let runtime_distribution = serde_json::json!({
+            "torrent_info_hash": "0123456789abcdef0123456789abcdef01234567",
+            "torrent_url": "/api/media/att-test/torrent?session_id=s-test",
+            "web_seed_url": "/api/attachments/att-test/content?session_id=s-test&variant=original",
+            "join_ticket": "ticket-valid",
+        });
+
+        let 命令 = 从协作分发响应构造做种启动命令(
+            &runtime_distribution,
+            "ws://127.0.0.1:18080/api/swarm/announce",
+        )
+        .expect("有 info_hash 与 join_ticket 时应能构造做种命令");
+
+        assert_eq!(命令.join_ticket.as_deref(), Some("ticket-valid"));
+    }
 }

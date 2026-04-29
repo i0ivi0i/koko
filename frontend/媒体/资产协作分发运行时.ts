@@ -11,6 +11,7 @@ import {
   读取协作分发定位片段,
   读取可用协作分发片段,
   读取首个可播放文件,
+  协作分发定位片段需要JoinTicket,
   请求协作分发持久化存储,
   重置协作分发浏览器运行时,
   是否为协作分发JoinTicket失效错误,
@@ -859,9 +860,18 @@ function 安排协作分发会话票据续租(
 function 刷新协作分发会话票据(
   session: 底层协作分发会话,
   distribution: 协作分发定位片段
-): void {
+): boolean {
+  if (协作分发定位片段需要JoinTicket(distribution) && !distribution.join_ticket) {
+    /**
+     * 缺票 locator 不能覆盖会话里仍可用的旧票。
+     * 这条会话的 owner 是 WebTorrent swarm，不是某次 locator 响应；
+     * 缺票只说明本次续租失败，应低频重试，而不是降成无票 announce。
+     */
+    return false;
+  }
   // join_ticket 只属于 tracker 入群门禁续租；刷新它不改变媒体身份、业务附件或 swarm 归属。
   session.joinTicketRef.value = distribution.join_ticket ?? null;
+  return true;
 }
 
 async function 执行协作分发会话票据续租(
@@ -902,8 +912,11 @@ async function 执行协作分发会话票据续租(
       安排协作分发会话票据续租重试(runtime, session);
       return;
     }
-    刷新协作分发会话票据(session, distribution);
-    安排协作分发会话票据续租(runtime, session, distribution);
+    if (刷新协作分发会话票据(session, distribution)) {
+      安排协作分发会话票据续租(runtime, session, distribution);
+    } else {
+      安排协作分发会话票据续租重试(runtime, session);
+    }
   } catch {
     if (!runtime.已销毁 && runtime.底层会话表.get(session.swarmId) === session) {
       安排协作分发会话票据续租重试(runtime, session);
@@ -952,8 +965,11 @@ async function 确保协作分发会话(
     更新协作分发会话票据刷新器(session, input.refreshJoinTicket);
     // 续租锚点必须跟随最新取得 locator 的业务附件；旧附件删除后不能拖垮同一 canonical 资产的新引用。
     session.joinTicketAttachmentId = input.attachmentId;
-    刷新协作分发会话票据(session, input.distribution);
-    安排协作分发会话票据续租(runtime, session, input.distribution);
+    if (刷新协作分发会话票据(session, input.distribution)) {
+      安排协作分发会话票据续租(runtime, session, input.distribution);
+    } else {
+      安排协作分发会话票据续租重试(runtime, session);
+    }
     session.consumerBindings.set(consumerBinding.consumerId, consumerBinding);
     const 刚获得帮助资格 = 应默认进入整附件补齐 && !session.已获得帮助资格;
     if (应默认进入整附件补齐) {

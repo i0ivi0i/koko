@@ -758,9 +758,18 @@ async fn complete视频上传会写入canonical并返回file_asset() {
         "canonical 视频读取入口必须收口到既有受控附件内容路由，不能再下发裸对象地址"
     );
     assert!(complete_body["preview_asset"].is_null());
-    assert!(media_asset["manifest"].is_null());
     assert!(
-        media_asset["lifecycle"].is_null(),
+        media_asset
+            .get("manifest")
+            .map(|value| value.is_null())
+            .unwrap_or(true),
+        "新视频附件不再返回 HLS/DASH manifest；字段缺失和 null 都表示旧第二链路已退场"
+    );
+    assert!(
+        media_asset
+            .get("lifecycle")
+            .map(|value| value.is_null())
+            .unwrap_or(true),
         "新视频主链没有服务端流媒体窗口，生命周期只能由 origin 冷备窗口表达"
     );
     assert_eq!(

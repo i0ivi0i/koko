@@ -175,6 +175,23 @@ export class 协作分发JoinTicket失效错误 extends Error {
   }
 }
 
+export const 是否受保护协作分发Announce = (rawUrl: string): boolean => {
+  const value = rawUrl.trim();
+  if (!value) {
+    return false;
+  }
+  try {
+    const url = new URL(value, "https://koko.local");
+    return url.pathname === "/api/swarm/announce";
+  } catch {
+    return value.includes("/api/swarm/announce");
+  }
+};
+
+export const 协作分发定位片段需要JoinTicket = (
+  distribution: Pick<媒体协作分发定位片段, "announce_urls">
+): boolean => distribution.announce_urls.some(是否受保护协作分发Announce);
+
 /**
  * WebTorrent 浏览器流媒体运行时依赖 service worker + secure context：
  * 1. `http://localhost` 可用是因为浏览器把它视为可信来源；
@@ -844,10 +861,18 @@ export async function 接入协作分发种子(
   distribution: 媒体协作分发定位片段,
   options: { joinTicketRef?: 协作分发JoinTicketRef } = {}
 ): Promise<WebTorrent种子> {
-  const torrentBytes = await 拉取受控Torrent字节(distribution);
-  const noPeersIntervalTime = 读取noPeers探测间隔毫秒(distribution);
   // join_ticket 是 tracker 入群门禁。它必须跟随 locator 续租，不能被首次建 torrent 的闭包冻住。
   const joinTicketRef = options.joinTicketRef ?? { value: distribution.join_ticket };
+  if (协作分发定位片段需要JoinTicket(distribution) && !joinTicketRef.value) {
+    /**
+     * `/api/swarm/announce` 的验票 owner 在 Rust 同源代理。
+     * 浏览器侧不能把“缺票”放到 WebTorrent 里再等 tracker 报警；
+     * 缺票 locator 必须先回到 locator owner 强刷，避免形成 missing_ticket 风暴。
+     */
+    throw new 协作分发JoinTicket失效错误();
+  }
+  const torrentBytes = await 拉取受控Torrent字节(distribution);
+  const noPeersIntervalTime = 读取noPeers探测间隔毫秒(distribution);
   return await new Promise<WebTorrent种子>((resolve, reject) => {
     let 已结束 = false;
     const 收口resolve = (torrent: WebTorrent种子) => {

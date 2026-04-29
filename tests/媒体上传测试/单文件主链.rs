@@ -259,11 +259,17 @@ async fn 视频complete后不再返回hls_dash_manifest() {
         "新单文件视频 complete 后不再长期承诺 preview_asset；首屏预览改由客户端运行时自己派生"
     );
     assert!(
-        media_asset["manifest"].is_null(),
+        media_asset
+            .get("manifest")
+            .map(|value| value.is_null())
+            .unwrap_or(true),
         "新视频附件不再返回 HLS/DASH manifest"
     );
     assert!(
-        media_asset["lifecycle"].is_null(),
+        media_asset
+            .get("lifecycle")
+            .map(|value| value.is_null())
+            .unwrap_or(true),
         "新视频附件不再返回 streaming lifecycle"
     );
     let variants = media_asset["variants"]
@@ -338,6 +344,7 @@ async fn 视频complete会触发seeder_start命令() {
         "SWARM_SEEDER_CONTROL_BASE_URL",
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_SEEDER_TRACKER_URL",
+        "SWARM_TICKET_SECRET",
     ]);
     env::set_var("APP_PORT", "18080");
     env::set_var(
@@ -348,6 +355,7 @@ async fn 视频complete会触发seeder_start命令() {
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
+    env::set_var("SWARM_TICKET_SECRET", "single-file-video-seeder-ticket-secret");
 
     let env = 准备complete测试环境("single-file-video-seeder-start").await;
     let video_bytes = 最小mp4字节();
@@ -418,8 +426,11 @@ async fn 视频complete会触发seeder_start命令() {
         "sidecar start 的 webSeedUrl 必须是绝对 URL，避免 sidecar 解析相对路径时漂移"
     );
     assert!(
-        start_payload.get("joinTicket").is_some(),
-        "start payload 至少应保留 joinTicket 字段（可为空），避免控制面命名漂移"
+        start_payload["joinTicket"]
+            .as_str()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        "sidecar start 必须携带非空 joinTicket；无票启动会直接制造 tracker missing_ticket"
     );
 
     fake_seeder_server.abort();

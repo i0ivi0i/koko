@@ -391,6 +391,83 @@ describe("资产协作分发运行时", () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
+  it("续租 locator 暂时缺少 join_ticket 时不会把活跃会话降成无票 announce，而是等待下一次重签", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-24T00:00:00.000Z"));
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-ticket-refresh-missing"
+    );
+    let getAnnounceOpts!: () => Record<string, string | undefined>;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      getAnnounceOpts = options.getAnnounceOpts!;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstLocator = 准备好的定位结果(
+      "att-ticket-refresh-missing",
+      "swarm-ticket-refresh-missing"
+    );
+    if (!firstLocator.distribution) {
+      throw new Error("测试前提失败：初始 locator 缺少 distribution");
+    }
+    firstLocator.distribution.join_ticket = "ticket-old";
+    firstLocator.distribution.ticket_expires_at = "2026-04-24T00:00:30.000Z";
+    firstLocator.distribution.torrent_info_hash = "torrent-info-refresh-missing";
+    firstLocator.distribution.announce_urls = ["wss://im.example.com/api/swarm/announce"];
+
+    const missingTicketLocator = 准备好的定位结果(
+      "att-ticket-refresh-missing",
+      "swarm-ticket-refresh-missing"
+    );
+    if (!missingTicketLocator.distribution) {
+      throw new Error("测试前提失败：缺票 locator 缺少 distribution");
+    }
+    missingTicketLocator.distribution.join_ticket = null;
+    missingTicketLocator.distribution.ticket_expires_at = null;
+    missingTicketLocator.distribution.torrent_info_hash = "torrent-info-refresh-missing";
+    missingTicketLocator.distribution.announce_urls = ["wss://im.example.com/api/swarm/announce"];
+
+    const refreshedLocator = 准备好的定位结果(
+      "att-ticket-refresh-missing",
+      "swarm-ticket-refresh-missing"
+    );
+    if (!refreshedLocator.distribution) {
+      throw new Error("测试前提失败：续签 locator 缺少 distribution");
+    }
+    refreshedLocator.distribution.join_ticket = "ticket-new";
+    refreshedLocator.distribution.ticket_expires_at = "2026-04-24T00:01:00.000Z";
+    refreshedLocator.distribution.torrent_info_hash = "torrent-info-refresh-missing";
+    refreshedLocator.distribution.announce_urls = ["wss://im.example.com/api/swarm/announce"];
+
+    const refreshJoinTicket = vi
+      .fn(async () => missingTicketLocator)
+      .mockResolvedValueOnce(missingTicketLocator)
+      .mockResolvedValueOnce(refreshedLocator);
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-refresh-missing",
+      kind: "video",
+      locator: firstLocator,
+      consumerId: "session:att-ticket-refresh-missing",
+      refreshJoinTicket,
+    });
+
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+
+    await vi.advanceTimersByTimeAsync(26_000);
+    expect(refreshJoinTicket).toHaveBeenCalledTimes(1);
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(refreshJoinTicket).toHaveBeenCalledTimes(2);
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
   it("同一 swarm 被新附件复用后会用最新附件引用续租 join_ticket", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-24T00:00:00.000Z"));
