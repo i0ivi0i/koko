@@ -2427,29 +2427,34 @@ export class 房间消息窗 extends LitElement {
               !hasExistingSameSourcePreviewFrame &&
               !hasFrozenTimelineFrame &&
               !hasKnownReadyPreviewFrame;
-            const shouldRenderPreviewVideoByBudget =
+            const shouldRenderReleasedOwnerPreviewVideo =
               Boolean(previewVideoSrc) &&
-              this.读取时间线预览视频是否允许渲染(videoBudget, {
-                hasExistingSameSourcePreviewFrame,
-                hasFrozenTimelineFrame,
-                hasKnownReadyPreviewFrame,
-                previewVideoSrc,
-                shouldReuseSavedTimelineFrameAsPreview,
-              }) &&
-              (可渲染真实预览视频附件.has(attachment.attachmentId) ||
-                hasExistingSameSourcePreviewFrame ||
-                hasFrozenTimelineFrame ||
-                hasKnownReadyPreviewFrame);
+              isRecentlyReleasedOwnerWithPosition &&
+              !playback &&
+              videoBudget.formalByteSource === "none" &&
+              shouldReuseSavedTimelineFrameAsPreview &&
+              hasSameSourceSavedTimelineFrame &&
+              !hasFrozenTimelineFrame;
+            const shouldRenderPreviewVideoByBudget =
+              (Boolean(previewVideoSrc) &&
+                this.读取时间线预览视频是否允许渲染(videoBudget, {
+                  hasExistingSameSourcePreviewFrame,
+                  hasFrozenTimelineFrame,
+                  hasKnownReadyPreviewFrame,
+                  previewVideoSrc,
+                  shouldReuseSavedTimelineFrameAsPreview,
+                }) &&
+                (可渲染真实预览视频附件.has(attachment.attachmentId) ||
+                  hasExistingSameSourcePreviewFrame ||
+                  hasFrozenTimelineFrame ||
+                  hasKnownReadyPreviewFrame)) ||
+              /**
+               * 刚退场 owner 是“这一拍从 live player 退下来的当前会话”，不是普通历史冷卡片。
+               * 真实冻结帧导出是异步的；在它写入前，必须继续挂同源 preview video 承接恢复位置，
+               * 不能让统一预算里短暂的 cold_expression 把画面打回 poster。
+               */
+              shouldRenderReleasedOwnerPreviewVideo;
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
-            const shouldRenderPreviewPosterSurface =
-              hasStablePreviewPosterSurface &&
-              !shouldSuppressPosterForContinuity &&
-              !isRecentlyReleasedOwnerWithPosition &&
-              !shouldReuseSavedTimelineFrameAsPreview &&
-              !hasSameSourceSavedTimelineFrame &&
-              !hasFrozenTimelineFrame &&
-              !hasCurrentDomPreviewFrame &&
-              (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             /**
              * 源级首帧缓存只说明“这个 WebTorrent src 曾经成功出帧”，
              * 不说明“这颗刚重新挂载的 DOM video 当前已经有像素”：
@@ -2457,12 +2462,6 @@ export class 房间消息窗 extends LitElement {
              * 2. 外层 `<img class="message-video-poster">` 会造成 img/video 两个表面互换，连续性链路中必须压掉；
              * 3. `<video poster>` 属于同一个 DOM 表面的冷保护，不会制造外层卡片闪回。
              */
-            const previewVideoPoster =
-              !hasFrozenTimelineFrame &&
-              !hasCurrentDomPreviewFrame &&
-              (hasSourcePoster || hasRuntimePreview)
-                ? previewPosterSrc
-                : undefined;
             const shouldShowFirstFrameGuard =
               shouldRenderPreviewVideoByBudget &&
               !hasCurrentDomPreviewFrame &&
@@ -2491,11 +2490,35 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderPreviewVideo =
               shouldRenderPreviewVideoByBudget &&
               !shouldRenderVisibleCanonicalHost &&
-              attachment.attachmentId !== this.最近退场Owner附件Id;
+              (!isRecentlyReleasedOwnerWithPosition ||
+                shouldRenderReleasedOwnerPreviewVideo);
             const shouldRenderFrozenTimelineFrame =
               hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
+            const shouldRenderCanonicalLoadingPosterCover =
+              shouldRenderInlineVideo &&
+              !shouldRevealCanonicalHost &&
+              !shouldRenderPreviewVideo &&
+              !shouldRenderFrozenTimelineFrame &&
+              !hasCurrentDomPreviewFrame &&
+              Boolean(previewPosterSrc);
+            const shouldRenderPreviewPosterSurface =
+              (hasStablePreviewPosterSurface &&
+                !shouldSuppressPosterForContinuity &&
+                !isRecentlyReleasedOwnerWithPosition &&
+                !shouldReuseSavedTimelineFrameAsPreview &&
+                !hasSameSourceSavedTimelineFrame &&
+                !hasFrozenTimelineFrame &&
+                !hasCurrentDomPreviewFrame &&
+                (!shouldRenderInlineVideo || !shouldRevealCanonicalHost)) ||
+              shouldRenderCanonicalLoadingPosterCover;
+            const previewVideoPoster =
+              !hasFrozenTimelineFrame &&
+              !hasCurrentDomPreviewFrame &&
+              (hasSourcePoster || hasRuntimePreview)
+                ? previewPosterSrc
+                : undefined;
             const 时间线预览底板视频 = html`
               <video
                 class=${`message-video-preview${

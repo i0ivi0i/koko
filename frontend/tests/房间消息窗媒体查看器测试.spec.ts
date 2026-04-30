@@ -3560,6 +3560,139 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("新 owner 的 canonical 尚未出帧时，禁止把黑色播放器壳直接露到可见卡片", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-black-handoff",
+      kind: "video",
+      src: "http://media.local/swarm-video-black-handoff",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-black-handoff",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-black-handoff",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-black-handoff",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-black-handoff";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-black-handoff": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const card = pane.querySelector<HTMLElement>(
+      '.message-video-card[data-attachment-id="att-video-black-handoff"]'
+    );
+    const visibleCanonicalHost = card?.querySelector(
+      '.message-video-canonical-host[data-attachment-id="att-video-black-handoff"]'
+    );
+    const hiddenStageHost = card?.querySelector(
+      '.message-video-canonical-stage-host[data-attachment-id="att-video-black-handoff"]'
+    );
+    const previewVideo = card?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-black-handoff"]:not([data-canonical-player="true"])'
+    );
+    const posterCover = card?.querySelector<HTMLImageElement>("img.message-video-poster");
+
+    expect(visibleCanonicalHost).not.toBeNull();
+    expect(hiddenStageHost).toBeNull();
+    expect(previewVideo).toBeNull();
+    expect(posterCover?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(posterCover?.classList.contains("message-video-poster--canonical-cover")).toBe(
+      true
+    );
+
+    pane.remove();
+  });
+
+  it("刚退场 owner 的冻结帧尚未导出时，必须先保留同源续播预览而不是闪回 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const releasedAttachmentId = "att-video-released-owner";
+    const nextAttachmentId = "att-video-next-owner";
+    const releasedSrc = "http://media.local/swarm-video-released-owner";
+    const nextPlayback = {
+      mode: "swarm",
+      attachmentId: nextAttachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-video-next-owner",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      创建单视频消息项(releasedAttachmentId, 1),
+      创建单视频消息项(nextAttachmentId, 2),
+    ];
+    pane.mediaVideoBudgetByAttachmentId = {
+      [releasedAttachmentId]: {
+        attachmentId: releasedAttachmentId,
+        tier: "cold_expression",
+        reason: "inactive",
+        canonicalVideoSrc: null,
+        previewVideoSrc: null,
+        allowInlineCanonical: false,
+        allowPreviewVideo: false,
+        formalByteSource: "none",
+        webTorrentLifecycleState: null,
+        activeWebTorrentReaderCount: 0,
+      },
+    };
+    pane.inlineAutoplayOwnerAttachmentId = nextAttachmentId;
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      [nextAttachmentId]: nextPlayback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [releasedAttachmentId]: {
+        src: releasedSrc,
+        currentTime: 12.5,
+        updatedAt: 1_777_500_000_000,
+      },
+    };
+    (
+      pane as unknown as {
+        最近退场Owner附件Id: string | null;
+      }
+    ).最近退场Owner附件Id = releasedAttachmentId;
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const releasedCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${releasedAttachmentId}"]`
+    );
+    const releasedPreview = releasedCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+
+    expect(releasedCard).not.toBeNull();
+    expect(releasedPreview).not.toBeNull();
+    expect(releasedPreview?.getAttribute("src")).toBe(releasedSrc);
+    expect(releasedCard?.querySelector("img.message-video-poster")).toBeNull();
+    expect(releasedCard?.querySelector(".message-video-play-indicator")).toBeNull();
+
+    releasedPreview?.dispatchEvent(new Event("loadedmetadata"));
+    expect(releasedPreview?.currentTime).toBeCloseTo(12.5, 2);
+
+    pane.remove();
+  });
+
   it("双视频自动播 owner 再次切回旧附件时，禁止复用上一次遗留的可见接管就绪缓存", async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {
