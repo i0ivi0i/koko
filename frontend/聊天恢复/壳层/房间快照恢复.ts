@@ -237,6 +237,7 @@ export function 创建房间快照恢复协作(
         type: "RECOVERY_FAILED",
         code: failure.code ?? "",
         keepRoomVisible: false,
+        roomInvalidated: true,
       });
       deps.exitCurrentRoomView({
         keepRoomCodeCache: failure.code === "room_not_found" && fallbackRoomCode.length > 0,
@@ -251,6 +252,7 @@ export function 创建房间快照恢复协作(
       type: "RECOVERY_FAILED",
       code: failure.code ?? "system_error",
       keepRoomVisible,
+      roomInvalidated: false,
     });
     deps.写入恢复状态({
       pending: false,

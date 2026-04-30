@@ -108,6 +108,7 @@ describe("房间内核", () => {
       type: "RECOVERY_FAILED",
       code: "socket_timeout",
       keepRoomVisible: true,
+      roomInvalidated: false,
     });
 
     const 当前外观 = 派生房间壳外观(房间内核.getSnapshot());
@@ -117,6 +118,67 @@ describe("房间内核", () => {
     expect(当前外观.latestEventPosition).toBe(8);
     expect(当前外观.lastRecoveryErrorCode).toBe("socket_timeout");
     expect("viewportMode" in 当前外观).toBe(false);
+  });
+
+  it("恢复硬失效且不再保留房间时，会退出房间并回到空闲首页", async () => {
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+
+    const 房间内核 = 创建房间内核();
+
+    房间内核.send({
+      type: "BOOTSTRAP_SUCCEEDED",
+      sessionId: "s-test",
+      displayAlias: "暴躁的企鹅",
+      roomId: "r-stale",
+    });
+    房间内核.send({
+      type: "SNAPSHOT_LOADED",
+      roomId: "r-stale",
+      roomDisplayTitle: "ROOM01",
+      latestEventPosition: 8,
+    });
+    房间内核.send({
+      type: "RECOVERY_FAILED",
+      code: "room_not_found",
+      keepRoomVisible: false,
+      roomInvalidated: true,
+    });
+
+    const 当前快照 = 房间内核.getSnapshot();
+    const 当前外观 = 派生房间壳外观(当前快照);
+
+    expect(当前快照.value).toBe("已离房");
+    expect(当前外观.recoveryState).toBe("idle");
+    expect(当前外观.roomId).toBe("");
+    expect(当前外观.roomDisplayTitle).toBe("");
+    expect(当前外观.latestEventPosition).toBe(0);
+    expect(当前外观.lastRecoveryErrorCode).toBe("");
+  });
+
+  it("恢复临时失败但没有可显示房间时，仍保留可重试失败语义", async () => {
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+
+    const 房间内核 = 创建房间内核();
+
+    房间内核.send({
+      type: "BOOTSTRAP_SUCCEEDED",
+      sessionId: "s-test",
+      displayAlias: "暴躁的企鹅",
+      roomId: "r-retry",
+    });
+    房间内核.send({
+      type: "RECOVERY_FAILED",
+      code: "system_error",
+      keepRoomVisible: false,
+      roomInvalidated: false,
+    });
+
+    const 当前外观 = 派生房间壳外观(房间内核.getSnapshot());
+
+    expect(房间内核.getSnapshot().value).toBe("可重试失败");
+    expect(当前外观.recoveryState).toBe("retryable_failure");
+    expect(当前外观.roomId).toBe("");
+    expect(当前外观.lastRecoveryErrorCode).toBe("system_error");
   });
 
   it("软离房后会清空当前房间，但保留当前会话身份", async () => {

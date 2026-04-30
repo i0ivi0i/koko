@@ -76,6 +76,7 @@ export type 房间内核事件 =
       type: "RECOVERY_FAILED";
       code: string;
       keepRoomVisible: boolean;
+      roomInvalidated: boolean;
     }
   | {
       type: "SOFT_LEAVE_REQUESTED";
@@ -140,6 +141,11 @@ const 房间编排机 = createMachine(
               actions: "保留房间并记录失败",
             },
             {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
+            },
+            {
               target: "可重试失败",
               actions: "清空房间并记录失败",
             },
@@ -164,6 +170,11 @@ const 房间编排机 = createMachine(
               guard: ({ event }) => event.keepRoomVisible,
               target: "可重试失败",
               actions: "保留房间并记录失败",
+            },
+            {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
             },
             {
               target: "可重试失败",
@@ -192,6 +203,11 @@ const 房间编排机 = createMachine(
               guard: ({ event }) => event.keepRoomVisible,
               target: "可重试失败",
               actions: "保留房间并记录失败",
+            },
+            {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
             },
             {
               target: "可重试失败",
@@ -227,6 +243,11 @@ const 房间编排机 = createMachine(
               actions: "保留房间并记录失败",
             },
             {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
+            },
+            {
               target: "可重试失败",
               actions: "清空房间并记录失败",
             },
@@ -254,6 +275,11 @@ const 房间编排机 = createMachine(
               guard: ({ event }) => event.keepRoomVisible,
               target: "可重试失败",
               actions: "保留房间并记录失败",
+            },
+            {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
             },
             {
               target: "可重试失败",
@@ -287,6 +313,11 @@ const 房间编排机 = createMachine(
               guard: ({ event }) => event.keepRoomVisible,
               target: "可重试失败",
               actions: "保留房间并记录失败",
+            },
+            {
+              guard: ({ event }) => event.roomInvalidated,
+              target: "已离房",
+              actions: "清空当前房间",
             },
             {
               target: "可重试失败",
@@ -435,6 +466,8 @@ const 房间编排机 = createMachine(
           lastRecoveryErrorCode: event.code,
         };
       }),
+      // 临时失败但没有可显示房间时，仍应保留“可重试失败”语义，
+      // 例如启动恢复遇到 5xx：房间锚点没有被判死，只是当前没有可投影的房间视图。
       清空房间并记录失败: assign(({ event }) => {
         if (event.type !== "RECOVERY_FAILED") {
           return {};
@@ -446,6 +479,8 @@ const 房间编排机 = createMachine(
           lastRecoveryErrorCode: event.code,
         };
       }),
+      // room_not_found / membership_required 这类硬失效说明本地房间锚点已失效。
+      // 内核只负责退出当前房间真相；不要把已回首页的旧窗口继续渲染成“可重试恢复失败”。
       清空当前房间: assign(() => ({
         roomId: "",
         roomDisplayTitle: "",

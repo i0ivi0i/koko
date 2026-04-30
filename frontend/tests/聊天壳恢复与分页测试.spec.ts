@@ -66,6 +66,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     expect(window.localStorage.getItem("koko_home_sessions")).toBe("[]");
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("恢复失败");
     el.remove();
   });
 
@@ -87,6 +88,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
 
     expect(读取操作台主输入(el).value).toBe("ROOM01");
     expect(读取操作台主动作(el).disabled).toBe(false);
+    expect(el.shadowRoot!.textContent).not.toContain("恢复失败");
 
     读取操作台主动作(el).click();
     await 等待组件稳定(el);
@@ -114,6 +116,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
     expect(window.localStorage.getItem("koko_home_sessions")).toContain("ROOM02");
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("恢复失败");
     el.remove();
   });
 
