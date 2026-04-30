@@ -6,6 +6,8 @@ const 当前脚本路径 = fileURLToPath(import.meta.url);
 const 当前文件目录 = dirname(当前脚本路径);
 const 仓库根目录 = resolve(当前文件目录, "..");
 const 前端目录 = join(仓库根目录, "frontend");
+const 前端测试目录 = join(前端目录, "tests");
+const 房间消息窗测试目录 = join(前端测试目录, "房间消息窗");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
@@ -81,11 +83,37 @@ const 热点文件行数上限 = [
   { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1800 },
 ];
 
+const 退役前端测试文件 = [
+  {
+    path: "frontend/tests/房间消息窗媒体查看器测试.spec.ts",
+    reason: "房间消息窗媒体测试必须按 owner 拆到 frontend/tests/房间消息窗/",
+  },
+];
+
+const 房间消息窗媒体测试上限 = {
+  directory: "frontend/tests/房间消息窗/",
+  maxEffectiveLines: 950,
+  maxTestCases: 18,
+};
+
+const 房间消息窗媒体测试支架上限 = {
+  path: "frontend/tests/common/房间消息窗媒体支架.ts",
+  maxEffectiveLines: 350,
+};
+
 const 转成仓库相对路径 = (absolutePath) =>
   relative(仓库根目录, absolutePath).replaceAll("\\", "/");
 
 const 读取源码 = (relativePath) =>
   readFileSync(join(仓库根目录, relativePath), "utf8");
+
+const 文件存在 = (absolutePath) => {
+  try {
+    return statSync(absolutePath).isFile();
+  } catch {
+    return false;
+  }
+};
 
 const 去掉注释 = (source) =>
   source
@@ -288,6 +316,65 @@ export const 检查热点文件增长 = (
   return violations;
 };
 
+const 检查房间消息窗媒体测试边界 = () => {
+  const violations = [];
+
+  for (const retired of 退役前端测试文件) {
+    if (!文件存在(join(仓库根目录, retired.path))) {
+      continue;
+    }
+    violations.push({
+      file: retired.path,
+      label: "retired test hotspot revived",
+      detail: retired.reason,
+    });
+  }
+
+  const supportSource = 读取源码(房间消息窗媒体测试支架上限.path);
+  const supportLineCount = 统计有效源码行数(supportSource);
+  if (supportLineCount > 房间消息窗媒体测试支架上限.maxEffectiveLines) {
+    violations.push({
+      file: 房间消息窗媒体测试支架上限.path,
+      label: "room media test support growth",
+      detail: `${supportLineCount} 行超过有效上限 ${房间消息窗媒体测试支架上限.maxEffectiveLines} 行`,
+    });
+  }
+  if (/\bexpect\s*\(/.test(去掉注释(supportSource))) {
+    violations.push({
+      file: 房间消息窗媒体测试支架上限.path,
+      label: "room media test support owns assertions",
+      detail: "测试支架只能准备上下文，断言必须留在按 owner 拆分的 spec 中",
+    });
+  }
+
+  for (const absolutePath of 收集文件(房间消息窗测试目录)) {
+    const relativePath = 转成仓库相对路径(absolutePath);
+    if (!relativePath.endsWith(".spec.ts")) {
+      continue;
+    }
+    const source = readFileSync(absolutePath, "utf8");
+    const lineCount = 统计有效源码行数(source);
+    if (lineCount > 房间消息窗媒体测试上限.maxEffectiveLines) {
+      violations.push({
+        file: relativePath,
+        label: "room media spec growth ratchet",
+        detail: `${lineCount} 行超过有效上限 ${房间消息窗媒体测试上限.maxEffectiveLines} 行`,
+      });
+    }
+
+    const testCount = source.match(/^\s+it\s*\(/gm)?.length ?? 0;
+    if (testCount > 房间消息窗媒体测试上限.maxTestCases) {
+      violations.push({
+        file: relativePath,
+        label: "room media spec test-count ratchet",
+        detail: `${testCount} 个用例超过上限 ${房间消息窗媒体测试上限.maxTestCases} 个`,
+      });
+    }
+  }
+
+  return violations;
+};
+
 export const 收集架构适应度违规 = () => {
   const files = 收集文件(前端目录);
   const 违规记录 = [
@@ -296,6 +383,7 @@ export const 收集架构适应度违规 = () => {
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
     ...检查热点文件增长(),
+    ...检查房间消息窗媒体测试边界(),
   ];
 
   for (const absolutePath of files) {

@@ -1390,7 +1390,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("可见自动播候选在真正成为 owner 前仍保持 poster，owner 成立后才切进正式 video 节点", async () => {
+  it("可见自动播候选在真正成为 owner 前仍保持 poster，canonical ready 后才揭开正式 video 节点", async () => {
     const transport = new 假传输();
     const intersectionObserverDescriptor = Object.getOwnPropertyDescriptor(
       globalThis,
@@ -1502,6 +1502,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
       expect(ownerVideo).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector(
+          'img.message-video-poster--canonical-cover[data-attachment-id="att-video-inline-shell"]'
+        )
+      ).not.toBeNull();
+
+      Object.defineProperty(ownerVideo!, "readyState", {
+        configurable: true,
+        value: 3,
+      });
+      ownerVideo!.dispatchEvent(new Event("loadedmetadata"));
+      ownerVideo!.dispatchEvent(new Event("canplay"));
+      await 等待组件稳定(el);
+      await pane.updateComplete;
+
       expect(
         el.shadowRoot!.querySelector(
           'img.message-video-poster[data-attachment-id="att-video-inline-shell"]'
