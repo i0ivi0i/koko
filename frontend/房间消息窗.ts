@@ -28,6 +28,8 @@ type 消息虚拟项 = {
   start: number;
 };
 
+type 时间线视频附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
+
 type 时间线自动播冻结帧 = {
   src: string;
   currentTime: number;
@@ -409,78 +411,134 @@ export class 房间消息窗 extends LitElement {
     const 可渲染真实预览视频附件 = this.读取允许渲染真实预览视频的附件集合(virtualItems);
     const previewVideoSrcByAttachmentId = new Map<string, string>();
     const canonicalVideoSrcByAttachmentId = new Map<string, string>();
-    for (const item of this.items) {
-      if (item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (attachment.kind !== "video") {
-          continue;
-        }
-        const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-        const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
-        const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
-        const hasRuntimePreview = Boolean(runtimePreview);
-        const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(attachment, playback, {
-          有静态封面: hasSourcePoster,
-          有运行时预览: hasRuntimePreview,
+    for (const attachment of this.读取即将渲染的时间线视频附件(virtualItems)) {
+      const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+      const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
+      const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
+      const hasRuntimePreview = Boolean(runtimePreview);
+      const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(attachment, playback, {
+        有静态封面: hasSourcePoster,
+        有运行时预览: hasRuntimePreview,
+      });
+      const savedTimelineFrame =
+        this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
+      const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
+      const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
+        attachment.attachmentId
+      );
+      const shouldReuseSavedTimelineFrameAsPreview =
+        this.读取保存续帧是否允许承接时间线预览底板({
+          attachmentId: attachment.attachmentId,
+          playback,
+          playbackTimelineVideoSrc,
+          savedTimelineFrameSrc,
         });
-        const savedTimelineFrame =
-          this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
-        const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-        const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
-          attachment.attachmentId
-        );
-        const shouldReuseSavedTimelineFrameAsPreview =
-          this.读取保存续帧是否允许承接时间线预览底板({
-            attachmentId: attachment.attachmentId,
-            playback,
-            playbackTimelineVideoSrc,
-            savedTimelineFrameSrc,
-          });
-        const timelinePreviewVideoSrcCandidate =
-          playbackTimelineVideoSrc ??
-          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-          knownReadyTimelineFrameSrc;
-        const budget = this.读取时间线视频预算投影(
-          attachment,
-          timelinePreviewVideoSrcCandidate
-        );
-        const timelinePreviewVideoSrc =
-          budget.previewVideoSrc ??
-          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-          knownReadyTimelineFrameSrc;
-        const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
-          attachment.attachmentId,
-          timelinePreviewVideoSrc
-        );
-        const hasExistingSameSourcePreviewFrame = this.读取时间线现有预览视频是否可继续显示(
-          attachment.attachmentId,
-          timelinePreviewVideoSrc
-        );
-        if (
-          this.读取时间线预览视频是否允许渲染(budget, {
-            hasExistingSameSourcePreviewFrame,
-            hasKnownReadyPreviewFrame,
-            previewVideoSrc: timelinePreviewVideoSrc,
-            shouldReuseSavedTimelineFrameAsPreview,
-          }) &&
-          timelinePreviewVideoSrc &&
-          (可渲染真实预览视频附件.has(attachment.attachmentId) ||
-            hasExistingSameSourcePreviewFrame ||
-            hasKnownReadyPreviewFrame)
-        ) {
-          previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
-        }
-        if (budget.allowInlineCanonical && budget.canonicalVideoSrc) {
-          canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, budget.canonicalVideoSrc);
-        }
+      const timelinePreviewVideoSrcCandidate =
+        playbackTimelineVideoSrc ??
+        (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+        knownReadyTimelineFrameSrc;
+      const budget = this.读取时间线视频预算投影(
+        attachment,
+        timelinePreviewVideoSrcCandidate
+      );
+      const timelinePreviewVideoSrc =
+        budget.previewVideoSrc ??
+        (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
+        knownReadyTimelineFrameSrc;
+      const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
+        attachment.attachmentId,
+        timelinePreviewVideoSrc
+      );
+      const hasExistingSameSourcePreviewFrame = this.读取时间线现有预览视频是否可继续显示(
+        attachment.attachmentId,
+        timelinePreviewVideoSrc
+      );
+      if (
+        this.读取时间线预览视频是否允许渲染(budget, {
+          hasExistingSameSourcePreviewFrame,
+          hasKnownReadyPreviewFrame,
+          previewVideoSrc: timelinePreviewVideoSrc,
+          shouldReuseSavedTimelineFrameAsPreview,
+        }) &&
+        timelinePreviewVideoSrc &&
+        (可渲染真实预览视频附件.has(attachment.attachmentId) ||
+          hasExistingSameSourcePreviewFrame ||
+          hasKnownReadyPreviewFrame)
+      ) {
+        previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
+      }
+      if (budget.allowInlineCanonical && budget.canonicalVideoSrc) {
+        canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, budget.canonicalVideoSrc);
       }
     }
     return {
       previewVideoSrcByAttachmentId,
       canonicalVideoSrcByAttachmentId,
     };
+  }
+
+  private 读取即将渲染的时间线视频附件(
+    virtualItems: 消息虚拟项[]
+  ): 时间线视频附件[] {
+    const attachmentsById = new Map<string, 时间线视频附件>();
+    const unresolvedAttachmentIds = new Set<string>();
+    const pushAttachment = (attachment: 消息展示项["attachments"][number]): void => {
+      if (attachment.kind !== "video" || attachmentsById.has(attachment.attachmentId)) {
+        return;
+      }
+      attachmentsById.set(attachment.attachmentId, attachment);
+      unresolvedAttachmentIds.delete(attachment.attachmentId);
+    };
+    const pushAttachmentId = (attachmentId: string | null | undefined): void => {
+      const normalized = attachmentId?.trim() ?? "";
+      if (!normalized || attachmentsById.has(normalized)) {
+        return;
+      }
+      unresolvedAttachmentIds.add(normalized);
+    };
+
+    for (const virtualItem of virtualItems) {
+      const item = this.items[virtualItem.index];
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        pushAttachment(attachment);
+      }
+    }
+
+    pushAttachmentId(this.inlineAutoplayOwnerAttachmentId);
+    pushAttachmentId(this.最近退场Owner附件Id);
+    pushAttachmentId(this.时间线隐藏接管附件Id);
+
+    for (const video of this.querySelectorAll<HTMLElement>(
+      "video.message-video-preview[data-attachment-id]," +
+        ".message-video-canonical-host[data-attachment-id]," +
+        ".message-video-canonical-stage-host[data-attachment-id]"
+    )) {
+      pushAttachmentId(video.dataset.attachmentId);
+    }
+
+    if (unresolvedAttachmentIds.size > 0) {
+      for (const item of this.items) {
+        if (item.kind !== "message") {
+          continue;
+        }
+        for (const attachment of item.attachments) {
+          if (
+            attachment.kind === "video" &&
+            unresolvedAttachmentIds.has(attachment.attachmentId)
+          ) {
+            pushAttachment(attachment);
+          }
+        }
+        if (unresolvedAttachmentIds.size === 0) {
+          break;
+        }
+      }
+    }
+
+    return Array.from(attachmentsById.values());
   }
 
   private 释放时间线预览视频资源(video: HTMLVideoElement): void {

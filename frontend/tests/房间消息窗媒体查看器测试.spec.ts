@@ -1836,6 +1836,90 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("滚动清理只按当前虚拟窗口和现存表面推导视频期望，不扫描整段历史视频", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from(
+      { length: 36 },
+      (_, index) => `att-scroll-scope-${index + 1}`
+    );
+    pane.items = attachmentIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `/webtorrent/hash-${attachmentId}/content-${attachmentId}.mp4`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+
+    type 测试虚拟项 = { key: string; index: number; start: number };
+    const 创建虚拟项 = (indexes: number[]): 测试虚拟项[] =>
+      indexes.map((index) => ({
+        key: `m-${attachmentIds[index]}`,
+        index,
+        start: index * 240,
+      }));
+    const 内部虚拟器 = (
+      pane as unknown as {
+        读取消息虚拟器(): { getVirtualItems(): 测试虚拟项[] };
+      }
+    ).读取消息虚拟器();
+    vi.spyOn(内部虚拟器, "getVirtualItems").mockReturnValue(创建虚拟项([0, 1]));
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const scrollContainer = pane.querySelector<HTMLElement>(".message-scroll");
+    expect(scrollContainer).not.toBeNull();
+    const 可触达附件 = new Set([
+      "att-scroll-scope-1",
+      "att-scroll-scope-2",
+    ]);
+    for (const video of pane.querySelectorAll<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id],video.message-video-preview[data-canonical-player="true"]'
+    )) {
+      const attachmentId = video.dataset.attachmentId?.trim();
+      if (attachmentId) {
+        可触达附件.add(attachmentId);
+      }
+    }
+
+    type 时间线预算探针附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
+    type 时间线预算探针 = (
+      attachment: 时间线预算探针附件,
+      previewVideoSrc: string | null
+    ) => unknown;
+    const 内部面板 = pane as unknown as {
+      读取时间线视频预算投影: 时间线预算探针;
+    };
+    const 原读取预算 = 内部面板.读取时间线视频预算投影.bind(pane);
+    const 预算触达附件: string[] = [];
+    const 预算Spy = vi
+      .spyOn(内部面板, "读取时间线视频预算投影")
+      .mockImplementation((attachment, previewVideoSrc) => {
+        预算触达附件.push(attachment.attachmentId);
+        return 原读取预算(attachment, previewVideoSrc);
+      });
+
+    try {
+      scrollContainer!.dispatchEvent(new Event("scroll"));
+
+      expect(预算触达附件.length).toBeGreaterThan(0);
+      expect(new Set(预算触达附件).size).toBeLessThanOrEqual(可触达附件.size);
+      expect(预算触达附件.every((attachmentId) => 可触达附件.has(attachmentId))).toBe(true);
+    } finally {
+      预算Spy.mockRestore();
+      pane.remove();
+    }
+  });
+
   it("自动播时间戳上报只允许当前 owner，并对高频 timeupdate 做节流", async () => {
     const pane = 创建媒体消息窗();
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
