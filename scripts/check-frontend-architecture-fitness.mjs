@@ -10,6 +10,7 @@ const 前端测试目录 = join(前端目录, "tests");
 const 房间消息窗测试目录 = join(前端测试目录, "房间消息窗");
 const 聊天应用内核测试目录 = join(前端测试目录, "聊天应用内核");
 const 聊天媒体编排测试目录 = join(前端测试目录, "聊天媒体编排");
+const 媒体查看器测试目录 = join(前端测试目录, "媒体查看器");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
@@ -134,6 +135,33 @@ const 前端测试热点边界 = [
       {
         path: "frontend/tests/聊天媒体编排测试.spec.ts",
         reason: "聊天媒体编排测试必须按 owner 拆到 frontend/tests/聊天媒体编排/",
+      },
+    ],
+  },
+  {
+    label: "media viewer",
+    directory: "frontend/tests/媒体查看器/",
+    directoryAbsolutePath: 媒体查看器测试目录,
+    maxEffectiveLines: 950,
+    maxTestCases: 10,
+    supportFiles: [
+      {
+        path: "frontend/tests/common/媒体查看器支架.ts",
+        maxEffectiveLines: 40,
+      },
+      {
+        path: "frontend/tests/common/媒体查看器DOM支架.ts",
+        maxEffectiveLines: 350,
+      },
+      {
+        path: "frontend/tests/common/媒体查看器VideoJs支架.ts",
+        maxEffectiveLines: 160,
+      },
+    ],
+    retiredFiles: [
+      {
+        path: "frontend/tests/媒体查看器测试.spec.ts",
+        reason: "媒体查看器适配器测试必须按 viewer owner 拆到 frontend/tests/媒体查看器/",
       },
     ],
   },
@@ -369,21 +397,24 @@ const 检查前端测试热点边界 = () => {
       });
     }
 
-    const supportSource = 读取源码(boundary.support.path);
-    const supportLineCount = 统计有效源码行数(supportSource);
-    if (supportLineCount > boundary.support.maxEffectiveLines) {
-      violations.push({
-        file: boundary.support.path,
-        label: `${boundary.label} test support growth`,
-        detail: `${supportLineCount} 行超过有效上限 ${boundary.support.maxEffectiveLines} 行`,
-      });
-    }
-    if (/\bexpect\s*\(/.test(去掉注释(supportSource))) {
-      violations.push({
-        file: boundary.support.path,
-        label: `${boundary.label} test support owns assertions`,
-        detail: "测试支架只能准备上下文，断言必须留在按 owner 拆分的 spec 中",
-      });
+    const supportFiles = boundary.supportFiles ?? [boundary.support];
+    for (const support of supportFiles) {
+      const supportSource = 读取源码(support.path);
+      const supportLineCount = 统计有效源码行数(supportSource);
+      if (supportLineCount > support.maxEffectiveLines) {
+        violations.push({
+          file: support.path,
+          label: `${boundary.label} test support growth`,
+          detail: `${supportLineCount} 行超过有效上限 ${support.maxEffectiveLines} 行`,
+        });
+      }
+      if (/\bexpect\s*\(/.test(去掉注释(supportSource))) {
+        violations.push({
+          file: support.path,
+          label: `${boundary.label} test support owns assertions`,
+          detail: "测试支架只能准备上下文，断言必须留在按 owner 拆分的 spec 中",
+        });
+      }
     }
 
     for (const absolutePath of 收集文件(boundary.directoryAbsolutePath)) {
