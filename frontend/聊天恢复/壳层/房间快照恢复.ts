@@ -104,6 +104,18 @@ export function 创建房间快照恢复协作(
     });
   }
 
+  function 尝试写入本地恢复记忆(write: () => void, onFailed?: () => void): void {
+    try {
+      write();
+    } catch {
+      try {
+        onFailed?.();
+      } catch {
+        // 本地恢复记忆只是体验缓存；写入或清理失败都不能反向推翻已经拿到的权威房间快照。
+      }
+    }
+  }
+
   function 读取当前房间恢复快照(
     roomIdHint = ""
   ): { roomCode: string; snapshot: 房间快照 } | null {
@@ -152,7 +164,7 @@ export function 创建房间快照恢复协作(
   function resolveRoomDisplayTitle(roomCodeForDisplay?: string): string {
     const trimmedRoomCode = roomCodeForDisplay?.trim() ?? "";
     if (trimmedRoomCode) {
-      deps.storage.写入当前房间短码(trimmedRoomCode);
+      尝试写入本地恢复记忆(() => deps.storage.写入当前房间短码(trimmedRoomCode));
       return trimmedRoomCode;
     }
     return deps.storage.读取当前房间短码() || "群聊房间";
@@ -169,8 +181,10 @@ export function 创建房间快照恢复协作(
       roomCode: trimmedRoomCode,
       lastEnteredAt: Date.now(),
     };
-    deps.storage.写入或更新首页房间历史条目(nextItem);
-    同步首页房间历史();
+    尝试写入本地恢复记忆(() => {
+      deps.storage.写入或更新首页房间历史条目(nextItem);
+      同步首页房间历史();
+    });
   }
 
   /**
@@ -189,14 +203,18 @@ export function 创建房间快照恢复协作(
     deps.cancelPendingFollowLatestReadSample();
     deps.roomScroller.取消挂起滚动副作用();
     deps.写入恢复补锚标记(primeReadAnchorAfterInitialSettle);
-    deps.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = resolveRoomDisplayTitle(roomCodeForDisplay);
     const persistedRoomCode =
       roomCodeForDisplay?.trim() || deps.storage.读取当前房间短码().trim();
-    deps.storage.写入当前房间恢复快照({
-      roomCode: persistedRoomCode,
-      snapshot,
-    });
+    尝试写入本地恢复记忆(() => deps.storage.写入当前房间标识(snapshot.room_id));
+    尝试写入本地恢复记忆(
+      () =>
+        deps.storage.写入当前房间恢复快照({
+          roomCode: persistedRoomCode,
+          snapshot,
+        }),
+      () => deps.storage.清除当前房间恢复快照()
+    );
     recordHomeSession(snapshot.room_id, persistedRoomCode);
     deps.roomKernel.send({
       type: "SNAPSHOT_LOADED",

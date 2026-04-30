@@ -152,6 +152,35 @@ describe("房间恢复编排", () => {
     expect(场景.读取状态().roomId).toBe("");
   });
 
+  it("本地恢复快照写入失败时，不能阻断已经成功拿到的房间快照", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景();
+    const rawSetItem = 场景.rawStorage.setItem.bind(场景.rawStorage);
+    rawSetItem(
+      "koko_current_room_snapshot",
+      JSON.stringify({ roomCode: "1234b", snapshot: 创建房间快照("r-old-1234b", 1) })
+    );
+    场景.rawStorage.setItem = (key: string, value: string): void => {
+      if (key === "koko_current_room_snapshot") {
+        throw new DOMException("localStorage quota exceeded", "QuotaExceededError");
+      }
+      rawSetItem(key, value);
+    };
+    场景.deps.写入恢复状态({ roomCodeInput: "1234b" });
+    场景.transport.joinQueue = [创建房间快照("r-1234b", 7)];
+
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      joinRoom(): Promise<void>;
+    };
+    await 编排.joinRoom();
+
+    expect(场景.transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "1234b" }]);
+    expect(场景.读取状态().roomId).toBe("r-1234b");
+    expect(场景.读取状态().roomDisplayTitle).toBe("1234b");
+    expect(场景.读取状态().latestEventPosition).toBe(7);
+    expect(场景.rawStorage.getItem("koko_current_room_snapshot")).toBeNull();
+  });
+
   it("bootstrap 失败但本地还留着身份和当前房间快照时，会离线恢复当前房间而不是直接掉回失败页", async () => {
     const 创建房间恢复编排 = await 读取房间恢复编排工厂();
     const 场景 = 创建恢复编排测试场景({

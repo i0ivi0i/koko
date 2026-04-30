@@ -120,6 +120,39 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
+  it("1234b 这类重房间的本地恢复快照写入失败时，仍应进入房间而不是显示恢复失败", async () => {
+    const storage = createFakeStorage();
+    const rawSetItem = storage.setItem.bind(storage);
+    storage.setItem = (key: string, value: string): void => {
+      if (key === "koko_current_room_snapshot") {
+        throw new DOMException("localStorage quota exceeded", "QuotaExceededError");
+      }
+      rawSetItem(key, value);
+    };
+    Object.defineProperty(window, "localStorage", {
+      value: storage,
+      configurable: true,
+    });
+    const transport = new 假传输();
+    transport.joinQueue = [创建房间快照("r-1234b", 7)];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "1234b");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "1234b" }]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("1234b");
+    expect(el.shadowRoot!.textContent).not.toContain("恢复失败");
+    el.remove();
+  });
+
   it("invalid_session 会重新 bootstrap 再决定恢复分支", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
