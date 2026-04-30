@@ -9,6 +9,7 @@ const 前端目录 = join(仓库根目录, "frontend");
 const 前端测试目录 = join(前端目录, "tests");
 const 房间消息窗测试目录 = join(前端测试目录, "房间消息窗");
 const 聊天应用内核测试目录 = join(前端测试目录, "聊天应用内核");
+const 聊天媒体编排测试目录 = join(前端测试目录, "聊天媒体编排");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
@@ -116,6 +117,23 @@ const 前端测试热点边界 = [
       {
         path: "frontend/tests/聊天应用内核测试.spec.ts",
         reason: "聊天应用内核测试必须按 owner 拆到 frontend/tests/聊天应用内核/",
+      },
+    ],
+  },
+  {
+    label: "chat media orchestration",
+    directory: "frontend/tests/聊天媒体编排/",
+    directoryAbsolutePath: 聊天媒体编排测试目录,
+    maxEffectiveLines: 950,
+    maxTestCases: 12,
+    support: {
+      path: "frontend/tests/common/聊天媒体编排支架.ts",
+      maxEffectiveLines: 350,
+    },
+    retiredFiles: [
+      {
+        path: "frontend/tests/聊天媒体编排测试.spec.ts",
+        reason: "聊天媒体编排测试必须按 owner 拆到 frontend/tests/聊天媒体编排/",
       },
     ],
   },
