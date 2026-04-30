@@ -1,13 +1,8 @@
 import { html, LitElement, type PropertyValues } from "lit";
 import { VirtualizerController } from "@tanstack/lit-virtual";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import {
-  投影信息流视频预算,
-  type 信息流视频预算投影,
-  type 正式媒体字节来源,
-} from "./媒体/信息流视频预算.js";
+import type { 信息流视频预算投影 } from "./媒体/信息流视频预算.js";
 import {
   视频地址属于旧流媒体清单,
   type 媒体播放结果,
@@ -18,8 +13,18 @@ import type { 消息视频自动播候选 } from "./媒体/消息视频自动播
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import { 读取默认全局唯一播放器 } from "./媒体/全局唯一播放器.js";
-import { 判定播放连续性表面 } from "./媒体/全局丝滑自动播.js";
 import { 读取BlobDataUrl } from "./媒体/视频元数据.js";
+import {
+  渲染消息附件,
+  读取保存续帧是否允许承接时间线预览底板 as 读取保存续帧是否允许承接时间线预览底板投影,
+  读取附件播放源 as 读取附件播放源投影,
+  读取图片查看器播放源 as 读取图片查看器播放源投影,
+  读取时间线视频封面地址 as 读取时间线视频封面地址投影,
+  读取时间线视频首帧预览源 as 读取时间线视频首帧预览源投影,
+  读取时间线视频预算投影 as 读取时间线视频预算投影计算,
+  读取时间线预览视频是否允许渲染 as 读取时间线预览视频是否允许渲染投影,
+} from "./房间消息窗/附件渲染.js";
+import type { 时间线自动播冻结帧 } from "./房间消息窗/附件渲染.js";
 import {
   估算媒体附件布局高度,
   估算消息行高度,
@@ -32,51 +37,6 @@ import {
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 type 时间线视频附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
-
-type 时间线自动播冻结帧 = {
-  src: string;
-  currentTime: number;
-  dataUrl: string;
-  updatedAt: number;
-};
-
-/**
- * 时间线卡片对“当前没有正式视频源”的表达只保留静态 poster。
- * 1. 旧 manifest/HLS 地址不能再塞进时间线原生 `<video>`；
- * 2. 查看器也不能继续把这类旧地址当成正式可播真相；
- * 3. 当唯一主链还没重裁出来时，这张轻占位图就是唯一允许的降载表达。
- */
-const 默认视频清单占位Poster =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
-      <defs>
-        <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stop-color="#1f2937"/>
-          <stop offset="100%" stop-color="#111827"/>
-        </linearGradient>
-      </defs>
-      <rect width="320" height="180" fill="url(#bg)"/>
-      <circle cx="160" cy="90" r="34" fill="rgba(255,255,255,0.18)"/>
-    </svg>
-  `);
-
-/**
- * 图片时间线在正式播放真相到达前只允许本地轻占位：
- * 1. 不能把 attachment.originalSrc / thumbnailSrc 抢先塞进 `<img>`；
- * 2. 否则刷新或重进房第一屏会先绕过 WebTorrent 读冷源；
- * 3. 真图到达后再由同一条媒体会话 playback 替换，不在消息窗另造缓存 owner。
- */
-const 默认图片清单占位图 =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
-      <rect width="320" height="240" fill="#17202c"/>
-      <rect x="78" y="58" width="164" height="124" rx="10" fill="rgba(255,255,255,0.12)"/>
-      <circle cx="122" cy="98" r="18" fill="rgba(255,255,255,0.18)"/>
-      <path d="M86 168l58-54 34 32 26-24 30 46z" fill="rgba(255,255,255,0.2)"/>
-    </svg>
-  `);
 
 const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
 const 自动播时间戳常规上报最小变化秒 = 0.75;
@@ -1682,41 +1642,27 @@ export class 房间消息窗 extends LitElement {
   }
 
   private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
-    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
-    if (
-      attachment.kind === "video" &&
-      视频地址属于旧流媒体清单(playback?.src)
-    ) {
-      return "";
-    }
-    return playback?.mode === "swarm" ||
-      playback?.mode === "anchor"
-      ? playback.src
-      : "";
+    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+    return 读取附件播放源投影(attachment, playback);
   }
 
   private 读取图片查看器播放源(
     attachment: Extract<消息展示项["attachments"][number], { kind: "image" }>
   ): string {
-    return this.读取附件播放源(attachment);
+    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+    return 读取图片查看器播放源投影(attachment, playback);
   }
 
   private 读取时间线视频封面地址(
     attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
     playback: 媒体播放结果 | null
   ): string {
-    const candidatePosterSrc =
-      playback?.thumbnailUrl ?? attachment.posterSrc ?? 默认视频清单占位Poster;
-    const failedPosterSrc = this.失效视频封面地址.get(attachment.attachmentId);
-    if (failedPosterSrc && failedPosterSrc !== candidatePosterSrc) {
-      // 新缩略图来源已到达，撤销旧失败记录，恢复正常封面展示。
-      this.失效视频封面地址.delete(attachment.attachmentId);
-      return candidatePosterSrc;
-    }
-    if (failedPosterSrc && failedPosterSrc === candidatePosterSrc) {
-      return 默认视频清单占位Poster;
-    }
-    return candidatePosterSrc;
+    return 读取时间线视频封面地址投影({
+      attachment,
+      playback,
+      failedPosterSrc: this.失效视频封面地址.get(attachment.attachmentId) ?? null,
+      clearFailedPoster: () => this.失效视频封面地址.delete(attachment.attachmentId),
+    });
   }
 
   private 读取时间线视频首帧预览源(
@@ -1727,29 +1673,12 @@ export class 房间消息窗 extends LitElement {
       有运行时预览: boolean;
     }
   ): string | null {
-    if (playback?.src && playback.mode === "swarm") {
-      const previewState = this.mediaPreviewByAttachmentId[attachment.attachmentId] ?? null;
-      /**
-       * 时间线 preview video 继续复用同一条 `swarm playback.src`，但它只回答“底层热态与连续性桥”：
-       * 1. 这颗 `<video>` 仍然负责 preload / readyState / continuity bridge，避免 owner 接管时重新建壳；
-       * 2. 真正的“当前可见像素”不再默认等于这颗视频自己的 `0s` 冷帧，而由上层 overlay preview truth 决定；
-       * 3. 因此这里保留同源 `<video>` 壳，但 `missing_source` 仍要明确阻断，防止冷视频伪装成 preview。
-       */
-      if (input.有静态封面 || input.有运行时预览) {
-        return playback.src;
-      }
-      if (previewState?.phase === "missing_source") {
-        return null;
-      }
-      return playback.src;
-    }
-    /**
-     * 禁止时间线预览直接读取原始视频地址：
-     * 1. 自动播/查看器都必须由媒体主链解析出的 playback owner 驱动；
-     * 2. 未拿到 playback 时保持静态占位，避免列表层偷偷走第二条 original 读取链路；
-     * 3. 这样可确保“要播就吃 WebTorrent 真相，不播就占位”，不混跑。
-     */
-    return null;
+    return 读取时间线视频首帧预览源投影({
+      attachment,
+      playback,
+      previewState: this.mediaPreviewByAttachmentId[attachment.attachmentId] ?? null,
+      ...input,
+    });
   }
 
   private 读取时间线视频运行时预览(
@@ -1763,44 +1692,14 @@ export class 房间消息窗 extends LitElement {
     attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
     previewVideoSrcCandidate: string | null
   ): 信息流视频预算投影 {
-    const fromSnapshot = this.mediaVideoBudgetByAttachmentId[attachment.attachmentId];
-    if (fromSnapshot) {
-      return fromSnapshot;
-    }
-    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-    const inlineAutoplayPlayback =
-      this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-    /**
-     * fallback 里的 preview 候选只可能来自两条受控事实：
-     * 1. `playback.mode === "swarm"` 的正式 WebTorrent 播放源；
-     * 2. 刚退场 owner 留下的同源续帧桥。
-     * 这里认的是上游事实来源，不用 URL 文本猜 `src`，避免把合法续帧误压成冷表达。
-     */
-    const formalByteSource: 正式媒体字节来源 =
-      playback?.mode === "swarm" ||
-      inlineAutoplayPlayback?.mode === "swarm" ||
-      Boolean(previewVideoSrcCandidate)
-        ? "webtorrent_official_stream"
-        : "none";
-    /**
-     * 这里的 fallback 只服务直连组件测试和极少数独立挂载场景：
-     * 1. 真实应用路径会由聊天媒体编排先给出统一预算投影；
-     * 2. 即便需要兜底，也继续复用同一个投影原语，不再在消息窗里手搓第二套 owner 判断；
-     * 3. 这样可以兼顾测试稳定性，同时守住“预算逻辑只有一份”的约束。
-     */
-    return 投影信息流视频预算({
-      attachmentId: attachment.attachmentId,
-      playback,
-      inlineAutoplayPlayback,
-      viewerCanonicalVideoSrc: null,
-      previewVideoSrc: previewVideoSrcCandidate,
-      inMediaWindow: true,
-      isAutoplayCandidate: false,
-      isInlineAutoplayOwner: this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId,
-      isViewerOwner: false,
-      sessionStatus: playback?.mode === "swarm" ? "backfilling" : null,
-      locallyComplete: false,
-      formalByteSource,
+    return 读取时间线视频预算投影计算({
+      attachment,
+      previewVideoSrcCandidate,
+      fromSnapshot: this.mediaVideoBudgetByAttachmentId[attachment.attachmentId] ?? null,
+      playback: this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null,
+      inlineAutoplayPlayback:
+        this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
     });
   }
 
@@ -1814,25 +1713,7 @@ export class 房间消息窗 extends LitElement {
       shouldReuseSavedTimelineFrameAsPreview: boolean;
     }
   ): boolean {
-    if (budget.allowPreviewVideo) {
-      return true;
-    }
-    if (!input.previewVideoSrc) {
-      return false;
-    }
-    if (
-      !input.shouldReuseSavedTimelineFrameAsPreview &&
-      !input.hasExistingSameSourcePreviewFrame &&
-      !input.hasFrozenTimelineFrame &&
-      !input.hasKnownReadyPreviewFrame
-    ) {
-      return false;
-    }
-    /**
-     * 续播/首帧缓存只能桥接仍归 WebTorrent 主链拥有的正式字节：
-     * `none` 代表当前预算只允许静态表达，不能因为历史 src 曾经出帧就重新挂真实 `<video>`。
-     */
-    return budget.formalByteSource === "webtorrent_official_stream";
+    return 读取时间线预览视频是否允许渲染投影(budget, input);
   }
 
   private 读取保存续帧是否允许承接时间线预览底板(input: {
@@ -1841,34 +1722,12 @@ export class 房间消息窗 extends LitElement {
     playbackTimelineVideoSrc: string | null;
     savedTimelineFrameSrc: string | null;
   }): boolean {
-    if (!input.savedTimelineFrameSrc) {
-      return false;
-    }
-    /**
-     * 保存续帧只允许服务三种场景：
-     * 1. 正式 playback 这一拍暂时还没回灌回来，此时保存帧是唯一像素桥；
-     * 2. 当前 / 刚退场 owner 需要保住底板连续性，避免 canonical host 挪走后闪回 poster；
-     * 3. 已有正式 swarm playback 且保存帧与当前 preview 源同源，说明它不是历史幽灵，而是同一条 WebTorrent 主链的暂停帧。
-     *
-     * 其余 `missing_source` 卡片即便有历史播放位置，也不代表它“天然就有 preview 真相”。
-     * 否则 newcomer 首次进房滚动时，旧的 swarm 源会被房间消息窗偷偷重新长成一张 preview video，
-     * 表面看像“有预览”，实际只是历史 playback 泄漏到了展示层。
-     */
-    if (!input.playback) {
-      return true;
-    }
-    if (
-      this.inlineAutoplayOwnerAttachmentId === input.attachmentId ||
-      this.最近退场Owner附件Id === input.attachmentId
-    ) {
-      return true;
-    }
-    if (input.playback.mode !== "swarm") {
-      return false;
-    }
-    const normalizedSavedSrc = this.归一化时间线视频播放源(input.savedTimelineFrameSrc);
-    const normalizedPreviewSrc = this.归一化时间线视频播放源(input.playbackTimelineVideoSrc);
-    return Boolean(normalizedSavedSrc && normalizedSavedSrc === normalizedPreviewSrc);
+    return 读取保存续帧是否允许承接时间线预览底板投影({
+      ...input,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+      recentlyReleasedOwnerAttachmentId: this.最近退场Owner附件Id,
+      normalizeSrc: (src) => this.归一化时间线视频播放源(src),
+    });
   }
 
   private 同步时间线唯一播放器宿主(): void {
@@ -2072,631 +1931,55 @@ export class 房间消息窗 extends LitElement {
     item: 消息展示项,
     可渲染真实预览视频附件: Set<string>
   ) {
-    if (item.attachments.length === 0) {
-      return null;
-    }
-
-    const attachmentLayout = item.attachmentLayout;
-    const gridColumnCount =
-      attachmentLayout?.columnCount ?? (item.attachments.length >= 2 ? 2 : 1);
-    const gridStyle = [
-      `--attachment-grid-columns: ${gridColumnCount}`,
-      `--attachment-grid-gap: ${attachmentLayout?.gap ?? 8}px`,
-      attachmentLayout ? `--attachment-grid-row-height: ${attachmentLayout.rowHeight}px` : "",
-    ]
-      .filter((value) => value.length > 0)
-      .join("; ");
-
-    const 读取附件播放结果 = (attachmentId: string): 媒体播放结果 | null =>
-      this.mediaPlaybackByAttachmentId[attachmentId] ?? null;
-
-    const 读取附件卡片样式 = (attachment: 消息展示项["attachments"][number]): string =>
-      [
-        attachment.gridColumnStart
-          ? `grid-column: ${attachment.gridColumnStart} / span ${attachment.gridColumnSpan ?? 1}`
-          : "",
-        attachment.gridRowStart
-          ? `grid-row: ${attachment.gridRowStart} / span ${attachment.gridRowSpan ?? 1}`
-          : "",
-      ]
-        .filter((value) => value.length > 0)
-        .join("; ");
-
-    const 渲染媒体提示 = (attachmentId: string, playback: 媒体播放结果 | null) => {
-      if (!playback?.hint) {
-        return null;
-      }
-      return html`
-        <div class="message-media-hint" data-media-hint=${attachmentId}>${playback.hint}</div>
-      `;
-    };
-
-    const 是否允许手动重试不可用视频 = (
-      attachment: 消息展示项["attachments"][number],
-      playback: 媒体播放结果
-    ): boolean =>
-      attachment.kind === "video" &&
-      playback.mode === "degraded" &&
-      (playback.reason === "connecting_to_peers" || playback.reason === "no_online_seed");
-
-    const 渲染不可用附件 = (
-      attachment: 消息展示项["attachments"][number],
-      playback: 媒体播放结果
-    ) =>
-      html`
-        <div class="message-media-unavailable" data-attachment-id=${attachment.attachmentId}>
-          ${渲染媒体提示(attachment.attachmentId, playback)}
-          ${是否允许手动重试不可用视频(attachment, playback)
-            ? html`
-                <button
-                  class="message-media-retry-trigger"
-                  type="button"
-                  data-attachment-id=${attachment.attachmentId}
-                  @click=${(event: Event) => {
-                    /**
-                     * “暂无在线种子”卡片必须给出手动重试入口：
-                     * 1. 用户点重试代表显式恢复意图，不应被动等下一轮 15 秒窗口；
-                     * 2. 这里只回抛 ENTER_RECOVERING 信号，保持“壳层只表达意图，恢复裁决仍在会话 owner”； 
-                     * 3. deleted/非视频场景不显示该入口，避免误导无效操作。
-                     */
-                    event.preventDefault();
-                    event.stopPropagation();
-                    this.广播媒体会话信号(attachment.attachmentId, {
-                      type: "ENTER_RECOVERING",
-                    });
-                  }}
-                >
-                  立即重试
-                </button>
-              `
-            : null}
-        </div>
-      `;
-
-    return html`
-      <div
-        class="message-attachment-grid"
-        data-attachment-count=${item.attachments.length}
-        data-attachment-template=${attachmentLayout?.template ?? "legacy-grid"}
-        style=${gridStyle}
-      >
-        ${item.attachments.map((attachment) => {
-          const playback = 读取附件播放结果(attachment.attachmentId);
-          const attachmentCardStyle = 读取附件卡片样式(attachment);
-          if (playback?.mode === "expired" || playback?.mode === "degraded") {
-            return html`
-              <div
-                class="message-attachment-card message-media-unavailable"
-                data-attachment-id=${attachment.attachmentId}
-                data-grid-column-start=${attachment.gridColumnStart ?? ""}
-                data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-                data-grid-row-start=${attachment.gridRowStart ?? ""}
-                data-grid-row-span=${attachment.gridRowSpan ?? ""}
-                style=${attachmentCardStyle}
-              >
-                ${渲染不可用附件(attachment, playback)}
-              </div>
-            `;
-          }
-          if (attachment.kind === "video") {
-            const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
-            const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
-            const hasRuntimePreview = Boolean(runtimePreview);
-            const previewPosterSrc =
-              !hasSourcePoster && runtimePreview
-                ? runtimePreview.src
-                : this.读取时间线视频封面地址(attachment, playback);
-            const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(
-              attachment,
-              playback,
-              {
-                有静态封面: hasSourcePoster,
-                有运行时预览: hasRuntimePreview,
-              }
-            );
-            const savedTimelineFrame =
-              this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
-            /**
-             * owner 刚滑出视口时，上层可能先撤掉 autoplay playback 快照，
-             * 下一轮可见性裁决才会重新回灌。这个短窗口不能退回 poster：
-             * 保存位置的 src 来自刚才那颗真实 `<video>` 的当前模板源，只作为同源续帧画面，
-             * 不打开 original 冷源，也不产生第二条播放真相。
-             */
-            const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-            const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
-              attachment.attachmentId
-            );
-            const shouldReuseSavedTimelineFrameAsPreview =
-              this.读取保存续帧是否允许承接时间线预览底板({
-                attachmentId: attachment.attachmentId,
-                playback,
-                playbackTimelineVideoSrc,
-                savedTimelineFrameSrc,
-              });
-            const timelinePreviewVideoSrcCandidate =
-              playbackTimelineVideoSrc ??
-              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-              knownReadyTimelineFrameSrc;
-            const videoBudget = this.读取时间线视频预算投影(
-              attachment,
-              timelinePreviewVideoSrcCandidate
-            );
-            /**
-             * 时间线真正消费的是“统一预算投影 + 本地连续性桥”：
-             * 1. canonical / preview 谁能露、谁该藏，先看编排层收口后的预算裁决；
-             * 2. `savedTimelineFrameSrc` 只在预算没有 preview src 时兜住刚退场 owner 的同源续帧；
-             * 3. `knownReadyTimelineFrameSrc` 只在高速虚拟回滑遇到冷快照时承接已经出过的同源首帧；
-             * 4. 这样消息窗就不再自己重算第二套 owner 逻辑，只负责把预算真相投影成 DOM。
-             */
-            const timelinePreviewVideoSrc =
-              videoBudget.previewVideoSrc ??
-              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-              knownReadyTimelineFrameSrc;
-            const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
-            const shouldRenderInlineVideo =
-              videoBudget.allowInlineCanonical && Boolean(ownerCanonicalVideoSrc);
-            const shouldRevealCanonicalHost =
-              shouldRenderInlineVideo &&
-              this.读取时间线唯一播放器是否可见接管就绪(
-                attachment.attachmentId,
-                ownerCanonicalVideoSrc
-              );
-            /**
-             * preview 底板只认 preview 真相，不再因为当前变成 owner 就自动借用 canonical 播放源：
-             * 1. owner 自己是否可播，交给 `ownerCanonicalVideoSrc`；
-             * 2. 底板是否可见，只看真正允许的 preview 来源；
-             * 3. 这样 `missing_source` 场景就不会再把冷 paused `<video>` 冒充成可见 cover。
-             */
-            const previewVideoSrc = timelinePreviewVideoSrc;
-            const restorableTimelineFrame = this.读取自动播恢复位置(
-              attachment.attachmentId,
-              previewVideoSrc
-            );
-            const isRecentlyReleasedOwnerWithPosition =
-              attachment.attachmentId === this.最近退场Owner附件Id;
-            const hasExistingSameSourcePreviewFrame =
-              this.读取时间线现有预览视频是否可继续显示(
-                attachment.attachmentId,
-                previewVideoSrc
-              );
-            const frozenTimelineFrame = this.读取时间线自动播冻结帧(
-              attachment.attachmentId,
-              previewVideoSrc ?? ownerCanonicalVideoSrc,
-              restorableTimelineFrame
-            );
-            const hasFrozenTimelineFrame = Boolean(frozenTimelineFrame);
-            const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
-              attachment.attachmentId,
-              previewVideoSrc
-            );
-            const hasCurrentDomPreviewFrame = hasExistingSameSourcePreviewFrame;
-            const normalizedPreviewVideoSrc =
-              this.归一化时间线视频播放源(previewVideoSrc);
-            const normalizedSavedTimelineFrameSrc =
-              this.归一化时间线视频播放源(savedTimelineFrameSrc);
-            const normalizedOwnerCanonicalVideoSrc =
-              this.归一化时间线视频播放源(ownerCanonicalVideoSrc);
-            const hasHistoricalCanonicalReveal =
-              Boolean(normalizedOwnerCanonicalVideoSrc) &&
-              this.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
-                normalizedOwnerCanonicalVideoSrc;
-            const hasSameSourceSavedTimelineFrame = Boolean(
-              normalizedPreviewVideoSrc &&
-                normalizedSavedTimelineFrameSrc &&
-                normalizedPreviewVideoSrc === normalizedSavedTimelineFrameSrc
-            );
-            const playbackContinuityDecision = 判定播放连续性表面({
-              attachmentId: attachment.attachmentId,
-              ownerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
-              surface: "timeline",
-              source: { src: previewVideoSrc ?? ownerCanonicalVideoSrc },
-              savedPosition: savedTimelineFrame,
-              dom: {
-                previewReadyState:
-                  hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame ? 2 : 0,
-                canonicalReadyState: shouldRevealCanonicalHost ? 3 : 0,
-                sourceMatches:
-                  hasSameSourceSavedTimelineFrame ||
-                  hasExistingSameSourcePreviewFrame ||
-                  hasFrozenTimelineFrame ||
-                  hasHistoricalCanonicalReveal,
-              },
-              host: {
-                exists: true,
-                hasStableFrame:
-                  hasExistingSameSourcePreviewFrame ||
-                  hasFrozenTimelineFrame ||
-                  hasKnownReadyPreviewFrame ||
-                  shouldReuseSavedTimelineFrameAsPreview ||
-                  hasHistoricalCanonicalReveal,
-              },
-              intent: { viewerOpen: false, fullscreen: false },
-            });
-            /**
-             * 同源续播证据已经存在时，poster 不再是“安全兜底”，而是闪烁源：
-             * 1. 保存位置、当前首帧、历史 canonical 接管都属于同一条播放连续性；
-             * 2. 外层 poster 会把“滑回续播”拆成 poster -> video 两拍；
-             * 3. 没有同源连续性证据的普通冷预览仍保留 poster，避免裸露黑色 video。
-             */
-            const shouldSuppressPosterForContinuity =
-              (shouldReuseSavedTimelineFrameAsPreview ||
-                hasFrozenTimelineFrame ||
-                hasHistoricalCanonicalReveal) &&
-              (playbackContinuityDecision.kind === "hidden_handoff" ||
-                playbackContinuityDecision.kind === "hold_frame" ||
-                playbackContinuityDecision.kind === "visible_canonical");
-            /**
-             * 续播暂停帧是时间线自动播的视觉连续性底板，不是“等待用户点击播放”的静态封面。
-             * 如果这里继续叠播放图标，owner 交接第一拍会先露一个中心图标再切成播放画面，
-             * 肉眼看到的就是滑入/滑出时的闪一下。
-             */
-            const shouldShowTimelinePlayIndicator =
-              !shouldRenderInlineVideo &&
-              !isRecentlyReleasedOwnerWithPosition &&
-              !shouldReuseSavedTimelineFrameAsPreview &&
-              !hasSameSourceSavedTimelineFrame &&
-              !restorableTimelineFrame &&
-              !hasExistingSameSourcePreviewFrame &&
-              !hasFrozenTimelineFrame &&
-              !hasKnownReadyPreviewFrame;
-            const shouldRenderReleasedOwnerPreviewVideo =
-              Boolean(previewVideoSrc) &&
-              isRecentlyReleasedOwnerWithPosition &&
-              !playback &&
-              videoBudget.formalByteSource === "none" &&
-              shouldReuseSavedTimelineFrameAsPreview &&
-              hasSameSourceSavedTimelineFrame &&
-              !hasFrozenTimelineFrame;
-            const shouldRenderPreviewVideoByBudget =
-              (Boolean(previewVideoSrc) &&
-                this.读取时间线预览视频是否允许渲染(videoBudget, {
-                  hasExistingSameSourcePreviewFrame,
-                  hasFrozenTimelineFrame,
-                  hasKnownReadyPreviewFrame,
-                  previewVideoSrc,
-                  shouldReuseSavedTimelineFrameAsPreview,
-                }) &&
-                (可渲染真实预览视频附件.has(attachment.attachmentId) ||
-                  hasExistingSameSourcePreviewFrame ||
-                  hasFrozenTimelineFrame ||
-                  hasKnownReadyPreviewFrame)) ||
-              /**
-               * 刚退场 owner 是“这一拍从 live player 退下来的当前会话”，不是普通历史冷卡片。
-               * 真实冻结帧导出是异步的；在它写入前，必须继续挂同源 preview video 承接恢复位置，
-               * 不能让统一预算里短暂的 cold_expression 把画面打回 poster。
-               */
-              shouldRenderReleasedOwnerPreviewVideo;
-            const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
-            /**
-             * 源级首帧缓存只说明“这个 WebTorrent src 曾经成功出帧”，
-             * 不说明“这颗刚重新挂载的 DOM video 当前已经有像素”：
-             * 1. 有当前 DOM 首帧时才移除 video 自身 poster，避免首帧前裸露黑块；
-             * 2. 外层 `<img class="message-video-poster">` 会造成 img/video 两个表面互换，连续性链路中必须压掉；
-             * 3. `<video poster>` 属于同一个 DOM 表面的冷保护，不会制造外层卡片闪回。
-             */
-            const shouldShowFirstFrameGuard =
-              shouldRenderPreviewVideoByBudget &&
-              !hasCurrentDomPreviewFrame &&
-              !hasFrozenTimelineFrame &&
-              !hasStablePreviewPosterSurface;
-            const hasReadyPreviewSurface =
-              hasStablePreviewPosterSurface ||
-              hasCurrentDomPreviewFrame ||
-              hasFrozenTimelineFrame;
-            /**
-             * hidden stage 只在“目标卡片当前已经有一张能继续顶住像素的预览视频”时启用：
-             * 1. 明确跨附件 handoff 时，先保留现有预览帧，让 canonical player 在隐藏宿主完成 source/time 对齐；
-             * 2. 历史 reveal 缓存存在但当前 DOM 不 ready 时，也要回到隐藏宿主重新校验；
-             * 3. 普通初次 owner 获取不走这条路，避免把自动播体验拖成长时间静止态；
-             * 4. 没有稳定 poster/preview 底板时也不启用 hidden stage，因为没有可继续顶住的像素。
-             */
-            const shouldUseHiddenStageCover =
-              shouldRenderInlineVideo &&
-              hasReadyPreviewSurface &&
-              !shouldRevealCanonicalHost &&
-              (this.时间线隐藏接管附件Id === attachment.attachmentId ||
-                hasHistoricalCanonicalReveal);
-            const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
-            const shouldRenderVisibleCanonicalHost =
-              shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
-            const shouldRenderPreviewVideo =
-              shouldRenderPreviewVideoByBudget &&
-              !shouldRenderVisibleCanonicalHost &&
-              (!isRecentlyReleasedOwnerWithPosition ||
-                shouldRenderReleasedOwnerPreviewVideo);
-            const shouldRenderFrozenTimelineFrame =
-              hasFrozenTimelineFrame &&
-              !hasCurrentDomPreviewFrame &&
-              (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
-            const shouldRenderCanonicalLoadingPosterCover =
-              shouldRenderInlineVideo &&
-              !shouldRevealCanonicalHost &&
-              !shouldRenderPreviewVideo &&
-              !shouldRenderFrozenTimelineFrame &&
-              !hasCurrentDomPreviewFrame &&
-              Boolean(previewPosterSrc);
-            const shouldRenderPreviewPosterSurface =
-              (hasStablePreviewPosterSurface &&
-                !shouldSuppressPosterForContinuity &&
-                !isRecentlyReleasedOwnerWithPosition &&
-                !shouldReuseSavedTimelineFrameAsPreview &&
-                !hasSameSourceSavedTimelineFrame &&
-                !hasFrozenTimelineFrame &&
-                !hasCurrentDomPreviewFrame &&
-                (!shouldRenderInlineVideo || !shouldRevealCanonicalHost)) ||
-              shouldRenderCanonicalLoadingPosterCover;
-            const previewVideoPoster =
-              !hasFrozenTimelineFrame &&
-              !hasCurrentDomPreviewFrame &&
-              (hasSourcePoster || hasRuntimePreview)
-                ? previewPosterSrc
-                : undefined;
-            const 时间线预览底板视频 = html`
-              <video
-                class=${`message-video-preview${
-                  shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
-                }`}
-                data-attachment-id=${attachment.attachmentId}
-                src=${previewVideoSrc ?? ""}
-                width=${attachment.displayWidth}
-                height=${attachment.displayHeight}
-                muted
-                playsinline
-                preload="metadata"
-                disablepictureinpicture
-                disableremoteplayback
-                controlslist="nodownload nofullscreen noremoteplayback"
-                tabindex="-1"
-                aria-hidden="true"
-                poster=${ifDefined(previewVideoPoster)}
-                @loadedmetadata=${(event: Event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLVideoElement)) {
-                    return;
-                  }
-                  this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
-                    allowPreviewFrame: Boolean(restorableTimelineFrame),
-                  });
-                }}
-                @loadeddata=${(event: Event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLVideoElement)) {
-                    return;
-                  }
-                  this.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
-                }}
-                @canplay=${(event: Event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLVideoElement)) {
-                    return;
-                  }
-                  this.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
-                }}
-                @playing=${(event: Event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLVideoElement)) {
-                    return;
-                  }
-                  this.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
-                }}
-                @error=${() => {
-                  /**
-                   * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
-                   * - 它失败时不代表“当前活跃播放会话”失败；
-                   * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
-                   * - 所以只允许 owner 那颗 canonical player 上抛错误，预览壳保持静默退避。
-                   */
-                }}
-              ></video>
-            `;
-            const 时间线视频预览内容 = html`
-              ${shouldRenderFrozenTimelineFrame
-                ? html`
-                    <img
-                      class="message-video-frozen-frame"
-                      data-attachment-id=${attachment.attachmentId}
-                      src=${frozenTimelineFrame?.dataUrl ?? ""}
-                      alt=""
-                      width=${attachment.displayWidth}
-                      height=${attachment.displayHeight}
-                      loading="eager"
-                      aria-hidden="true"
-                    />
-                  `
-                : null}
-              ${shouldRenderVisibleCanonicalHost
-                ? html`
-                    <div
-                      class="message-video-canonical-host"
-                      data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc) ? "legacy_stream" : "file"}
-                      data-video-src=${ownerCanonicalVideoSrc ?? ""}
-                      data-video-poster=${previewVideoPoster ?? ""}
-                      data-video-width=${attachment.width}
-                      data-video-height=${attachment.height}
-                      aria-hidden="true"
-                    ></div>
-                  `
-                : null}
-              ${shouldRenderPreviewVideo ? 时间线预览底板视频 : null}
-              ${shouldRenderPreviewPosterSurface
-                ? html`
-                    <img
-                      class=${`message-video-poster${
-                        shouldRenderInlineVideo && !shouldRevealCanonicalHost
-                          ? " message-video-poster--canonical-cover"
-                          : ""
-                      }`}
-                      data-attachment-id=${attachment.attachmentId}
-                      src=${previewPosterSrc}
-                      alt="视频封面"
-                      width=${attachment.displayWidth}
-                      height=${attachment.displayHeight}
-                      loading="lazy"
-                      aria-hidden="true"
-                      @error=${(event: Event) =>
-                        this.标记视频封面加载失败(attachment.attachmentId, event)}
-                    />
-                  `
-                : null}
-              ${shouldRenderStageHost
-                ? html`
-                    <div
-                      class="message-video-canonical-stage-host"
-                      data-stage-host="true"
-                      data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc) ? "legacy_stream" : "file"}
-                      data-video-src=${ownerCanonicalVideoSrc ?? ""}
-                      data-video-poster=${previewVideoPoster ?? ""}
-                      data-video-width=${attachment.width}
-                      data-video-height=${attachment.height}
-                      style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"
-                      aria-hidden="true"
-                    ></div>
-                  `
-                : null}
-            `;
-            /**
-             * 时间线视频卡片保持单入口（点击后统一进查看器）：
-             * 1. steady-state 可见 preview 只认 preview truth：静态 poster/runtime preview，或 continuity bridge 保下来的暂停帧；
-             * 2. 正式 playback 源属于 canonical owner / hidden-stage，禁止再泄漏成非 owner 的冷 `<video>`；
-             * 3. 没有任何 preview surface 时，才允许直接暴露 canonical owner，并用轻量 guard 兜住首帧；
-             * 4. owner 交接前若目标卡片已经有稳定 preview，就先保留它；canonical player 在隐藏宿主切源就绪后再揭帘；
-             * 5. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
-             */
-            return html`
-              <div
-                class="message-attachment-card message-video-card"
-                data-attachment-id=${attachment.attachmentId}
-                data-budget-tier=${videoBudget.tier}
-                data-budget-reason=${videoBudget.reason}
-                data-formal-byte-source=${videoBudget.formalByteSource}
-                data-grid-column-start=${attachment.gridColumnStart ?? ""}
-                data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-                data-grid-row-start=${attachment.gridRowStart ?? ""}
-                data-grid-row-span=${attachment.gridRowSpan ?? ""}
-                style=${attachmentCardStyle}
-              >
-                <button
-                  class="message-video-preview-trigger"
-                  type="button"
-                  data-attachment-id=${attachment.attachmentId}
-                  aria-label="观看视频"
-                  @contextmenu=${this.阻止时间线媒体预览原生菜单}
-                  @click=${(event: Event) =>
-                    this.打开媒体查看器(event, attachment.attachmentId)}
-                >
-                  ${shouldRenderPreviewVideo ||
-                  shouldRenderFrozenTimelineFrame ||
-                  shouldRenderPreviewPosterSurface ||
-                  shouldRenderInlineVideo
-                    ? html`
-                        ${时间线视频预览内容}
-                        ${shouldRenderPreviewVideo && shouldShowFirstFrameGuard
-                          ? html`
-                              <img
-                                class="message-video-first-frame-guard"
-                                data-attachment-id=${attachment.attachmentId}
-                                src=${默认视频清单占位Poster}
-                                alt=""
-                                width=${attachment.displayWidth}
-                                height=${attachment.displayHeight}
-                                loading="lazy"
-                                aria-hidden="true"
-                              />
-                            `
-                          : null}
-                        ${shouldRenderInlineVideo
-                          ? null
-                          : shouldShowTimelinePlayIndicator
-                            ? html`
-                                <span class="message-video-play-indicator" aria-hidden="true">▶</span>
-                              `
-                            : null}
-                      `
-                    : html`
-                        <img
-                          class="message-video-poster"
-                          data-attachment-id=${attachment.attachmentId}
-                          src=${previewPosterSrc}
-                          alt="视频封面"
-                          width=${attachment.displayWidth}
-                          height=${attachment.displayHeight}
-                          loading="lazy"
-                          aria-hidden="true"
-                          @error=${(event: Event) =>
-                            this.标记视频封面加载失败(attachment.attachmentId, event)}
-                        />
-                        <span class="message-video-play-indicator" aria-hidden="true">▶</span>
-                      `}
-                </button>
-                ${渲染媒体提示(attachment.attachmentId, playback)}
-              </div>
-            `;
-          }
-          return html`
-            <div
-              class="message-attachment-card message-image-card"
-              data-attachment-id=${attachment.attachmentId}
-              data-grid-column-start=${attachment.gridColumnStart ?? ""}
-              data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-              data-grid-row-start=${attachment.gridRowStart ?? ""}
-              data-grid-row-span=${attachment.gridRowSpan ?? ""}
-              style=${attachmentCardStyle}
-            >
-              ${(() => {
-                const imagePreviewSrc =
-                  // 图片一旦有正式 WebTorrent 播放源，时间线可见像素必须直接吃这条源；
-                  // thumbnail/original 只能服务未拿到 swarm 的冷启动或 legacy 表达，不能继续浪费已缓存 piece。
-                  playback?.mode === "swarm"
-                    ? playback.src
-                    : playback?.thumbnailUrl ??
-                      (playback?.mode === "anchor"
-                        ? playback.src
-                        : 默认图片清单占位图);
-                return html`
-                  <button
-                    class="message-image-preview-trigger"
-                    type="button"
-                    data-attachment-id=${attachment.attachmentId}
-                    aria-label="查看图片原图"
-                    @click=${(event: Event) =>
-                      this.打开媒体查看器(event, attachment.attachmentId)}
-                  >
-                    <img
-                      class="message-image"
-                      data-attachment-id=${attachment.attachmentId}
-                      src=${imagePreviewSrc}
-                      alt="图片附件"
-                      width=${attachment.displayWidth}
-                      height=${attachment.displayHeight}
-                      loading="lazy"
-                      @error=${() =>
-                        this.广播媒体会话信号(attachment.attachmentId, {
-                          // 图片虽然没有 video 的 waiting/stalled，但“当前渲染源已经失效”这件事是同一种恢复信号。
-                          // 这里统一回抛到媒体会话 owner，由 owner 决定是否重取 swarm/anchor，
-                          // 避免壳层再长一套图片专属恢复分支。
-                          type: "PLAYER_ERROR",
-                        })}
-                    />
-                  </button>
-                `;
-              })()}
-              ${渲染媒体提示(attachment.attachmentId, playback)}
-            </div>
-          `;
-        })}
-      </div>
-    `;
+    return 渲染消息附件(
+      {
+        mediaPlaybackByAttachmentId: this.mediaPlaybackByAttachmentId,
+        inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+        inlineAutoplayPositionByAttachmentId: this.inlineAutoplayPositionByAttachmentId,
+        最近退场Owner附件Id: this.最近退场Owner附件Id,
+        时间线隐藏接管附件Id: this.时间线隐藏接管附件Id,
+        时间线唯一播放器可见接管就绪源: this.时间线唯一播放器可见接管就绪源,
+        读取时间线视频运行时预览: (attachmentId) =>
+          this.读取时间线视频运行时预览(attachmentId),
+        读取时间线视频封面地址: (attachment, playback) =>
+          this.读取时间线视频封面地址(attachment, playback),
+        读取时间线视频首帧预览源: (attachment, playback, input) =>
+          this.读取时间线视频首帧预览源(attachment, playback, input),
+        读取保存续帧是否允许承接时间线预览底板: (input) =>
+          this.读取保存续帧是否允许承接时间线预览底板(input),
+        读取时间线视频已就绪首帧预览源: (attachmentId) =>
+          this.读取时间线视频已就绪首帧预览源(attachmentId),
+        读取时间线视频预算投影: (attachment, previewVideoSrcCandidate) =>
+          this.读取时间线视频预算投影(attachment, previewVideoSrcCandidate),
+        读取时间线唯一播放器是否可见接管就绪: (attachmentId, src) =>
+          this.读取时间线唯一播放器是否可见接管就绪(attachmentId, src),
+        读取自动播恢复位置: (attachmentId, src) =>
+          this.读取自动播恢复位置(attachmentId, src),
+        读取时间线现有预览视频是否可继续显示: (attachmentId, src) =>
+          this.读取时间线现有预览视频是否可继续显示(attachmentId, src),
+        读取时间线自动播冻结帧: (attachmentId, src, position) =>
+          this.读取时间线自动播冻结帧(attachmentId, src, position),
+        读取时间线视频首帧是否就绪: (attachmentId, src) =>
+          this.读取时间线视频首帧是否就绪(attachmentId, src),
+        归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
+        读取时间线预览视频是否允许渲染: (budget, input) =>
+          this.读取时间线预览视频是否允许渲染(budget, input),
+        恢复时间线自动播播放位置: (attachmentId, video, input) =>
+          this.恢复时间线自动播播放位置(attachmentId, video, input),
+        标记时间线视频首帧已就绪: (attachmentId, src) =>
+          this.标记时间线视频首帧已就绪(attachmentId, src),
+        标记视频封面加载失败: (attachmentId, event) =>
+          this.标记视频封面加载失败(attachmentId, event),
+        广播媒体会话信号: (attachmentId, signal) =>
+          this.广播媒体会话信号(attachmentId, signal),
+        阻止时间线媒体预览原生菜单: (event) =>
+          this.阻止时间线媒体预览原生菜单(event),
+        打开媒体查看器: (event, startAttachmentId) =>
+          this.打开媒体查看器(event, startAttachmentId),
+      },
+      item,
+      可渲染真实预览视频附件
+    );
   }
 
   private renderVirtualMessageItem(

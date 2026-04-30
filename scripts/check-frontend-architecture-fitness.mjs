@@ -81,9 +81,10 @@ const 禁止新增前端文件规则 = [
 ];
 
 const 热点文件行数上限 = [
-  // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
-  { path: "frontend/房间消息窗.ts", maxEffectiveLines: 2350 },
-  { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180 },
+  // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
+  { path: "frontend/房间消息窗.ts", maxEffectiveLines: 1800, maxPhysicalLines: 2150 },
+  { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 820, maxPhysicalLines: 930 },
+  { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
   { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1800 },
 ];
@@ -228,6 +229,8 @@ export const 统计有效源码行数 = (source) => {
   return count;
 };
 
+export const 统计物理源码行数 = (source) => source.split(/\r?\n/).length;
+
 const 收集文件 = (directory) => {
   const files = [];
   for (const entry of readdirSync(directory)) {
@@ -371,15 +374,29 @@ export const 检查热点文件增长 = (
 ) => {
   const violations = [];
   for (const hotFile of hotFiles) {
-    const lineCount = 统计有效源码行数(readSource(hotFile.path));
-    if (lineCount <= hotFile.maxEffectiveLines) {
-      continue;
+    const source = readSource(hotFile.path);
+    const effectiveLineCount = 统计有效源码行数(source);
+    if (
+      hotFile.maxEffectiveLines !== undefined &&
+      effectiveLineCount > hotFile.maxEffectiveLines
+    ) {
+      violations.push({
+        file: hotFile.path,
+        label: "hotspot growth ratchet",
+        detail: `${effectiveLineCount} 行超过有效上限 ${hotFile.maxEffectiveLines} 行`,
+      });
     }
-    violations.push({
-      file: hotFile.path,
-      label: "hotspot growth ratchet",
-      detail: `${lineCount} 行超过有效上限 ${hotFile.maxEffectiveLines} 行`,
-    });
+    const physicalLineCount = 统计物理源码行数(source);
+    if (
+      hotFile.maxPhysicalLines !== undefined &&
+      physicalLineCount > hotFile.maxPhysicalLines
+    ) {
+      violations.push({
+        file: hotFile.path,
+        label: "hotspot physical growth ratchet",
+        detail: `${physicalLineCount} 行超过物理上限 ${hotFile.maxPhysicalLines} 行`,
+      });
+    }
   }
   return violations;
 };
