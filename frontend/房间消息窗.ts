@@ -1256,9 +1256,13 @@ export class 房间消息窗 extends LitElement {
     const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
     const visibleHeight = Math.max(0, visibleBottom - visibleTop);
     if (visibleHeight > 0) {
+      const effectiveVisibleHeightBase = Math.max(
+        1,
+        Math.min(rect.height, viewportRect.height > 0 ? viewportRect.height : rect.height)
+      );
       return {
         attachmentId,
-        visibilityRatio: visibleHeight / rect.height,
+        visibilityRatio: Math.min(1, visibleHeight / effectiveVisibleHeightBase),
         distanceToViewportCenter,
       };
     }

@@ -394,10 +394,72 @@ describe("媒体发布器", () => {
     }) as {
       chunkSize: number;
       uploadDataDuringCreation: boolean;
+      removeFingerprintOnSuccess: boolean;
     };
 
     expect(transportOptions.chunkSize).toBe(媒体Tus单请求体分块字节数);
     expect(transportOptions.uploadDataDuringCreation).toBe(false);
+    expect(transportOptions.removeFingerprintOnSuccess).toBe(true);
+  });
+
+  it("Tus 断点存储不再依赖 localStorage 配额，避免满配额时把上传打断", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => {
+        throw new DOMException("localStorage disabled", "QuotaExceededError");
+      }),
+      setItem: vi.fn(() => {
+        throw new DOMException("localStorage quota", "QuotaExceededError");
+      }),
+      removeItem: vi.fn(),
+      key: vi.fn(),
+      length: 0,
+    });
+    const transportOptions = 构造媒体Tus传输选项({
+      tusEndpoint: "http://storage.local/files",
+      profile: "default",
+    }) as {
+      urlStorage: {
+        addUpload(
+          fingerprint: string,
+          upload: {
+            size: number;
+            metadata: Record<string, string>;
+            creationTime: string;
+            uploadUrl: string;
+          }
+        ): Promise<string>;
+        findUploadsByFingerprint(fingerprint: string): Promise<
+          Array<{
+            metadata: Record<string, string>;
+            uploadUrl: string | null;
+            urlStorageKey: string;
+          }>
+        >;
+        removeUpload(urlStorageKey: string): Promise<void>;
+      };
+    };
+
+    const urlStorageKey = await transportOptions.urlStorage.addUpload("fingerprint-1", {
+      size: 124203405,
+      metadata: { attachment_id: "att-quota-safe" },
+      creationTime: new Date(0).toString(),
+      uploadUrl: "http://storage.local/files/upload-1",
+    });
+    const uploads = await transportOptions.urlStorage.findUploadsByFingerprint("fingerprint-1");
+
+    expect(urlStorageKey).toContain("koko-tus::fingerprint-1::");
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toMatchObject({
+      metadata: { attachment_id: "att-quota-safe" },
+      uploadUrl: "http://storage.local/files/upload-1",
+      urlStorageKey,
+    });
+
+    await transportOptions.urlStorage.removeUpload(urlStorageKey);
+    await expect(
+      transportOptions.urlStorage.findUploadsByFingerprint("fingerprint-1")
+    ).resolves.toEqual([]);
   });
 
   it("Uppy 本地文件会忽略传入 id，只有 relativePath 变化才会改变内部 file.id", () => {

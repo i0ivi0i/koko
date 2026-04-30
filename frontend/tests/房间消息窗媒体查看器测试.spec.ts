@@ -4465,6 +4465,28 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("竖屏视频高度超过聊天视口时，自动播可见比例按可用视口归一化", () => {
+    const pane = 创建媒体消息窗();
+    const candidate = (
+      pane as unknown as {
+        根据矩形计算自动播候选(
+          attachmentId: string,
+          rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
+          viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
+        ): { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number } | null;
+      }
+    ).根据矩形计算自动播候选(
+      "att-vertical-video",
+      { top: -184, bottom: 385, height: 569 },
+      { top: 54, bottom: 385, height: 331 }
+    );
+
+    expect(candidate).toMatchObject({
+      attachmentId: "att-vertical-video",
+      visibilityRatio: 1,
+    });
+  });
+
   it("支持 IntersectionObserver 时，贴近视口但尚未相交的视频也会保留为预热候选", async () => {
     const pane = 创建媒体消息窗();
     const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
