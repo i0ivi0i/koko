@@ -463,6 +463,23 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("虚拟消息行高度估算必须覆盖多附件拼贴完整网格，避免消息互相压住", () => {
+    const pane = 创建媒体消息窗();
+    const collage = 创建五附件拼贴消息项();
+    pane.items = [collage];
+
+    const estimatedHeight = (
+      pane as unknown as {
+        估算消息行高度(index: number): number;
+      }
+    ).估算消息行高度(0);
+    const expectedGridHeight = 3 * 240 + 2 * 8;
+
+    expect(estimatedHeight).toBeGreaterThanOrEqual(22 + expectedGridHeight);
+
+    pane.remove();
+  });
+
   it("群友昵称会渲染在气泡外层，而不是继续被气泡宽度一起挤折", async () => {
     const pane = 创建媒体消息窗();
     document.body.appendChild(pane);

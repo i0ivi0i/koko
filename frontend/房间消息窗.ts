@@ -1448,13 +1448,38 @@ export class 房间消息窗 extends LitElement {
     if (item.kind === "unread-divider") {
       return 28;
     }
-    const mediaHeight =
-      item.attachments.length > 0
-        ? Math.max(...item.attachments.map((attachment) => attachment.displayHeight), 0)
-        : 0;
     const aliasHeight = item.showAlias ? 22 : 0;
-    const mediaTextGap = item.hasText && item.attachments.length > 0 ? 8 : 0;
-    return Math.max(48, aliasHeight + item.layout.height + mediaHeight + mediaTextGap + 32);
+    if (item.attachments.length > 0) {
+      const mediaHeight = this.估算媒体附件布局高度(item);
+      const mediaTextGap = item.hasText ? 8 : 0;
+      return Math.max(48, aliasHeight + item.layout.height + mediaTextGap + mediaHeight);
+    }
+    return Math.max(48, aliasHeight + item.layout.height + 32);
+  }
+
+  private 估算媒体附件布局高度(item: 消息展示项): number {
+    if (item.attachments.length === 0) {
+      return 0;
+    }
+    const layout = item.attachmentLayout;
+    if (layout) {
+      const rowCount = Math.max(
+        1,
+        ...item.attachments.map(
+          (attachment) =>
+            (attachment.gridRowStart ?? 1) + Math.max(1, attachment.gridRowSpan ?? 1) - 1
+        )
+      );
+      return rowCount * layout.rowHeight + Math.max(0, rowCount - 1) * layout.gap;
+    }
+    const columnCount = item.attachments.length >= 2 ? 2 : 1;
+    const rowCount = Math.ceil(item.attachments.length / columnCount);
+    const rowHeight = Math.max(
+      0,
+      ...item.attachments.map((attachment) => attachment.displayHeight)
+    );
+    const gap = columnCount > 1 ? 8 : 0;
+    return rowCount * rowHeight + Math.max(0, rowCount - 1) * gap;
   }
 
   private 提取消息虚拟范围(range: {
