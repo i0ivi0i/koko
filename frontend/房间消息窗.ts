@@ -20,13 +20,16 @@ import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒�
 import { 读取默认全局唯一播放器 } from "./媒体/全局唯一播放器.js";
 import { 判定播放连续性表面 } from "./媒体/全局丝滑自动播.js";
 import { 读取BlobDataUrl } from "./媒体/视频元数据.js";
+import {
+  估算媒体附件布局高度,
+  估算消息行高度,
+  提取消息虚拟范围,
+  补齐首帧消息虚拟项,
+  消息虚拟列表overscan消息数,
+  type 消息虚拟项,
+  type 消息虚拟范围,
+} from "./房间消息窗/消息虚拟列表.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
-
-type 消息虚拟项 = {
-  key: unknown;
-  index: number;
-  start: number;
-};
 
 type 时间线视频附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
 
@@ -82,11 +85,6 @@ const 近视口活媒体会话预算上限 = 24;
 const 近视口活视频会话预算上限 = 4;
 const 自动播观察候选上限 = 12;
 const 首帧预热候选上限 = 2;
-const 消息虚拟列表overscan消息数 = 4;
-const 首帧兜底消息预算上限 = 12;
-const 首帧兜底最小消息数量 = 6;
-const 首帧兜底默认视口高度 = 720;
-const 首帧兜底视口覆盖倍率 = 1.25;
 const 时间线自动播冻结帧最大边长 = 480;
 const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
 
@@ -1503,76 +1501,18 @@ export class 房间消息窗 extends LitElement {
   }
 
   private 估算消息行高度(index: number): number {
-    const item = this.items[index];
-    if (!item) {
-      return 72;
-    }
-    if (item.kind === "unread-divider") {
-      return 28;
-    }
-    const aliasHeight = item.showAlias ? 22 : 0;
-    if (item.attachments.length > 0) {
-      const mediaHeight = this.估算媒体附件布局高度(item);
-      const mediaTextGap = item.hasText ? 8 : 0;
-      return Math.max(48, aliasHeight + item.layout.height + mediaTextGap + mediaHeight);
-    }
-    return Math.max(48, aliasHeight + item.layout.height + 32);
+    return 估算消息行高度(this.items, index);
   }
 
   private 估算媒体附件布局高度(item: 消息展示项): number {
-    if (item.attachments.length === 0) {
-      return 0;
-    }
-    const layout = item.attachmentLayout;
-    if (layout) {
-      const rowCount = Math.max(
-        1,
-        ...item.attachments.map(
-          (attachment) =>
-            (attachment.gridRowStart ?? 1) + Math.max(1, attachment.gridRowSpan ?? 1) - 1
-        )
-      );
-      return rowCount * layout.rowHeight + Math.max(0, rowCount - 1) * layout.gap;
-    }
-    const columnCount = item.attachments.length >= 2 ? 2 : 1;
-    const rowCount = Math.ceil(item.attachments.length / columnCount);
-    const rowHeight = Math.max(
-      0,
-      ...item.attachments.map((attachment) => attachment.displayHeight)
-    );
-    const gap = columnCount > 1 ? 8 : 0;
-    return rowCount * rowHeight + Math.max(0, rowCount - 1) * gap;
+    return 估算媒体附件布局高度(item);
   }
 
-  private 提取消息虚拟范围(range: {
-    startIndex: number;
-    endIndex: number;
-    overscan: number;
-    count: number;
-  }): number[] {
-    const indexes = new Set<number>();
-    const start = Math.max(range.startIndex - range.overscan, 0);
-    const end = Math.min(range.endIndex + range.overscan, range.count - 1);
-    for (let index = start; index <= end; index += 1) {
-      indexes.add(index);
-    }
-    // 恢复到首条未读仍沿用现有滚动器的 DOM 查询入口；
-    // 固定保留分隔线和后一条消息，避免大房间初始 range 不包含目标节点。
-    const unreadDividerIndex = this.items.findIndex((item) => item.kind === "unread-divider");
-    if (unreadDividerIndex >= 0) {
-      indexes.add(unreadDividerIndex);
-      if (unreadDividerIndex + 1 < this.items.length) {
-        indexes.add(unreadDividerIndex + 1);
-      }
-    }
-    return Array.from(indexes).sort((left, right) => left - right);
+  private 提取消息虚拟范围(range: 消息虚拟范围): number[] {
+    return 提取消息虚拟范围(this.items, range);
   }
 
   private 补齐首帧消息虚拟项(virtualItems: 消息虚拟项[]): 消息虚拟项[] {
-    if (virtualItems.length > 0 || this.items.length === 0) {
-      return virtualItems;
-    }
-
     /**
      * Lit 父壳把消息属性喂给子组件时，首帧可能早于 virtualizer 算出真实 range。
      * 这里仍要兜底，但兜底只服务“先别空白”，不能再退化成：
@@ -1583,39 +1523,11 @@ export class 房间消息窗 extends LitElement {
      * 所以首帧兜底只覆盖大约一屏到一屏多一点，并且硬限制消息数量；
      * 真正的 overscan 仍然交给 TanStack virtualizer 在下一拍接管。
      */
-    const 视口高度 =
-      this.messageScrollRef.value?.clientHeight || this.clientHeight || 首帧兜底默认视口高度;
-    const 目标覆盖高度 = Math.max(视口高度 * 首帧兜底视口覆盖倍率, 首帧兜底默认视口高度);
-    let 累积高度 = 0;
-    let 已选消息数 = 0;
-    let endIndex = 0;
-    for (; endIndex < this.items.length; endIndex += 1) {
-      累积高度 += this.估算消息行高度(endIndex) + 10;
-      已选消息数 += 1;
-      if (已选消息数 >= 首帧兜底消息预算上限) {
-        break;
-      }
-      if (已选消息数 >= 首帧兜底最小消息数量 && 累积高度 >= 目标覆盖高度) {
-        break;
-      }
-    }
-    const indexes = this.提取消息虚拟范围({
-      startIndex: 0,
-      endIndex: Math.min(this.items.length - 1, endIndex),
-      overscan: 0,
-      count: this.items.length,
+    return 补齐首帧消息虚拟项({
+      virtualItems,
+      items: this.items,
+      viewportHeight: this.messageScrollRef.value?.clientHeight || this.clientHeight,
     });
-    const starts: number[] = [];
-    let offset = 0;
-    for (let index = 0; index < this.items.length; index += 1) {
-      starts[index] = offset;
-      offset += this.估算消息行高度(index) + 10;
-    }
-    return indexes.map((index) => ({
-      key: this.items[index]?.id ?? index,
-      index,
-      start: starts[index] ?? 0,
-    }));
   }
 
   private 读取当前虚拟消息项(): 消息虚拟项[] {

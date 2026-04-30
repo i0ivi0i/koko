@@ -82,6 +82,8 @@ const 禁止新增前端文件规则 = [
 
 const 热点文件行数上限 = [
   // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
+  { path: "frontend/房间消息窗.ts", maxEffectiveLines: 2350 },
+  { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180 },
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
   { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1800 },
 ];
