@@ -235,6 +235,24 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(globalThis.__kokoBudgetSnapshot).toBeUndefined();
   });
 
+  it("操作台高度计算不在 render 热路径同步读取 DOM 宽度", async () => {
+    const el = await 创建已入房聊天壳();
+    await 等待组件稳定(el);
+    const inputGroup = el.shadowRoot!.querySelector<HTMLElement>("#shellConsoleInputGroup");
+    expect(inputGroup).not.toBeNull();
+    Object.defineProperty(inputGroup!, "clientWidth", {
+      configurable: true,
+      get() {
+        throw new Error("render 不应同步读取操作台几何宽度");
+      },
+    });
+
+    el.requestUpdate();
+    await expect(el.updateComplete).resolves.toBeTruthy();
+
+    el.remove();
+  });
+
   it("聊天滚动容器会显式关闭浏览器默认滚动锚点，避免和手动历史补偿打架", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 

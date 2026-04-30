@@ -332,6 +332,14 @@ export class 房间消息窗 extends LitElement {
       this.同步时间线视频首帧就绪缓存();
     }
     this.同步时间线自动播播放状态(changedProperties);
+    if (changedProperties.size === 0 && this.inlineAutoplayOwnerAttachmentId) {
+      /**
+       * hidden-stage 揭帘和虚拟列表 range 更新常常是无属性更新：
+       * DOM 已经从隐藏宿主切到可见宿主，但属性没有变，不能等 updateComplete.then 才迁移唯一播放器。
+       * 这里同步一次宿主指针，避免真实浏览器里出现一帧到数帧的 owner -> 空 -> owner 接管空窗。
+       */
+      this.同步时间线唯一播放器宿主();
+    }
     this.揭开已就绪的时间线隐藏接管宿主();
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
@@ -1444,7 +1452,9 @@ export class 房间消息窗 extends LitElement {
       item.attachments.length > 0
         ? Math.max(...item.attachments.map((attachment) => attachment.displayHeight), 0)
         : 0;
-    return Math.max(48, item.layout.height + mediaHeight + 32);
+    const aliasHeight = item.showAlias ? 22 : 0;
+    const mediaTextGap = item.hasText && item.attachments.length > 0 ? 8 : 0;
+    return Math.max(48, aliasHeight + item.layout.height + mediaHeight + mediaTextGap + 32);
   }
 
   private 提取消息虚拟范围(range: {
@@ -2499,7 +2509,11 @@ export class 房间消息窗 extends LitElement {
               ${shouldRenderPreviewPosterSurface
                 ? html`
                     <img
-                      class="message-video-poster"
+                      class=${`message-video-poster${
+                        shouldRenderInlineVideo && !shouldRevealCanonicalHost
+                          ? " message-video-poster--canonical-cover"
+                          : ""
+                      }`}
                       data-attachment-id=${attachment.attachmentId}
                       src=${previewPosterSrc}
                       alt="视频封面"
@@ -2667,15 +2681,9 @@ export class 房间消息窗 extends LitElement {
     item: 聊天列表展示项,
     index: number,
     start: number,
-    measureElement: (element: HTMLElement) => void,
     可渲染真实预览视频附件: Set<string>
   ) {
     const rowStyle = `position: absolute; top: 0; left: 0; width: 100%; transform: translateY(${start}px);`;
-    const measureRow = (element?: Element): void => {
-      if (element instanceof HTMLElement) {
-        measureElement(element);
-      }
-    };
     if (item.kind === "unread-divider") {
       return html`
         <li
@@ -2684,7 +2692,6 @@ export class 房间消息窗 extends LitElement {
           data-kind="unread-divider"
           data-index=${index}
           style=${rowStyle}
-          ${ref(measureRow)}
         >
           ${item.label}
         </li>
@@ -2705,7 +2712,6 @@ export class 房间消息窗 extends LitElement {
         data-event-position=${item.eventPosition}
         data-index=${index}
         style=${rowStyle}
-        ${ref(measureRow)}
       >
         <div class="message-stack ${item.owner}">
           ${alias}
@@ -2752,7 +2758,6 @@ export class 房间消息窗 extends LitElement {
                 item,
                 virtualItem.index,
                 virtualItem.start,
-                (element) => virtualizer.measureElement(element),
                 可渲染真实预览视频附件
               );
             }

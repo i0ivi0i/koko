@@ -443,6 +443,26 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("虚拟消息行渲染不再调用 measureElement 同步量 DOM", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = Array.from({ length: 8 }, (_, index) =>
+      创建单视频消息项(`att-no-measure-${index + 1}`, index + 1)
+    );
+    const virtualizer = (
+      pane as unknown as {
+        读取消息虚拟器(): { measureElement(element: HTMLElement): void };
+      }
+    ).读取消息虚拟器();
+    const measureElement = vi.spyOn(virtualizer, "measureElement");
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    expect(measureElement).not.toHaveBeenCalled();
+
+    pane.remove();
+  });
+
   it("群友昵称会渲染在气泡外层，而不是继续被气泡宽度一起挤折", async () => {
     const pane = 创建媒体消息窗();
     document.body.appendChild(pane);
@@ -2641,6 +2661,56 @@ describe("房间消息窗媒体查看器", () => {
     expect(reacquiredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(reacquiredVideo?.autoplay).toBe(true);
     expect(reacquiredVideo?.getAttribute("src")).toBe(playback.src);
+
+    pane.remove();
+  });
+
+  it("初次自动播 owner 的 canonical 未就绪时，稳定 poster 必须盖住黑壳且不新增第二颗 video", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-initial-hidden",
+      kind: "video",
+      src: "/webtorrent/demo-infohash-initial/content-demo-initial.mp4",
+      thumbnailUrl: "http://media.local/poster-initial-hidden",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建单视频消息项("att-video-initial-hidden", 1)];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-initial-hidden": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-initial-hidden";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-initial-hidden": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const visibleHost = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-host[data-attachment-id="att-video-initial-hidden"]'
+    );
+    const poster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-initial-hidden"]'
+    );
+    const extraPreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-initial-hidden"]:not([data-canonical-player="true"])'
+    );
+
+    expect(visibleHost).not.toBeNull();
+    expect(extraPreviewVideo).toBeNull();
+    expect(poster?.getAttribute("src")).toBe(playback.thumbnailUrl);
+    expect(poster?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
+
+    const readyVideo = await 驱动时间线Canonical就绪(pane, "att-video-initial-hidden");
+    expect(readyVideo?.dataset.canonicalPlayer).toBe("true");
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-initial-hidden"]')
+    ).not.toBeNull();
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-initial-hidden"]')
+    ).toBeNull();
 
     pane.remove();
   });

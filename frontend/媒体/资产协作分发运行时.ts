@@ -1422,10 +1422,14 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       if (!distribution) {
         return null;
       }
+      const consumerBinding = 归一化协作分发消费者(input);
       const existingSession = runtime.底层会话表.get(distribution.swarm_id);
       const 复用前为零引用会话 =
         existingSession?.播放源已交付过 === true &&
         existingSession.consumerBindings.size === 0;
+      const 复用前为同消费者旧播放源 =
+        existingSession?.播放源已交付过 === true &&
+        existingSession.consumerBindings.has(consumerBinding.consumerId);
       const session = await 确保协作分发会话(runtime, {
         attachmentId: input.attachmentId,
         kind: input.kind,
@@ -1442,7 +1446,7 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       if (!source) {
         return null;
       }
-      if (复用前为零引用会话) {
+      if (复用前为零引用会话 || 复用前为同消费者旧播放源) {
         try {
           await 确认协作分发会话播放源仍可读(session, source.src);
         } catch (error) {

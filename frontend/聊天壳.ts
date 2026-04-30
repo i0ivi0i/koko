@@ -118,6 +118,9 @@ export class 聊天壳 extends LitElement {
 
   private 房间宽度观察目标: HTMLElement | null = null;
   private 房间宽度观察器: ResizeObserver | null = null;
+  private 操作台输入组观察目标: HTMLElement | null = null;
+  private 操作台输入组观察器: ResizeObserver | null = null;
+  private 操作台输入组宽度缓存 = Math.min(globalThis.innerWidth || 390, 560);
   private 消息文本布局宽度缓存 = Math.max(1, globalThis.innerWidth || 1024);
   private 消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(
     this.消息文本布局宽度缓存
@@ -644,6 +647,12 @@ export class 聊天壳 extends LitElement {
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
     }
 
+    .message-video-poster--canonical-cover {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+    }
+
     /*
      * 冻结帧只负责高速回滑时顶住“刚才暂停的那一帧”：
      * 它覆盖在重新挂载的 video 上，等当前 DOM 真正出帧后由模板自然移除。
@@ -1119,6 +1128,7 @@ export class 聊天壳 extends LitElement {
 
   override updated(): void {
     this.同步房间宽度观察();
+    this.同步操作台输入组观察();
     this.同步预算烟测探针();
   }
 
@@ -1128,6 +1138,7 @@ export class 聊天壳 extends LitElement {
       globalThis.__kokoBudgetSnapshot = undefined;
     }
     this.清理房间宽度观察();
+    this.清理操作台输入组观察();
     this._应用运行时?.dispose();
     this.kernel.dispose();
     this._应用运行时 = null;
@@ -1213,9 +1224,7 @@ export class 聊天壳 extends LitElement {
       return 50;
     }
 
-    const inputGroup =
-      (this.shadowRoot?.querySelector("#shellConsoleInputGroup") as HTMLElement | null) ?? null;
-    const inputGroupWidth = inputGroup?.clientWidth || Math.min(globalThis.innerWidth || 390, 560);
+    const inputGroupWidth = this.操作台输入组宽度缓存;
     const 附件入口宽度 = this.读取聊天快照().roomId ? 84 : 0;
     const 输入框总宽度 = Math.max(180, inputGroupWidth - 附件入口宽度);
     const 输入框内容宽度 = Math.max(120, 输入框总宽度 - 34);
@@ -1448,6 +1457,48 @@ export class 聊天壳 extends LitElement {
     this.房间宽度观察器?.disconnect();
     this.房间宽度观察器 = null;
     this.房间宽度观察目标 = null;
+  }
+
+  private 应用操作台输入组宽度(width: number): void {
+    const nextWidth = Math.max(
+      180,
+      Math.round(width || Math.min(globalThis.innerWidth || 390, 560))
+    );
+    if (nextWidth === this.操作台输入组宽度缓存) {
+      return;
+    }
+    this.操作台输入组宽度缓存 = nextWidth;
+    this.requestUpdate();
+  }
+
+  private 清理操作台输入组观察(): void {
+    this.操作台输入组观察器?.disconnect();
+    this.操作台输入组观察器 = null;
+    this.操作台输入组观察目标 = null;
+  }
+
+  private 同步操作台输入组观察(): void {
+    const inputGroup =
+      (this.shadowRoot?.querySelector("#shellConsoleInputGroup") as HTMLElement | null) ?? null;
+    if (inputGroup === this.操作台输入组观察目标) {
+      return;
+    }
+    this.清理操作台输入组观察();
+    if (!inputGroup) {
+      return;
+    }
+    this.操作台输入组观察目标 = inputGroup;
+    if (typeof ResizeObserver !== "function") {
+      return;
+    }
+    this.操作台输入组观察器 = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      this.应用操作台输入组宽度(entry.contentRect.width);
+    });
+    this.操作台输入组观察器.observe(inputGroup);
   }
 
   private 读取当前房间宽度(): number {
