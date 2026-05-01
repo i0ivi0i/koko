@@ -23,13 +23,13 @@ describe("房间时间线", () => {
   it("根文件退成时间线 owner 门面，运行时内部直连时间线 owner", () => {
     const facadeSource = 读取前端源码("房间时间线.ts");
     const ownerSource = 读取前端源码("时间线/领域.ts");
-    const runtimeSource = 读取前端源码("房间时间线运行时.ts");
+    const runtimeSource = 读取前端源码("时间线/运行时.ts");
 
     expect(facadeSource).toContain('export * from "./时间线/领域.js"');
     expect(facadeSource).not.toContain("function 合并房间时间线消息(");
     expect(ownerSource).toContain("export function 推进房间时间线(");
     expect(ownerSource).toContain("export function 创建乐观房间消息(");
-    expect(runtimeSource).toContain('from "./时间线/领域.js"');
+    expect(runtimeSource).toContain('from "./领域.js"');
     expect(runtimeSource).not.toContain('from "./房间时间线.js"');
   });
 

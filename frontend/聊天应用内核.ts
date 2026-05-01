@@ -75,7 +75,7 @@ import {
   创建房间时间线Actor,
   投影时间线快照到聊天时间线状态,
   type 房间时间线事件,
-} from "./房间时间线运行时.js";
+} from "./时间线/运行时.js";
 import {
   创建实时会话Actor,
   type 实时会话事件,
