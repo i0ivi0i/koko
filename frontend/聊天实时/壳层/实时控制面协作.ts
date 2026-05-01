@@ -1,5 +1,5 @@
 import { Http接口错误 } from "../../传输.js";
-import type { Transport异常 } from "../../房间恢复编排.js";
+import type { Transport异常 } from "../../恢复/壳层/房间恢复编排.js";
 import type { 实时会话事件 } from "../../实时会话运行时.js";
 
 export type 实时控制面结果 = {

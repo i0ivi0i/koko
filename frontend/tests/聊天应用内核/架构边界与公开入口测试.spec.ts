@@ -51,10 +51,12 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     const bridgeSource = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
 
     expect(source).toContain('from "./总装/聊天应用编排桥接.js"');
+    expect(source).toContain('from "./恢复/壳层/房间恢复编排.js"');
     expect(source).toContain('from "./房间/壳层/阅读推进.js"');
     expect(source).toContain("创建内核恢复编排端口({");
     expect(source).toContain("创建内核实时编排端口({");
     expect(source).toContain("创建内核阅读推进编排端口({");
+    expect(bridgeSource).toContain('from "../恢复/壳层/房间恢复编排.js"');
     expect(bridgeSource).toContain('from "../房间/壳层/阅读推进.js"');
     expect(source).not.toContain("创建房间恢复编排({");
     expect(source).not.toContain("创建房间实时编排({");

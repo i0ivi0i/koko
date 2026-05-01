@@ -7,7 +7,7 @@ import {
 import {
   type 房间恢复编排依赖,
   type 房间恢复编排端口,
-} from "./房间恢复编排.js";
+} from "./恢复/壳层/房间恢复编排.js";
 import {
   type 房间实时编排依赖,
   type 房间实时编排端口,

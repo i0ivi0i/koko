@@ -86,7 +86,7 @@ describe("浏览器端应用平台化基线", () => {
 
   it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
     const kernelSource = 读取前端源码("聊天应用内核.ts");
-    const recoverySource = 读取前端源码("房间恢复编排.ts");
+    const recoverySource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
     const realtimeSource = 读取前端源码("房间实时编排.ts");
     const readSource = 读取前端源码("房间/壳层/阅读推进.ts");
     const scrollerSource = 读取前端源码("房间滚动器.ts");
@@ -289,6 +289,13 @@ describe("浏览器端应用平台化基线", () => {
 
     expect(source).toContain('path: "frontend/阅读推进编排.ts"');
     expect(source).toContain('ownerPath: "frontend/房间/壳层/阅读推进.ts"');
+  });
+
+  it("架构适应度门禁会把房间恢复编排根文件锁成迁移门面，避免恢复壳层 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/房间恢复编排.ts"');
+    expect(source).toContain('ownerPath: "frontend/恢复/壳层/房间恢复编排.ts"');
   });
 
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {

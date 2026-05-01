@@ -10,6 +10,19 @@ import {
   读取房间恢复编排工厂,
 } from "./common/聊天测试支架";
 describe("房间恢复编排", () => {
+  it("根文件退成恢复壳层门面，真实实现收进恢复 owner", () => {
+    const facadeSource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const ownerSource = readFileSync(
+      resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"),
+      "utf8"
+    );
+
+    expect(facadeSource).toContain('export * from "./恢复/壳层/房间恢复编排.js"');
+    expect(facadeSource).not.toContain("export function 创建房间恢复编排(");
+    expect(ownerSource).toContain("export function 创建房间恢复编排(");
+    expect(ownerSource).toContain('from "../应用.js"');
+  });
+
   it("旧房间快照恢复壳层文件必须退成恢复应用门面", () => {
     const source = readFileSync(
       resolve(process.cwd(), "聊天恢复/壳层/房间快照恢复.ts"),
@@ -23,28 +36,31 @@ describe("房间恢复编排", () => {
   });
 
   it("会把 invalid_session 恢复委托给 会话失效恢复 协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"), "utf8");
 
-    expect(source).toContain('from "./聊天恢复/壳层/会话失效恢复.js"');
+    expect(source).toContain('from "../../聊天恢复/壳层/会话失效恢复.js"');
     expect(source).toContain("创建会话失效恢复协作(");
     expect(source).not.toContain("async function bootstrapFreshSession");
     expect(source).not.toContain("async function handleInvalidSessionTransport异常");
   });
 
   it("房间恢复编排和阅读推进只依赖聊天房间窄接口，而不再声明完整前端传输端口", () => {
-    const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const recoverySource = readFileSync(
+      resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"),
+      "utf8"
+    );
     const readSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
 
-    expect(recoverySource).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
+    expect(recoverySource).toContain('from "../../聊天共享/适配/聊天房间传输端口.js"');
     expect(recoverySource).not.toContain("type 前端传输端口");
     expect(readSource).toContain('from "../../聊天共享/适配/聊天房间传输端口.js"');
     expect(readSource).not.toContain("type 前端传输端口");
   });
 
   it("会把 snapshot reload 与房间硬失败委托给 房间快照恢复 协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"), "utf8");
 
-    expect(source).toContain('from "./恢复/应用.js"');
+    expect(source).toContain('from "../应用.js"');
     expect(source).toContain("创建恢复应用(");
     expect(source).not.toContain("async function reloadRoomFromSnapshot");
     expect(source).not.toContain("function resolveFallbackRoomCode");

@@ -101,7 +101,7 @@ describe("传输", () => {
 
   it("聊天 realtime / 房间恢复 / 后台 admin / 媒体定位 当前已经只消费各自需要的 transport 子表面", () => {
     const realtimeSource = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
-    const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const recoverySource = readFileSync(resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"), "utf8");
     const readSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
     const mediaSource = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
     const adminQuerySource = readFileSync(resolve(process.cwd(), "后台/查询编排.ts"), "utf8");

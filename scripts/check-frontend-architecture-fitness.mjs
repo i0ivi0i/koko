@@ -119,6 +119,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./房间/壳层/阅读推进.js";'],
     forbiddenSnippets: ["const 阅读推进节流毫秒 = 400;", "export function 创建阅读推进编排("],
   },
+  {
+    path: "frontend/房间恢复编排.ts",
+    ownerPath: "frontend/恢复/壳层/房间恢复编排.ts",
+    requiredSnippets: ['export * from "./恢复/壳层/房间恢复编排.js";'],
+    forbiddenSnippets: ["export function 创建房间恢复编排(", "const 房间快照恢复 = 创建恢复应用("],
+  },
 ];
 
 const 架构规则 = [
