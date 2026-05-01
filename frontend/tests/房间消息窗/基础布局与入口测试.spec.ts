@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../../媒体/媒体查看器";
@@ -12,7 +14,22 @@ import {
   创建五附件拼贴消息项,
 } from "../common/房间消息窗媒体支架";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
+  it("根文件退成消息窗壳层门面，聊天壳内部直连房间消息窗 owner", () => {
+    const facadeSource = 读取前端源码("房间消息窗.ts");
+    const ownerSource = 读取前端源码("房间消息窗/壳.ts");
+    const shellSource = 读取前端源码("聊天壳.ts");
+
+    expect(facadeSource).toContain('export * from "./房间消息窗/壳.js"');
+    expect(facadeSource).not.toContain("export class 房间消息窗 extends LitElement");
+    expect(ownerSource).toContain("export class 房间消息窗 extends LitElement");
+    expect(shellSource).toContain('import "./房间消息窗/壳.js";');
+    expect(shellSource).not.toContain('import "./房间消息窗.js";');
+  });
+
   it("IntersectionObserver 首次接管时，不再同步量测视口，候选由观察器回调给出", async () => {
     const pane = 创建媒体消息窗();
     const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];

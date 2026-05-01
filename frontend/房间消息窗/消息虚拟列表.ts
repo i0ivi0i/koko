@@ -1,4 +1,4 @@
-import type { 聊天列表展示项, 消息展示项 } from "../视图.js";
+import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 export type 消息虚拟项 = {
   key: unknown;

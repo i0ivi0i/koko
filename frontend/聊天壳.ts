@@ -1,7 +1,7 @@
 import { css, html, LitElement } from "lit";
 import type { 应用运行时端口 } from "./应用运行时.js";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
-import "./房间消息窗.js";
+import "./房间消息窗/壳.js";
 import type { 聊天运行时预算状态 } from "./状态.js";
 import {
   创建操作台附件入口编排,
@@ -26,7 +26,7 @@ import {
   派生消息窗口提示文案,
   派生跳到最新入口文案,
   type 消息文本布局环境,
-} from "./视图.js";
+} from "./房间消息窗/视图.js";
 
 function 派生媒体草稿失败文案(errorCode: string): string {
   switch (errorCode) {

@@ -354,6 +354,20 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/房间消息窗/文本布局.ts"');
   });
 
+  it("架构适应度门禁会把视图根文件锁成迁移门面，避免展示 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/视图.ts"');
+    expect(source).toContain('ownerPath: "frontend/房间消息窗/视图.ts"');
+  });
+
+  it("架构适应度门禁会把房间消息窗根文件锁成迁移门面，避免消息窗 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/房间消息窗.ts"');
+    expect(source).toContain('ownerPath: "frontend/房间消息窗/壳.ts"');
+  });
+
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 

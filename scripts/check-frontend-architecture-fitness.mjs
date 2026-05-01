@@ -173,6 +173,21 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./房间消息窗/文本布局.js";'],
     forbiddenSnippets: ["export function 创建文本布局器()", "export const 默认文本布局器 = 创建文本布局器()"],
   },
+  {
+    path: "frontend/视图.ts",
+    ownerPath: "frontend/房间消息窗/视图.ts",
+    requiredSnippets: [
+      'export * from "./房间消息窗/视图.js";',
+      'export * from "./后台/视图.js";',
+    ],
+    forbiddenSnippets: ["export function 派生聊天列表展示项(", "export function 格式化后台概览("],
+  },
+  {
+    path: "frontend/房间消息窗.ts",
+    ownerPath: "frontend/房间消息窗/壳.ts",
+    requiredSnippets: ['export * from "./房间消息窗/壳.js";'],
+    forbiddenSnippets: ["export class 房间消息窗 extends LitElement"],
+  },
 ];
 
 const 架构规则 = [
@@ -204,7 +219,7 @@ const 前端禁回流片段规则 = [
   },
   {
     label: "room message pane WebTorrent byte owner barrier",
-    path: "frontend/房间消息窗.ts",
+    path: "frontend/房间消息窗/壳.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b/g,
   },
   {

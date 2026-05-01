@@ -7,7 +7,7 @@ import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js"
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放.js";
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
-import type { 消息展示项 } from "../视图.js";
+import type { 消息展示项 } from "./视图.js";
 
 export type 时间线自动播冻结帧 = {
   src: string;

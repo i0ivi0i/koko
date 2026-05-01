@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { 消息事件, 附件快照, 图片附件快照, 视频附件快照 } from "../契约";
 import { 默认消息文本布局环境, 派生消息展示项 } from "../视图";
 import { 安装测试文本测量画布 } from "./common/聊天测试支架";
+
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 安装测试文本测量画布();
 
@@ -53,6 +58,36 @@ function 创建消息事件(
 }
 
 describe("视图 / 消息展示项派生", () => {
+  it("根文件退成展示门面，聊天展示 owner 与后台展示 owner 分别收口", () => {
+    const facadeSource = 读取前端源码("视图.ts");
+    const messagePaneViewSource = 读取前端源码("房间消息窗/视图.ts");
+    const adminViewSource = 读取前端源码("后台/视图.ts");
+    const shellSource = 读取前端源码("聊天壳.ts");
+    const messagePaneSource = 读取前端源码("房间消息窗/壳.ts");
+    const attachmentRenderSource = 读取前端源码("房间消息窗/附件渲染.ts");
+    const messageVirtualListSource = 读取前端源码("房间消息窗/消息虚拟列表.ts");
+    const adminShellSource = 读取前端源码("后台/壳.ts");
+
+    expect(facadeSource).toContain('export * from "./房间消息窗/视图.js"');
+    expect(facadeSource).toContain('export * from "./后台/视图.js"');
+    expect(facadeSource).not.toContain("export function 派生聊天列表展示项(");
+    expect(facadeSource).not.toContain("export function 格式化后台概览(");
+    expect(messagePaneViewSource).toContain("export function 派生聊天列表展示项(");
+    expect(messagePaneViewSource).toContain("export function 派生壳级操作台状态(");
+    expect(adminViewSource).toContain("export function 格式化后台概览(");
+    expect(adminViewSource).toContain("export function 格式化后台房间详情(");
+    expect(shellSource).toContain('from "./房间消息窗/视图.js"');
+    expect(shellSource).not.toContain('from "./视图.js"');
+    expect(messagePaneSource).toContain('from "./视图.js"');
+    expect(messagePaneSource).not.toContain('from "../视图.js"');
+    expect(attachmentRenderSource).toContain('from "./视图.js"');
+    expect(attachmentRenderSource).not.toContain('from "../视图.js"');
+    expect(messageVirtualListSource).toContain('from "./视图.js"');
+    expect(messageVirtualListSource).not.toContain('from "../视图.js"');
+    expect(adminShellSource).toContain('from "./视图.js"');
+    expect(adminShellSource).not.toContain('from "../视图.js"');
+  });
+
   it("五个混合媒体附件会被派生成 hero-strip 拼贴，而不是继续退化成双列流式列表", () => {
     const item = 派生消息展示项(
       创建消息事件([
