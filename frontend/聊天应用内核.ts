@@ -3,7 +3,7 @@ import {
   派生房间壳外观,
   type 房间内核事件,
   type 房间壳外观,
-} from "./房间内核.js";
+} from "./房间/运行时.js";
 import {
   type 房间恢复编排依赖,
   type 房间恢复编排端口,

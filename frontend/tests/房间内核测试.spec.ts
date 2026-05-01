@@ -4,7 +4,36 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 describe("房间内核", () => {
+  it("根文件退成房间运行时 owner 门面，内部引用直连房间 owner", () => {
+    const facadeSource = 读取前端源码("房间内核.ts");
+    const ownerSource = 读取前端源码("房间/运行时.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const realtimeSource = 读取前端源码("实时/应用.ts");
+    const recoverySource = 读取前端源码("恢复/应用.ts");
+    const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
+    const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
+
+    expect(facadeSource).toContain('export * from "./房间/运行时.js"');
+    expect(facadeSource).not.toContain("const 房间编排机 = createMachine(");
+    expect(ownerSource).toContain("const 房间编排机 = createMachine(");
+    expect(ownerSource).toContain("export function 创建房间内核()");
+    expect(ownerSource).toContain("export function 派生房间壳外观(");
+    expect(kernelSource).toContain('from "./房间/运行时.js"');
+    expect(kernelSource).not.toContain('from "./房间内核.js"');
+    expect(realtimeSource).toContain('from "../房间/运行时.js"');
+    expect(realtimeSource).not.toContain('from "../房间内核.js"');
+    expect(recoverySource).toContain('from "../房间/运行时.js"');
+    expect(recoverySource).not.toContain('from "../房间内核.js"');
+    expect(recoveryShellSource).toContain('from "../../房间/运行时.js"');
+    expect(recoveryShellSource).not.toContain('from "../../房间内核.js"');
+    expect(testHarnessSource).toContain('from "../../房间/运行时"');
+    expect(testHarnessSource).not.toContain('from "../../房间内核"');
+  });
+
   it("不再承载视口真相字段和事件", () => {
     const source = readFileSync(resolve(process.cwd(), "房间内核.ts"), "utf8");
 

@@ -1,6 +1,6 @@
 import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "../契约.js";
-import type { 房间内核事件 } from "../房间内核.js";
+import type { 房间内核事件 } from "../房间/运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
 import type { 实时会话事件 } from "./会话运行时.js";
 import { 创建乐观房间消息 } from "../时间线/领域.js";

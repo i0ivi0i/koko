@@ -1,5 +1,5 @@
 import type { 房间快照 } from "../../契约.js";
-import type { 房间内核事件 } from "../../房间内核.js";
+import type { 房间内核事件 } from "../../房间/运行时.js";
 import type { 房间时间线事件 } from "../../时间线/运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "../../存储.js";
 import { 创建会话失效恢复协作 } from "../../聊天恢复/壳层/会话失效恢复.js";

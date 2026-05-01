@@ -27,7 +27,7 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/平台/浏览器应用平台.ts", symbol: "创建浏览器应用平台" },
   { path: "frontend/平台/应用生命周期.ts", symbol: "创建应用生命周期Actor" },
   { path: "frontend/实时/会话运行时.ts", symbol: "创建实时会话Actor" },
-  { path: "frontend/房间内核.ts", symbol: "创建房间内核" },
+  { path: "frontend/房间/运行时.ts", symbol: "创建房间内核" },
   { path: "frontend/时间线/运行时.ts", symbol: "创建房间时间线Actor" },
   { path: "frontend/时间线/视口运行时.ts", symbol: "创建房间视口Actor" },
   { path: "frontend/媒体运行时.ts", symbol: "创建媒体运行时Actor" },
@@ -148,6 +148,12 @@ const 前端迁移门面规则 = [
     ownerPath: "frontend/时间线/运行时.ts",
     requiredSnippets: ['export * from "./时间线/运行时.js";'],
     forbiddenSnippets: ["const 房间时间线机 = createMachine(", "export function 创建房间时间线Actor()"],
+  },
+  {
+    path: "frontend/房间内核.ts",
+    ownerPath: "frontend/房间/运行时.ts",
+    requiredSnippets: ['export * from "./房间/运行时.js";'],
+    forbiddenSnippets: ["const 房间编排机 = createMachine(", "export function 创建房间内核()"],
   },
 ];
 

@@ -326,6 +326,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/时间线/运行时.ts"');
   });
 
+  it("架构适应度门禁会把房间内核根文件锁成迁移门面，避免房间运行时 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/房间内核.ts"');
+    expect(source).toContain('ownerPath: "frontend/房间/运行时.ts"');
+  });
+
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
