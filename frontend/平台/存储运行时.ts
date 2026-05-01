@@ -1,7 +1,7 @@
 import {
   创建浏览器存储,
   type 前端存储端口,
-} from "../存储.js";
+} from "./存储.js";
 import {
   创建浏览器媒体缓存仓库,
   type 媒体缓存仓库,

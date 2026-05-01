@@ -80,6 +80,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./平台/传输.js";'],
     forbiddenSnippets: ["export function 创建前端传输(", "const 实时连接 = new 实时连接适配(baseUrl);"],
   },
+  {
+    path: "frontend/存储.ts",
+    ownerPath: "frontend/平台/存储.ts",
+    requiredSnippets: ['export * from "./平台/存储.js";'],
+    forbiddenSnippets: ["export function 创建浏览器存储(", "const 设备匿名凭证存储键 ="],
+  },
 ];
 
 const 架构规则 = [
@@ -344,6 +350,12 @@ const 平台内层Import违规 = (relativePath, source) => {
       if (
         relativePath === "frontend/传输.ts" &&
         (importPath === "./平台/传输.js" || importPath.endsWith("/平台/传输.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/存储.ts" &&
+        (importPath === "./平台/存储.js" || importPath.endsWith("/平台/存储.js"))
       ) {
         continue;
       }
