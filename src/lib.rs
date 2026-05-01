@@ -27,6 +27,8 @@ pub mod shell;
 pub mod media_distribution;
 #[path = "实时/mod.rs"]
 pub mod realtime;
+#[path = "恢复/mod.rs"]
+pub mod recovery;
 #[path = "房间/mod.rs"]
 pub mod room;
 #[path = "用例.rs"]

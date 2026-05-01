@@ -32,34 +32,10 @@ pub fn 校验房间订阅资格(
     usecase::校验房间订阅资格(仓储, 房间标识, 会话标识)
 }
 
-/// 加载房间快照用例：
-/// 先验证成员资格，再返回基线快照，防止未入房会话越权读取房间事实。
-pub fn 加载房间快照(
-    仓储: &dyn usecase::仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-) -> Result<contract::快照, contract::错误码> {
-    usecase::校验实时连接会话(仓储, 会话标识)?;
-    校验房间存在(仓储, 房间标识)?;
-    // 先验证成员资格，再返回快照，避免未入房会话直接读取房间真相。
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-    let latest_event_position = 仓储
-        .查询房间最新事件位置(房间标识)?
-        .ok_or(contract::错误码::房间不存在)?;
-    let last_read_event_position = 仓储.查询房间阅读位置(房间标识, 会话标识)?;
-    // 第一条未读的裁决必须留在应用层，不能让前端自己猜。
-    let first_unread_event_position = match last_read_event_position {
-        Some(last_read_event_position) if last_read_event_position < latest_event_position => {
-            Some(last_read_event_position + 1)
-        }
-        _ => None,
-    };
-    仓储.拉取房间快照(
-        房间标识,
-        last_read_event_position,
-        first_unread_event_position,
-    )
-}
+/// 过渡兼容门面：
+/// 恢复快照的权威 owner 已搬到 `recovery::application`，
+/// 这里继续保留旧入口，避免一次性掀翻所有调用点。
+pub use crate::recovery::application::加载房间快照;
 
 /// 加载房间增量事件用例：
 /// 1. 参数合法性校验。

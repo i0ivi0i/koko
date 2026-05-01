@@ -13,8 +13,9 @@ pub use crate::media::upload::application::{
 };
 pub use crate::message::application::{创建消息, 创建消息_异步};
 pub use crate::realtime::application::{加载房间增量事件_异步, 校验实时连接会话_异步};
+pub use crate::recovery::application::加载房间快照;
 pub use crate::room::application::{
-    加载房间历史页, 加载房间增量事件, 加载房间快照, 按短码进房或建房, 推进房间阅读位置,
+    加载房间历史页, 加载房间增量事件, 按短码进房或建房, 推进房间阅读位置,
 };
 
 /// 用例层读取到的附件种类快照。

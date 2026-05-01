@@ -4,3 +4,5 @@
 pub mod application;
 #[path = "契约.rs"]
 pub mod contract;
+#[path = "外壳.rs"]
+pub mod shell;

@@ -374,7 +374,7 @@ pub(super) async fn load_room_snapshot(
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        房间应用::加载房间快照(&repo, &room_id_copy, &session_id_for_usecase)
+        crate::recovery::application::加载房间快照(&repo, &room_id_copy, &session_id_for_usecase)
             .map_err(map_domain_err_tuple)
     })
     .await;

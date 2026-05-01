@@ -1408,7 +1408,7 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
 
 /// 共享状态 -> 仓储 的唯一构造入口。
 /// 约束：热路径只复用共享连接池，不在 handler 里重复建池。
-fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
+pub(crate) fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
     Pg仓储::从连接池构建(state.pool.clone(), state.runtime_handle.clone())
 }
 
@@ -1423,7 +1423,7 @@ struct ApiError {
 
 /// 领域事件 -> 传输 JSON 的稳定映射层。
 /// 约束：只做字段翻译，不添加业务语义。
-fn events_to_json(
+pub(crate) fn events_to_json(
     events: Vec<contract::领域事件>,
     session_id: Option<&str>,
 ) -> Vec<serde_json::Value> {
@@ -1471,7 +1471,10 @@ fn attachments_to_json(
 }
 
 /// 单条领域事件 -> JSON。
-fn event_to_json(event: contract::领域事件, session_id: Option<&str>) -> serde_json::Value {
+pub(crate) fn event_to_json(
+    event: contract::领域事件,
+    session_id: Option<&str>,
+) -> serde_json::Value {
     match event {
         contract::领域事件::消息已创建 {
             房间标识,
@@ -1499,7 +1502,7 @@ fn event_to_json(event: contract::领域事件, session_id: Option<&str>) -> ser
 
 /// 领域错误码 -> HTTP 状态码 + 稳定错误码的映射表。
 /// 约束：这里不做领域判断，只做“已得到错误码”的协议转码。
-fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str, String) {
+pub(crate) fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str, String) {
     match code {
         contract::错误码::参数非法 => (
             StatusCode::BAD_REQUEST,
