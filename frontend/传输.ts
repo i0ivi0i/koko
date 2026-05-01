@@ -31,7 +31,7 @@ import type {
 } from "./聊天共享/适配/聊天实时连接端口.js";
 import { 创建房间HTTP接口 } from "./聊天恢复/适配/房间HTTP接口.js";
 import { 媒体HTTP接口 } from "./媒体/适配/媒体HTTP接口.js";
-import { 后台HTTP接口 } from "./操作台/适配/后台HTTP接口.js";
+import { 后台HTTP接口 } from "./后台/适配/后台HTTP接口.js";
 
 type 接口错误响应 = {
   code?: string;

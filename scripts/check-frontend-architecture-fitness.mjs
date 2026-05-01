@@ -21,7 +21,7 @@ const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
  */
 const 前端运行时Owner注册表 = [
   { path: "frontend/聊天应用内核.ts", symbol: "创建聊天应用内核" },
-  { path: "frontend/后台应用内核.ts", symbol: "创建后台应用内核" },
+  { path: "frontend/后台/应用内核.ts", symbol: "创建后台应用内核" },
   { path: "frontend/恢复/应用.ts", symbol: "创建恢复应用" },
   { path: "frontend/实时/应用.ts", symbol: "创建实时应用" },
   { path: "frontend/平台/浏览器应用平台.ts", symbol: "创建浏览器应用平台" },
@@ -34,6 +34,46 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/媒体/全局丝滑自动播.ts", symbol: "判定播放连续性表面" },
   { path: "frontend/媒体/资产协作分发运行时.ts", symbol: "创建资产协作分发运行时" },
   { path: "frontend/平台/缓存更新运行时.ts", symbol: "创建缓存更新运行时" },
+];
+
+/**
+ * 后台根文件当前处于“兼容入口还没完全删掉”的迁移阶段。
+ * 这里强制它们只做薄门面，避免真实 owner 又偷偷回流到根目录。
+ */
+const 前端迁移门面规则 = [
+  {
+    path: "frontend/后台查询编排.ts",
+    ownerPath: "frontend/后台/查询编排.ts",
+    requiredSnippets: ['export * from "./后台/查询编排.js";'],
+    forbiddenSnippets: ["export function 创建后台查询编排("],
+  },
+  {
+    path: "frontend/后台会话编排.ts",
+    ownerPath: "frontend/后台/会话编排.ts",
+    requiredSnippets: ['export * from "./后台/会话编排.js";'],
+    forbiddenSnippets: ["export function 创建后台会话编排("],
+  },
+  {
+    path: "frontend/后台壳编排.ts",
+    ownerPath: "frontend/后台/壳编排.ts",
+    requiredSnippets: ['export * from "./后台/壳编排.js";'],
+    forbiddenSnippets: ["export function 创建后台壳编排("],
+  },
+  {
+    path: "frontend/后台应用内核.ts",
+    ownerPath: "frontend/后台/应用内核.ts",
+    requiredSnippets: ['export * from "./后台/应用内核.js";'],
+    forbiddenSnippets: ["class 后台应用内核", "export function 创建后台应用内核("],
+  },
+  {
+    path: "frontend/后台壳.ts",
+    ownerPath: "frontend/后台/壳.ts",
+    requiredSnippets: [
+      'export { 后台壳 } from "./后台/壳.js";',
+      'import "./后台/壳.js";',
+    ],
+    forbiddenSnippets: ["class 后台壳"],
+  },
 ];
 
 const 架构规则 = [
@@ -330,6 +370,68 @@ const 检查Owner注册表 = () => {
   return violations;
 };
 
+const 检查迁移门面规则 = () => {
+  const violations = [];
+
+  for (const rule of 前端迁移门面规则) {
+    let facadeSource;
+    let ownerSource;
+    try {
+      facadeSource = 读取源码(rule.path);
+    } catch {
+      violations.push({
+        file: rule.path,
+        label: "migration facade missing",
+        detail: "迁移门面文件不存在",
+      });
+      continue;
+    }
+
+    try {
+      ownerSource = 读取源码(rule.ownerPath);
+    } catch {
+      violations.push({
+        file: rule.ownerPath,
+        label: "migration owner missing",
+        detail: "真实 owner 文件不存在",
+      });
+      continue;
+    }
+
+    for (const snippet of rule.requiredSnippets) {
+      if (facadeSource.includes(snippet)) {
+        continue;
+      }
+      violations.push({
+        file: rule.path,
+        label: "migration facade drift",
+        detail: `缺少门面片段: ${snippet}`,
+      });
+    }
+
+    for (const snippet of rule.forbiddenSnippets) {
+      if (!facadeSource.includes(snippet)) {
+        continue;
+      }
+      violations.push({
+        file: rule.path,
+        label: "migration facade owns implementation",
+        detail: `门面不应继续承载实现片段: ${snippet}`,
+      });
+    }
+
+    if (去掉注释(ownerSource).includes("/操作台/")) {
+      violations.push({
+        file: rule.ownerPath,
+        label: "migration owner semantic drift",
+        detail: "后台 owner 真实代码不应再引用操作台目录",
+      });
+    }
+  }
+
+  return violations;
+};
+
 const 检查未登记XStateOwner = (files) => {
   const registered = new Set(前端运行时Owner注册表.map((owner) => owner.path));
   const violations = [];
@@ -494,6 +596,7 @@ export const 收集架构适应度违规 = () => {
   const files = 收集文件(前端目录);
   const 违规记录 = [
     ...检查Owner注册表(),
+    ...检查迁移门面规则(),
     ...检查未登记XStateOwner(files),
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),

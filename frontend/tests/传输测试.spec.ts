@@ -47,7 +47,7 @@ describe("传输", () => {
     const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 
     expect(source).toContain('from "./媒体/适配/媒体HTTP接口.js"');
-    expect(source).toContain('from "./操作台/适配/后台HTTP接口.js"');
+    expect(source).toContain('from "./后台/适配/后台HTTP接口.js"');
     expect(source).toContain("const 媒体传输 = new 媒体HTTP接口({");
     expect(source).toContain("const 后台传输 = new 后台HTTP接口({");
     expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash)");
@@ -91,8 +91,8 @@ describe("传输", () => {
     const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
     const readSource = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
     const mediaSource = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
-    const adminQuerySource = readFileSync(resolve(process.cwd(), "后台查询编排.ts"), "utf8");
-    const adminSessionSource = readFileSync(resolve(process.cwd(), "后台会话编排.ts"), "utf8");
+    const adminQuerySource = readFileSync(resolve(process.cwd(), "后台/查询编排.ts"), "utf8");
+    const adminSessionSource = readFileSync(resolve(process.cwd(), "后台/会话编排.ts"), "utf8");
 
     expect(realtimeSource).toContain("deps.transport.createSocket(sessionId)");
     expect(realtimeSource).toContain("deps.transport.释放Socket?.(realtimeSocket);");

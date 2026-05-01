@@ -220,6 +220,7 @@ describe("浏览器端应用平台化基线", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain("前端运行时 owner 注册表");
+    expect(source).toContain("frontend/后台/应用内核.ts");
     expect(source).toContain("frontend/恢复/应用.ts");
     expect(source).toContain("frontend/实时/应用.ts");
     expect(source).toContain("frontend/应用生命周期.ts");
@@ -227,6 +228,18 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('label: "platform internal import boundary"');
     expect(source).toContain("frontend/聊天应用内核.ts");
     expect(source).toContain("frontend/聊天媒体编排.ts");
+  });
+
+  it("架构适应度门禁会把后台根文件锁成迁移门面，避免后台 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/后台壳.ts"');
+    expect(source).toContain('path: "frontend/后台应用内核.ts"');
+    expect(source).toContain('path: "frontend/后台查询编排.ts"');
+    expect(source).toContain('path: "frontend/后台会话编排.ts"');
+    expect(source).toContain('path: "frontend/后台壳编排.ts"');
+    expect(source).toContain("frontend/后台/壳.ts");
+    expect(source).toContain("frontend/后台/应用内核.ts");
   });
 
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
@@ -339,8 +352,10 @@ const stillKeep = true;
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
-    const adminSource = 读取前端源码("后台壳.ts");
-    const adminKernelSource = 读取前端源码("后台应用内核.ts");
+    const adminFacadeSource = 读取前端源码("后台壳.ts");
+    const adminOwnerSource = 读取前端源码("后台/壳.ts");
+    const adminKernelFacadeSource = 读取前端源码("后台应用内核.ts");
+    const adminKernelOwnerSource = 读取前端源码("后台/应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
     expect(kernelSource).toContain('from "./聊天应用编排桥接.js"');
@@ -350,17 +365,21 @@ const stillKeep = true;
     expect(kernelSource).not.toContain("this.platform.transport.transport()");
     expect(kernelSource).toContain('from "./平台/index.js"');
 
-    expect(adminSource).toContain('from "./后台应用内核.js"');
-    expect(adminSource).not.toContain('from "./平台/index.js"');
-    expect(adminSource).not.toContain("private transport:");
-    expect(adminSource).not.toContain("new HttpRealtime传输(window.location.origin)");
-    expect(adminKernelSource).toContain('from "./平台/index.js"');
-    expect(adminKernelSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
-    expect(adminKernelSource).toContain("this.platform.transport.后台查询传输()");
-    expect(adminKernelSource).toContain("this.platform.transport.后台会话传输()");
-    expect(adminKernelSource).not.toContain("this.platform.transport.transport()");
-    expect(adminKernelSource).not.toContain("overviewText:");
-    expect(adminKernelSource).not.toContain("detailText:");
+    expect(adminFacadeSource).toContain('export { 后台壳 } from "./后台/壳.js"');
+    expect(adminFacadeSource).toContain('import "./后台/壳.js"');
+    expect(adminKernelFacadeSource).toContain('export * from "./后台/应用内核.js"');
+
+    expect(adminOwnerSource).toContain('from "./应用内核.js"');
+    expect(adminOwnerSource).not.toContain('from "../平台/index.js"');
+    expect(adminOwnerSource).not.toContain("private transport:");
+    expect(adminOwnerSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+    expect(adminKernelOwnerSource).toContain('from "../平台/index.js"');
+    expect(adminKernelOwnerSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
+    expect(adminKernelOwnerSource).toContain("this.platform.transport.后台查询传输()");
+    expect(adminKernelOwnerSource).toContain("this.platform.transport.后台会话传输()");
+    expect(adminKernelOwnerSource).not.toContain("this.platform.transport.transport()");
+    expect(adminKernelOwnerSource).not.toContain("overviewText:");
+    expect(adminKernelOwnerSource).not.toContain("detailText:");
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

@@ -9,8 +9,10 @@ export interface 后台HTTP接口依赖 {
 }
 
 /**
- * 操作台后台接口继续只是管理员冷路径 HTTP 适配。
- * 它不接管聊天室主链，也不参与恢复语义。
+ * 后台 HTTP 接口继续只是管理员冷路径适配：
+ * 1. 它只翻译后台登录、概览、房间查询接口；
+ * 2. 不接管聊天室主链，也不参与恢复语义；
+ * 3. 物理目录上也必须和后台 owner 放在一起，避免再次混入聊天操作台。
  */
 export class 后台HTTP接口 {
   constructor(private readonly deps: 后台HTTP接口依赖) {}

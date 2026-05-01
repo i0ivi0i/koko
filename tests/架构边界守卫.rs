@@ -5,6 +5,10 @@ fn 读取(path: &str) -> String {
     fs::read_to_string(Path::new(path)).expect("应能读取架构边界目标文件")
 }
 
+fn 统计物理行数(path: &str) -> usize {
+    读取(path).lines().count()
+}
+
 #[test]
 fn 后端恢复_owner_文件必须显式存在() {
     for path in ["src/恢复/mod.rs", "src/恢复/应用.rs"] {
@@ -89,6 +93,91 @@ fn 统一契约门面不得混入页面文案布局词或框架类型() {
         assert!(
             !content.contains(forbidden),
             "src/契约.rs 不应混入壳层/框架类型: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
+    let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
+    let 未收口热点 = [
+        ("src/用例.rs", 200usize),
+        ("src/外壳.rs", 200usize),
+        ("src/适配.rs", 120usize),
+        ("frontend/聊天应用内核.ts", 200usize),
+        ("frontend/聊天壳.ts", 200usize),
+        ("frontend/聊天媒体编排.ts", 200usize),
+    ]
+    .into_iter()
+    .filter(|(path, budget)| 统计物理行数(path) > *budget)
+    .map(|(path, _)| path)
+    .collect::<Vec<_>>();
+
+    assert!(
+        !未收口热点.is_empty(),
+        "这条守卫只在仍有热点根文件未收口时才有意义；如果这里为空，说明预算或测试前提需要一起更新"
+    );
+    assert!(
+        !matrix.contains("状态：已完成"),
+        "仍有热点根文件明显未收口：{:?}；完成矩阵不应提前写成已完成",
+        未收口热点
+    );
+}
+
+#[test]
+fn 根目录业务文件必须逐个登记到完成矩阵() {
+    let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
+    let required_entries = [
+        "src/媒体附件适配.rs",
+        "src/媒体内容解析.rs",
+        "src/媒体上传外壳.rs",
+        "src/媒体资产外壳.rs",
+        "src/媒体协作分发.rs",
+        "src/tus_hook外壳.rs",
+        "src/房间外壳.rs",
+        "src/房间阅读适配.rs",
+        "src/消息事件适配.rs",
+        "src/用户身份.rs",
+        "src/后台外壳.rs",
+        "src/用例.rs",
+        "src/契约.rs",
+        "src/适配.rs",
+        "src/外壳.rs",
+        "frontend/聊天应用内核.ts",
+        "frontend/聊天壳.ts",
+        "frontend/聊天媒体编排.ts",
+        "frontend/房间消息窗.ts",
+        "frontend/媒体运行时.ts",
+        "frontend/房间内核.ts",
+        "frontend/房间时间线.ts",
+        "frontend/房间时间线运行时.ts",
+        "frontend/房间视口运行时.ts",
+        "frontend/房间滚动器.ts",
+        "frontend/房间实时编排.ts",
+        "frontend/房间恢复编排.ts",
+        "frontend/实时会话运行时.ts",
+        "frontend/传输.ts",
+        "frontend/存储.ts",
+        "frontend/调试兼容.ts",
+        "frontend/契约.ts",
+        "frontend/视图.ts",
+        "frontend/文本布局.ts",
+        "frontend/状态.ts",
+        "frontend/阅读推进编排.ts",
+        "frontend/聊天应用编排桥接.ts",
+        "frontend/后台查询编排.ts",
+        "frontend/后台会话编排.ts",
+        "frontend/后台壳.ts",
+        "frontend/后台壳编排.ts",
+        "frontend/后台应用内核.ts",
+        "frontend/应用运行时.ts",
+        "frontend/应用生命周期.ts",
+    ];
+
+    for path in required_entries {
+        assert!(
+            matrix.contains(path),
+            "完成矩阵缺少根目录业务文件登记: {path}"
         );
     }
 }
