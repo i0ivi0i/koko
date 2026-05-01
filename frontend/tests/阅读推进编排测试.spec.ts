@@ -8,14 +8,18 @@ import {
   读取阅读推进编排工厂,
 } from "./common/聊天测试支架";
 describe("阅读推进编排", () => {
-  it("不再在阅读推进编排里直接决定最终 viewportMode", () => {
-    const source = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+  it("根文件退成房间壳层门面，真实实现收进房间 owner", () => {
+    const facadeSource = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+    const ownerSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
 
-    expect(source).not.toContain('type: "VIEWPORT_OBSERVED"');
-    expect(source).not.toContain('type: "USER_JUMPED_TO_LATEST"');
-    expect(source).not.toContain("function 读取阅读状态()");
-    expect(source).not.toContain("function 写入阅读状态(");
-    expect(source).not.toContain("function 接收时间线事实(");
+    expect(facadeSource).toContain('export * from "./房间/壳层/阅读推进.js"');
+    expect(facadeSource).not.toContain("const 阅读推进节流毫秒 =");
+    expect(ownerSource).toContain("export function 创建阅读推进编排(");
+    expect(ownerSource).not.toContain('type: "VIEWPORT_OBSERVED"');
+    expect(ownerSource).not.toContain('type: "USER_JUMPED_TO_LATEST"');
+    expect(ownerSource).not.toContain("function 读取阅读状态()");
+    expect(ownerSource).not.toContain("function 写入阅读状态(");
+    expect(ownerSource).not.toContain("function 接收时间线事实(");
   });
 
   it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {

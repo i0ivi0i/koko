@@ -113,6 +113,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./总装/聊天应用编排桥接.js";'],
     forbiddenSnippets: ["export interface 聊天内核平台端口", "export function 创建聊天内核平台桥接("],
   },
+  {
+    path: "frontend/阅读推进编排.ts",
+    ownerPath: "frontend/房间/壳层/阅读推进.ts",
+    requiredSnippets: ['export * from "./房间/壳层/阅读推进.js";'],
+    forbiddenSnippets: ["const 阅读推进节流毫秒 = 400;", "export function 创建阅读推进编排("],
+  },
 ];
 
 const 架构规则 = [
