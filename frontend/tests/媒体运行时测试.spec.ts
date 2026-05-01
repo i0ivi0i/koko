@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import { 创建媒体运行时Actor, 投影媒体运行时预算 } from "../媒体运行时.js";
 import type { 媒体播放结果 } from "../媒体/媒体播放.js";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 const 创建视频查看器请求 = (attachmentId: string) => ({
   startAttachmentId: attachmentId,
   items: [
@@ -19,6 +22,25 @@ const 创建视频查看器请求 = (attachmentId: string) => ({
 });
 
 describe("媒体运行时", () => {
+  it("根文件退成媒体运行时 owner 门面，媒体编排与媒体壳层内部直连媒体 owner", () => {
+    const facadeSource = 读取前端源码("媒体运行时.ts");
+    const ownerSource = 读取前端源码("媒体/运行时.ts");
+    const mediaOrchestratorSource = 读取前端源码("聊天媒体编排.ts");
+    const autoplayShellSource = 读取前端源码("媒体/壳层/自动播协作.ts");
+    const previewShellSource = 读取前端源码("媒体/壳层/视频预览协作.ts");
+
+    expect(facadeSource).toContain('export * from "./媒体/运行时.js"');
+    expect(facadeSource).not.toContain("const 媒体运行时机 = createMachine(");
+    expect(ownerSource).toContain("const 媒体运行时机 = createMachine(");
+    expect(ownerSource).toContain("export function 创建媒体运行时Actor()");
+    expect(mediaOrchestratorSource).toContain('from "./媒体/运行时.js"');
+    expect(mediaOrchestratorSource).not.toContain('from "./媒体运行时.js"');
+    expect(autoplayShellSource).toContain('from "../运行时.js"');
+    expect(autoplayShellSource).not.toContain('from "../../媒体运行时.js"');
+    expect(previewShellSource).toContain('from "../运行时.js"');
+    expect(previewShellSource).not.toContain('from "../../媒体运行时.js"');
+  });
+
   it("同屏真实 video 数超过预算时，只有可见 owner 保留为 active", () => {
     const actor = 创建媒体运行时Actor();
 
@@ -178,7 +200,7 @@ describe("媒体运行时", () => {
   });
 
   it("媒体运行时只负责 viewer/autoplay/runtime budget，不接手分发底层运行时初始化", () => {
-    const source = readFileSync(resolve(import.meta.dirname, "../媒体运行时.ts"), "utf8");
+    const source = 读取前端源码("媒体/运行时.ts");
 
     expect(source).toContain("VIEWER_OPEN_REQUESTED");
     expect(source).toContain("INLINE_AUTOPLAY_CANDIDATES_OBSERVED");

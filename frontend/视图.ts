@@ -6,7 +6,7 @@ import {
   默认文本布局器,
   type 文本布局结果,
   type 文本布局环境,
-} from "./文本布局.js";
+} from "./房间消息窗/文本布局.js";
 
 export interface 消息文本布局环境 extends 文本布局环境 {
   maxContentWidth: number;

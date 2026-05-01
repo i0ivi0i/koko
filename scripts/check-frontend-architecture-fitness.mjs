@@ -30,7 +30,7 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/房间/运行时.ts", symbol: "创建房间内核" },
   { path: "frontend/时间线/运行时.ts", symbol: "创建房间时间线Actor" },
   { path: "frontend/时间线/视口运行时.ts", symbol: "创建房间视口Actor" },
-  { path: "frontend/媒体运行时.ts", symbol: "创建媒体运行时Actor" },
+  { path: "frontend/媒体/运行时.ts", symbol: "创建媒体运行时Actor" },
   { path: "frontend/媒体/全局丝滑自动播.ts", symbol: "判定播放连续性表面" },
   { path: "frontend/媒体/资产协作分发运行时.ts", symbol: "创建资产协作分发运行时" },
   { path: "frontend/平台/缓存更新运行时.ts", symbol: "创建缓存更新运行时" },
@@ -160,6 +160,18 @@ const 前端迁移门面规则 = [
     ownerPath: "frontend/时间线/滚动器.ts",
     requiredSnippets: ['export * from "./时间线/滚动器.js";'],
     forbiddenSnippets: ["export class 房间滚动器", "export interface 房间滚动器依赖"],
+  },
+  {
+    path: "frontend/媒体运行时.ts",
+    ownerPath: "frontend/媒体/运行时.ts",
+    requiredSnippets: ['export * from "./媒体/运行时.js";'],
+    forbiddenSnippets: ["const 媒体运行时机 = createMachine(", "export function 创建媒体运行时Actor()"],
+  },
+  {
+    path: "frontend/文本布局.ts",
+    ownerPath: "frontend/房间消息窗/文本布局.ts",
+    requiredSnippets: ['export * from "./房间消息窗/文本布局.js";'],
+    forbiddenSnippets: ["export function 创建文本布局器()", "export const 默认文本布局器 = 创建文本布局器()"],
   },
 ];
 

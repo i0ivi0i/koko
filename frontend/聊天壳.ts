@@ -13,7 +13,7 @@ import {
   type 媒体查看器打开请求,
 } from "./媒体/index.js";
 import type { 前端传输端口 } from "./传输.js";
-import { 默认文本布局器 } from "./文本布局.js";
+import { 默认文本布局器 } from "./房间消息窗/文本布局.js";
 import { 创建聊天壳应用装配 } from "./总装/应用装配.js";
 import {
   默认消息文本布局环境,

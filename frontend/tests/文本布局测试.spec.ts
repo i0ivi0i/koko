@@ -1,10 +1,31 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { 安装测试文本测量画布 } from "./common/聊天测试支架";
 import { 创建文本布局器 } from "../文本布局";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 describe("文本布局器", () => {
   beforeEach(() => {
     安装测试文本测量画布();
+  });
+
+  it("根文件退成房间消息窗文本布局 owner 门面，聊天壳与视图内部直连新 owner", () => {
+    const facadeSource = 读取前端源码("文本布局.ts");
+    const ownerSource = 读取前端源码("房间消息窗/文本布局.ts");
+    const shellSource = 读取前端源码("聊天壳.ts");
+    const viewSource = 读取前端源码("视图.ts");
+
+    expect(facadeSource).toContain('export * from "./房间消息窗/文本布局.js"');
+    expect(facadeSource).not.toContain("export function 创建文本布局器()");
+    expect(ownerSource).toContain("export function 创建文本布局器()");
+    expect(ownerSource).toContain("export const 默认文本布局器 = 创建文本布局器()");
+    expect(shellSource).toContain('from "./房间消息窗/文本布局.js"');
+    expect(shellSource).not.toContain('from "./文本布局.js"');
+    expect(viewSource).toContain('from "./房间消息窗/文本布局.js"');
+    expect(viewSource).not.toContain('from "./文本布局.js"');
   });
 
   it("会为同一段文本返回稳定的行数和高度", () => {
