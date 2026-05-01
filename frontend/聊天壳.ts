@@ -2,7 +2,7 @@ import { css, html, LitElement } from "lit";
 import type { 应用运行时端口 } from "./应用运行时.js";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
 import "./房间消息窗/壳.js";
-import type { 聊天运行时预算状态 } from "./状态.js";
+import type { 聊天运行时预算状态 } from "./总装/聊天状态.js";
 import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,

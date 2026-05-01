@@ -65,7 +65,7 @@ import {
   type 聊天状态,
   type 聊天视口状态,
   type 聊天输入状态,
-} from "./状态.js";
+} from "./总装/聊天状态.js";
 import { 创建应用生命周期Actor } from "./平台/应用生命周期.js";
 import {
   创建房间视口Actor,

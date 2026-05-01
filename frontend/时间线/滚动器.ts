@@ -1,5 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import type { 聊天状态, 房间视口模式 } from "../状态.js";
+import type { 聊天状态, 房间视口模式 } from "../总装/聊天状态.js";
 
 /**
  * 时间线滚动 owner 只负责聊天时间线的 DOM 观测、副作用与补偿。

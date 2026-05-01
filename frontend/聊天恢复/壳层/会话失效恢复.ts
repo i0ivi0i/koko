@@ -1,4 +1,4 @@
-import type { 聊天状态 } from "../../状态.js";
+import type { 聊天状态 } from "../../总装/聊天状态.js";
 
 type 恢复状态 = Pick<聊天状态, "deviceAnonymousToken" | "roomId">;
 

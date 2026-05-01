@@ -15,7 +15,7 @@ import {
   重放待补发创建消息,
 } from "../聊天实时/壳层/待补发消息协作.js";
 import type { 聊天实时连接端口 } from "../聊天共享/适配/聊天实时连接端口.js";
-import type { 聊天状态 } from "../状态.js";
+import type { 聊天状态 } from "../总装/聊天状态.js";
 import type { Transport异常 } from "../恢复/壳层/房间恢复编排.js";
 import type { 平台离线任务 } from "../平台/index.js";
 
