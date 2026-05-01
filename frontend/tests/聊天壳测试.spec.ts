@@ -222,6 +222,15 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect("媒体发布器" in (el as object)).toBe(false);
   });
 
+  it("聊天壳通过总装门面拿 kernel 和 runtime，不再自己 new 业务入口", () => {
+    const source = 读取前端源码("聊天壳.ts");
+
+    expect(source).toContain('from "./总装/应用装配.js"');
+    expect(source).toContain("创建聊天壳应用装配(");
+    expect(source).not.toContain("private readonly kernel = 创建聊天应用内核(");
+    expect(source).not.toContain("this._应用运行时 = 创建应用运行时(");
+  });
+
   it("浏览器烟测预算探针只读取聊天内核运行时预算，不新建壳层预算真相", async () => {
     const el = await 创建已入房聊天壳();
     await 等待组件稳定(el);

@@ -137,7 +137,7 @@ describe("房间时间线", () => {
     const realtimeSource = 读取前端源码("房间实时编排.ts");
     const readingSource = 读取前端源码("阅读推进编排.ts");
 
-    expect(recoverySource).toContain('from "./聊天恢复/壳层/房间快照恢复.js"');
+    expect(recoverySource).toContain('from "./恢复/应用.js"');
     expect(recoverySource).not.toContain("messages: 合并房间时间线消息(");
     expect(recoverySnapshotSource).toContain("接收时间线事实({");
     expect(recoverySnapshotSource).not.toContain("messages: 合并房间时间线消息(");

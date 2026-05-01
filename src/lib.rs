@@ -19,6 +19,8 @@ pub mod entry;
 pub mod identity;
 #[path = "消息/mod.rs"]
 pub mod message;
+#[path = "媒体/mod.rs"]
+pub mod media;
 #[path = "外壳.rs"]
 pub mod shell;
 #[path = "媒体协作分发.rs"]

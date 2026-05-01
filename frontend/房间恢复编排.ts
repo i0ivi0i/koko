@@ -3,7 +3,7 @@ import type { 房间内核事件 } from "./房间内核.js";
 import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "./存储.js";
 import { 创建会话失效恢复协作 } from "./聊天恢复/壳层/会话失效恢复.js";
-import { 创建房间快照恢复协作 } from "./聊天恢复/壳层/房间快照恢复.js";
+import { 创建恢复应用 } from "./恢复/应用.js";
 import type { 聊天房间传输端口 } from "./聊天共享/适配/聊天房间传输端口.js";
 import { Http接口错误 } from "./传输.js";
 import type { 聊天状态 } from "./状态.js";
@@ -159,7 +159,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     }
   }
 
-  const 房间快照恢复 = 创建房间快照恢复协作({
+  const 房间快照恢复 = 创建恢复应用({
     读取恢复状态,
     写入恢复状态,
     接收时间线事实,

@@ -34,7 +34,7 @@ use tower_http::{
     set_header::response::SetResponseHeaderLayer,
 };
 
-use crate::{adapter::Pg仓储, contract, media_distribution};
+use crate::{adapter::Pg仓储, contract, media::distribution::application as 协作分发应用, media_distribution};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
@@ -705,7 +705,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
     let state_for_query = state.clone();
     let 待做种项 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待做种协作分发项(&repo, 当前时间戳秒, 256)
+        协作分发应用::列出待做种协作分发项(&repo, 当前时间戳秒, 256)
             .map_err(|err| io::Error::other(format!("查询待做种协作分发项失败: {err:?}")))
     })
     .await
@@ -763,7 +763,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         let attachment_id = 待做种.附件标识.clone();
         let upsert_presence = tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_presence);
-            crate::usecase::写入协作分发swarm存活(
+            协作分发应用::写入协作分发swarm存活(
                 &mut repo,
                 &crate::usecase::协作分发swarm存活写入请求 {
                     swarm_id,

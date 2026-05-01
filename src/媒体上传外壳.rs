@@ -2,11 +2,10 @@ use super::{
     err_resp, map_domain_err_tuple, tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
     构建共享仓储,
 };
-use crate::{
-    adapter::{媒体上传会话授权写入请求, 媒体上传运输记录},
-    media_distribution, usecase,
-    usecase::仓储端口,
-};
+use crate::adapter::{媒体上传会话授权写入请求, 媒体上传运输记录};
+use crate::media::distribution::application as 协作分发应用;
+use crate::media::upload::application as 上传应用;
+use crate::{media_distribution, usecase, usecase::仓储端口};
 use axum::{
     Json,
     body::Body,
@@ -191,7 +190,7 @@ pub(super) async fn prepare_media_upload(
     let session_id_for_usecase = session_id.clone();
     let prepare_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        usecase::准备媒体附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
+        上传应用::准备媒体附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -627,7 +626,7 @@ pub(super) async fn complete_media_upload(
     let session_id_for_usecase = session_id.clone();
     let prepared_and_transport = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        let prepared = usecase::读取待完成媒体附件(
+        let prepared = 上传应用::读取待完成媒体附件(
             &repo,
             &session_id_for_usecase,
             &attachment_id_for_usecase,
@@ -1088,9 +1087,12 @@ pub(super) async fn complete_media_upload(
     let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        let snapshot =
-            usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
-                .map_err(map_domain_err_tuple)?;
+        let snapshot = 上传应用::完成媒体附件上传(
+            &mut repo,
+            &session_id_for_usecase,
+            &ready_request,
+        )
+        .map_err(map_domain_err_tuple)?;
         // canonical 资产是内容身份层事实，先写资产再绑定附件引用；
         // 后续 source_hash 命中才能复用同一资产，而不是复制旧附件或旧消息。
         usecase::仓储端口::写入canonical媒体资产(
@@ -1104,9 +1106,9 @@ pub(super) async fn complete_media_upload(
             canonical_asset_request_for_write.content_hash.as_str(),
         )
         .map_err(map_domain_err_tuple)?;
-        usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
+        协作分发应用::写入协作分发元数据(&mut repo, &distribution_request_for_write)
             .map_err(map_domain_err_tuple)?;
-        usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
+        协作分发应用::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
             .map_err(map_domain_err_tuple)?;
         if let Some(request) = streaming_manifest_request_for_write.as_ref() {
             usecase::写入流媒体清单元数据(&mut repo, request).map_err(map_domain_err_tuple)?;

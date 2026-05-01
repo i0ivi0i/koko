@@ -53,11 +53,13 @@ const 创建假传输运行时 = (input: {
 };
 
 describe("浏览器端应用平台化基线", () => {
-  it("聊天壳会把业务入口收进 ChatAppKernel，自身只保留 view + bridge", () => {
+  it("聊天壳会把业务入口收进总装门面，自身只保留 view + bridge", () => {
     const source = 读取前端源码("聊天壳.ts");
 
-    expect(source).toContain('from "./聊天应用内核.js"');
-    expect(source).toContain("private readonly kernel = 创建聊天应用内核(");
+    expect(source).toContain('from "./总装/应用装配.js"');
+    expect(source).toContain("private readonly 装配 = 创建聊天壳应用装配(");
+    expect(source).toContain("private get kernel()");
+    expect(source).toContain("return this.装配.kernel;");
     expect(source).not.toContain("private transport:");
     expect(source).not.toContain("private storage:");
     expect(source).not.toContain("private roomKernel =");
@@ -120,7 +122,7 @@ describe("浏览器端应用平台化基线", () => {
     );
     expect(source).toContain(".inlineAutoplayPositionByAttachmentId=");
     expect(source).toContain("this.应用运行时.start()");
-    expect(source).toContain("this._应用运行时?.dispose()");
+    expect(source).toContain("this.装配.销毁()");
     expect(source).not.toContain("this.kernel.处理选择媒体文件(");
     expect(source).not.toContain("this.kernel.移除媒体草稿(");
     expect(source).not.toContain("this.kernel.重试媒体草稿(");

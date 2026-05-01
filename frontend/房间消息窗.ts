@@ -84,6 +84,7 @@ export class 房间消息窗 extends LitElement {
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
   private 自动播候选调度句柄: number | null = null;
+  private 自动播候选调度兜底定时器: ReturnType<typeof setTimeout> | null = null;
   private 自动播候选滚动容器: HTMLElement | null = null;
   private 自动播候选观察根: HTMLElement | null = null;
   private 自动播候选观察器: IntersectionObserver | null = null;
@@ -1035,6 +1036,19 @@ export class 房间消息窗 extends LitElement {
       return false;
     }
     /**
+     * 当前 DOM 自己回抛过首帧事件时，优先认这颗节点留下的 ready-src 证明：
+     * 1. 这仍然是同一颗 `<video>` 的本地事实，不会把旧 DOM 或别的 attachment 的缓存冒充成当前表面；
+     * 2. 某些测试/浏览器环境会先发 `loadeddata/canplay`，再慢一拍更新 `readyState`，不能让 cover 因此多挂一拍；
+     * 3. 一旦 src 改变，`data-preview-src` 会同步变化，旧 ready-src 立刻失效，不会污染新源。
+     */
+    if (
+      previewVideo.dataset.previewReadySrc &&
+      previewVideo.dataset.previewReadySrc === normalizedExpectedSrc &&
+      previewVideo.dataset.previewSrc === normalizedExpectedSrc
+    ) {
+      return true;
+    }
+    /**
      * 真实浏览器里，非 owner 的 preview `<video>` 可能已经拿到首帧，
      * 但 `loadeddata/canplay` 还没来得及把缓存写回本轮 render。
      * 这里补看 DOM 现状，避免“明明已经有稳定可见帧，却因为缓存慢一拍而直接显露 canonical host”。
@@ -1218,21 +1232,43 @@ export class 房间消息窗 extends LitElement {
     if (this.自动播候选调度句柄 !== null) {
       return;
     }
-    this.自动播候选调度句柄 = window.requestAnimationFrame(() => {
-      this.自动播候选调度句柄 = null;
+    /**
+     * 真浏览器里优先跟着下一帧统一量测，避免每次滚动都同步扫一遍视频卡片。
+     * 但测试环境或低活跃 tab 可能长期不给 rAF；那就必须有一条单次兜底，
+     * 否则候选会永远停在“滚动发生前的旧矩形”，自动播 owner 根本拿不到更新。
+     */
+    const 执行候选调度 = (): void => {
+      if (this.自动播候选调度句柄 !== null) {
+        window.cancelAnimationFrame(this.自动播候选调度句柄);
+        this.自动播候选调度句柄 = null;
+      }
+      if (this.自动播候选调度兜底定时器 !== null) {
+        clearTimeout(this.自动播候选调度兜底定时器);
+        this.自动播候选调度兜底定时器 = null;
+      }
       const nextScrollContainer = this.自动播候选滚动容器;
       this.自动播候选滚动容器 = null;
       if (!nextScrollContainer || !this.isConnected) {
         return;
       }
       this.dispatch自动播候选(nextScrollContainer);
+    };
+    this.自动播候选调度句柄 = window.requestAnimationFrame(() => {
+      执行候选调度();
     });
+    this.自动播候选调度兜底定时器 = setTimeout(() => {
+      执行候选调度();
+    }, 32);
   }
 
   private 取消自动播候选调度(): void {
     if (this.自动播候选调度句柄 !== null) {
       window.cancelAnimationFrame(this.自动播候选调度句柄);
       this.自动播候选调度句柄 = null;
+    }
+    if (this.自动播候选调度兜底定时器 !== null) {
+      clearTimeout(this.自动播候选调度兜底定时器);
+      this.自动播候选调度兜底定时器 = null;
     }
     this.自动播候选滚动容器 = null;
   }

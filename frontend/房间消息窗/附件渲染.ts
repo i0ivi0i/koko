@@ -1,6 +1,5 @@
 import { html } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
-
 import { 投影信息流视频预算 } from "../媒体/信息流视频预算.js";
 import type { 信息流视频预算投影, 正式媒体字节来源 } from "../媒体/信息流视频预算.js";
 import { 判定播放连续性表面 } from "../媒体/全局丝滑自动播.js";
@@ -147,6 +146,15 @@ export const 读取时间线视频封面地址 = (input: {
   }
   return candidatePosterSrc;
 };
+
+function 标记当前预览视频已出首帧(context: 房间消息窗附件渲染宿主, attachmentId: string, target: HTMLVideoElement): void {
+  const currentSrc = target.currentSrc || target.getAttribute("src");
+  const readySrc = context.归一化时间线视频播放源(currentSrc);
+  if (readySrc) {
+    target.dataset.previewReadySrc = readySrc;
+  }
+  context.标记时间线视频首帧已就绪(attachmentId, currentSrc);
+}
 
 export const 读取时间线视频首帧预览源 = (input: {
   attachment: 时间线视频附件;
@@ -620,13 +628,30 @@ export const 渲染消息附件 = (
               hasFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
               (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
+            /**
+             * 冷 owner 进入 hidden stage 预热后，preview `<video>` 可以先挂出来接住 autoplay owner，
+             * 但在它自己还没拿到当前 DOM 首帧前，外层 canonical cover 不能撤：
+             * 1. 否则用户会先看到“默认 poster -> 黑色/空白 preview video -> 正式 canonical”三拍；
+             * 2. 这里要求同时满足 hidden stage、首帧 guard、没有稳定 poster 底板，避免把普通 preview 都误压成 cover；
+             * 3. 一旦当前 DOM 首帧就绪，或 canonical host 真正 ready，可见 cover 会按原有 reveal gate 自然撤掉。
+             */
+            const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup =
+              shouldRenderInlineVideo &&
+              shouldRenderPreviewVideo &&
+              shouldRenderStageHost &&
+              shouldShowFirstFrameGuard &&
+              !hasStablePreviewPosterSurface &&
+              !hasCurrentDomPreviewFrame &&
+              !hasFrozenTimelineFrame;
             const shouldRenderCanonicalLoadingPosterCover =
               shouldRenderInlineVideo &&
               !shouldRevealCanonicalHost &&
-              !shouldRenderPreviewVideo &&
               !shouldRenderFrozenTimelineFrame &&
               !hasCurrentDomPreviewFrame &&
-              Boolean(previewPosterSrc);
+              Boolean(previewPosterSrc) &&
+              !(shouldRenderVisibleCanonicalHost && hasKnownReadyPreviewFrame) &&
+              (!shouldRenderPreviewVideo ||
+                shouldKeepCanonicalCoverDuringGuardedPreviewWarmup);
             const shouldRenderPreviewPosterSurface =
               (hasStablePreviewPosterSurface &&
                 !shouldSuppressPosterForContinuity &&
@@ -649,6 +674,7 @@ export const 渲染消息附件 = (
                   shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
                 }`}
                 data-attachment-id=${attachment.attachmentId}
+                data-preview-src=${normalizedPreviewVideoSrc ?? ""}
                 src=${previewVideoSrc ?? ""}
                 width=${attachment.displayWidth}
                 height=${attachment.displayHeight}
@@ -675,30 +701,21 @@ export const 渲染消息附件 = (
                   if (!(target instanceof HTMLVideoElement)) {
                     return;
                   }
-                  context.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
+                  标记当前预览视频已出首帧(context, attachment.attachmentId, target);
                 }}
                 @canplay=${(event: Event) => {
                   const target = event.currentTarget;
                   if (!(target instanceof HTMLVideoElement)) {
                     return;
                   }
-                  context.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
+                  标记当前预览视频已出首帧(context, attachment.attachmentId, target);
                 }}
                 @playing=${(event: Event) => {
                   const target = event.currentTarget;
                   if (!(target instanceof HTMLVideoElement)) {
                     return;
                   }
-                  context.标记时间线视频首帧已就绪(
-                    attachment.attachmentId,
-                    target.currentSrc || target.getAttribute("src")
-                  );
+                  标记当前预览视频已出首帧(context, attachment.attachmentId, target);
                 }}
                 @error=${() => {
                   /**

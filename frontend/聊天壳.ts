@@ -1,7 +1,6 @@
 import { css, html, LitElement } from "lit";
-import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
-import { 创建聊天应用内核, type 聊天应用快照 } from "./聊天应用内核.js";
-import { 获取默认浏览器应用平台 } from "./平台/index.js";
+import type { 应用运行时端口 } from "./应用运行时.js";
+import type { 聊天应用快照 } from "./聊天应用内核.js";
 import "./房间消息窗.js";
 import type { 聊天运行时预算状态 } from "./状态.js";
 import {
@@ -15,6 +14,7 @@ import {
 } from "./媒体/index.js";
 import type { 前端传输端口 } from "./传输.js";
 import { 默认文本布局器 } from "./文本布局.js";
+import { 创建聊天壳应用装配 } from "./总装/应用装配.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -133,12 +133,6 @@ export class 聊天壳 extends LitElement {
     contentUrlByAttachmentId: 聊天应用快照["media"]["contentUrlByAttachmentId"];
     items: ReturnType<typeof 派生聊天列表展示项>;
   } | null = null;
-
-  /**
-   * 壳层和 AppRuntime 需要共享同一份浏览器平台门面。
-   * 这样生命周期、SW、离线状态都只会有一条真实订阅链，不会在壳层里分叉。
-   */
-  private readonly 平台 = 获取默认浏览器应用平台();
 
   static override styles = css`
     :host {
@@ -1017,15 +1011,12 @@ export class 聊天壳 extends LitElement {
    * - 发 `dispatch(command)`；
    * - 转接少量浏览器副作用清理回调。
    */
-  private readonly kernel = 创建聊天应用内核({
-    platform: this.平台,
-    渲染桥: {
-      请求重渲染: () => {
-        this.requestUpdate();
-      },
-      等待壳渲染完成: async () => {
-        await this.updateComplete;
-      },
+  private readonly 装配 = 创建聊天壳应用装配({
+    请求重渲染: () => {
+      this.requestUpdate();
+    },
+    等待壳渲染完成: async () => {
+      await this.updateComplete;
     },
     滚动宿主: this,
     查询滚动容器: () =>
@@ -1036,6 +1027,14 @@ export class 聊天壳 extends LitElement {
       this.回收媒体草稿预览地址(previewUrls);
     },
   });
+
+  private get 平台() {
+    return this.装配.平台;
+  }
+
+  private get kernel() {
+    return this.装配.kernel;
+  }
 
   /**
    * 壳层只读内核快照，不再缓存第二份 `chatState` 镜像。
@@ -1050,32 +1049,18 @@ export class 聊天壳 extends LitElement {
    * 这个探针只服务验证：自动播放、查看器、swarm 与重任务预算仍以聊天内核为唯一来源。
    */
   private readonly 读取预算烟测快照 = (): 聊天运行时预算状态 =>
-    this.读取聊天快照().runtimeBudget;
-
-  private 同步预算烟测探针(): void {
-    globalThis.__kokoBudgetSnapshot = this.读取预算烟测快照;
-  }
-
-  private _应用运行时: 应用运行时端口 | null = null;
+    this.装配.读取预算烟测快照();
 
   /**
    * 应用运行时是壳层里唯一的应用事件入口。
    * 它现在只认内核命令，不再把 roomScroller / 阅读推进端口这些 owner 暴露给壳层。
    */
   private get 应用运行时(): 应用运行时端口 {
-    if (!this._应用运行时) {
-      this._应用运行时 = 创建应用运行时({
-        dispatch: (command) => this.kernel.dispatch(command),
-        subscribePlatformEvents: (listener) => this.平台.订阅事件?.(listener) ?? (() => {}),
-      });
-    }
-    return this._应用运行时;
+    return this.装配.读取应用运行时();
   }
 
   setTransportForTest(transport: 前端传输端口): void {
-    this._应用运行时?.dispose();
-    this._应用运行时 = null;
-    this.kernel.setTransportForTest(transport);
+    this.装配.设置测试传输(transport);
   }
 
   private revokeDraftPreviewUrl(previewUrl: string): void {
@@ -1093,6 +1078,10 @@ export class 聊天壳 extends LitElement {
     for (const previewUrl of previewUrls) {
       this.revokeDraftPreviewUrl(previewUrl);
     }
+  }
+
+  private 同步预算烟测探针(): void {
+    globalThis.__kokoBudgetSnapshot = this.读取预算烟测快照;
   }
 
   private removeComposerDraft(localId: string): void {
@@ -1139,9 +1128,7 @@ export class 聊天壳 extends LitElement {
     }
     this.清理房间宽度观察();
     this.清理操作台输入组观察();
-    this._应用运行时?.dispose();
-    this.kernel.dispose();
-    this._应用运行时 = null;
+    this.装配.销毁();
     super.disconnectedCallback();
   }
 

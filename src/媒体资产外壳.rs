@@ -1,4 +1,5 @@
 use super::{err_resp, map_domain_err_tuple, 应用状态, 构建共享仓储};
+use crate::media::distribution::application as 协作分发应用;
 use crate::{contract, media_distribution, usecase};
 use axum::{
     Json,
@@ -717,7 +718,7 @@ pub(super) async fn load_media_locator(
     let session_id_for_usecase = query.session_id.clone();
     let locator = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
+        协作分发应用::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
             .map_err(map_domain_err_tuple)
     })
     .await
@@ -871,7 +872,7 @@ async fn 读取受控附件内容响应(
     let session_id_for_usecase = session_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取附件内容(
+        协作分发应用::读取附件内容(
             &repo,
             &attachment_id_for_usecase,
             &session_id_for_usecase,
@@ -1055,7 +1056,7 @@ pub(super) async fn load_media_torrent(
     let session_id_for_usecase = query.session_id.clone();
     let torrent_result = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
+        协作分发应用::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
             .map_err(map_domain_err_tuple)?;
         usecase::读取协作分发torrent元信息(&repo, &attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)

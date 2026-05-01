@@ -61,3 +61,14 @@ fn 实时外壳必须显式依赖实时业务门面而不是继续偷连统一�
         "实时外壳尚未切到 realtime 业务门面，热路径 owner 仍会被统一用例反向绑住"
     );
 }
+
+#[test]
+fn 媒体上传与媒体资产外壳必须显式依赖媒体业务门面() {
+    for path in ["src/媒体上传外壳.rs", "src/媒体资产外壳.rs"] {
+        let content = 读取(path);
+        assert!(
+            content.contains("crate::media"),
+            "{path} 尚未切到媒体业务门面，媒体 owner 仍会被统一用例反向绑住"
+        );
+    }
+}

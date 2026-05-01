@@ -32,8 +32,8 @@ describe("房间恢复编排", () => {
   it("会把 snapshot reload 与房间硬失败委托给 房间快照恢复 协作", () => {
     const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
 
-    expect(source).toContain('from "./聊天恢复/壳层/房间快照恢复.js"');
-    expect(source).toContain("创建房间快照恢复协作(");
+    expect(source).toContain('from "./恢复/应用.js"');
+    expect(source).toContain("创建恢复应用(");
     expect(source).not.toContain("async function reloadRoomFromSnapshot");
     expect(source).not.toContain("function resolveFallbackRoomCode");
   });

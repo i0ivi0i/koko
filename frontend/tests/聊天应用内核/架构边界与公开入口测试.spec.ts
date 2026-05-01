@@ -58,6 +58,14 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).not.toContain("创建阅读推进编排({");
   });
 
+  it("聊天应用内核通过媒体播放会话门面接入媒体 owner，而不是继续直连旧媒体编排入口", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).toContain('from "./媒体/播放会话/应用.js"');
+    expect(source).toContain("创建媒体播放会话应用(");
+    expect(source).not.toContain('from "./聊天媒体编排.js"');
+  });
+
   it("滚动观察命令不再把 DOM 容器穿过运行时和聊天内核", () => {
     const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
     const runtimeSource = readFileSync(resolve(process.cwd(), "应用运行时.ts"), "utf8");
@@ -67,6 +75,22 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(kernelSource).not.toContain("处理聊天视口滚动(scrollContainer: HTMLElement): void");
     expect(runtimeSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
     expect(shellSource).not.toContain("detail.scrollContainer");
+  });
+
+  it("进房与输入框命令不再在聊天应用内核里内联裁剪和草稿清理逻辑", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).toContain('from "./房间/应用.js"');
+    expect(source).toContain('from "./输入框/应用.js"');
+    expect(source).toContain("处理房间号输入变更(");
+    expect(source).toContain("处理进房请求(");
+    expect(source).toContain("处理历史房间进房请求(");
+    expect(source).toContain("处理消息输入变更(");
+    expect(source).toContain("处理发送消息请求(");
+    expect(source).not.toContain("const trimmedRoomCode = command.roomCode.trim();");
+    expect(source).not.toContain("const currentDrafts = this.输入状态.composerMediaDrafts;");
+    expect(source).not.toContain("const hasReadyDraft = currentDrafts.some");
+    expect(source).not.toContain("const hasBlockingDraft = currentDrafts.some");
   });
 
   it("聊天应用编排桥接会把平台依赖裁成窄平台桥接，而不是偷拿聊天业务真相", () => {

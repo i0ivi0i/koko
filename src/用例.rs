@@ -4,6 +4,13 @@ use crate::{contract, domain};
 /// 身份、房间、消息三条主业务能力开始显式转发到对应业务模块。
 /// 这样后续继续收 owner 时，新逻辑就不该再回流到这份总文件里。
 pub use crate::identity::application::引导匿名身份;
+pub use crate::media::distribution::application::{
+    列出待做种协作分发项, 写入协作分发swarm存活, 写入协作分发torrent元信息,
+    写入协作分发元数据, 查询媒体定位, 读取附件内容,
+};
+pub use crate::media::upload::application::{
+    准备媒体附件上传, 完成媒体附件上传, 读取待完成媒体附件,
+};
 pub use crate::message::application::{创建消息, 创建消息_异步};
 pub use crate::realtime::application::{加载房间增量事件_异步, 校验实时连接会话_异步};
 pub use crate::room::application::{
@@ -426,7 +433,7 @@ pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
 /// 这条常量只回答“服务端清单什么时候该退场”，不等于 swarm 长期存活时间。
 pub const 流媒体冷备保留秒数: i64 = 24 * 60 * 60;
 
-fn 是64位小写hex(value: &str) -> bool {
+pub(crate) fn 是64位小写hex(value: &str) -> bool {
     value.len() == 64
         && value
             .as_bytes()
@@ -438,7 +445,7 @@ fn 是64位小写hex(value: &str) -> bool {
 /// 1. 还有没有冷源地址；
 /// 2. 是否已经超过 TTL；
 /// 3. 是否已经被后台物理删除并留下权威删除时间。
-fn 冷源生命周期当前可用(
+pub(crate) fn 冷源生命周期当前可用(
     到期时间戳秒: Option<i64>,
     删除时间戳秒: Option<i64>,
     当前时间戳秒: i64,
@@ -1053,90 +1060,6 @@ pub fn 发送文本消息(
     创建消息(仓储, 房间标识, 会话标识, 客户端消息标识, 文本, &[])
 }
 
-/// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
-pub fn 准备媒体附件上传(
-    仓储: &mut dyn 仓储端口,
-    会话标识: &str,
-    附件: &媒体附件准备请求,
-) -> Result<媒体附件准备快照, contract::错误码> {
-    if 附件.附件标识.trim().is_empty()
-        || 附件.mime_type.trim().is_empty()
-        || 附件.原始内容存储键.trim().is_empty()
-        || 附件.字节大小 <= 0
-    {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    if let Some(source_hash) = 附件.source_hash.as_deref() {
-        if !是64位小写hex(source_hash)
-            || 附件.source_byte_size.is_none_or(|byte_size| byte_size <= 0)
-        {
-            return Err(contract::错误码::参数非法);
-        }
-    } else if 附件.source_byte_size.is_some() || 附件.source_file_name.is_some() {
-        return Err(contract::错误码::参数非法);
-    }
-    let 所属匿名身份标识 = 仓储
-        .查询会话所属匿名身份(会话标识)?
-        .ok_or(contract::错误码::会话无效)?;
-    let snapshot = 仓储.创建预备媒体附件记录(&所属匿名身份标识, 附件)?;
-    if let Some(source_hash) = 附件.source_hash.as_deref() {
-        let source_byte_size = 附件.source_byte_size.ok_or(contract::错误码::参数非法)?;
-        // source_hash 跟随附件占位记录落库；后续查询必须经过当前身份、
-        // 当前会话可见性和目标房间发送裁决，避免把原文件哈希做成全站探针。
-        仓储.记录附件source_hash(
-            &snapshot.附件标识,
-            source_hash,
-            source_byte_size,
-            附件.source_file_name.as_deref(),
-        )?;
-    }
-    Ok(snapshot)
-}
-
-/// complete 前必须先验证：
-/// 1. 当前会话仍然有效；
-/// 2. 附件仍归当前发送者所有；
-/// 3. 附件现在确实还处于 prepared。
-pub fn 读取待完成媒体附件(
-    仓储: &dyn 仓储端口,
-    会话标识: &str,
-    附件标识: &str,
-) -> Result<待完成媒体附件读取结果, contract::错误码> {
-    if 附件标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    let 所属匿名身份标识 = 仓储
-        .查询会话所属匿名身份(会话标识)?
-        .ok_or(contract::错误码::会话无效)?;
-    let prepared = 仓储
-        .查询待完成媒体附件(附件标识)?
-        .ok_or(contract::错误码::附件不存在)?;
-    // complete 链路不能再吃兼容旧串，否则一旦会话解析切到 identity_uuid，owner 判定就会撕裂。
-    if prepared.所属匿名身份标识 != 所属匿名身份标识 {
-        return Err(contract::错误码::附件不属于当前发送者);
-    }
-    if prepared.状态 != 附件状态读取结果::已准备 {
-        return Err(contract::错误码::附件未就绪);
-    }
-    Ok(prepared)
-}
-
-/// 完成上传只负责把 prepared 升级成 ready。
-/// 它不创建消息，也不改变消息发送主链。
-pub fn 完成媒体附件上传(
-    仓储: &mut dyn 仓储端口,
-    会话标识: &str,
-    附件: &媒体附件写入请求,
-) -> Result<媒体附件快照, contract::错误码> {
-    let prepared = 读取待完成媒体附件(仓储, 会话标识, &附件.附件标识)?;
-    if prepared.种类 != 附件.种类 {
-        return Err(contract::错误码::附件类型不支持);
-    }
-    仓储.创建媒体附件记录(&prepared.所属匿名身份标识, 附件)
-}
-
 struct SourceHash附件记录<'a> {
     source_hash: &'a str,
     source_byte_size: i64,
@@ -1295,22 +1218,6 @@ pub fn 转发媒体附件到房间(
     })
 }
 
-/// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在用例层语义里。
-/// 这样 handler 只负责调度，不直接越层操纵仓储。
-pub fn 写入协作分发元数据(
-    仓储: &mut dyn 仓储端口,
-    请求: &协作分发元数据写入请求,
-) -> Result<协作分发元数据快照, contract::错误码> {
-    if 请求.附件标识.trim().is_empty()
-        || 请求.content_id.trim().is_empty()
-        || 请求.content_hash.trim().is_empty()
-        || 请求.swarm_id.trim().is_empty()
-    {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.写入协作分发元数据(请求)
-}
-
 pub fn 写入协作分发存活(
     仓储: &mut dyn 仓储端口,
     请求: &协作分发存活写入请求,
@@ -1339,42 +1246,6 @@ pub fn 写入协作分发存活(
     )
 }
 
-/// 这条入口给后端 owner（如 seeder 对账）写 swarm 运行态事实：
-/// 1. 不再要求“会话必须是房间成员”，因为 backend strong seed 不是前端会话；
-/// 2. 仍然强校验 peer_kind 与基础参数，避免 adapter 被脏数据污染；
-/// 3. 只写运行态表，不改 attachment 稳定分发表面。
-pub fn 写入协作分发swarm存活(
-    仓储: &mut dyn 仓储端口,
-    请求: &协作分发swarm存活写入请求,
-) -> Result<(), contract::错误码> {
-    if 请求.swarm_id.trim().is_empty()
-        || 请求.附件标识.trim().is_empty()
-        || 请求.会话标识.trim().is_empty()
-        || 请求.存活类型.trim().is_empty()
-        || 请求.最近peer存活时间戳秒 <= 0
-    {
-        return Err(contract::错误码::参数非法);
-    }
-    if !是有效协作分发存活类型(请求.存活类型.as_str()) {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.写入协作分发swarm存活(请求)
-}
-
-pub fn 写入协作分发torrent元信息(
-    仓储: &mut dyn 仓储端口,
-    请求: &协作分发torrent元信息写入请求,
-) -> Result<协作分发torrent元信息快照, contract::错误码> {
-    if 请求.附件标识.trim().is_empty()
-        || 请求.torrent_info_hash.trim().is_empty()
-        || 请求.torrent_bytes.is_empty()
-        || 请求.piece_length字节 <= 0
-    {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.写入协作分发torrent元信息(请求)
-}
-
 pub fn 写入流媒体清单元数据(
     仓储: &mut dyn 仓储端口,
     请求: &流媒体清单写入请求,
@@ -1398,110 +1269,6 @@ pub fn 读取协作分发torrent元信息(
         return Err(contract::错误码::参数非法);
     }
     仓储.查询协作分发torrent元信息(附件标识)
-}
-
-/// 读取附件内容：
-/// 1. 会话必须有效
-/// 2. 附件必须存在且 ready
-/// 3. 实际可见性仍按“当前会话是否能看到引用该附件的消息”裁决
-pub fn 读取附件内容(
-    仓储: &dyn 仓储端口,
-    附件标识: &str,
-    会话标识: &str,
-    变体: 附件内容变体,
-) -> Result<附件内容读取结果, contract::错误码> {
-    if 附件标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    let snapshot = 仓储
-        .查询附件快照(附件标识)?
-        .ok_or(contract::错误码::附件不存在)?;
-    if snapshot.状态 != 附件状态读取结果::就绪 {
-        return Err(contract::错误码::附件未就绪);
-    }
-    if matches!(变体, 附件内容变体::原图) {
-        let 当前时间戳秒 = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_secs() as i64)
-            .unwrap_or_default();
-        if !冷源生命周期当前可用(
-            snapshot.原始冷源到期时间戳秒,
-            snapshot.原始冷源删除时间戳秒,
-            当前时间戳秒,
-        ) {
-            return Err(contract::错误码::附件不存在);
-        }
-    }
-    仓储
-        .查询附件可读内容(附件标识, 会话标识, 变体)?
-        .ok_or(contract::错误码::成员资格不足)
-}
-
-/// locator 是受控 transport 入口：
-/// - 业务层只回答“当前附件是什么、是否 ready、当前会话是否允许拿到 transport 线索”；
-/// - 不把存储键、房间 id、owner 等实现细节交给壳层。
-pub fn 查询媒体定位(
-    仓储: &dyn 仓储端口,
-    附件标识: &str,
-    会话标识: &str,
-) -> Result<媒体定位结果, contract::错误码> {
-    if 附件标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    let snapshot = 仓储
-        .查询附件快照(附件标识)?
-        .ok_or(contract::错误码::附件不存在)?;
-    // locator 允许“已删除附件”继续走同一条受控查询链，
-    // 这样后端才能给前端返回稳定的 MEDIA_DELETED，而不是模糊的 not_ready 错误。
-    if !matches!(
-        snapshot.状态,
-        附件状态读取结果::就绪 | 附件状态读取结果::已过期
-    ) {
-        return Err(contract::错误码::附件未就绪);
-    }
-    仓储
-        .查询附件可读内容(附件标识, 会话标识, 附件内容变体::原图)?
-        .ok_or(contract::错误码::成员资格不足)?;
-    let kind = match snapshot.种类 {
-        附件种类读取结果::图片 => 媒体附件类型::图片,
-        附件种类读取结果::视频 => 媒体附件类型::视频,
-        _ => return Err(contract::错误码::附件类型不支持),
-    };
-    let distribution = 仓储.查询协作分发元数据(附件标识)?;
-    let streaming_manifest = match kind {
-        媒体附件类型::视频 => 仓储.查询流媒体清单元数据(附件标识)?,
-        媒体附件类型::图片 => None,
-    };
-    Ok(媒体定位结果 {
-        附件标识: snapshot.附件标识,
-        种类: kind.clone(),
-        mime_type: snapshot.mime_type,
-        状态: snapshot.状态,
-        宽: snapshot.宽,
-        高: snapshot.高,
-        允许缩略图: snapshot.允许缩略图,
-        原始冷源到期时间戳秒: snapshot.原始冷源到期时间戳秒,
-        原始冷源删除时间戳秒: snapshot.原始冷源删除时间戳秒,
-        协作分发: distribution,
-        流媒体清单: streaming_manifest,
-    })
-}
-
-/// 0-24h 强 seed 的候选集合是后台对账输入，不面向壳层展示。
-/// 约束：
-/// 1. 时间与限制参数必须合法；
-/// 2. 具体筛选条件由仓储实现保持与权威表一致。
-pub fn 列出待做种协作分发项(
-    仓储: &dyn 仓储端口,
-    当前时间戳秒: i64,
-    限制条数: i64,
-) -> Result<Vec<待做种协作分发项>, contract::错误码> {
-    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.列出待做种协作分发项(当前时间戳秒, 限制条数)
 }
 
 /// 背景清理循环只做“把该删除的冷源挑出来”这一层过滤。

@@ -28,7 +28,13 @@ import {
   type 房间滚动器依赖,
   type 房间滚动器宿主,
 } from "./房间滚动器.js";
+import {
+  处理历史房间进房请求,
+  处理房间号输入变更,
+  处理进房请求,
+} from "./房间/应用.js";
 import { 创建房间滚动应用 } from "./时间线/应用.js";
+import { 处理发送消息请求, 处理消息输入变更 } from "./输入框/应用.js";
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
@@ -84,10 +90,10 @@ import {
   type 媒体查看器打开请求,
 } from "./媒体/index.js";
 import {
-  创建聊天媒体编排,
-  type 聊天媒体快照,
-  type 聊天媒体编排端口,
-} from "./聊天媒体编排.js";
+  创建媒体播放会话应用,
+  type 媒体播放会话快照 as 聊天媒体快照,
+  type 媒体播放会话应用端口 as 聊天媒体编排端口,
+} from "./媒体/播放会话/应用.js";
 
 type 程序滚动来源 = "media_viewer_open";
 
@@ -328,7 +334,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.阅读推进编排端口.接收候选已读位置(position);
       },
     });
-    this.媒体编排 = 创建聊天媒体编排({
+    this.媒体编排 = 创建媒体播放会话应用({
       transport: () => this.媒体传输,
       读取会话编号: () => this.回填房间壳补丁().sessionId,
       读取当前房间标识: () => this.回填房间壳补丁().roomId || null,
@@ -374,43 +380,49 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await this.恢复编排端口.bootstrap();
         return;
       case "ROOM_CODE_INPUT_CHANGED":
-        this.应用本地状态补丁({ roomCodeInput: command.value });
+        处理房间号输入变更({
+          value: command.value,
+          写入房间号输入: (value) => {
+            this.应用本地状态补丁({ roomCodeInput: value });
+          },
+        });
         return;
       case "MESSAGE_INPUT_CHANGED":
-        this.应用本地状态补丁({ messageInput: command.value });
+        处理消息输入变更({
+          value: command.value,
+          写入消息输入: (value) => {
+            this.应用本地状态补丁({ messageInput: value });
+          },
+        });
         return;
       case "JOIN_ROOM_REQUESTED":
-        if (typeof command.roomCode === "string") {
-          const trimmedRoomCode = command.roomCode.trim();
-          if (!trimmedRoomCode) {
-            return;
-          }
-          this.应用本地状态补丁({ roomCodeInput: trimmedRoomCode });
-        }
-        await this.恢复编排端口.joinRoom();
+        await 处理进房请求({
+          roomCode: command.roomCode,
+          写入房间号输入: (value) => {
+            this.应用本地状态补丁({ roomCodeInput: value });
+          },
+          触发进房: () => this.恢复编排端口.joinRoom(),
+        });
         return;
-      case "JOIN_HISTORY_ROOM_REQUESTED": {
-        const trimmedRoomCode = command.roomCode.trim();
-        if (!trimmedRoomCode) {
-          return;
-        }
-        this.应用本地状态补丁({ roomCodeInput: trimmedRoomCode });
-        await this.恢复编排端口.joinRoom();
+      case "JOIN_HISTORY_ROOM_REQUESTED":
+        await 处理历史房间进房请求({
+          roomCode: command.roomCode,
+          写入房间号输入: (value) => {
+            this.应用本地状态补丁({ roomCodeInput: value });
+          },
+          触发进房: () => this.恢复编排端口.joinRoom(),
+        });
         return;
-      }
       case "LEAVE_ROOM_VIEW_REQUESTED":
         this.leaveCurrentRoomView();
         return;
-      case "SEND_MESSAGE_REQUESTED": {
-        const currentDrafts = this.输入状态.composerMediaDrafts;
-        const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
-        const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
-        await this.实时编排端口.sendMessage();
-        if (hasReadyDraft && !hasBlockingDraft) {
-          this.媒体编排.清空草稿();
-        }
+      case "SEND_MESSAGE_REQUESTED":
+        await 处理发送消息请求({
+          读取媒体草稿: () => this.输入状态.composerMediaDrafts,
+          触发发送: () => this.实时编排端口.sendMessage(),
+          清空媒体草稿: () => this.媒体编排.清空草稿(),
+        });
         return;
-      }
       case "ROOM_SCROLL_INTENT":
         this.标记用户滚动意图();
         return;
