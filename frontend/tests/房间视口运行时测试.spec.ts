@@ -1,7 +1,25 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { 创建房间视口Actor } from "../房间视口运行时";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 describe("房间视口运行时", () => {
+  it("根文件退成时间线视口 owner 门面，聊天内核内部直连新 owner", () => {
+    const facadeSource = 读取前端源码("房间视口运行时.ts");
+    const ownerSource = 读取前端源码("时间线/视口运行时.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+
+    expect(facadeSource).toContain('export * from "./时间线/视口运行时.js"');
+    expect(facadeSource).not.toContain("const 房间视口机 = createMachine(");
+    expect(ownerSource).toContain("const 房间视口机 = createMachine(");
+    expect(ownerSource).toContain("export function 创建房间视口Actor()");
+    expect(kernelSource).toContain('from "./时间线/视口运行时.js"');
+    expect(kernelSource).not.toContain('from "./房间视口运行时.js"');
+  });
+
   it("程序补偿滚动期间，顶部触发不会被误判成用户请求加载历史", () => {
     const actor = 创建房间视口Actor();
 
