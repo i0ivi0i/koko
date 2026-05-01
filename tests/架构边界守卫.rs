@@ -42,6 +42,19 @@ fn 旧实时外壳必须退成显式门面并委托新_owner() {
 }
 
 #[test]
+fn 旧房间快照入口必须退成_recovery_owner_门面() {
+    let content = 读取("src/房间/应用.rs");
+    assert!(
+        content.contains("pub use crate::recovery::application::加载房间快照;"),
+        "src/房间/应用.rs 还没把快照恢复入口退成 recovery owner 门面"
+    );
+    assert!(
+        !content.contains("async fn 加载房间快照"),
+        "src/房间/应用.rs 不应重新长回房间快照恢复实现"
+    );
+}
+
+#[test]
 fn 统一用例门面必须继续转发到业务模块且不得回灌外层实现() {
     let content = 读取("src/用例.rs");
     assert!(

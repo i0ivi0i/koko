@@ -220,11 +220,21 @@ describe("浏览器端应用平台化基线", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain("前端运行时 owner 注册表");
+    expect(source).toContain("frontend/恢复/应用.ts");
+    expect(source).toContain("frontend/实时/应用.ts");
     expect(source).toContain("frontend/应用生命周期.ts");
     expect(source).toContain("frontend/媒体/资产协作分发运行时.ts");
     expect(source).toContain('label: "platform internal import boundary"');
     expect(source).toContain("frontend/聊天应用内核.ts");
     expect(source).toContain("frontend/聊天媒体编排.ts");
+  });
+
+  it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "chat media owner fallback"');
+    expect(source).toContain('label: "legacy room realtime facade fallback"');
+    expect(source).toContain('label: "legacy recovery facade fallback"');
   });
 
   it("架构适应度门禁会拦住视频预览 owner 重新引入 canonical/original 冷源旁路", () => {
@@ -262,10 +272,12 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("WebTorrent状态机");
   });
 
-  it("热点文件行数门禁预算会统一放宽到 1800 行", () => {
+  it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
-    expect(source.match(/maxEffectiveLines:\s*1800/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(source).toContain('path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500');
+    expect(source).toContain('path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1450');
+    expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
   });
 
   it("架构适应度热点门禁会按有效源码行数裁决，而不是把注释和空行也算成热点增长", async () => {

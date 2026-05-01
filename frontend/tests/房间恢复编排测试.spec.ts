@@ -10,6 +10,18 @@ import {
   读取房间恢复编排工厂,
 } from "./common/聊天测试支架";
 describe("房间恢复编排", () => {
+  it("旧房间快照恢复壳层文件必须退成恢复应用门面", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "聊天恢复/壳层/房间快照恢复.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('from "../../恢复/应用.js"');
+    expect(source).toContain("创建恢复应用 as 创建房间快照恢复协作");
+    expect(source).not.toContain("function 同步首页房间历史()");
+    expect(source).not.toContain("function 进入房间快照(");
+  });
+
   it("会把 invalid_session 恢复委托给 会话失效恢复 协作", () => {
     const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
 

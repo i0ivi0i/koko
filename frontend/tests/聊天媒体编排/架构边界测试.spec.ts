@@ -9,7 +9,8 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(source).toContain("创建媒体运行时Actor");
     expect(source).toContain("创建媒体播放器");
     expect(source).toContain("创建媒体查看器");
-    expect(source).toContain("创建资产协作分发运行时");
+    expect(source).toContain('from "./媒体/协作分发/应用.js"');
+    expect(source).toContain("创建媒体协作分发应用");
     expect(source).not.toContain("new WebTorrent");
     expect(source).not.toContain("navigator.serviceWorker");
     expect(source).not.toContain("createServer(");
@@ -19,12 +20,17 @@ describe("聊天媒体编排 - 架构边界", () => {
   it("聊天媒体编排不再直接内联查看器打开/同步/关闭协作", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
 
+    expect(source).toContain('from "./媒体/查看器/应用.js"');
+    expect(source).toContain("创建媒体查看器应用(");
     expect(source).toContain('from "./媒体/壳层/查看器会话协作.js"');
     expect(source).toContain("创建查看器会话协作(");
     expect(source).not.toContain("const 投影查看器请求到当前播放真相 =");
     expect(source).not.toContain("const 是否应等待本地完整视频会话真相 =");
     expect(source).not.toContain("const 正式打开查看器 =");
     expect(source).not.toContain("const 同步当前查看器请求 =");
+    expect(source).not.toContain("const 启动查看器起始附件会话 =");
+    expect(source).not.toContain("const 补启动查看器正式会话Consumer =");
+    expect(source).not.toContain("const 当前请求命中热自动播会话 =");
   });
 
   it("聊天媒体编排不再直接内联自动播稳定等待与播放结果解析", () => {
@@ -63,6 +69,16 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(source).not.toContain("const 处理协作分发事件 =");
     expect(source).not.toContain("const 激活附件协作补齐 =");
     expect(source).not.toContain("const 恢复当前房间缓存帮助任务 =");
+  });
+
+  it("聊天媒体编排不再直接拥有协作分发应用 owner", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+
+    expect(source).toContain('from "./媒体/协作分发/应用.js"');
+    expect(source).toContain("创建媒体协作分发应用(");
+    expect(source).not.toContain("创建资产协作分发运行时");
+    expect(source).not.toContain("const 刷新协作分发入群定位 =");
+    expect(source).not.toContain("const 解析协作分发源 =");
   });
 
   it("聊天媒体编排统一复用附件释放和关停 helper，不再在多处复制销毁序列", () => {

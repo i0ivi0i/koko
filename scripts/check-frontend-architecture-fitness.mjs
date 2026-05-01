@@ -22,6 +22,8 @@ const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
 const 前端运行时Owner注册表 = [
   { path: "frontend/聊天应用内核.ts", symbol: "创建聊天应用内核" },
   { path: "frontend/后台应用内核.ts", symbol: "创建后台应用内核" },
+  { path: "frontend/恢复/应用.ts", symbol: "创建恢复应用" },
+  { path: "frontend/实时/应用.ts", symbol: "创建实时应用" },
   { path: "frontend/平台/浏览器应用平台.ts", symbol: "创建浏览器应用平台" },
   { path: "frontend/应用生命周期.ts", symbol: "创建应用生命周期Actor" },
   { path: "frontend/实时会话运行时.ts", symbol: "创建实时会话Actor" },
@@ -71,6 +73,24 @@ const 前端禁回流片段规则 = [
     path: "frontend/媒体/全局丝滑自动播.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b|\bvideojs\b|\bdocument\.createElement\b/g,
   },
+  {
+    label: "chat media owner fallback",
+    path: "frontend/聊天媒体编排.ts",
+    pattern:
+      /创建资产协作分发运行时|const 启动查看器起始附件会话\s*=|const 补启动查看器正式会话Consumer\s*=|const 当前请求命中热自动播会话\s*=/g,
+  },
+  {
+    label: "legacy room realtime facade fallback",
+    path: "frontend/房间实时编排.ts",
+    pattern:
+      /let realtimeSocket|function ensureRealtimeSocket|处理实时控制面结果\(|登记待补发创建消息\(/g,
+  },
+  {
+    label: "legacy recovery facade fallback",
+    path: "frontend/聊天恢复/壳层/房间快照恢复.ts",
+    pattern:
+      /function 同步首页房间历史|function 进入房间快照|function 处理恢复失败|function resolveFallbackRoomCode/g,
+  },
 ];
 
 const 禁止新增前端文件规则 = [
@@ -85,8 +105,13 @@ const 热点文件行数上限 = [
   { path: "frontend/房间消息窗.ts", maxEffectiveLines: 1800, maxPhysicalLines: 2150 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 820, maxPhysicalLines: 930 },
   { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },
-  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
-  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1800 },
+  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500, maxPhysicalLines: 1500 },
+  { path: "frontend/聊天壳.ts", maxEffectiveLines: 1750, maxPhysicalLines: 1800 },
+  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
+  { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
+  { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
+  { path: "frontend/房间实时编排.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
+  { path: "frontend/聊天恢复/壳层/房间快照恢复.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
 ];
 
 const 前端测试热点边界 = [

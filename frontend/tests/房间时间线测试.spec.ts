@@ -133,14 +133,16 @@ describe("房间时间线", () => {
 
   it("恢复、实时、历史分页都只能把事实交给时间线 owner，不再各自手拼 messages 数组", () => {
     const recoverySource = 读取前端源码("房间恢复编排.ts");
-    const recoverySnapshotSource = 读取前端源码("聊天恢复/壳层/房间快照恢复.ts");
-    const realtimeSource = 读取前端源码("房间实时编排.ts");
+    const recoverySnapshotSource = 读取前端源码("恢复/应用.ts");
+    const recoveryLegacySource = 读取前端源码("聊天恢复/壳层/房间快照恢复.ts");
+    const realtimeSource = 读取前端源码("实时/应用.ts");
     const readingSource = 读取前端源码("阅读推进编排.ts");
 
     expect(recoverySource).toContain('from "./恢复/应用.js"');
     expect(recoverySource).not.toContain("messages: 合并房间时间线消息(");
     expect(recoverySnapshotSource).toContain("接收时间线事实({");
     expect(recoverySnapshotSource).not.toContain("messages: 合并房间时间线消息(");
+    expect(recoveryLegacySource).toContain('from "../../恢复/应用.js"');
 
     expect(realtimeSource).toContain('type: "REALTIME_EVENTS_RECEIVED"');
     expect(realtimeSource).toContain('type: "OPTIMISTIC_MESSAGE_ADDED"');

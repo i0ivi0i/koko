@@ -9,8 +9,17 @@ import {
   读取房间实时编排工厂,
 } from "./common/聊天测试支架";
 describe("房间实时编排", () => {
-  it("socket 回调不会直接宣布 reconnecting，而是先回灌给 realtime owner", () => {
+  it("旧房间实时编排文件必须退成实时应用门面", () => {
     const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+
+    expect(source).toContain('from "./实时/应用.js"');
+    expect(source).toContain("创建实时应用");
+    expect(source).not.toContain("let realtimeSocket");
+    expect(source).not.toContain("function ensureRealtimeSocket");
+  });
+
+  it("socket 回调不会直接宣布 reconnecting，而是先回灌给 realtime owner", () => {
+    const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
     expect(source).toContain("接收实时会话事实");
     expect(source).not.toContain('type: "RECONNECTING_STARTED"');
@@ -20,16 +29,16 @@ describe("房间实时编排", () => {
   });
 
   it("只依赖聊天 realtime 窄接口，而不再声明完整前端传输端口", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./聊天共享/适配/聊天实时连接端口.js"');
+    expect(source).toContain('from "../聊天共享/适配/聊天实时连接端口.js"');
     expect(source).not.toContain("type 前端传输端口");
   });
 
   it("会把 connect_error 和 control_result 翻译委托给 实时控制面协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./聊天实时/壳层/实时控制面协作.js"');
+    expect(source).toContain('from "../聊天实时/壳层/实时控制面协作.js"');
     expect(source).toContain("处理连接错误(");
     expect(source).toContain("处理实时控制面结果(");
     expect(source).not.toContain("async function handleConnectError");
@@ -37,9 +46,9 @@ describe("房间实时编排", () => {
   });
 
   it("会把离线补发登记与重放委托给 待补发消息协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./聊天实时/壳层/待补发消息协作.js"');
+    expect(source).toContain('from "../聊天实时/壳层/待补发消息协作.js"');
     expect(source).toContain("登记待补发创建消息(");
     expect(source).toContain("重放待补发创建消息(");
     expect(source).not.toContain("dedupeKey: clientMessageId");

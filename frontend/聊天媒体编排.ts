@@ -22,6 +22,8 @@ import {
   type 查看器会话协作端口,
 } from "./媒体/壳层/查看器会话协作.js";
 import { 创建自动播协作, type 自动播协作端口 } from "./媒体/壳层/自动播协作.js";
+import { 创建媒体查看器应用 } from "./媒体/查看器/应用.js";
+import { 创建媒体协作分发应用 } from "./媒体/协作分发/应用.js";
 import {
   创建视频预览协作,
   type 视频预览协作端口,
@@ -44,7 +46,6 @@ import {
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
-  创建资产协作分发运行时,
   排序消息视频自动播候选,
   type 消息视频自动播候选,
   type 媒体附件草稿,
@@ -198,7 +199,6 @@ const 自动播预览预热候选上限 = 2;
  */
 export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天媒体编排端口 {
   const 媒体运行时 = 创建媒体运行时Actor();
-  const 协作分发运行时 = 创建资产协作分发运行时();
   let 媒体缓存已启动 = false;
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
@@ -207,25 +207,21 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       deps.transport().loadMediaLocator(sessionId, attachmentId, signal),
     repo: deps.媒体定位仓库 ?? 创建内存媒体定位缓存仓库(),
   });
-  const 刷新协作分发入群定位 = (input: {
-    attachmentId: string;
-    swarmId: string;
-    torrentInfoHash: string;
-  }) =>
-    // 续租只要求 locator owner 重签当前附件；swarm/infohash 由运行态校验，防止刷新时偷换媒体身份。
-    媒体定位器.获取定位(input.attachmentId, { forceRefresh: true });
-  const 解析协作分发源 = (
-    input: Parameters<typeof 协作分发运行时.解析协作分发源>[0]
-  ) =>
-    协作分发运行时.解析协作分发源({
-      ...input,
-      refreshJoinTicket: 刷新协作分发入群定位,
-    });
+  const 协作分发应用 = 创建媒体协作分发应用({
+    refreshJoinTicket: (input) =>
+      /**
+       * join ticket 续租必须回到定位 owner：
+       * 1. 当前附件是谁，只能由 locator 主链重签；
+       * 2. 编排层不再自己拼第二条 refresh seam；
+       * 3. 这样 swarm/infohash 校验始终由 runtime + locator 同一口径收口。
+       */
+      媒体定位器.获取定位(input.attachmentId, { forceRefresh: true }),
+  });
 
   let 媒体播放器 = 创建媒体播放器({
     locate: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
-    resolveSwarmSource: (input) => 解析协作分发源(input),
-    releaseSwarmSource: (input) => 协作分发运行时.释放协作分发消费者(input),
+    resolveSwarmSource: (input) => 协作分发应用.解析协作分发源(input),
+    releaseSwarmSource: (input) => 协作分发应用.释放协作分发消费者(input),
   });
   const 媒体会话表 = new Map<string, 媒体会话端口>();
   const 当前媒体窗口附件Id集合 = new Set<string>();
@@ -270,7 +266,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       consumerId: 构造媒体会话ConsumerId(attachmentId),
       ...(input.丢弃未完成播放补齐 ? { 丢弃未完成补齐: true } : {}),
     });
-    协作分发运行时.释放协作分发消费者({
+    协作分发应用.释放协作分发消费者({
       attachmentId,
       consumerId: 构造预览ConsumerId(attachmentId),
       ...(input.丢弃未完成预览补齐 ? { 丢弃未完成补齐: true } : {}),
@@ -649,7 +645,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 2. budget 只消费 runtime owner 已裁决的轻重状态；
      * 3. 这样消息窗不会继续用旧 preview src 自己猜“还能不能渲染真实 video”。
      */
-    return 协作分发运行时.读取会话状态(swarmId)?.lifecycle ?? null;
+    return 协作分发应用.读取会话状态(swarmId)?.lifecycle ?? null;
   };
 
   /**
@@ -924,14 +920,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     读取当前视频预览播放源: 读取视频预览候选播放源,
     获取媒体定位: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
     解析协作分发预览源: ({ attachmentId, locator, consumerId }) =>
-      解析协作分发源({
+      协作分发应用.解析协作分发源({
         attachmentId,
         kind: "video",
         locator,
         consumerId,
       }),
     释放协作分发消费者: (input) => {
-      协作分发运行时.释放协作分发消费者(input);
+      协作分发应用.释放协作分发消费者(input);
     },
     预览缓存,
     抓取视频预览,
@@ -1013,76 +1009,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      */
     视频预览协作.解析视频预览(attachmentId, input);
   };
-
-  const 启动查看器起始附件会话 = (request: 媒体查看器打开请求): void => {
-    const startAttachment = 读取附件条目(request.startAttachmentId);
-    if (!startAttachment) {
-      return;
-    }
-    const session = 读取或创建媒体会话(startAttachment);
-    const snapshot = session.snapshot();
-    if (!snapshot.playback) {
-      void session.启动();
-      return;
-    }
-    if (startAttachment.kind !== "video") {
-      return;
-    }
-    /**
-     * 手动打开正式查看器必须先重裁一次当前会话真相：
-     * 1. degraded/expired 当然要立刻重试，不能继续等后台慢轮询；
-     * 2. 即使旧会话手里还有可播 src，也要给删除态 / 新 ticket / 新主链一次抢占机会；
-     * 3. 只对显式 viewer open 生效，不把消息流常态渲染放大成持续重解析。
-     */
-    session.send({ type: "ENTER_RECOVERING" });
-  };
-
-  const 补启动查看器正式会话Consumer = (request: 媒体查看器打开请求): void => {
-    const startAttachment = 读取附件条目(request.startAttachmentId);
-    if (!startAttachment || startAttachment.kind !== "video") {
-      return;
-    }
-    const session = 读取或创建媒体会话(startAttachment);
-    if (session.snapshot().playback) {
-      return;
-    }
-    /**
-     * 自动播热源可以让 viewer 立刻打开，但 viewer 仍必须拿到自己的正式 consumer。
-     * 否则 inline autoplay owner 被 runtime 清空后，底层 WebTorrent route/reader 可能只剩短暂 drain，
-     * 返回后再点同一条视频就会重新走降级链，表现成“附件当前不可获取”。
-     */
-    void session.启动();
-  };
-
-  const 当前请求命中热自动播会话 = (request: 媒体查看器打开请求): boolean => {
-    const startAttachment = 读取附件条目(request.startAttachmentId);
-    if (!startAttachment || startAttachment.kind !== "video") {
-      return false;
-    }
-    const 当前媒体运行时上下文 = 读取媒体运行时上下文();
-    if (当前媒体运行时上下文.inlineAutoplayOwnerAttachmentId !== request.startAttachmentId) {
-      return false;
-    }
-    const 当前自动播播放 = 当前媒体运行时上下文.inlineAutoplayPlayback;
-    if (!当前自动播播放 || 当前自动播播放.attachmentId !== request.startAttachmentId) {
-      return false;
-    }
-    const session = 读取或创建媒体会话(startAttachment);
-    const snapshot = session.snapshot();
-    /**
-     * 当前自动播 owner 已经握着同一条 swarm 主链时，点击放大只是“迁移宿主表面”：
-     * 1. 去掉 visible 预热正式会话后，真正的热真相可能先出现在 runtime 的 autoplay overlay；
-     * 2. 只要 overlay 已经握住这条 swarm 播放真相，viewer 就应直接复用，不能再先打回 recovering；
-     * 3. 但如果媒体会话自己已经有 playback，且和当前 autoplay 真相冲突，仍要回到正常重裁，避免抱着旧源误判命中热链。
-     */
-    if (!snapshot.playback) {
-      return 当前自动播播放.mode === "swarm";
-    }
-    return (
-      snapshot.playback.mode === 当前自动播播放.mode &&
-      snapshot.playback.src === 当前自动播播放.src
-    );
-  };
+  const 媒体查看器应用 = 创建媒体查看器应用({
+    读取附件条目,
+    读取或创建媒体会话,
+    读取媒体运行时上下文,
+    投影查看器请求到当前播放真相: (request) =>
+      查看器会话协作.投影查看器请求到当前播放真相(request),
+    触发视频预览收敛: (attachmentId) => {
+      触发视频预览收敛(attachmentId);
+    },
+    接收媒体运行时事实,
+  });
 
   const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
     for (const candidate of candidates.slice(0, 自动播预览预热候选上限)) {
@@ -1205,9 +1142,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     清空播放状态();
     if (input.协作分发动作 === "reset") {
-      协作分发运行时.重置();
+      协作分发应用.重置();
     } else {
-      协作分发运行时.销毁();
+      协作分发应用.销毁();
     }
     void 同步媒体运行时快照并执行副作用(before);
     if (input.停止媒体运行时) {
@@ -1255,7 +1192,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         activeMediaSessionCount: mediaSessions.length,
         activeVideoSessionCount: mediaSessions.filter((session) => session.kind === "video").length,
         ...投影媒体运行时预算(媒体运行时.getSnapshot()),
-        ...协作分发运行时.读取预算(),
+        ...协作分发应用.读取预算(),
         focusedVideoBudget: 缓存重点信息流视频预算(videoBudgets),
       };
     },
@@ -1289,24 +1226,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
-      const baseRequest = {
-        startAttachmentId: request.startAttachmentId,
-        items: request.items.map((item) => ({ ...item })),
-      };
-      const 命中热自动播会话 = 当前请求命中热自动播会话(baseRequest);
-      if (!命中热自动播会话) {
-        启动查看器起始附件会话(baseRequest);
-      } else {
-        补启动查看器正式会话Consumer(baseRequest);
-      }
-      const nextRequest = 查看器会话协作.投影查看器请求到当前播放真相(baseRequest);
-      if (读取附件条目(request.startAttachmentId)?.kind === "video") {
-        触发视频预览收敛(request.startAttachmentId);
-      }
-      接收媒体运行时事实({
-        type: "VIEWER_OPEN_REQUESTED",
-        request: nextRequest,
-      });
+      媒体查看器应用.打开查看器(request);
     },
 
     同步媒体窗口附件(attachmentIds: string[]): void {
@@ -1382,7 +1302,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         type: "LIFECYCLE_POLICY_CHANGED",
         heavyWorkPolicy: input.heavyWorkPolicy,
       });
-      协作分发运行时.send({
+      协作分发应用.send({
         type: "LIFECYCLE_POLICY_CHANGED",
         heavyWorkPolicy: input.heavyWorkPolicy,
       });
