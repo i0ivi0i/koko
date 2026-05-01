@@ -3,7 +3,7 @@ import type { 消息事件 } from "../契约.js";
 import type { 房间内核事件 } from "../房间内核.js";
 import type { 房间时间线事件 } from "../房间时间线运行时.js";
 import type { 实时会话事件 } from "../实时会话运行时.js";
-import { 创建乐观房间消息 } from "../房间时间线.js";
+import { 创建乐观房间消息 } from "../时间线/领域.js";
 import { 提取可发送媒体附件标识 } from "../媒体/媒体草稿.js";
 import {
   处理实时控制面结果,

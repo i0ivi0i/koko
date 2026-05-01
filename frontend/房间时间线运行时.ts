@@ -1,6 +1,6 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
 import type { 消息事件 } from "./契约.js";
-import { 推进房间时间线 } from "./房间时间线.js";
+import { 推进房间时间线 } from "./时间线/领域.js";
 import type { 聊天时间线状态 } from "./状态.js";
 
 export interface 房间时间线上下文 {
