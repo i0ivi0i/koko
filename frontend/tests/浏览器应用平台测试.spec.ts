@@ -277,6 +277,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/平台/应用运行时.ts"');
   });
 
+  it("架构适应度门禁会把聊天应用编排桥接根文件锁成迁移门面，避免总装 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/聊天应用编排桥接.ts"');
+    expect(source).toContain('ownerPath: "frontend/总装/聊天应用编排桥接.ts"');
+  });
+
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
@@ -393,7 +400,7 @@ const stillKeep = true;
     const adminKernelOwnerSource = 读取前端源码("后台/应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
-    expect(kernelSource).toContain('from "./聊天应用编排桥接.js"');
+    expect(kernelSource).toContain('from "./总装/聊天应用编排桥接.js"');
     expect(kernelSource).toContain("const rawPlatform = deps.platform ?? 获取默认浏览器应用平台()");
     expect(kernelSource).toContain("创建聊天内核平台桥接(rawPlatform)");
     expect(kernelSource).toContain("this.平台桥接.聊天房间传输()");
@@ -475,6 +482,18 @@ const stillKeep = true;
     expect(runtimeOwnerSource).toContain("翻译平台事件为内核命令");
     expect(assemblySource).toContain('from "../平台/应用运行时.js"');
     expect(assemblySource).not.toContain('from "../应用运行时.js"');
+  });
+
+  it("聊天应用编排桥接 owner 进入总装层，根目录只保留兼容门面，聊天内核直接依赖总装 owner", () => {
+    const bridgeFacadeSource = 读取前端源码("聊天应用编排桥接.ts");
+    const bridgeOwnerSource = 读取前端源码("总装/聊天应用编排桥接.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+
+    expect(bridgeFacadeSource).toContain('export * from "./总装/聊天应用编排桥接.js"');
+    expect(bridgeFacadeSource).not.toContain("export interface 聊天内核平台端口");
+    expect(bridgeOwnerSource).toContain("export interface 聊天内核平台端口");
+    expect(kernelSource).toContain('from "./总装/聊天应用编排桥接.js"');
+    expect(kernelSource).not.toContain('from "./聊天应用编排桥接.js"');
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

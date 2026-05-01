@@ -107,6 +107,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./平台/应用运行时.js";'],
     forbiddenSnippets: ["const 翻译平台事件为内核命令 =", "export function 创建应用运行时("],
   },
+  {
+    path: "frontend/聊天应用编排桥接.ts",
+    ownerPath: "frontend/总装/聊天应用编排桥接.ts",
+    requiredSnippets: ['export * from "./总装/聊天应用编排桥接.js";'],
+    forbiddenSnippets: ["export interface 聊天内核平台端口", "export function 创建聊天内核平台桥接("],
+  },
 ];
 
 const 架构规则 = [
