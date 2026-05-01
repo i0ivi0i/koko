@@ -4,7 +4,7 @@ import type {
   房间历史页,
   房间快照,
   阅读推进请求,
-} from "../../契约.js";
+} from "../../聊天共享/契约.js";
 import type { 聊天房间传输端口 } from "../../聊天共享/适配/聊天房间传输端口.js";
 
 type 读取JSON = <T>(path: string, headers?: Record<string, string>) => Promise<T>;

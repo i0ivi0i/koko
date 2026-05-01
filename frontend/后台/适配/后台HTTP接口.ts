@@ -1,4 +1,4 @@
-import type { 后台概览, 后台房间列表, 后台房间详情, 后台登录结果 } from "../../契约.js";
+import type { 后台概览, 后台房间列表, 后台房间详情, 后台登录结果 } from "../../聊天共享/契约.js";
 
 type 读取JSON = <T>(path: string, headers?: Record<string, string>) => Promise<T>;
 type 提交JSON = <T>(path: string, body: object) => Promise<T>;

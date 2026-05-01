@@ -1,4 +1,4 @@
-import type { 后台房间详情, 后台概览 } from "../契约.js";
+import type { 后台房间详情, 后台概览 } from "../聊天共享/契约.js";
 import { 创建后台壳编排, type 后台壳编排端口 } from "./壳编排.js";
 import { 创建后台会话编排, type 后台会话编排端口 } from "./会话编排.js";
 import { 创建后台查询编排, type 后台查询编排端口 } from "./查询编排.js";

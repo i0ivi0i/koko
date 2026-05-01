@@ -1,4 +1,4 @@
-import type { 媒体定位结果, 媒体种类 } from "../../契约.js";
+import type { 媒体定位结果, 媒体种类 } from "../../聊天共享/契约.js";
 import {
   创建资产协作分发运行时,
   type 资产协作分发事件,

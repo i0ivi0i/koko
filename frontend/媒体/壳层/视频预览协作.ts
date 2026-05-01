@@ -1,4 +1,4 @@
-import type { 媒体定位结果, 媒体种类 } from "../../契约.js";
+import type { 媒体定位结果, 媒体种类 } from "../../聊天共享/契约.js";
 import type { 媒体运行时事件 } from "../运行时.js";
 import type {
   预览缓存端口,

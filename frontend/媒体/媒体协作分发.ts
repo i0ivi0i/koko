@@ -1,4 +1,4 @@
-import type { 媒体协作分发定位片段, 媒体定位结果, 媒体种类 } from "../契约.js";
+import type { 媒体协作分发定位片段, 媒体定位结果, 媒体种类 } from "../聊天共享/契约.js";
 import { 获取默认浏览器应用平台 } from "../平台/index.js";
 import type { 协作分发Torrent缓存快照 } from "./媒体协作分发缓存.js";
 import IndexedDBChunkStore from "idb-chunk-store";

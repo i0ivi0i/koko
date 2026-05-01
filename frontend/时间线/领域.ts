@@ -1,4 +1,4 @@
-import type { 消息事件 } from "../契约.js";
+import type { 消息事件 } from "../聊天共享/契约.js";
 
 export type 创建乐观房间消息输入 = {
   roomId: string;

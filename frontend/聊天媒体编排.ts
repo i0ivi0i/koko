@@ -3,7 +3,7 @@ import type {
   媒体附件转发请求,
   媒体附件转发结果,
   媒体种类,
-} from "./契约.js";
+} from "./聊天共享/契约.js";
 import type { 媒体传输端口 } from "./传输.js";
 import type { 聊天运行时预算状态 } from "./状态.js";
 import {

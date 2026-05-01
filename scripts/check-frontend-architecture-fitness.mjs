@@ -188,6 +188,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./房间消息窗/壳.js";'],
     forbiddenSnippets: ["export class 房间消息窗 extends LitElement"],
   },
+  {
+    path: "frontend/契约.ts",
+    ownerPath: "frontend/聊天共享/契约.ts",
+    requiredSnippets: ['export * from "./聊天共享/契约.js";'],
+    forbiddenSnippets: ["export interface 消息事件 {", "export interface 房间快照 {"],
+  },
 ];
 
 const 架构规则 = [
@@ -256,6 +262,7 @@ const 禁止新增前端文件规则 = [
 
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
+  { path: "frontend/契约.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/房间消息窗.ts", maxEffectiveLines: 1800, maxPhysicalLines: 2150 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 820, maxPhysicalLines: 930 },
   { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },

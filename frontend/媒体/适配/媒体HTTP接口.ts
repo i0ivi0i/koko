@@ -14,7 +14,7 @@ import type {
   媒体上传准备结果,
   媒体种类,
   预览资源描述,
-} from "../../契约.js";
+} from "../../聊天共享/契约.js";
 
 type 读取JSON = <T>(
   path: string,

@@ -1,4 +1,4 @@
-import type { 消息事件 } from "./契约.js";
+import type { 消息事件 } from "./聊天共享/契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 媒体附件草稿 } from "./媒体/媒体草稿.js";
 import type { 信息流视频预算投影 } from "./媒体/信息流视频预算.js";

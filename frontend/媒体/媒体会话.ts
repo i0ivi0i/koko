@@ -1,4 +1,4 @@
-import type { 媒体种类 } from "../契约.js";
+import type { 媒体种类 } from "../聊天共享/契约.js";
 import type { 媒体播放输入, 媒体播放结果 } from "./媒体播放.js";
 
 const 连接群友重试毫秒 = 2_000;

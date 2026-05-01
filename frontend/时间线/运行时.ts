@@ -1,5 +1,5 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
-import type { 消息事件 } from "../契约.js";
+import type { 消息事件 } from "../聊天共享/契约.js";
 import { 推进房间时间线 } from "./领域.js";
 import type { 聊天时间线状态 } from "../状态.js";
 

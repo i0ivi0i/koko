@@ -8,7 +8,7 @@ import type {
   媒体SourceHash信息,
   媒体上传准备结果,
   媒体种类,
-} from "../契约.js";
+} from "../聊天共享/契约.js";
 import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
 import {
   创建本地图片预览地址 as 创建本地媒体预览地址,

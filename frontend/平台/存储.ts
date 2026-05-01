@@ -1,4 +1,4 @@
-import type { 房间快照 } from "../契约.js";
+import type { 房间快照 } from "../聊天共享/契约.js";
 
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";

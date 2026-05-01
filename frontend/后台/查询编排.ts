@@ -1,4 +1,4 @@
-import type { 后台房间详情, 后台概览 } from "../契约.js";
+import type { 后台房间详情, 后台概览 } from "../聊天共享/契约.js";
 import type { 后台查询传输端口 } from "../传输.js";
 
 export interface 后台查询快照 {

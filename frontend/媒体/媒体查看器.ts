@@ -1,4 +1,4 @@
-import type { 媒体资产分发表面 } from "../契约.js";
+import type { 媒体资产分发表面 } from "../聊天共享/契约.js";
 import type { 媒体会话信号 } from "./媒体会话.js";
 import type { 媒体播放位置 } from "./媒体播放.js";
 import type {

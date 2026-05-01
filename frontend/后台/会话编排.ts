@@ -1,4 +1,4 @@
-import type { 后台登录结果 } from "../契约.js";
+import type { 后台登录结果 } from "../聊天共享/契约.js";
 import type { 后台会话传输端口 } from "../传输.js";
 
 export interface 后台会话快照 {

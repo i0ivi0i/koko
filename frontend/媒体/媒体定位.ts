@@ -1,4 +1,4 @@
-import type { 媒体定位结果 } from "../契约.js";
+import type { 媒体定位结果 } from "../聊天共享/契约.js";
 
 type 媒体定位缓存存储源 = Pick<Storage, "getItem" | "setItem"> | Partial<Storage> | undefined;
 

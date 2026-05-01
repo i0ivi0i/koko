@@ -41,7 +41,7 @@ import {
   type 缓存更新快照,
   type 生命周期快照,
 } from "./平台/index.js";
-import type { 消息事件 } from "./契约.js";
+import type { 消息事件 } from "./聊天共享/契约.js";
 import {
   type 媒体传输端口,
   type 聊天实时连接端口,

@@ -1,5 +1,5 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
-import type { 媒体定位结果, 媒体种类 } from "../契约.js";
+import type { 媒体定位结果, 媒体种类 } from "../聊天共享/契约.js";
 import {
   获取或创建协作分发浏览器运行时,
   启动协作分发存活上报,
