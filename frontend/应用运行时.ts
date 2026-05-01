@@ -4,7 +4,7 @@ import type { 浏览器应用平台事件 } from "./平台/index.js";
 type 应用运行时命令 = Extract<
   聊天应用命令,
   | { type: "ROOM_SCROLL_INTENT" }
-  | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
+  | { type: "ROOM_SCROLL_OBSERVED" }
   | { type: "ROOM_MEDIA_WINDOW_OBSERVED"; attachmentIds: string[] }
   | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED" }
   | { type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED" }

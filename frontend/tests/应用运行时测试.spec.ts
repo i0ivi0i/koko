@@ -31,29 +31,25 @@ describe("应用运行时", () => {
   });
 
   it("滚动信号必须先进入应用运行时，再翻成滚动观察 command", () => {
-    const scrollContainer = document.createElement("div");
     const deps = 创建运行时依赖();
     const runtime = 创建应用运行时(deps);
 
-    runtime.dispatch({ type: "ROOM_SCROLL_OBSERVED", scrollContainer });
+    runtime.dispatch({ type: "ROOM_SCROLL_OBSERVED" });
 
     expect(deps.dispatch).toHaveBeenCalledWith({
       type: "ROOM_SCROLL_OBSERVED",
-      scrollContainer,
     });
   });
 
   it("被视口 owner 吸收的程序性滚动不会在运行时里再旁路出第二套阅读逻辑", () => {
-    const scrollContainer = document.createElement("div");
     const deps = 创建运行时依赖();
     const runtime = 创建应用运行时(deps);
 
-    runtime.dispatch({ type: "ROOM_SCROLL_OBSERVED", scrollContainer });
+    runtime.dispatch({ type: "ROOM_SCROLL_OBSERVED" });
 
     expect(deps.dispatch).toHaveBeenCalledTimes(1);
     expect(deps.dispatch).toHaveBeenCalledWith({
       type: "ROOM_SCROLL_OBSERVED",
-      scrollContainer,
     });
   });
 

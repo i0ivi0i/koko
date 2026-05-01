@@ -24,11 +24,11 @@ import {
   type 聊天内核平台端口,
 } from "./聊天应用编排桥接.js";
 import {
-  房间滚动器,
   type 房间滚动观测,
   type 房间滚动器依赖,
   type 房间滚动器宿主,
 } from "./房间滚动器.js";
+import { 创建房间滚动应用 } from "./时间线/应用.js";
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
@@ -156,7 +156,7 @@ export type 聊天应用命令 =
   | { type: "LEAVE_ROOM_VIEW_REQUESTED" }
   | { type: "SEND_MESSAGE_REQUESTED" }
   | { type: "ROOM_SCROLL_INTENT" }
-  | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
+  | { type: "ROOM_SCROLL_OBSERVED" }
   | { type: "ROOM_MEDIA_WINDOW_OBSERVED"; attachmentIds: string[] }
   | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED"; candidates: 消息视频自动播候选[] }
   | {
@@ -286,7 +286,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 视口 owner 需要 DOM 查询能力，但 owner 本身仍属于聊天应用内核。
    * 这样浏览器滚动信号就先收进内核，再由阅读推进编排消费，不再让壳层横穿业务边界。
    */
-  private readonly roomScroller: 房间滚动器;
+  private readonly roomScroller: ReturnType<typeof 创建房间滚动应用>;
 
   constructor(deps: 聊天应用内核依赖) {
     this.deps = deps;
@@ -307,7 +307,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       runtimeBudget: { ...初始聊天运行时状态.runtimeBudget },
     };
     this.同步房间视口快照();
-    this.roomScroller = new 房间滚动器(deps.滚动宿主, {
+    this.roomScroller = 创建房间滚动应用(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
       查询滚动容器: () => deps.查询滚动容器(),
       查询消息节点: () => deps.查询消息节点(),
@@ -415,7 +415,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.标记用户滚动意图();
         return;
       case "ROOM_SCROLL_OBSERVED":
-        this.处理聊天视口滚动(command.scrollContainer);
+        this.处理聊天视口滚动();
         return;
       case "ROOM_MEDIA_WINDOW_OBSERVED":
         this.媒体编排.同步媒体窗口附件(command.attachmentIds);
@@ -491,8 +491,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.同步房间视口快照();
   }
 
-  private 处理聊天视口滚动(scrollContainer: HTMLElement): void {
-    this.roomScroller.处理滚动事件(scrollContainer);
+  private 处理聊天视口滚动(): void {
+    this.roomScroller.处理滚动事件();
   }
 
   private async 请求跳到最新(): Promise<void> {
@@ -572,7 +572,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排.打开查看器(request);
   }
 
-  读取房间滚动器供测试(): 房间滚动器 {
+  读取房间滚动器供测试(): ReturnType<typeof 创建房间滚动应用> {
     return this.roomScroller;
   }
 

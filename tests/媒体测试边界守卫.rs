@@ -52,3 +52,12 @@ fn 媒体定位正式表面守卫_禁止顶层original_url回流() {
         "顶层 locator 已禁止继续暴露 original_url；冷源锚点必须留在 nested asset/origin 正式表面"
     );
 }
+
+#[test]
+fn 实时外壳必须显式依赖实时业务门面而不是继续偷连统一用例细节() {
+    let content = 读取("src/实时外壳.rs");
+    assert!(
+        content.contains("crate::realtime"),
+        "实时外壳尚未切到 realtime 业务门面，热路径 owner 仍会被统一用例反向绑住"
+    );
+}

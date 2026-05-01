@@ -227,13 +227,7 @@ export class 房间消息窗 extends LitElement {
   private dispatchScroll(event: Event): void {
     const scrollContainer = event.currentTarget as HTMLElement;
     this.清理即将退场时间线视频表面(this.读取当前虚拟消息项());
-    this.dispatchEvent(
-      new CustomEvent<{ scrollContainer: HTMLElement }>("room-scroll", {
-        detail: { scrollContainer },
-        bubbles: true,
-        composed: true,
-      })
-    );
+    this.dispatchEvent(new CustomEvent("room-scroll", { bubbles: true, composed: true }));
     this.调度自动播候选(scrollContainer);
   }
 

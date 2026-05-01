@@ -58,6 +58,17 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).not.toContain("创建阅读推进编排({");
   });
 
+  it("滚动观察命令不再把 DOM 容器穿过运行时和聊天内核", () => {
+    const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const runtimeSource = readFileSync(resolve(process.cwd(), "应用运行时.ts"), "utf8");
+    const shellSource = readFileSync(resolve(process.cwd(), "聊天壳.ts"), "utf8");
+
+    expect(kernelSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
+    expect(kernelSource).not.toContain("处理聊天视口滚动(scrollContainer: HTMLElement): void");
+    expect(runtimeSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
+    expect(shellSource).not.toContain("detail.scrollContainer");
+  });
+
   it("聊天应用编排桥接会把平台依赖裁成窄平台桥接，而不是偷拿聊天业务真相", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天应用编排桥接.ts"), "utf8");
 

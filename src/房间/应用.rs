@@ -1,0 +1,137 @@
+use crate::{contract, domain, usecase};
+
+/// 进房/建房主链：
+/// 1. 先在领域层校验短码语义。
+/// 2. 再进入仓储完成事实写入。
+/// 3. 这条链现在归房间业务模块 owner，不再继续挤在统一用例文件里。
+pub fn 按短码进房或建房(
+    仓储: &mut dyn usecase::仓储端口,
+    会话标识: &str,
+    房间短码: &str,
+) -> Result<contract::快照, contract::错误码> {
+    domain::room::校验房间短码(房间短码).map_err(usecase::映射领域错误)?;
+    仓储.按短码进房或建房(会话标识, 房间短码)
+}
+
+/// 房间存在性校验只负责把“有没有这个房间”说清楚。
+/// 它被显式放到房间模块公开面，是为了让房间相关入口不再回头摸统一用例私有细节。
+pub fn 校验房间存在(
+    仓储: &dyn usecase::仓储端口,
+    房间标识: &str,
+) -> Result<(), contract::错误码> {
+    usecase::校验房间存在(仓储, 房间标识)
+}
+
+/// realtime / 冷路径共用的订阅资格校验。
+/// 成员资格真相依然只在应用层裁决，外壳和适配层不能自行脑补。
+pub fn 校验房间订阅资格(
+    仓储: &dyn usecase::仓储端口,
+    房间标识: &str,
+    会话标识: &str,
+) -> Result<(), contract::错误码> {
+    usecase::校验房间订阅资格(仓储, 房间标识, 会话标识)
+}
+
+/// 加载房间快照用例：
+/// 先验证成员资格，再返回基线快照，防止未入房会话越权读取房间事实。
+pub fn 加载房间快照(
+    仓储: &dyn usecase::仓储端口,
+    房间标识: &str,
+    会话标识: &str,
+) -> Result<contract::快照, contract::错误码> {
+    usecase::校验实时连接会话(仓储, 会话标识)?;
+    校验房间存在(仓储, 房间标识)?;
+    // 先验证成员资格，再返回快照，避免未入房会话直接读取房间真相。
+    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    let latest_event_position = 仓储
+        .查询房间最新事件位置(房间标识)?
+        .ok_or(contract::错误码::房间不存在)?;
+    let last_read_event_position = 仓储.查询房间阅读位置(房间标识, 会话标识)?;
+    // 第一条未读的裁决必须留在应用层，不能让前端自己猜。
+    let first_unread_event_position = match last_read_event_position {
+        Some(last_read_event_position) if last_read_event_position < latest_event_position => {
+            Some(last_read_event_position + 1)
+        }
+        _ => None,
+    };
+    仓储.拉取房间快照(
+        房间标识,
+        last_read_event_position,
+        first_unread_event_position,
+    )
+}
+
+/// 加载房间增量事件用例：
+/// 1. 参数合法性校验。
+/// 2. 会话有效性校验。
+/// 3. 房间存在性校验。
+/// 4. 成员资格校验。
+/// 5. 返回该位置之后的权威增量。
+pub fn 加载房间增量事件(
+    仓储: &dyn usecase::仓储端口,
+    房间标识: &str,
+    会话标识: &str,
+    从位置开始: i64,
+) -> Result<contract::快照, contract::错误码> {
+    if 从位置开始 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    usecase::校验实时连接会话(仓储, 会话标识)?;
+    校验房间存在(仓储, 房间标识)?;
+    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    仓储.拉取房间增量事件(房间标识, 从位置开始)
+}
+
+/// 加载房间更早历史页用例：
+/// 1. 参数合法性校验。
+/// 2. 会话有效性校验。
+/// 3. 房间存在性校验。
+/// 4. 成员资格校验。
+/// 5. 返回该顺序锚点之前的一页历史消息。
+pub fn 加载房间历史页(
+    仓储: &dyn usecase::仓储端口,
+    房间标识: &str,
+    会话标识: &str,
+    截止位置之前: i64,
+    限制条数: i64,
+) -> Result<contract::快照, contract::错误码> {
+    if 截止位置之前 <= 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    usecase::校验实时连接会话(仓储, 会话标识)?;
+    校验房间存在(仓储, 房间标识)?;
+    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    // limit 在应用层统一收口，避免某个壳把历史页放大成巨批次，把冷路径拉重。
+    let limit = 限制条数.min(55);
+    仓储.拉取房间历史页(房间标识, 截止位置之前, limit)
+}
+
+/// 推进房间阅读位置用例：
+/// 1. 参数合法性校验。
+/// 2. 会话有效性校验。
+/// 3. 房间存在性校验。
+/// 4. 成员资格校验。
+/// 5. 不允许越过房间当前 latest_event_position。
+/// 6. 最终按身份级锚点单调写入。
+pub fn 推进房间阅读位置(
+    仓储: &mut dyn usecase::仓储端口,
+    房间标识: &str,
+    会话标识: &str,
+    已读到事件位置: i64,
+) -> Result<contract::命令结果, contract::错误码> {
+    if 已读到事件位置 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    usecase::校验实时连接会话(仓储, 会话标识)?;
+    校验房间存在(仓储, 房间标识)?;
+    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    let latest_event_position = 仓储
+        .查询房间最新事件位置(房间标识)?
+        .ok_or(contract::错误码::房间不存在)?;
+    // 阅读推进只能落在已经成立的权威事件范围内，不能把未来位置写成已读。
+    if 已读到事件位置 > latest_event_position {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.推进房间阅读位置(房间标识, 会话标识, 已读到事件位置)?;
+    Ok(contract::命令结果::成功)
+}

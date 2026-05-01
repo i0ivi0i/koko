@@ -1,5 +1,7 @@
 use super::{err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
-use crate::{contract, usecase};
+use crate::contract;
+use crate::identity::application as 身份应用;
+use crate::room::application as 房间应用;
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -189,7 +191,8 @@ pub(super) async fn bootstrap_session(
     );
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
-        usecase::引导匿名身份(&mut repo, &device_anonymous_token).map_err(map_domain_err_tuple)
+        身份应用::引导匿名身份(&mut repo, &device_anonymous_token)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -263,7 +266,7 @@ pub(super) async fn join_or_create_room(
     let room_code = body.room_code.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
-        usecase::按短码进房或建房(&mut repo, &session_id_for_usecase, &room_code)
+        房间应用::按短码进房或建房(&mut repo, &session_id_for_usecase, &room_code)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -371,7 +374,7 @@ pub(super) async fn load_room_snapshot(
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        usecase::加载房间快照(&repo, &room_id_copy, &session_id_for_usecase)
+        房间应用::加载房间快照(&repo, &room_id_copy, &session_id_for_usecase)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -534,7 +537,7 @@ pub(super) async fn update_room_read_anchor(
     let session_id_for_usecase = session_id.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
-        usecase::推进房间阅读位置(
+        房间应用::推进房间阅读位置(
             &mut repo,
             &room_id_for_usecase,
             &session_id_for_usecase,
@@ -652,7 +655,7 @@ pub(super) async fn load_room_events(
     let from = query.from;
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        usecase::加载房间增量事件(&repo, &room_id_copy, &session_id_for_usecase, from)
+        房间应用::加载房间增量事件(&repo, &room_id_copy, &session_id_for_usecase, from)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -782,7 +785,7 @@ pub(super) async fn load_room_history(
     let limit = query.limit;
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        usecase::加载房间历史页(
+        房间应用::加载房间历史页(
             &repo,
             &room_id_copy,
             &session_id_for_usecase,

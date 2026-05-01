@@ -1693,13 +1693,9 @@ export class 聊天壳 extends LitElement {
              .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() =>
               this.应用运行时.dispatch({ type: "ROOM_SCROLL_INTENT" })}
-            @room-scroll=${(event: Event) => {
-              const target = (
-                event as CustomEvent<{ scrollContainer: HTMLElement }>
-              ).detail.scrollContainer;
+            @room-scroll=${() => {
               this.应用运行时.dispatch({
                 type: "ROOM_SCROLL_OBSERVED",
-                scrollContainer: target,
               });
             }}
             @room-media-window-observed=${(

@@ -1,5 +1,15 @@
 use crate::{contract, domain};
 
+/// 第一波真 DDD 收口先让统一用例文件退成门面：
+/// 身份、房间、消息三条主业务能力开始显式转发到对应业务模块。
+/// 这样后续继续收 owner 时，新逻辑就不该再回流到这份总文件里。
+pub use crate::identity::application::引导匿名身份;
+pub use crate::message::application::{创建消息, 创建消息_异步};
+pub use crate::realtime::application::{加载房间增量事件_异步, 校验实时连接会话_异步};
+pub use crate::room::application::{
+    加载房间历史页, 加载房间增量事件, 加载房间快照, 按短码进房或建房, 推进房间阅读位置,
+};
+
 /// 用例层读取到的附件种类快照。
 /// 这是应用层对仓储的最小依赖面，不把数据库字段名直接泄漏进领域。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -969,32 +979,6 @@ pub trait Realtime仓储端口 {
     ) -> Result<contract::领域事件, contract::错误码>;
 }
 
-/// 设备级匿名身份引导用例：
-/// 1. 只接受壳层持久化的入口凭证
-/// 2. 恢复或创建匿名内部身份
-/// 3. 返回当前稳定花名与会话锚点
-pub fn 引导匿名身份(
-    仓储: &mut dyn 仓储端口,
-    设备匿名凭证: &str,
-) -> Result<contract::匿名身份引导结果, contract::错误码> {
-    if 设备匿名凭证.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.引导匿名身份(设备匿名凭证)
-}
-
-/// 进房/建房主链：
-/// 1. 先在领域层校验短码语义
-/// 2. 再进入仓储完成事实写入
-pub fn 按短码进房或建房(
-    仓储: &mut dyn 仓储端口,
-    会话标识: &str,
-    房间短码: &str,
-) -> Result<contract::快照, contract::错误码> {
-    domain::room::校验房间短码(房间短码).map_err(映射领域错误)?;
-    仓储.按短码进房或建房(会话标识, 房间短码)
-}
-
 /// realtime 连接会话校验：
 /// 只确认“连接携带的会话是否存在”，不在这里混入成员资格或房间权限。
 pub fn 校验实时连接会话(
@@ -1009,142 +993,6 @@ pub fn 校验实时连接会话(
     }
 }
 
-/// realtime 连接会话校验的异步版：
-/// 热路径直接 await 仓储查询，不再经过 blocking 线程池桥接。
-pub async fn 校验实时连接会话_异步<R: Realtime仓储端口 + ?Sized>(
-    仓储: &R,
-    会话标识: &str,
-) -> Result<(), contract::错误码> {
-    let exists = 仓储.检查会话存在(会话标识).await?;
-    if exists {
-        Ok(())
-    } else {
-        Err(contract::错误码::会话无效)
-    }
-}
-
-/// 加载房间快照用例：
-/// 先验证成员资格，再返回基线快照，防止未入房会话越权读取房间事实。
-pub fn 加载房间快照(
-    仓储: &dyn 仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-) -> Result<contract::快照, contract::错误码> {
-    校验实时连接会话(仓储, 会话标识)?;
-    校验房间存在(仓储, 房间标识)?;
-    // 先验证成员资格，再返回快照，避免未入房会话直接读取房间真相。
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-    let latest_event_position = 仓储
-        .查询房间最新事件位置(房间标识)?
-        .ok_or(contract::错误码::房间不存在)?;
-    let last_read_event_position = 仓储.查询房间阅读位置(房间标识, 会话标识)?;
-    // 第一条未读的裁决必须在应用层完成，不能让前端自己猜，也不能把语义散到 adapter。
-    let first_unread_event_position = match last_read_event_position {
-        Some(last_read_event_position) if last_read_event_position < latest_event_position => {
-            Some(last_read_event_position + 1)
-        }
-        _ => None,
-    };
-    仓储.拉取房间快照(
-        房间标识,
-        last_read_event_position,
-        first_unread_event_position,
-    )
-}
-
-/// 加载房间增量事件用例：
-/// 1. 参数合法性校验
-/// 2. 会话有效性校验
-/// 3. 房间存在性校验
-/// 4. 成员资格校验
-/// 5. 返回该位置之后的权威增量
-pub fn 加载房间增量事件(
-    仓储: &dyn 仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-    从位置开始: i64,
-) -> Result<contract::快照, contract::错误码> {
-    if 从位置开始 < 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    校验房间存在(仓储, 房间标识)?;
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-    仓储.拉取房间增量事件(房间标识, 从位置开始)
-}
-
-/// realtime 订阅首帧补洞的异步版。
-/// 这里刻意保持“会话 -> 房间存在 -> 成员资格 -> 拉增量”的顺序，
-/// 让 handler 只负责把权威裁决翻译成 `control_result / room_events`。
-pub async fn 加载房间增量事件_异步<R: Realtime仓储端口 + ?Sized>(
-    仓储: &R,
-    房间标识: &str,
-    会话标识: &str,
-    从位置开始: i64,
-) -> Result<contract::快照, contract::错误码> {
-    if 从位置开始 < 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话_异步(仓储, 会话标识).await?;
-    校验房间存在_异步(仓储, 房间标识).await?;
-    校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
-    仓储.拉取房间增量事件(房间标识, 从位置开始).await
-}
-
-/// 加载房间更早历史页用例：
-/// 1. 参数合法性校验
-/// 2. 会话有效性校验
-/// 3. 房间存在性校验
-/// 4. 成员资格校验
-/// 5. 返回该顺序锚点之前的一页历史消息
-pub fn 加载房间历史页(
-    仓储: &dyn 仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-    截止位置之前: i64,
-    限制条数: i64,
-) -> Result<contract::快照, contract::错误码> {
-    if 截止位置之前 <= 0 || 限制条数 <= 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    校验房间存在(仓储, 房间标识)?;
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-    // limit 在应用层统一收口，避免某个壳把历史页放大成巨批次，把冷路径拉重。
-    let limit = 限制条数.min(55);
-    仓储.拉取房间历史页(房间标识, 截止位置之前, limit)
-}
-
-/// 推进房间阅读位置用例：
-/// 1. 参数合法性校验
-/// 2. 会话有效性校验
-/// 3. 房间存在性校验
-/// 4. 成员资格校验
-/// 5. 不允许越过房间当前 latest_event_position
-/// 6. 最终按身份级锚点单调写入
-pub fn 推进房间阅读位置(
-    仓储: &mut dyn 仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-    已读到事件位置: i64,
-) -> Result<contract::命令结果, contract::错误码> {
-    if 已读到事件位置 < 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    校验实时连接会话(仓储, 会话标识)?;
-    校验房间存在(仓储, 房间标识)?;
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-    let latest_event_position = 仓储
-        .查询房间最新事件位置(房间标识)?
-        .ok_or(contract::错误码::房间不存在)?;
-    // 阅读推进只能落在已经成立的权威事件范围内，不能把未来位置写成已读。
-    if 已读到事件位置 > latest_event_position {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.推进房间阅读位置(房间标识, 会话标识, 已读到事件位置)?;
-    Ok(contract::命令结果::成功)
-}
-
 /// realtime / 冷路径共用的订阅资格校验。
 /// 约束：房间成员真相只由应用层查询并裁决，handler 不得私自判断。
 pub fn 校验房间订阅资格(
@@ -1156,7 +1004,7 @@ pub fn 校验房间订阅资格(
     domain::member::校验成员可发言(is_member).map_err(映射领域错误)
 }
 
-async fn 校验房间订阅资格_异步<R: Realtime仓储端口 + ?Sized>(
+pub(crate) async fn 校验房间订阅资格_异步<R: Realtime仓储端口 + ?Sized>(
     仓储: &R,
     房间标识: &str,
     会话标识: &str,
@@ -1169,7 +1017,7 @@ async fn 校验房间订阅资格_异步<R: Realtime仓储端口 + ?Sized>(
 
 /// 房间存在性校验只负责把“有没有这个房间”说清楚。
 /// 这样后续成员资格失败就不会把 `room_not_found` 吞成 `membership_required`。
-fn 校验房间存在(
+pub(crate) fn 校验房间存在(
     仓储: &dyn 仓储端口, 房间标识: &str
 ) -> Result<(), contract::错误码> {
     if 仓储.检查房间存在(房间标识)? {
@@ -1179,7 +1027,7 @@ fn 校验房间存在(
     }
 }
 
-async fn 校验房间存在_异步<R: Realtime仓储端口 + ?Sized>(
+pub(crate) async fn 校验房间存在_异步<R: Realtime仓储端口 + ?Sized>(
     仓储: &R,
     房间标识: &str,
 ) -> Result<(), contract::错误码> {
@@ -1203,139 +1051,6 @@ pub fn 发送文本消息(
     文本: &str,
 ) -> Result<contract::领域事件, contract::错误码> {
     创建消息(仓储, 房间标识, 会话标识, 客户端消息标识, 文本, &[])
-}
-
-/// 统一消息创建主链：
-/// 1. client_message_id 不能为空
-/// 2. 发送者身份必须稳定可解析
-/// 3. 每个附件都要先过 owner / status / kind 校验
-/// 4. 最终由领域决定“文本 + 附件”这条消息能否成立
-pub fn 创建消息(
-    仓储: &mut dyn 仓储端口,
-    房间标识: &str,
-    会话标识: &str,
-    客户端消息标识: &str,
-    文本: &str,
-    附件标识列表: &[String],
-) -> Result<contract::领域事件, contract::错误码> {
-    if 客户端消息标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    校验房间订阅资格(仓储, 房间标识, 会话标识)?;
-
-    let mut attachments = Vec::with_capacity(附件标识列表.len());
-    if !附件标识列表.is_empty() {
-        // 只有真正引用附件时，才需要解析发送者身份并校验附件 owner。
-        // 这样可以保持现有纯文本消息主链不被图片第一阶段的新约束误伤。
-        let 发送者身份 = 仓储
-            .查询会话所属匿名身份(会话标识)?
-            .ok_or(contract::错误码::会话无效)?;
-        for attachment_id in 附件标识列表 {
-            let snapshot = 仓储
-                .查询附件快照(attachment_id)?
-                .ok_or(contract::错误码::附件不存在)?;
-            // 附件 owner 比对只认内部身份真相，这样兼容旧串就不会再渗回消息主链。
-            if snapshot.所属匿名身份标识 != 发送者身份 {
-                return Err(contract::错误码::附件不属于当前发送者);
-            }
-            if snapshot.状态 != 附件状态读取结果::就绪 {
-                return Err(contract::错误码::附件未就绪);
-            }
-            let attachment = match snapshot.种类 {
-                附件种类读取结果::图片 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::图片,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: false,
-                },
-                附件种类读取结果::视频 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::视频,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
-                },
-                附件种类读取结果::语音 => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-                附件种类读取结果::GIF => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-                附件种类读取结果::文件 => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-            };
-            attachments.push(attachment);
-        }
-    }
-
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(映射领域错误)?;
-    仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
-}
-
-/// realtime 创建消息的异步版。
-/// 这里只负责把 command 落成同一条权威消息成立主链；
-/// 成功后返回的仍然只能是领域事件，由 handler 决定如何广播成 `room_event`。
-pub async fn 创建消息_异步<R: Realtime仓储端口 + ?Sized>(
-    仓储: &mut R,
-    房间标识: &str,
-    会话标识: &str,
-    客户端消息标识: &str,
-    文本: &str,
-    附件标识列表: &[String],
-) -> Result<contract::领域事件, contract::错误码> {
-    if 客户端消息标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
-    校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
-
-    let mut attachments = Vec::with_capacity(附件标识列表.len());
-    if !附件标识列表.is_empty() {
-        let 发送者身份 = 仓储
-            .查询会话所属匿名身份(会话标识)
-            .await?
-            .ok_or(contract::错误码::会话无效)?;
-        for attachment_id in 附件标识列表 {
-            let snapshot = 仓储
-                .查询附件快照(attachment_id)
-                .await?
-                .ok_or(contract::错误码::附件不存在)?;
-            // realtime 入口和同步入口必须共用同一条内部身份 owner 规则，避免两条主链各判各的。
-            if snapshot.所属匿名身份标识 != 发送者身份 {
-                return Err(contract::错误码::附件不属于当前发送者);
-            }
-            if snapshot.状态 != 附件状态读取结果::就绪 {
-                return Err(contract::错误码::附件未就绪);
-            }
-            let attachment = match snapshot.种类 {
-                附件种类读取结果::图片 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::图片,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: false,
-                },
-                附件种类读取结果::视频 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::视频,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
-                },
-                附件种类读取结果::语音 | 附件种类读取结果::GIF | 附件种类读取结果::文件 =>
-                {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-            };
-            attachments.push(attachment);
-        }
-    }
-
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(映射领域错误)?;
-    仓储
-        .创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
-        .await
 }
 
 /// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
@@ -1950,7 +1665,7 @@ pub fn 放弃媒体上传(
 
 /// 领域错误 -> 契约错误码映射。
 /// 约束：这里只做语义映射，不改动错误事实本身。
-fn 映射领域错误(err: domain::领域错误) -> contract::错误码 {
+pub(crate) fn 映射领域错误(err: domain::领域错误) -> contract::错误码 {
     match err {
         domain::领域错误::成员资格不足 => contract::错误码::成员资格不足,
         domain::领域错误::消息文本为空

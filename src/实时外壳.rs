@@ -1,7 +1,9 @@
 use super::{
     event_to_json, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储
 };
-use crate::{contract, usecase};
+use crate::contract;
+use crate::message::application as 消息应用;
+use crate::realtime::application as 实时应用;
 use serde::Deserialize;
 use socketioxide::{
     extract::SocketRef, socket::DisconnectReason, BroadcastError, SendError, SocketError,
@@ -419,7 +421,7 @@ pub(super) async fn 认证realtime连接(
         "realtime 连接认证已受理"
     );
     let repo = 构建共享仓储(&state);
-    match usecase::校验实时连接会话_异步(&repo, &session_id).await {
+    match 实时应用::校验实时连接会话_异步(&repo, &session_id).await {
         Ok(()) => {
             tracing::info!(
                 usecase = "实时连接认证",
@@ -480,7 +482,7 @@ pub(super) async fn handle_realtime_subscribe(
     let from = payload.from;
     let session_id = auth.session_id.clone();
     let repo = 构建共享仓储(&state);
-    match usecase::加载房间增量事件_异步(&repo, &room_id, &session_id, from)
+    match 实时应用::加载房间增量事件_异步(&repo, &room_id, &session_id, from)
         .await
         .map_err(map_domain_err_tuple)
     {
@@ -621,7 +623,7 @@ pub(super) async fn handle_realtime_create_message(
     let room_id_for_log = payload.room_id.clone();
     let client_message_id_for_log = payload.client_message_id.clone();
     let mut repo = 构建共享仓储(&state);
-    match usecase::创建消息_异步(
+    match 消息应用::创建消息_异步(
         &mut repo,
         &payload.room_id,
         &session_id,

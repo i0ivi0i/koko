@@ -1,3 +1,10 @@
+/// 第一波业务模块契约转发信号：
+/// 旧总契约文件继续保留稳定名字，但新的业务 owner 已开始显式暴露自己的契约面。
+/// 后续新增契约应优先进入对应业务模块，再决定是否需要挂回这个总门面。
+pub use crate::identity::contract as 身份契约;
+pub use crate::message::contract as 消息契约;
+pub use crate::room::contract as 房间契约;
+
 /// 第一阶段共享命令契约：各壳层只能表达意图，不能直接裁决业务真相。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 命令 {

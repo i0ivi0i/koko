@@ -813,3 +813,36 @@ fn 历史读取使用事件位置游标并限制批量大小() {
         "历史读取必须把 event_position 游标和受控 limit 传给仓储，不能退回 OFFSET/全量历史模型"
     );
 }
+
+#[test]
+fn 用例门面必须开始转发到业务模块而不是继续独吞所有能力() {
+    let source = std::fs::read_to_string("src/用例.rs").expect("应能读取 src/用例.rs");
+    // 这里锁的是“总文件开始变薄”这个执行信号，不是要求一夜之间把所有实现搬空。
+    // 只要还完全看不到新业务模块门面，后续重构就很容易继续往统一用例里堆逻辑。
+    assert!(
+        source.contains("crate::identity") || source.contains("crate::room"),
+        "统一用例文件尚未开始转发到业务模块门面，继续收 owner 时容易回流到 src/用例.rs"
+    );
+}
+
+#[test]
+fn 契约门面必须开始转发到业务模块而不是继续堆大一统类型() {
+    let source = std::fs::read_to_string("src/契约.rs").expect("应能读取 src/契约.rs");
+    // 这里先锁转发信号，不抢在第一刀就要求彻底删空老文件。
+    // 目的只有一个：阻止新的共享契约继续无边界地长回超级契约文件。
+    assert!(
+        source.contains("crate::identity") || source.contains("crate::room"),
+        "统一契约文件尚未开始转发到业务模块门面，继续追加字段时会把新旧契约重新揉回同一层"
+    );
+}
+
+#[test]
+fn 房间外壳必须改走房间业务门面而不是继续直连统一用例细节() {
+    let source = std::fs::read_to_string("src/房间外壳.rs").expect("应能读取 src/房间外壳.rs");
+    // 房间外壳是第一波最容易继续偷连统一用例的入口之一。
+    // 这里先要求它开始显式依赖 room 门面，避免后面“模块建好了，外壳还在走旧总控”。
+    assert!(
+        source.contains("crate::room"),
+        "房间外壳尚未切到房间业务门面，后续 owner 收口仍会被统一用例反向绑住"
+    );
+}

@@ -93,8 +93,11 @@ export class 房间滚动器 implements ReactiveController {
     this.待吸收程序滚动尾波来源.clear();
   }
 
-  处理滚动事件(scrollContainer: HTMLElement): boolean {
+  处理滚动事件(scrollContainer: HTMLElement | null = this.deps.查询滚动容器()): boolean {
     if (!this.本次滚动属于聊天视口()) {
+      return false;
+    }
+    if (!scrollContainer) {
       return false;
     }
     const reachedTop = scrollContainer.scrollTop <= 0;
