@@ -7,10 +7,7 @@ import type {
 import type { 媒体传输端口 } from "./传输.js";
 import type { 聊天运行时预算状态 } from "./总装/聊天状态.js";
 import {
-  提取重点信息流视频预算,
-  投影信息流视频预算,
   type 信息流视频预算投影,
-  type 正式媒体字节来源,
 } from "./媒体/信息流视频预算.js";
 import {
   创建媒体运行时Actor,
@@ -32,6 +29,10 @@ import {
   创建协作补齐协作,
   type 协作补齐协作端口,
 } from "./媒体/壳层/协作补齐协作.js";
+import {
+  创建媒体快照投影协作,
+  type 附件内容地址快照,
+} from "./媒体/壳层/快照投影协作.js";
 import {
   创建媒体定位器,
   创建媒体缓存,
@@ -65,11 +66,6 @@ import {
 } from "./媒体/index.js";
 
 type 程序滚动来源 = "media_viewer_open";
-
-export type 附件内容地址快照 = {
-  originalSrc: string;
-  thumbnailSrc: string;
-};
 
 export type 聊天媒体快照 = {
   playbackByAttachmentId: Record<string, 媒体播放结果>;
@@ -639,162 +635,31 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     if (!swarmId) {
       return null;
     }
-    /**
-     * 聊天媒体编排只读取生命周期投影，不直接改 WebTorrent runtime：
-     * 1. swarm_id 仍来自后端 locator / playback distribution，不从 URL 文本反推；
-     * 2. budget 只消费 runtime owner 已裁决的轻重状态；
-     * 3. 这样消息窗不会继续用旧 preview src 自己猜“还能不能渲染真实 video”。
-     */
+  /**
+   * 聊天媒体编排只读取生命周期投影，不直接改 WebTorrent runtime：
+   * 1. swarm_id 仍来自后端 locator / playback distribution，不从 URL 文本反推；
+   * 2. budget 只消费 runtime owner 已裁决的轻重状态；
+   * 3. 这样消息窗不会继续用旧 preview src 自己猜“还能不能渲染真实 video”。
+   */
     return 协作分发应用.读取会话状态(swarmId)?.lifecycle ?? null;
   };
 
-  /**
-   * 附件内容地址属于“当前会话下可访问的媒体资源定位结果”。
-   * 这里按当前时间线里的附件集合现算现给，目的有两个：
-   * 1. 壳层 presenter 只消费 snapshot 里的纯数据，不再回调内核 helper；
-   * 2. URL 仍然只从 transport 能力构建，避免视图层自己猜 session 参数。
-   */
-  const 读取附件内容地址表 = (): Record<string, 附件内容地址快照> => {
-    const sessionId = deps.读取会话编号();
-    const urlsByAttachmentId: Record<string, 附件内容地址快照> = {};
-    for (const attachment of 读取当前房间媒体附件()) {
-      urlsByAttachmentId[attachment.attachmentId] = {
-        originalSrc: deps.transport().buildAttachmentContentUrl(
-          attachment.attachmentId,
-          sessionId,
-          "original"
-        ),
-        /**
-         * 图片时间线已经不再存在独立 thumbnail 主链：
-         * 1. 图片卡片 fallback 直接回 canonical/original；
-         * 2. 只有视频 poster 继续保留 thumbnail 入口；
-         * 3. 这样壳层不会平白再构造一条已退场的图片 URL。
-         */
-        thumbnailSrc:
-          attachment.kind === "video"
-            ? deps.transport().buildAttachmentContentUrl(
-                attachment.attachmentId,
-                sessionId,
-                "thumbnail"
-              )
-            : deps.transport().buildAttachmentContentUrl(
-                attachment.attachmentId,
-                sessionId,
-                "original"
-              ),
-      };
-    }
-    return urlsByAttachmentId;
-  };
-
-  /**
-   * 播放结果表不再自己持久保存一份可变真相，而是从媒体会话快照现算现给。
-   * 这样“播放源”“恢复态”“本地完整度”都收口在单个 owner，不会继续回到一张大 Map 到处 patch。
-   */
-  const 读取媒体会话快照表 = (): Record<string, 媒体会话快照> => {
-    const snapshots: Record<string, 媒体会话快照> = {};
-    for (const [attachmentId, session] of 媒体会话表) {
-      snapshots[attachmentId] = session.snapshot();
-    }
-    return snapshots;
-  };
-
-  const 读取媒体播放结果表 = (): Record<string, 媒体播放结果> => {
-    const playbackByAttachmentId: Record<string, 媒体播放结果> = {};
-    for (const [attachmentId, session] of 媒体会话表) {
-      const playback = session.snapshot().playback;
-      if (playback) {
-        playbackByAttachmentId[attachmentId] = playback;
-      }
-    }
-    return playbackByAttachmentId;
-  };
-
-  /**
-   * 信息流视频预算只投影“前台当前该怎么表达这条附件”：
-   * 1. 窗口 / 自动播候选 / viewer / autoplay owner 属于时刻事实；
-   * 2. session playback / status / locallyComplete 属于运行时事实；
-   * 3. 这里把它们压成同一份附件级预算图，避免消息窗和预算快照继续各自猜布尔值。
-   */
-  const 读取信息流视频预算表 = (): Record<string, 信息流视频预算投影> => {
-    const budgets: Record<string, 信息流视频预算投影> = {};
-    const context = 读取媒体运行时上下文();
-    const viewerAttachmentId = context.currentViewerRequest?.startAttachmentId?.trim() ?? "";
-    for (const attachment of 读取当前房间媒体附件()) {
-      if (attachment.kind !== "video") {
-        continue;
-      }
-      const attachmentId = attachment.attachmentId;
-      const session = 媒体会话表.get(attachmentId)?.snapshot() ?? null;
-      const previewCandidate = 读取视频预览候选播放源(attachmentId);
-      const runtimeAutoplayPlayback =
-        context.inlineAutoplayOwnerAttachmentId === attachmentId
-          ? context.inlineAutoplayPlayback
-          : null;
-      const webTorrentLifecycle = 读取播放结果协作分发生命周期(
-        runtimeAutoplayPlayback ?? session?.playback ?? null
-      );
-      const formalByteSource: 正式媒体字节来源 =
-        session?.playback?.mode === "swarm" ||
-        runtimeAutoplayPlayback?.mode === "swarm" ||
-        previewCandidate
-          ? "webtorrent_official_stream"
-          : "none";
-      const viewerCanonicalVideoSrc =
-        viewerAttachmentId === attachmentId
-          ? context.currentViewerRequest?.items.find(
-              (item) => item.kind === "video" && item.attachmentId === attachmentId
-            )?.src ?? null
-          : null;
-      budgets[attachmentId] = 投影信息流视频预算({
+  const 媒体快照投影协作 = 创建媒体快照投影协作({
+    构建附件内容地址: (attachmentId, variant) =>
+      deps.transport().buildAttachmentContentUrl(
         attachmentId,
-        playback: session?.playback ?? null,
-        inlineAutoplayPlayback: runtimeAutoplayPlayback,
-        viewerCanonicalVideoSrc,
-        previewVideoSrc: previewCandidate?.src ?? null,
-        inMediaWindow: 当前媒体窗口附件Id集合.has(attachmentId),
-        isAutoplayCandidate: 当前自动播候选附件Id集合.has(attachmentId),
-        isInlineAutoplayOwner: context.inlineAutoplayOwnerAttachmentId === attachmentId,
-        isViewerOwner: viewerAttachmentId === attachmentId,
-        sessionStatus: session?.status ?? null,
-        locallyComplete:
-          Boolean(session?.locallyComplete) || Boolean(媒体缓存.snapshot()[attachmentId]?.complete),
-        formalByteSource,
-        webTorrentLifecycle,
-      });
-    }
-    return budgets;
-  };
-  let 上次重点信息流视频预算: 信息流视频预算投影[] = [];
-  const 信息流视频预算条目相同 = (
-    left: 信息流视频预算投影,
-    right: 信息流视频预算投影
-  ): boolean =>
-    left.attachmentId === right.attachmentId &&
-    left.tier === right.tier &&
-    left.reason === right.reason &&
-    left.canonicalVideoSrc === right.canonicalVideoSrc &&
-    left.previewVideoSrc === right.previewVideoSrc &&
-    left.allowInlineCanonical === right.allowInlineCanonical &&
-    left.allowPreviewVideo === right.allowPreviewVideo &&
-    left.formalByteSource === right.formalByteSource &&
-    left.webTorrentLifecycleState === right.webTorrentLifecycleState &&
-    left.activeWebTorrentReaderCount === right.activeWebTorrentReaderCount;
-  const 缓存重点信息流视频预算 = (
-    nextBudgets: Record<string, 信息流视频预算投影>
-  ): 信息流视频预算投影[] => {
-    const nextFocused = 提取重点信息流视频预算(nextBudgets);
-    if (
-      nextFocused.length === 上次重点信息流视频预算.length &&
-      nextFocused.every((budget, index) =>
-        信息流视频预算条目相同(budget, 上次重点信息流视频预算[index]!)
-      )
-    ) {
-      return 上次重点信息流视频预算;
-    }
-    上次重点信息流视频预算 = nextFocused.map((budget) => ({ ...budget }));
-    return 上次重点信息流视频预算;
-  };
+        deps.读取会话编号(),
+        variant
+      ),
+    读取当前房间媒体附件,
+    读取媒体会话表: () => 媒体会话表,
+    读取视频预览候选播放源,
+    读取媒体运行时上下文,
+    当前在媒体窗口内: (attachmentId) => 当前媒体窗口附件Id集合.has(attachmentId),
+    当前是自动播候选: (attachmentId) => 当前自动播候选附件Id集合.has(attachmentId),
+    读取附件缓存是否完整: (attachmentId) => 媒体缓存.snapshot()[attachmentId]?.complete === true,
+    读取播放结果协作分发生命周期,
+  });
 
   const 应用缓存完整度到会话 = (
     attachmentId: string,
@@ -1171,11 +1036,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   return {
     snapshot(): 聊天媒体快照 {
       return {
-        playbackByAttachmentId: 读取媒体播放结果表(),
+        playbackByAttachmentId: 媒体快照投影协作.读取媒体播放结果表(),
         previewByAttachmentId: 视频预览协作.读取视频预览状态表(),
-        sessionByAttachmentId: 读取媒体会话快照表(),
-        contentUrlByAttachmentId: 读取附件内容地址表(),
-        videoBudgetByAttachmentId: 读取信息流视频预算表(),
+        sessionByAttachmentId: 媒体快照投影协作.读取媒体会话快照表(),
+        contentUrlByAttachmentId: 媒体快照投影协作.读取附件内容地址表(),
+        videoBudgetByAttachmentId: 媒体快照投影协作.读取信息流视频预算表(),
         inlineAutoplayOwnerAttachmentId:
           读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
         inlineAutoplayPlaybackByAttachmentId: 自动播协作.读取自动播播放结果表(),
@@ -1187,13 +1052,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     读取预算(): 聊天媒体预算快照 {
       const mediaSessions = Array.from(媒体会话表.values(), (session) => session.snapshot());
-      const videoBudgets = 读取信息流视频预算表();
+      const videoBudgets = 媒体快照投影协作.读取信息流视频预算表();
       return {
         activeMediaSessionCount: mediaSessions.length,
         activeVideoSessionCount: mediaSessions.filter((session) => session.kind === "video").length,
         ...投影媒体运行时预算(媒体运行时.getSnapshot()),
         ...协作分发应用.读取预算(),
-        focusedVideoBudget: 缓存重点信息流视频预算(videoBudgets),
+        focusedVideoBudget: 媒体快照投影协作.缓存重点信息流视频预算(videoBudgets),
       };
     },
 
