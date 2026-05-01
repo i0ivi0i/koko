@@ -33,6 +33,7 @@ import {
   创建媒体快照投影协作,
   type 附件内容地址快照,
 } from "./媒体/壳层/快照投影协作.js";
+import { 创建窗口会话协作 } from "./媒体/壳层/窗口会话协作.js";
 import {
   创建媒体定位器,
   创建媒体缓存,
@@ -904,78 +905,33 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
   };
 
-  const 清理失活媒体会话 = (activeAttachmentIds: Set<string>): boolean => {
-    let hasSessionSetChanged = false;
-    for (const [attachmentId, session] of 媒体会话表) {
-      if (activeAttachmentIds.has(attachmentId)) {
-        continue;
-      }
-      const playback = session.snapshot().playback;
-      if (
-        协作补齐协作.应保留帮助任务({
-          attachmentId,
-          playback,
-        })
-      ) {
-        continue;
-      }
-      if (
-        释放媒体附件会话(attachmentId, {
-          丢弃未完成预览补齐: true,
-          清理协作补齐: 读取附件条目(attachmentId) === null,
-          清理视频预览: true,
-        })
-      ) {
-        hasSessionSetChanged = true;
-      }
-    }
-    return hasSessionSetChanged;
-  };
-
-  const 按当前窗口重同步消息附件播放结果 = (): void => {
-    const attachments = 读取当前房间媒体附件();
-    const activeWindowAttachments = 读取当前活跃媒体窗口附件(attachments);
-    const helpAttachments = 读取当前房间帮助附件候选(activeWindowAttachments);
-    协作补齐协作.同步当前帮助窗口附件(helpAttachments);
-    const activeAttachmentIds = new Set(
-      activeWindowAttachments.map((item) => item.attachmentId)
-    );
-    if (清理失活媒体会话(activeAttachmentIds)) {
-      deps.请求重渲染();
-    }
-    const positionRetentionAttachmentIds = attachments.map((item) => item.attachmentId);
-    接收媒体运行时事实({
-      type: "MESSAGE_ATTACHMENTS_SYNCED",
-      attachmentIds: Array.from(activeAttachmentIds),
-      positionRetentionAttachmentIds,
-    });
-    const hasSessionSetChanged = 补齐当前房间媒体会话(activeWindowAttachments);
-    协作补齐协作.恢复当前房间缓存帮助任务(helpAttachments);
-    if (hasSessionSetChanged) {
-      deps.请求重渲染();
-    }
-  };
-
-  const 补齐当前房间媒体会话 = (attachments: 媒体附件条目[]): boolean => {
-    let hasSessionSetChanged = false;
-    for (const attachment of attachments) {
-      if (媒体会话表.has(attachment.attachmentId)) {
-        if (attachment.kind === "video") {
-          触发视频预览收敛(attachment.attachmentId);
-        }
-        continue;
-      }
-      hasSessionSetChanged = true;
-      const session = 创建媒体会话条目(attachment);
-      媒体会话表.set(attachment.attachmentId, session);
-      if (attachment.kind === "image") {
-        void session.启动();
-        continue;
-      }
-      触发视频预览收敛(attachment.attachmentId);
-    }
-    return hasSessionSetChanged;
-  };
+  const 窗口会话协作 = 创建窗口会话协作({
+    读取当前房间媒体附件,
+    读取当前活跃媒体窗口附件,
+    读取当前房间帮助附件候选,
+    读取媒体会话表: () => 媒体会话表,
+    创建媒体会话条目,
+    释放媒体附件会话,
+    读取附件条目,
+    触发视频预览收敛: (attachmentId) => {
+      触发视频预览收敛(attachmentId);
+    },
+    应保留帮助任务: (input) => 协作补齐协作.应保留帮助任务(input),
+    同步当前帮助窗口附件: (attachments) => {
+      协作补齐协作.同步当前帮助窗口附件(attachments);
+    },
+    恢复当前房间缓存帮助任务: (attachments) => {
+      协作补齐协作.恢复当前房间缓存帮助任务(attachments);
+    },
+    接收消息附件同步: (input) => {
+      接收媒体运行时事实({
+        type: "MESSAGE_ATTACHMENTS_SYNCED",
+        attachmentIds: input.attachmentIds,
+        positionRetentionAttachmentIds: input.positionRetentionAttachmentIds,
+      });
+    },
+    请求重渲染: deps.请求重渲染,
+  });
 
   const 清空播放状态 = (): void => {
     当前媒体窗口附件Id集合.clear();
@@ -1098,7 +1054,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       if (!同步附件标识集合(当前媒体窗口附件Id集合, attachmentIds)) {
         return;
       }
-      按当前窗口重同步消息附件播放结果();
+      窗口会话协作.按当前窗口重同步消息附件播放结果();
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
@@ -1113,7 +1069,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         preheatCandidates.map((candidate) => candidate.attachmentId)
       );
       if (自动播候选已变化) {
-        按当前窗口重同步消息附件播放结果();
+        窗口会话协作.按当前窗口重同步消息附件播放结果();
       }
       预热自动播候选媒体会话(preheatCandidates);
       接收媒体运行时事实({
@@ -1142,7 +1098,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 但已进入帮助链的附件不能因为暂时退出当前消息集合就被立刻释放。
      */
     同步消息附件播放结果(): void {
-      按当前窗口重同步消息附件播放结果();
+      窗口会话协作.按当前窗口重同步消息附件播放结果();
     },
 
     处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {

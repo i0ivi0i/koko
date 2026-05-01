@@ -83,6 +83,16 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(source).not.toContain("const 缓存重点信息流视频预算 =");
   });
 
+  it("聊天媒体编排不再直接内联窗口附件与媒体会话同步协作", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+
+    expect(source).toContain('from "./媒体/壳层/窗口会话协作.js"');
+    expect(source).toContain("创建窗口会话协作(");
+    expect(source).not.toContain("const 清理失活媒体会话 =");
+    expect(source).not.toContain("const 按当前窗口重同步消息附件播放结果 =");
+    expect(source).not.toContain("const 补齐当前房间媒体会话 =");
+  });
+
   it("聊天媒体编排不再直接拥有协作分发应用 owner", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
 
