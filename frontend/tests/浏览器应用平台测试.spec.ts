@@ -256,6 +256,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/平台/存储.ts"');
   });
 
+  it("架构适应度门禁会把调试兼容根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/调试兼容.ts"');
+    expect(source).toContain('ownerPath: "frontend/平台/调试兼容.ts"');
+  });
+
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
@@ -418,6 +425,18 @@ const stillKeep = true;
     expect(storageOwnerSource).toContain("export function 创建浏览器存储(");
     expect(storageRuntimeSource).toContain('from "./存储.js"');
     expect(storageRuntimeSource).not.toContain('from "../存储.js"');
+  });
+
+  it("构建 alias 直指平台调试兼容 owner，根目录调试兼容只保留兼容门面", () => {
+    const debugFacadeSource = 读取前端源码("调试兼容.ts");
+    const debugOwnerSource = 读取前端源码("平台/调试兼容.ts");
+    const buildSource = 读取前端源码("build.mjs");
+
+    expect(debugFacadeSource).toContain('export * from "./平台/调试兼容.js"');
+    expect(debugFacadeSource).not.toContain("debugFactory");
+    expect(debugOwnerSource).toContain("debugFactory");
+    expect(buildSource).toContain("path.join(frontendRoot, '平台', '调试兼容.ts')");
+    expect(buildSource).not.toContain("path.join(frontendRoot, '调试兼容.ts')");
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

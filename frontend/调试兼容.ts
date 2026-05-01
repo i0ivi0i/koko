@@ -1,9 +1,8 @@
-// @ts-expect-error debug 官方 browser 入口没有单独的 d.ts；这里是受控兼容桥，显式接受这层类型缺口。
-import debugFactory from "./node_modules/debug/src/browser.js";
-
 /**
- * 第三方浏览器 P2P 轮子内部仍有 `import { debug } from "debug"` 这一类 CJS/ESM 互操作口。
- * 这里不改第三方源码，也不包第二套日志层，只做一层最薄的 named export 兼容桥。
+ * 根目录 `调试兼容.ts` 只保留兼容门面：
+ * 1. 现有调用方暂时还能继续从根目录拿 `debug` 兼容出口；
+ * 2. 真实浏览器兼容 owner 已经收进 `frontend/平台/调试兼容.ts`；
+ * 3. 后续内部引用应优先改向平台 owner，避免根目录继续承担实现。
  */
-export const debug = debugFactory;
-export default debugFactory;
+export * from "./平台/调试兼容.js";
+export { default } from "./平台/调试兼容.js";

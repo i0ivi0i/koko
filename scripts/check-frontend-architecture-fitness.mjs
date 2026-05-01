@@ -86,6 +86,15 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./平台/存储.js";'],
     forbiddenSnippets: ["export function 创建浏览器存储(", "const 设备匿名凭证存储键 ="],
   },
+  {
+    path: "frontend/调试兼容.ts",
+    ownerPath: "frontend/平台/调试兼容.ts",
+    requiredSnippets: [
+      'export * from "./平台/调试兼容.js";',
+      'export { default } from "./平台/调试兼容.js";',
+    ],
+    forbiddenSnippets: ['import debugFactory from "./node_modules/debug/src/browser.js";', "debugFactory"],
+  },
 ];
 
 const 架构规则 = [
@@ -356,6 +365,12 @@ const 平台内层Import违规 = (relativePath, source) => {
       if (
         relativePath === "frontend/存储.ts" &&
         (importPath === "./平台/存储.js" || importPath.endsWith("/平台/存储.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/调试兼容.ts" &&
+        (importPath === "./平台/调试兼容.js" || importPath.endsWith("/平台/调试兼容.js"))
       ) {
         continue;
       }
