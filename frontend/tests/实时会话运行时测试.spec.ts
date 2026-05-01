@@ -1,8 +1,32 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 describe("实时会话运行时", () => {
+  it("根文件退成实时 owner 门面，聊天内核与实时侧内部直连实时 owner", () => {
+    const facadeSource = 读取前端源码("实时会话运行时.ts");
+    const ownerSource = 读取前端源码("实时/会话运行时.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const realtimeSource = 读取前端源码("实时/应用.ts");
+    const controlSource = 读取前端源码("聊天实时/壳层/实时控制面协作.ts");
+
+    expect(facadeSource).toContain('export * from "./实时/会话运行时.js"');
+    expect(facadeSource).not.toContain("const 实时会话机 = createMachine(");
+    expect(ownerSource).toContain("const 实时会话机 = createMachine(");
+    expect(ownerSource).toContain("export function 创建实时会话Actor()");
+    expect(kernelSource).toContain('from "./实时/会话运行时.js"');
+    expect(kernelSource).not.toContain('from "./实时会话运行时.js"');
+    expect(realtimeSource).toContain('from "./会话运行时.js"');
+    expect(realtimeSource).not.toContain('from "../实时会话运行时.js"');
+    expect(controlSource).toContain('from "../../实时/会话运行时.js"');
+    expect(controlSource).not.toContain('from "../../实时会话运行时.js"');
+  });
+
   it("平台 lifecycle hidden/background 后 realtime 会进入 reduced，而不是继续当 active", async () => {
     const { 创建实时会话Actor } = await import("../实时会话运行时");
 
