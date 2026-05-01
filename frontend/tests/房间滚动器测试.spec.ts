@@ -5,6 +5,9 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { 聊天状态 } from "../状态";
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
+
 function 创建滚动容器(): HTMLElement {
   const container = document.createElement("div");
   Object.defineProperty(container, "clientHeight", {
@@ -58,6 +61,28 @@ function 创建消息节点(eventPosition: number, top: number, bottom: number):
 }
 
 describe("房间滚动器", () => {
+  it("根文件退成时间线滚动 owner 门面，内部引用直连时间线 owner", () => {
+    const facadeSource = 读取前端源码("房间滚动器.ts");
+    const ownerSource = 读取前端源码("时间线/滚动器.ts");
+    const timelineAppSource = 读取前端源码("时间线/应用.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const assembleSource = 读取前端源码("总装/应用装配.ts");
+    const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
+
+    expect(facadeSource).toContain('export * from "./时间线/滚动器.js"');
+    expect(facadeSource).not.toContain("export class 房间滚动器");
+    expect(ownerSource).toContain("export class 房间滚动器");
+    expect(ownerSource).toContain("export interface 房间滚动器依赖");
+    expect(timelineAppSource).toContain('from "./滚动器.js"');
+    expect(timelineAppSource).not.toContain('from "../房间滚动器.js"');
+    expect(kernelSource).toContain('from "./时间线/滚动器.js"');
+    expect(kernelSource).not.toContain('from "./房间滚动器.js"');
+    expect(assembleSource).toContain('from "../时间线/滚动器.js"');
+    expect(assembleSource).not.toContain('from "../房间滚动器.js"');
+    expect(readProgressSource).toContain('from "../../时间线/滚动器.js"');
+    expect(readProgressSource).not.toContain('from "../../房间滚动器.js"');
+  });
+
   it("不再直接在滚动器里请求更早历史或提交候选已读", () => {
     const source = readFileSync(resolve(process.cwd(), "房间滚动器.ts"), "utf8");
 

@@ -1,5 +1,5 @@
 import type { 房间时间线事件 } from "../../时间线/运行时.js";
-import type { 历史补偿上下文 } from "../../房间滚动器.js";
+import type { 历史补偿上下文 } from "../../时间线/滚动器.js";
 import type { 聊天状态 } from "../../状态.js";
 import type { 聊天房间传输端口 } from "../../聊天共享/适配/聊天房间传输端口.js";
 

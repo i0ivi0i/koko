@@ -155,6 +155,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./房间/运行时.js";'],
     forbiddenSnippets: ["const 房间编排机 = createMachine(", "export function 创建房间内核()"],
   },
+  {
+    path: "frontend/房间滚动器.ts",
+    ownerPath: "frontend/时间线/滚动器.ts",
+    requiredSnippets: ['export * from "./时间线/滚动器.js";'],
+    forbiddenSnippets: ["export class 房间滚动器", "export interface 房间滚动器依赖"],
+  },
 ];
 
 const 架构规则 = [

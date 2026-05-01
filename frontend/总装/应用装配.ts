@@ -4,7 +4,7 @@ import {
   type 聊天应用内核端口,
   type 聊天应用快照,
 } from "../聊天应用内核.js";
-import type { 房间滚动器宿主 } from "../房间滚动器.js";
+import type { 房间滚动器宿主 } from "../时间线/滚动器.js";
 import { 获取默认浏览器应用平台, type 浏览器应用平台 } from "../平台/index.js";
 import type { 聊天运行时预算状态 } from "../状态.js";
 import type { 前端传输端口 } from "../传输.js";
