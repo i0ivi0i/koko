@@ -40,6 +40,13 @@ export interface 自动播协作端口 {
 
 // 自动播保留轻微迟滞防抖，但不能继续维持旧的 120ms 网页式空窗。
 const 自动播候选稳定等待毫秒 = 80;
+/**
+ * `connecting_to_peers` 的恢复节奏必须跟正式媒体主链保持同尺度：
+ * 1. 当前 locator / 播放器主链把“连接群友”视为 2 秒一个探测窗；
+ * 2. inline autoplay 虽然不直接启动正式媒体会话，但也不能只解析两次就永久躺平；
+ * 3. 这里沿用同一节奏做低频重试，避免 owner 长期卡在“已选中但永远只有占位图”。
+ */
+const 自动播连接群友重试毫秒 = 2_000;
 
 /**
  * 自动播协作只拥有“消息流自动播 owner 的稳定等待、解析和释放”：
@@ -159,6 +166,16 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
         if (!当前目标仍有效()) {
           return;
         }
+        if (playback.mode === "degraded" && playback.reason === "connecting_to_peers") {
+          /**
+           * inline autoplay 目前不会像正式媒体会话那样进入 recovering 状态机：
+           * 1. 这条轻链路第一次命中 `connecting_to_peers` 时，往往只是 swarm 还没热起来；
+           * 2. 如果这里不继续低频重试，runtime 会留下“owner 已存在，但没有真实 playback”的假激活态；
+           * 3. 只要当前 attachment 仍是 pending/owner，就继续按同一节奏重试，直到拿到真实 swarm
+           *    或者 owner 已经被别的附件接走。
+           */
+          调度自动播播放结果解析(attachmentId, 自动播连接群友重试毫秒);
+        }
         if (playback.kind === "video" && playback.mode === "swarm") {
           deps.标记自动播进入帮助链(attachmentId);
         }
@@ -179,15 +196,22 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       });
   };
 
-  const 调度自动播播放结果解析 = (attachmentId: string): void => {
+  const 调度自动播播放结果解析 = (
+    attachmentId: string,
+    delayMs = 自动播候选稳定等待毫秒
+  ): void => {
     清除自动播定时器();
     自动播启动定时器 = setTimeout(() => {
       自动播启动定时器 = null;
-      if (deps.读取媒体运行时上下文().inlineAutoplayPendingAttachmentId !== attachmentId) {
+      const context = deps.读取媒体运行时上下文();
+      if (
+        context.inlineAutoplayPendingAttachmentId !== attachmentId &&
+        context.inlineAutoplayOwnerAttachmentId !== attachmentId
+      ) {
         return;
       }
       解析自动播播放结果(attachmentId);
-    }, 自动播候选稳定等待毫秒);
+    }, delayMs);
   };
 
   return {

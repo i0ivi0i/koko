@@ -272,7 +272,7 @@ describe("房间消息窗媒体查看器 - 隐藏接管与海报预热", () => {
     pane.remove();
   });
 
-  it("新 owner 的 canonical 尚未出帧时，禁止把黑色播放器壳直接露到可见卡片", async () => {
+  it("初次自动播 owner 没有稳定像素底板且 canonical 尚未出帧时，必须先走隐藏预热宿主", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
       mode: "swarm",
@@ -323,13 +323,18 @@ describe("房间消息窗媒体查看器 - 隐藏接管与海报预热", () => {
     );
     const posterCover = card?.querySelector<HTMLImageElement>("img.message-video-poster");
 
-    expect(visibleCanonicalHost).not.toBeNull();
-    expect(hiddenStageHost).toBeNull();
+    /**
+     * 这里只锁“冷 owner 且没有稳定像素底板”的特例：
+     * 1. 当时间线 playback 事实还没回灌，且没有真实海报、运行时预览、冻结帧和已 ready 首帧时，
+     *    默认占位图不足以证明 canonical 可以直接露给用户；
+     * 2. 这时唯一播放器必须先在隐藏宿主里完成首帧预热，卡片表面只保留冷态占位；
+     * 3. 一旦存在真实海报或既有连续性证据，仍然允许复用原有显露路径，不把正常交接一起误伤。
+     */
+    expect(visibleCanonicalHost).toBeNull();
+    expect(hiddenStageHost).not.toBeNull();
     expect(previewVideo).toBeNull();
     expect(posterCover?.getAttribute("src")).toContain("data:image/svg+xml");
-    expect(posterCover?.classList.contains("message-video-poster--canonical-cover")).toBe(
-      true
-    );
+    expect(posterCover?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
 
     pane.remove();
   });

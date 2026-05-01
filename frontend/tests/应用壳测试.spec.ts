@@ -87,4 +87,14 @@ describe("应用壳缓存边界", () => {
 
     expect(source).toContain('import "./media-sw"');
   });
+
+  it("watch 模式下 app hash 变化后会同步刷新 app-sw 预缓存，避免 service worker 持续引用陈旧 dist 产物", () => {
+    const source = 读取前端文件("build.mjs");
+
+    expect(source).toContain("app-sw.raw.js");
+    expect(source).toContain("是否存在应用壳预缓存原始入口");
+    expect(source).toContain("await 注入应用壳预缓存清单()");
+    expect(source).toContain("if (!watchMode) {");
+    expect(source).toContain("rmSync(path.join(distDir, 'app-sw.raw.js'), { force: true })");
+  });
 });

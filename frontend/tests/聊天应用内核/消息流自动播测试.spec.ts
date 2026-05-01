@@ -328,6 +328,125 @@ describe("聊天应用内核 - 消息流自动播", () => {
     }
   });
 
+  it("inline autoplay 首轮只拿到 connecting_to_peers 时，会继续重试直到拿到真实 swarm", async () => {
+    vi.useFakeTimers();
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-retry",
+            client_message_id: "c-video-inline-retry",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-retry",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValueOnce({
+        mode: "degraded",
+        attachmentId: "att-video-inline-retry",
+        kind: "video",
+        src: "",
+        thumbnailUrl: null,
+        reason: "connecting_to_peers",
+        hint: "正在尝试连接群友",
+      })
+      .mockResolvedValueOnce({
+        mode: "degraded",
+        attachmentId: "att-video-inline-retry",
+        kind: "video",
+        src: "",
+        thumbnailUrl: null,
+        reason: "connecting_to_peers",
+        hint: "正在尝试连接群友",
+      })
+      .mockResolvedValueOnce({
+        mode: "swarm",
+        attachmentId: "att-video-inline-retry",
+        kind: "video",
+        src: "blob:http://media.local/swarm-att-video-inline-retry",
+        thumbnailUrl: null,
+        hint: null,
+      });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果,
+      释放附件播放资源: vi.fn(),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-retry",
+          visibilityRatio: 0.95,
+          distanceToViewportCenter: 4,
+        },
+      ],
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(81);
+      await Promise.resolve();
+
+      expect(解析播放结果).toHaveBeenCalledTimes(2);
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe(
+        "att-video-inline-retry"
+      );
+      expect(
+        kernel.snapshot().media.inlineAutoplayPlaybackByAttachmentId["att-video-inline-retry"]
+      ).toBeUndefined();
+
+      /**
+       * 真实浏览器里这正是最容易卡成“只有占位图”的窗口：
+       * 1. 第一轮 locator/torrent 只回 `connecting_to_peers` 很常见；
+       * 2. 如果 inline autoplay 在这里不继续重试，owner 会挂着但永远没有 swarm playback；
+       * 3. 因而 2 秒恢复窗之后，必须在 owner 仍有效时自动再试一次。
+       */
+      await vi.advanceTimersByTimeAsync(2001);
+      await Promise.resolve();
+
+      expect(解析播放结果).toHaveBeenCalledTimes(3);
+      expect(
+        kernel.snapshot().media.inlineAutoplayPlaybackByAttachmentId["att-video-inline-retry"]
+      ).toMatchObject({
+        mode: "swarm",
+        attachmentId: "att-video-inline-retry",
+        src: "blob:http://media.local/swarm-att-video-inline-retry",
+      });
+    } finally {
+      kernel.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("自动播候选在稳定前抖动时，只会为最终 owner 启动一次解析", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();

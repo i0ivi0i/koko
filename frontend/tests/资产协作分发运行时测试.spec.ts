@@ -85,14 +85,25 @@ function 准备已激活媒体ServiceWorker注册() {
   return registration;
 }
 
-function 创建可观测假Torrent(streamURL: string) {
+function 创建可观测假Torrent(
+  streamURL: string,
+  options?: {
+    fileOffset?: number;
+    fileLength?: number;
+    pieceLength?: number;
+  }
+) {
   const handlers: Record<string, Array<(...args: unknown[]) => void>> = {
+    download: [],
     error: [],
     warning: [],
     wire: [],
     noPeers: [],
     done: [],
   };
+  const fileOffset = options?.fileOffset ?? 0;
+  const fileLength = options?.fileLength ?? 5_120;
+  const pieceLength = options?.pieceLength ?? 1_024;
   const select = vi.fn();
   const deselect = vi.fn();
   const critical = vi.fn();
@@ -102,10 +113,13 @@ function 创建可观测假Torrent(streamURL: string) {
     files: [
       {
         streamURL,
+        offset: fileOffset,
+        length: fileLength,
         select,
         deselect,
       },
     ],
+    pieceLength,
     critical,
     select: selectPieces,
     on(event: string, handler: (...args: unknown[]) => void) {
@@ -122,7 +136,10 @@ function 创建可观测假Torrent(streamURL: string) {
     critical,
     selectPieces,
     destroy,
-    emit(event: "error" | "warning" | "wire" | "noPeers" | "done", ...args: unknown[]) {
+    emit(
+      event: "download" | "error" | "warning" | "wire" | "noPeers" | "done",
+      ...args: unknown[]
+    ) {
       const eventHandlers = handlers[event] ?? [];
       for (const handler of eventHandlers) {
         handler(...args);
@@ -828,6 +845,52 @@ describe("资产协作分发运行时", () => {
     expect(预览选片顺序!).toBeLessThan(整附件补齐顺序!);
   });
 
+  it("视频预热会同时抬起文件头尾关键片段，避免 moov 落在尾部时首帧长期卡占位", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-preview-tail-priority-1",
+      {
+        fileOffset: 2_048,
+        fileLength: 12_288,
+        pieceLength: 1_024,
+      }
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-preview-tail-priority-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-preview-tail-priority-1"),
+      consumerId: "session:att-preview-tail-priority-1",
+      eagerCompleting: true,
+    });
+
+    /**
+     * 这条用例对应真实浏览器里的“有 /webtorrent/206，但视频 readyState 一直是 0”：
+     * 1. 文件在 torrent 里不一定从 piece 0 开始；
+     * 2. MP4 的可解码元数据也不一定在文件头；
+     * 3. 预热若只抢头部 piece，浏览器可能一直等不到尾部 moov，界面就会长期停在占位。
+     */
+    expect(torrentHandle.critical.mock.calls).toEqual([
+      [2, 6],
+      [9, 13],
+    ]);
+    expect(torrentHandle.selectPieces.mock.calls).toEqual([
+      [2, 6, 0],
+      [9, 13, 0],
+    ]);
+    const 尾部预热顺序 = torrentHandle.selectPieces.mock.invocationCallOrder[1];
+    const 整附件补齐顺序 = torrentHandle.select.mock.invocationCallOrder[0];
+    expect(尾部预热顺序).toBeDefined();
+    expect(整附件补齐顺序).toBeDefined();
+    expect(尾部预热顺序!).toBeLessThan(整附件补齐顺序!);
+  });
+
   it("最后一个 consumer 释放后，未补齐会话会退到轻帮助态，而不是立刻从运行时摘除", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, destroy, deselect } = 创建可观测假Torrent(
@@ -872,6 +935,63 @@ describe("资产协作分发运行时", () => {
     expect(deselect).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("最后一个 consumer 释放后，已经拿到真实群友字节的未完成会话会短时保活重补齐，窗口到点后再降回轻帮助态", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-release-peer-grace"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-release-peer-grace",
+      kind: "video",
+      locator: 准备好的定位结果("att-release-peer-grace"),
+      consumerId: "viewer:att-release-peer-grace",
+      eagerCompleting: true,
+    });
+    torrentHandle.emit("wire", { type: "peer" });
+    torrentHandle.emit("download", 128);
+
+    释放协作分发消费者({
+      attachmentId: "att-release-peer-grace",
+      consumerId: "viewer:att-release-peer-grace",
+    });
+
+    expect(读取协作分发会话状态("swarm-att-release-peer-grace")).toMatchObject({
+      refs: 0,
+      eagerCompleting: true,
+      hint: "正在协作分发",
+    });
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 1,
+      zeroRefHeavySessionCount: 1,
+      zeroRefLightHelpSessionCount: 0,
+      zeroRefWholeFileReaderCount: 1,
+    });
+    expect(torrentHandle.deselect).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(31_000);
+
+    expect(读取协作分发会话状态("swarm-att-release-peer-grace")).toMatchObject({
+      refs: 0,
+      eagerCompleting: true,
+      hint: "正在补块",
+    });
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 0,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+    expect(torrentHandle.deselect).toHaveBeenCalledTimes(1);
   });
 
   it("底层 file 已失效时，退出整附件补齐不能让 deselect 异常打断释放链", async () => {

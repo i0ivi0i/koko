@@ -6,6 +6,8 @@ import { Buffer } from "buffer";
 
 export interface WebTorrent文件 {
   readonly streamURL: string;
+  readonly offset?: number;
+  readonly length?: number;
   select(priority?: number): void;
   deselect?(): void;
 }
@@ -35,9 +37,11 @@ export interface WebTorrent连接 {
 
 export interface WebTorrent种子 extends 可调监听器预算Emitter {
   files: WebTorrent文件[];
+  readonly pieceLength?: number;
   critical?(start: number, end: number): void;
   select?(start: number, end: number, priority?: number): void;
   discovery?: WebTorrent发现运行时 | null;
+  on(event: "download", handler: (bytes: number) => void): void;
   on(event: "error", handler: (error: unknown) => void): void;
   on(event: "warning", handler: (warning: unknown) => void): void;
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
@@ -433,12 +437,19 @@ export type 协作分发底层会话 = {
   terminalError: unknown | null;
   cleanupStarted: boolean;
   /**
-   * 这里只记录“是否连上过真实 swarm peer”：
+   * 这里只记录“是否建立过真实 swarm peer 连接”：
    * 1. `webSeed` 只能证明冷源可读，不能证明群友协作已经成立；
-   * 2. `done` 也只证明本地拿全了字节，不能反向伪造 peer 证据；
-   * 3. 后续 hint / presence / SWARM_ACTIVE 都要以这条真相为准。
+   * 2. `done` 也只证明本地拿全了字节，不能反向伪造 peer 连接证据；
+   * 3. 这条真相主要用于恢复/告警抑制，不再直接充当 `partial_peer` 的宣誓条件。
    */
   曾连上真实群友: boolean;
+  /**
+   * `partial_peer` 只能建立在“真实群友已经给过我字节”之上：
+   * 1. 单纯 `wire` 只说明 socket 连上了，不能证明真的交换过可用块；
+   * 2. 零引用保活是否还能继续冒充协作帮助，也要看这里；
+   * 3. 这样后端看到的 partial_peer 才是“真的在互帮互助”，不是空连接噪声。
+   */
+  曾收到真实群友字节: boolean;
   consumerBindings: Map<
     string,
     {

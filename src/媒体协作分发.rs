@@ -229,8 +229,15 @@ fn 裁决协作分发媒体状态码(
             stale_seconds,
         ),
         附件已删除,
-        仍在连接群友窗口内: now_epoch秒
-            <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒),
+        /*
+         * 连接群友窗口只表达“正式 web seed 刚刚退场后，给 swarm 一小段接棒时间”：
+         * 1. 如果冷源本身仍可用，READY 已经覆盖，不需要再额外落到 connecting；
+         * 2. 如果冷源提前失效，但 `web_seed_until` 还没到，不能把未来 TTL 误读成“现在还有希望”；
+         * 3. 因此这里只在“冷源已退场，且当前时间已经跨过 web_seed_until”后，才开启那 8 秒连接窗口。
+         */
+        仍在连接群友窗口内: !web_seed仍可用
+            && now_epoch秒 > snapshot.web_seed_until秒
+            && now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒),
     });
     协作分发媒体可用性转状态码(availability)
 }
@@ -569,6 +576,35 @@ mod tests {
         assert!(
             结果.is_err(),
             "数据库里的 torrent_info_hash 必须和 metainfo 自身 info_hash 一致，不能只看字段非空"
+        );
+    }
+
+    #[test]
+    fn 冷源提前失效但web_seed_until仍在未来时不会长期误报连接群友() {
+        let snapshot = usecase::协作分发元数据快照 {
+            附件标识: "att-preview-stuck".to_string(),
+            content_id: "content_att-preview-stuck".to_string(),
+            content_hash: "hash-preview-stuck".to_string(),
+            swarm_id: "swarm-preview-stuck".to_string(),
+            web_seed_until秒: 10_000,
+            torrent_info_hash: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            最近完整peer存活时间戳秒: None,
+            最近片段peer存活时间戳秒: None,
+            最近后端强种子存活时间戳秒: None,
+        };
+
+        let status = 裁决协作分发媒体状态码(
+            &snapshot,
+            false,
+            false,
+            9_000,
+            30,
+        );
+
+        assert_eq!(
+            status,
+            媒体状态无在线种子,
+            "冷源已经失效且没有任何新鲜 peer/后端种子时，不能仅凭未来 web_seed_until 就把 locator 长时间维持在 MEDIA_CONNECTING_TO_PEERS"
         );
     }
 }

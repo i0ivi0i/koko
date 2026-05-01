@@ -111,6 +111,7 @@ function 准备已激活媒体ServiceWorker注册() {
 
 function 创建可观测假Torrent(streamURL: string) {
   const handlers: Record<string, Array<(...args: unknown[]) => void>> = {
+    download: [],
     error: [],
     warning: [],
     wire: [],
@@ -134,7 +135,10 @@ function 创建可观测假Torrent(streamURL: string) {
   return {
     torrent,
     select,
-    emit(event: "error" | "warning" | "wire" | "noPeers" | "done", ...args: unknown[]) {
+    emit(
+      event: "download" | "error" | "warning" | "wire" | "noPeers" | "done",
+      ...args: unknown[]
+    ) {
       const eventHandlers = handlers[event] ?? [];
       for (const handler of eventHandlers) {
         handler(...args);
@@ -1300,6 +1304,8 @@ describe("媒体协作分发", () => {
     });
 
     emit("wire", { type: "peer" });
+    expect(读取协作分发会话状态("swarm-att-2")?.hint).toBe("正在补块");
+    emit("download", 128);
     expect(读取协作分发会话状态("swarm-att-2")?.hint).toBe("正在协作分发");
 
     emit("noPeers");
@@ -1949,7 +1955,7 @@ describe("媒体协作分发", () => {
     });
   });
 
-  it("真正进入帮助链的 backfill 会话首次连上群友后会先上报 partial_peer", async () => {
+  it("真正进入帮助链的 backfill 会话只有拿到真实群友字节后才会上报 partial_peer", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-3");
@@ -1991,6 +1997,9 @@ describe("媒体协作分发", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     emit("wire", { type: "peer" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(presenceBodies).toEqual([]);
+    emit("download", 128);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(presenceBodies).toEqual([expect.stringContaining("partial_peer")]);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -2212,6 +2221,7 @@ describe("媒体协作分发", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     emit("wire", { type: "peer" });
+    emit("download", 128);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     emit("done");
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -2283,7 +2293,7 @@ describe("媒体协作分发", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("释放最后一个协作分发消费者后，补齐中的 swarm 会话会继续保留并维持 partial_peer heartbeat", async () => {
+  it("释放最后一个协作分发消费者后，已拿到群友字节的未完成 swarm 只会短时保活 partial_peer，随后降回轻帮助态", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-release");
@@ -2328,10 +2338,11 @@ describe("媒体协作分发", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     emit("wire", { type: "peer" });
+    emit("download", 128);
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     释放协作分发消费者("att-release");
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(29_000);
 
     expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
       refs: 0,
@@ -2339,11 +2350,18 @@ describe("媒体协作分发", () => {
       eagerCompleting: true,
       hint: "正在协作分发",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(presenceBodies).toEqual([
-      expect.stringContaining("partial_peer"),
-      expect.stringContaining("partial_peer"),
-    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
+      refs: 0,
+      consumers: [],
+      eagerCompleting: true,
+      hint: "正在补块",
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(presenceBodies).toEqual([expect.stringContaining("partial_peer")]);
     expect(remove).not.toHaveBeenCalled();
   });
 
@@ -2390,6 +2408,7 @@ describe("媒体协作分发", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     emit("wire", { type: "peer" });
+    emit("download", 128);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     emit("done");
     expect(fetchMock).toHaveBeenCalledTimes(3);

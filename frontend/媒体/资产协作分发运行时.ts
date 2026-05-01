@@ -85,6 +85,13 @@ type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings
    */
   wholeFileBackfillEnabled: boolean;
   wholeFileSelectApplied: boolean;
+  /**
+   * 零引用但仍在尝试补齐的会话只能短时保活：
+   * 1. 给 owner/viewer 交接留出一小段连续性窗口；
+   * 2. 避免刚连上群友就因为壳切换立刻掐断整附件补齐；
+   * 3. 窗口到点后如果还没完成，必须降回轻帮助态，不能无限伪装 partial_peer。
+   */
+  zeroRefCompletionGraceTimerId: ReturnType<typeof setTimeout> | null;
   joinTicketRef: 协作分发JoinTicketRef;
   joinTicketAttachmentId: string;
   joinTicketRefreshTimerId: ReturnType<typeof setTimeout> | null;
@@ -579,6 +586,7 @@ let 活跃资产协作分发运行时实例数 = 0;
 const JOIN_TICKET_REFRESH_SAFETY_MS = 5_000;
 const JOIN_TICKET_REFRESH_RETRY_MS = 5_000;
 const JOIN_TICKET_REFRESH_MIN_DELAY_MS = 1_000;
+const ZERO_REF_PEER_COMPLETION_GRACE_MS = 30_000;
 
 const 推导协作分发提示 = (session: 底层协作分发会话): 协作分发媒体源["hint"] => {
   if (session.hint) {
@@ -637,7 +645,11 @@ const 推导协作分发会话当前生命周期 = (
 };
 
 const 会话允许对外上报帮助真相 = (session: 底层协作分发会话): boolean =>
-  session.已获得帮助资格 && session.曾连上真实群友;
+  session.已获得帮助资格 &&
+  session.曾收到真实群友字节 &&
+  (session.locallyComplete ||
+    session.consumerBindings.size > 0 ||
+    session.wholeFileBackfillEnabled);
 
 function 归一化协作分发消费者(input: {
   attachmentId: string;
@@ -704,6 +716,7 @@ const 删除底层协作分发会话 = (
   session: 底层协作分发会话
 ): void => {
   清除协作分发会话票据续租(session);
+  清除零引用补齐保活计时器(session);
   停止协作分发存活上报(session);
   runtime.底层会话表.delete(swarmId);
   清理协作分发底层会话(session);
@@ -746,11 +759,64 @@ const 退掉整附件重补齐 = (session: 底层协作分发会话): void => {
   }
 };
 
-const 让零引用会话降到轻帮助态 = (session: 底层协作分发会话): void => {
+const 清除零引用补齐保活计时器 = (session: 底层协作分发会话): void => {
+  if (session.zeroRefCompletionGraceTimerId === null) {
+    return;
+  }
+  clearTimeout(session.zeroRefCompletionGraceTimerId);
+  session.zeroRefCompletionGraceTimerId = null;
+};
+
+const 零引用未完成会话允许短时保活整附件补齐 = (
+  session: 底层协作分发会话
+): boolean =>
+  session.consumerBindings.size === 0 &&
+  !session.locallyComplete &&
+  session.eagerCompleting &&
+  session.曾收到真实群友字节;
+
+const 安排零引用补齐保活降级 = (
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话
+): void => {
+  清除零引用补齐保活计时器(session);
+  if (!零引用未完成会话允许短时保活整附件补齐(session)) {
+    return;
+  }
+  session.zeroRefCompletionGraceTimerId = setTimeout(() => {
+    session.zeroRefCompletionGraceTimerId = null;
+    if (runtime.已销毁 || runtime.底层会话表.get(session.swarmId) !== session) {
+      return;
+    }
+    if (session.consumerBindings.size > 0 || session.locallyComplete) {
+      return;
+    }
+    退掉整附件重补齐(session);
+    停止协作分发存活上报(session);
+    session.hint = null;
+    session.lifecycleState = 推导协作分发会话当前生命周期(session);
+    同步协作分发会话生命周期(runtime, session);
+  }, ZERO_REF_PEER_COMPLETION_GRACE_MS);
+};
+
+const 让零引用会话降到轻帮助态 = (
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话,
+  options: { allowCompletionGrace?: boolean } = {}
+): void => {
   if (!协作分发会话可在零引用后保留(session)) {
     return;
   }
+  if (options.allowCompletionGrace && 零引用未完成会话允许短时保活整附件补齐(session)) {
+    安排零引用补齐保活降级(runtime, session);
+    return;
+  }
+  清除零引用补齐保活计时器(session);
   退掉整附件重补齐(session);
+  if (!session.locallyComplete) {
+    停止协作分发存活上报(session);
+    session.hint = null;
+  }
 };
 
 const 按生命周期策略清理协作分发会话 = (
@@ -762,7 +828,9 @@ const 按生命周期策略清理协作分发会话 = (
   }
   for (const [swarmId, session] of runtime.底层会话表) {
     if (session.consumerBindings.size === 0) {
-      让零引用会话降到轻帮助态(session);
+      让零引用会话降到轻帮助态(runtime, session, {
+        allowCompletionGrace: false,
+      });
     }
     if (!是否为零消费者冷协作分发会话(session)) {
       continue;
@@ -849,6 +917,19 @@ function 绑定协作分发会话事件(
       return;
     }
     session.曾连上真实群友 = true;
+    session.hint = session.已获得帮助资格 ? "正在补块" : null;
+    设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
+    恢复整附件补齐(session);
+  });
+  torrent.on("download", (bytes) => {
+    /**
+     * `wire` 只说明 peer socket 建起来了；真正能算 `partial_peer`，
+     * 必须等到浏览器确认收到了来自真实群友的字节。
+     */
+    if (bytes <= 0 || !session.曾连上真实群友 || session.曾收到真实群友字节) {
+      return;
+    }
+    session.曾收到真实群友字节 = true;
     session.hint = session.已获得帮助资格 ? "正在协作分发" : null;
     设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
     if (会话允许对外上报帮助真相(session)) {
@@ -858,7 +939,6 @@ function 绑定协作分发会话事件(
         session.locallyComplete ? "complete_peer" : "partial_peer"
       );
     }
-    恢复整附件补齐(session);
     if (session.已获得帮助资格) {
       发送事件(runtime, {
         type: "SWARM_ACTIVE",
@@ -880,6 +960,7 @@ function 绑定协作分发会话事件(
     }
   });
   torrent.on("done", () => {
+    清除零引用补齐保活计时器(session);
     session.eagerCompleting = false;
     session.locallyComplete = true;
     退掉整附件重补齐(session);
@@ -942,14 +1023,16 @@ function 激活预览关键字节优先(session: 底层协作分发会话): void
     return;
   }
   /**
-   * preview-first 只负责把最早一小段关键字节提到最高优先级：
-   * 1. 先让浏览器尽快拿到可出预览的头部 / 关键片段；
-   * 2. 正式 whole-file backfill 会在 eager owner 成立后马上接上，而不是继续等 `wire`；
-   * 3. 这里仍先用非常克制的起始 piece 范围，避免在没有 byte planner 前重新炸整文件。
+   * preview-first 只负责把“首帧可解码”最可能依赖的关键片段抬到最高优先级：
+   * 1. 文件头通常决定浏览器能否尽快开始解析容器；
+   * 2. 但很多 MP4 的 moov / 索引信息可能落在文件尾，若只抢头部，界面会一直卡在占位；
+   * 3. whole-file backfill 仍会马上接上，这里只做一小段头尾预热，不把整文件再次抬到最高优先级。
    */
   session.previewPriorityApplied = true;
-  session.torrent?.critical?.(0, 4);
-  session.torrent?.select?.(0, 4, 0);
+  for (const 区间 of 推导预览关键片段区间(session)) {
+    session.torrent?.critical?.(区间.start, 区间.end);
+    session.torrent?.select?.(区间.start, 区间.end, 0);
+  }
 }
 
 function 恢复整附件补齐(session: 底层协作分发会话): void {
@@ -958,6 +1041,50 @@ function 恢复整附件补齐(session: 底层协作分发会话): void {
   }
   session.wholeFileSelectApplied = true;
   session.file.select(1);
+}
+
+function 推导预览关键片段区间(
+  session: Pick<底层协作分发会话, "file" | "torrent">
+): Array<{ start: number; end: number }> {
+  const fallback = [{ start: 0, end: 4 }];
+  const pieceLength = session.torrent?.pieceLength;
+  const fileOffset = session.file?.offset;
+  const fileLength = session.file?.length;
+  if (
+    !Number.isFinite(pieceLength) ||
+    !Number.isFinite(fileOffset) ||
+    !Number.isFinite(fileLength) ||
+    pieceLength! <= 0 ||
+    fileOffset! < 0 ||
+    fileLength! <= 0
+  ) {
+    return fallback;
+  }
+  const 文件首片段 = Math.floor(fileOffset! / pieceLength!);
+  const 文件尾片段 = Math.floor((fileOffset! + fileLength! - 1) / pieceLength!);
+  if (文件尾片段 < 文件首片段) {
+    return fallback;
+  }
+  const 区间列表: Array<{ start: number; end: number }> = [];
+  追加预览关键片段区间(区间列表, 文件首片段, Math.min(文件首片段 + 4, 文件尾片段));
+  追加预览关键片段区间(区间列表, Math.max(文件尾片段 - 4, 文件首片段), 文件尾片段);
+  return 区间列表.length > 0 ? 区间列表 : fallback;
+}
+
+function 追加预览关键片段区间(
+  ranges: Array<{ start: number; end: number }>,
+  start: number,
+  end: number
+): void {
+  if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) {
+    return;
+  }
+  const last = ranges.at(-1);
+  if (last && start <= last.end + 1) {
+    last.end = Math.max(last.end, end);
+    return;
+  }
+  ranges.push({ start, end });
 }
 
 function 协作分发会话可在零引用后保留(session: 底层协作分发会话): boolean {
@@ -1139,6 +1266,7 @@ async function 确保协作分发会话(
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
     更新协作分发会话票据刷新器(session, input.refreshJoinTicket);
+    清除零引用补齐保活计时器(session);
     // 续租锚点必须跟随最新取得 locator 的业务附件；旧附件删除后不能拖垮同一 canonical 资产的新引用。
     session.joinTicketAttachmentId = input.attachmentId;
     if (刷新协作分发会话票据(session, input.distribution)) {
@@ -1208,7 +1336,9 @@ async function 确保协作分发会话(
     terminalError: null,
     cleanupStarted: false,
     曾连上真实群友: false,
+    曾收到真实群友字节: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
+    zeroRefCompletionGraceTimerId: null,
     joinTicketRef: { value: input.distribution.join_ticket ?? null },
     joinTicketAttachmentId: input.attachmentId,
     joinTicketRefreshTimerId: null,
@@ -1511,7 +1641,9 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         if (session.consumerBindings.size > 0) {
           continue;
         }
-        让零引用会话降到轻帮助态(session);
+        让零引用会话降到轻帮助态(runtime, session, {
+          allowCompletionGrace: true,
+        });
         session.lifecycleState = 推导协作分发会话当前生命周期(session);
         同步协作分发会话生命周期(runtime, session);
         // 只要会话仍被产品层保留，presence 也要跟着保留：

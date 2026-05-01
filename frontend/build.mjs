@@ -19,6 +19,9 @@ const appShellHtmlPath = path.join(distDir, 'app-shell.html')
 const appShellServiceWorkerOutputFiles = [
   path.join(distDir, 'app-sw.js'),
 ]
+const appShellServiceWorkerRawOutputFiles = [
+  path.join(distDir, 'app-sw.raw.js'),
+]
 const watchMode = process.argv.some((arg) => arg === '--watch' || arg.startsWith('--watch='))
 // iOS Safari 16.4 之前不能解析 class static block，14.1 之前 private fields 也不稳。
 // 在构建边界统一降级成熟依赖的新语法，避免 koko-chat-shell 在页面启动前整包解析失败。
@@ -60,11 +63,15 @@ function 写入离线应用壳(manifest) {
   writeFileSync(appShellHtmlPath, `${html}\n`, 'utf8')
 }
 
+function 是否存在应用壳预缓存原始入口() {
+  return statSync(path.join(distDir, 'app-sw.raw.js'), { throwIfNoEntry: false })?.isFile() === true
+}
+
 function 生成静态资源清单插件() {
   return {
     name: 'koko-asset-manifest',
     setup(build) {
-      build.onEnd((result) => {
+      build.onEnd(async (result) => {
         if (result.errors.length > 0) {
           return
         }
@@ -87,10 +94,20 @@ function 生成静态资源清单插件() {
           ...mediaServiceWorkerOutputFiles,
           ...sourceHashWorkerOutputFiles,
           ...appShellServiceWorkerOutputFiles,
+          ...appShellServiceWorkerRawOutputFiles,
         ]))
         console.log(
           `[koko-build] manifest updated: js=${manifest.app_js} css=${manifest.app_css}`
         )
+        /**
+         * watch 模式下入口 JS hash 变化不会自动触发 app-sw.ts 重编：
+         * 1. 但 app-sw 的 precache 清单正是由 dist 当前静态产物决定；
+         * 2. 如果这里不立即重注入，worker 会继续引用上一轮 hash，安装时直接 redundant；
+         * 3. 根 SW 一旦装不上，后面的 WebTorrent 自动播、预览、离线导航都会一起失真。
+         */
+        if (是否存在应用壳预缓存原始入口()) {
+          await 注入应用壳预缓存清单()
+        }
       })
     },
   }
@@ -131,7 +148,15 @@ async function 注入应用壳预缓存清单() {
   for (const warning of result.warnings ?? []) {
     console.warn(`[koko-build] workbox warning: ${warning}`)
   }
-  rmSync(path.join(distDir, 'app-sw.raw.js'), { force: true })
+  /**
+   * watch 模式下 raw 入口必须保留下来：
+   * 1. 后续 app rebuild 只会刷新 dist 资源和 manifest，不会天然触发 app-sw.ts rebuild；
+   * 2. 这里若删掉 raw，静态壳更新后就没有可重注入的源文件，precache 只能永远停在旧 hash；
+   * 3. 非 watch 单次构建仍删除 raw，避免把中间产物暴露成第二入口。
+   */
+  if (!watchMode) {
+    rmSync(path.join(distDir, 'app-sw.raw.js'), { force: true })
+  }
   console.log(`[koko-build] app shell precache injected: files=${result.count}`)
 }
 

@@ -585,9 +585,32 @@ export const 渲染消息附件 = (
               !shouldRevealCanonicalHost &&
               (context.时间线隐藏接管附件Id === attachment.attachmentId ||
                 hasHistoricalCanonicalReveal);
-            const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
+            /**
+             * 这里单独补的是“初次冷 owner 黑卡误露”这一个洞，不扩大成通用裁决：
+             * 1. 仅当当前 attachment 首次拿到 owner，且时间线 playback 事实还没回灌，同时没有真实海报、运行时预览、冻结帧、同源续帧或已就绪首帧时触发；
+             * 2. 默认占位 poster 只是冷态表达，不算稳定像素底板，不能据此把 canonical player 直接挂到可见卡片；
+             * 3. 一旦已有真实海报、既有 preview/frame，或已经进入显式 handoff 路径，就回到原本通过回归的显露规则，
+             *    避免把正常 owner 交接、missing_source 护栏和同附件滑回一起打坏。
+             */
+            const shouldStageWarmupColdInitialOwnerCanonical =
+              shouldRenderInlineVideo &&
+              !shouldRevealCanonicalHost &&
+              !playback &&
+              context.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
+              context.时间线隐藏接管附件Id !== attachment.attachmentId &&
+              !hasHistoricalCanonicalReveal &&
+              !hasStablePreviewPosterSurface &&
+              !hasCurrentDomPreviewFrame &&
+              !hasFrozenTimelineFrame &&
+              !hasKnownReadyPreviewFrame &&
+              !shouldReuseSavedTimelineFrameAsPreview;
+            const shouldRenderStageHost =
+              !shouldRevealCanonicalHost &&
+              (shouldUseHiddenStageCover || shouldStageWarmupColdInitialOwnerCanonical);
             const shouldRenderVisibleCanonicalHost =
-              shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
+              shouldRenderInlineVideo &&
+              (!shouldUseHiddenStageCover &&
+                !shouldStageWarmupColdInitialOwnerCanonical);
             const shouldRenderPreviewVideo =
               shouldRenderPreviewVideoByBudget &&
               !shouldRenderVisibleCanonicalHost &&
