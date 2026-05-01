@@ -15,6 +15,9 @@ import type { 匿名身份快照 } from "../契约";
 
 const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
 const 创建HTTPS测试传输 = () => 创建前端传输("https://localhost");
+const 读取传输门面源码 = () => readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+const 读取平台传输Owner源码 = () =>
+  readFileSync(resolve(process.cwd(), "平台/传输.ts"), "utf8");
 
 describe("传输", () => {
   beforeEach(() => {
@@ -22,10 +25,20 @@ describe("传输", () => {
     vi.restoreAllMocks();
   });
 
-  it("前端传输组合根 会把 socket 生命周期与运行时策略委托给 实时连接适配", () => {
-    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+  it("根目录传输只保留兼容门面，真实组合根必须收进平台 owner", () => {
+    const facadeSource = 读取传输门面源码();
+    const ownerSource = 读取平台传输Owner源码();
 
-    expect(source).toContain('from "./聊天实时/适配/实时连接适配.js"');
+    expect(facadeSource).toContain('export * from "./平台/传输.js";');
+    expect(facadeSource).not.toContain("export function 创建前端传输(");
+    expect(facadeSource).not.toContain("const 实时连接 = new 实时连接适配(baseUrl);");
+    expect(ownerSource).toContain("export function 创建前端传输(");
+  });
+
+  it("前端传输组合根 会把 socket 生命周期与运行时策略委托给 实时连接适配", () => {
+    const source = 读取平台传输Owner源码();
+
+    expect(source).toContain('from "../聊天实时/适配/实时连接适配.js"');
     expect(source).toContain("const 实时连接 = new 实时连接适配(baseUrl);");
     expect(source).toContain("createSocket: (sessionId: string): Socket => 实时连接.createSocket(sessionId),");
     expect(source).toContain("实时连接.接收运行时策略(policy);");
@@ -36,18 +49,18 @@ describe("传输", () => {
   });
 
   it("前端传输组合根 会把房间主链 HTTP 调用委托给 房间HTTP接口", () => {
-    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+    const source = 读取平台传输Owner源码();
 
-    expect(source).toContain('from "./聊天恢复/适配/房间HTTP接口.js"');
+    expect(source).toContain('from "../聊天恢复/适配/房间HTTP接口.js"');
     expect(source).toContain("const 房间传输 = 创建房间HTTP接口({");
     expect(source).toContain("...房间传输,");
   });
 
   it("前端传输组合根 会把 media 与 admin HTTP 适配拆回各自接口，只保留组合根职责", () => {
-    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+    const source = 读取平台传输Owner源码();
 
-    expect(source).toContain('from "./媒体/适配/媒体HTTP接口.js"');
-    expect(source).toContain('from "./后台/适配/后台HTTP接口.js"');
+    expect(source).toContain('from "../媒体/适配/媒体HTTP接口.js"');
+    expect(source).toContain('from "../后台/适配/后台HTTP接口.js"');
     expect(source).toContain("const 媒体传输 = new 媒体HTTP接口({");
     expect(source).toContain("const 后台传输 = new 后台HTTP接口({");
     expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash)");
@@ -64,18 +77,18 @@ describe("传输", () => {
     expect(source).not.toContain("private 解析Blob媒体资产(");
   });
 
-  it("前端传输组合根改成工厂组合，不再维持巨型 class 热点", () => {
-    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+  it("平台传输 owner 改成工厂组合，不再维持巨型 class 热点", () => {
+    const source = 读取平台传输Owner源码();
 
     expect(source).toContain("export function 创建前端传输(");
     expect(source).not.toContain("export class HttpRealtime传输");
   });
 
   it("前端传输组合根 会把聊天房间/realtime/media/admin 显式投影成窄接口，而不是让所有调用者都抱住巨型端口", () => {
-    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+    const source = 读取平台传输Owner源码();
 
-    expect(source).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
-    expect(source).toContain('from "./聊天共享/适配/聊天实时连接端口.js"');
+    expect(source).toContain('from "../聊天共享/适配/聊天房间传输端口.js"');
+    expect(source).toContain('from "../聊天共享/适配/聊天实时连接端口.js"');
     expect(source).toContain("export interface 媒体传输端口");
     expect(source).toContain("export interface 后台查询传输端口");
     expect(source).toContain("export interface 后台会话传输端口");

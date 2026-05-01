@@ -37,7 +37,7 @@ const 前端运行时Owner注册表 = [
 ];
 
 /**
- * 后台根文件当前处于“兼容入口还没完全删掉”的迁移阶段。
+ * 根目录迁移门面当前仍保留兼容入口。
  * 这里强制它们只做薄门面，避免真实 owner 又偷偷回流到根目录。
  */
 const 前端迁移门面规则 = [
@@ -73,6 +73,12 @@ const 前端迁移门面规则 = [
       'import "./后台/壳.js";',
     ],
     forbiddenSnippets: ["class 后台壳"],
+  },
+  {
+    path: "frontend/传输.ts",
+    ownerPath: "frontend/平台/传输.ts",
+    requiredSnippets: ['export * from "./平台/传输.js";'],
+    forbiddenSnippets: ["export function 创建前端传输(", "const 实时连接 = new 实时连接适配(baseUrl);"],
   },
 ];
 
@@ -335,6 +341,12 @@ const 平台内层Import违规 = (relativePath, source) => {
       if (importPath.endsWith("/平台/index.js")) {
         continue;
       }
+      if (
+        relativePath === "frontend/传输.ts" &&
+        (importPath === "./平台/传输.js" || importPath.endsWith("/平台/传输.js"))
+      ) {
+        continue;
+      }
       violations.push({
         file: relativePath,
         label: 架构规则[0].label,
@@ -420,7 +432,10 @@ const 检查迁移门面规则 = () => {
       });
     }
 
-    if (去掉注释(ownerSource).includes("/操作台/")) {
+    if (
+      rule.ownerPath.startsWith("frontend/后台/") &&
+      去掉注释(ownerSource).includes("/操作台/")
+    ) {
       violations.push({
         file: rule.ownerPath,
         label: "migration owner semantic drift",

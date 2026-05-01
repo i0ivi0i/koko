@@ -7,7 +7,7 @@ import {
   type 聊天房间传输端口,
   type 前端传输端口,
   type 实时连接运行时策略,
-} from "../传输.js";
+} from "./传输.js";
 import type { 生命周期快照 } from "./生命周期运行时.js";
 
 export interface 传输运行时快照 {

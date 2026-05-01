@@ -242,6 +242,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/后台/应用内核.ts");
   });
 
+  it("架构适应度门禁会把传输根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/传输.ts"');
+    expect(source).toContain('ownerPath: "frontend/平台/传输.ts"');
+  });
+
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
@@ -380,6 +387,18 @@ const stillKeep = true;
     expect(adminKernelOwnerSource).not.toContain("this.platform.transport.transport()");
     expect(adminKernelOwnerSource).not.toContain("overviewText:");
     expect(adminKernelOwnerSource).not.toContain("detailText:");
+  });
+
+  it("平台传输运行时直接依赖平台 owner，根目录传输只保留兼容门面", () => {
+    const transportFacadeSource = 读取前端源码("传输.ts");
+    const transportOwnerSource = 读取前端源码("平台/传输.ts");
+    const transportRuntimeSource = 读取前端源码("平台/传输运行时.ts");
+
+    expect(transportFacadeSource).toContain('export * from "./平台/传输.js"');
+    expect(transportFacadeSource).not.toContain("export function 创建前端传输(");
+    expect(transportOwnerSource).toContain("export function 创建前端传输(");
+    expect(transportRuntimeSource).toContain('from "./传输.js"');
+    expect(transportRuntimeSource).not.toContain('from "../传输.js"');
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {
