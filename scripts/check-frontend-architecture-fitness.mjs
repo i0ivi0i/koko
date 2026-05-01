@@ -101,6 +101,12 @@ const 前端迁移门面规则 = [
     requiredSnippets: ['export * from "./平台/应用生命周期.js";'],
     forbiddenSnippets: ["createMachine(", "createActor(", "const 应用生命周期机 ="],
   },
+  {
+    path: "frontend/应用运行时.ts",
+    ownerPath: "frontend/平台/应用运行时.ts",
+    requiredSnippets: ['export * from "./平台/应用运行时.js";'],
+    forbiddenSnippets: ["const 翻译平台事件为内核命令 =", "export function 创建应用运行时("],
+  },
 ];
 
 const 架构规则 = [
@@ -391,6 +397,19 @@ const 平台内层Import违规 = (relativePath, source) => {
         relativePath === "frontend/聊天应用内核.ts" &&
         (importPath === "./平台/应用生命周期.js" ||
           importPath.endsWith("/平台/应用生命周期.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/应用运行时.ts" &&
+        (importPath === "./平台/应用运行时.js" || importPath.endsWith("/平台/应用运行时.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/总装/应用装配.ts" &&
+        (importPath === "../平台/应用运行时.js" ||
+          importPath.endsWith("/平台/应用运行时.js"))
       ) {
         continue;
       }

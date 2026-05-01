@@ -153,7 +153,7 @@ describe("浏览器端应用平台化基线", () => {
   });
 
   it("应用运行时只负责把浏览器事件翻成内核 command，不再知道具体 owner 动词", () => {
-    const source = 读取前端源码("应用运行时.ts");
+    const source = 读取前端源码("平台/应用运行时.ts");
 
     expect(source).toContain("dispatch(command)");
     expect(source).not.toContain("标记用户滚动意图(): void");
@@ -268,6 +268,13 @@ describe("浏览器端应用平台化基线", () => {
 
     expect(source).toContain('path: "frontend/应用生命周期.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/应用生命周期.ts"');
+  });
+
+  it("架构适应度门禁会把应用运行时根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/应用运行时.ts"');
+    expect(source).toContain('ownerPath: "frontend/平台/应用运行时.ts"');
   });
 
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
@@ -456,6 +463,18 @@ const stillKeep = true;
     expect(lifecycleOwnerSource).toContain("createMachine(");
     expect(kernelSource).toContain('from "./平台/应用生命周期.js"');
     expect(kernelSource).not.toContain('from "./应用生命周期.js"');
+  });
+
+  it("应用运行时 owner 进入平台层，根目录只保留兼容门面，总装直接依赖平台 owner", () => {
+    const runtimeFacadeSource = 读取前端源码("应用运行时.ts");
+    const runtimeOwnerSource = 读取前端源码("平台/应用运行时.ts");
+    const assemblySource = 读取前端源码("总装/应用装配.ts");
+
+    expect(runtimeFacadeSource).toContain('export * from "./平台/应用运行时.js"');
+    expect(runtimeFacadeSource).not.toContain("翻译平台事件为内核命令");
+    expect(runtimeOwnerSource).toContain("翻译平台事件为内核命令");
+    expect(assemblySource).toContain('from "../平台/应用运行时.js"');
+    expect(assemblySource).not.toContain('from "../应用运行时.js"');
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

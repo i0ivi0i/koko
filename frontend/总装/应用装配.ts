@@ -1,4 +1,4 @@
-import { 创建应用运行时, type 应用运行时端口 } from "../应用运行时.js";
+import { 创建应用运行时, type 应用运行时端口 } from "../平台/应用运行时.js";
 import {
   创建聊天应用内核,
   type 聊天应用内核端口,
