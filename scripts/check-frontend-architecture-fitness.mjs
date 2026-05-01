@@ -25,7 +25,7 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/恢复/应用.ts", symbol: "创建恢复应用" },
   { path: "frontend/实时/应用.ts", symbol: "创建实时应用" },
   { path: "frontend/平台/浏览器应用平台.ts", symbol: "创建浏览器应用平台" },
-  { path: "frontend/应用生命周期.ts", symbol: "创建应用生命周期Actor" },
+  { path: "frontend/平台/应用生命周期.ts", symbol: "创建应用生命周期Actor" },
   { path: "frontend/实时会话运行时.ts", symbol: "创建实时会话Actor" },
   { path: "frontend/房间内核.ts", symbol: "创建房间内核" },
   { path: "frontend/房间时间线运行时.ts", symbol: "创建房间时间线Actor" },
@@ -94,6 +94,12 @@ const 前端迁移门面规则 = [
       'export { default } from "./平台/调试兼容.js";',
     ],
     forbiddenSnippets: ['import debugFactory from "./node_modules/debug/src/browser.js";', "debugFactory"],
+  },
+  {
+    path: "frontend/应用生命周期.ts",
+    ownerPath: "frontend/平台/应用生命周期.ts",
+    requiredSnippets: ['export * from "./平台/应用生命周期.js";'],
+    forbiddenSnippets: ["createMachine(", "createActor(", "const 应用生命周期机 ="],
   },
 ];
 
@@ -371,6 +377,20 @@ const 平台内层Import违规 = (relativePath, source) => {
       if (
         relativePath === "frontend/调试兼容.ts" &&
         (importPath === "./平台/调试兼容.js" || importPath.endsWith("/平台/调试兼容.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/应用生命周期.ts" &&
+        (importPath === "./平台/应用生命周期.js" ||
+          importPath.endsWith("/平台/应用生命周期.js"))
+      ) {
+        continue;
+      }
+      if (
+        relativePath === "frontend/聊天应用内核.ts" &&
+        (importPath === "./平台/应用生命周期.js" ||
+          importPath.endsWith("/平台/应用生命周期.js"))
       ) {
         continue;
       }

@@ -223,7 +223,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/后台/应用内核.ts");
     expect(source).toContain("frontend/恢复/应用.ts");
     expect(source).toContain("frontend/实时/应用.ts");
-    expect(source).toContain("frontend/应用生命周期.ts");
+    expect(source).toContain("frontend/平台/应用生命周期.ts");
     expect(source).toContain("frontend/媒体/资产协作分发运行时.ts");
     expect(source).toContain('label: "platform internal import boundary"');
     expect(source).toContain("frontend/聊天应用内核.ts");
@@ -261,6 +261,13 @@ describe("浏览器端应用平台化基线", () => {
 
     expect(source).toContain('path: "frontend/调试兼容.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/调试兼容.ts"');
+  });
+
+  it("架构适应度门禁会把应用生命周期根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('path: "frontend/应用生命周期.ts"');
+    expect(source).toContain('ownerPath: "frontend/平台/应用生命周期.ts"');
   });
 
   it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
@@ -437,6 +444,18 @@ const stillKeep = true;
     expect(debugOwnerSource).toContain("debugFactory");
     expect(buildSource).toContain("path.join(frontendRoot, '平台', '调试兼容.ts')");
     expect(buildSource).not.toContain("path.join(frontendRoot, '调试兼容.ts')");
+  });
+
+  it("应用生命周期 owner 进入平台层，根目录只保留兼容门面，内核直接依赖平台 owner", () => {
+    const lifecycleFacadeSource = 读取前端源码("应用生命周期.ts");
+    const lifecycleOwnerSource = 读取前端源码("平台/应用生命周期.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+
+    expect(lifecycleFacadeSource).toContain('export * from "./平台/应用生命周期.js"');
+    expect(lifecycleFacadeSource).not.toContain("createMachine(");
+    expect(lifecycleOwnerSource).toContain("createMachine(");
+    expect(kernelSource).toContain('from "./平台/应用生命周期.js"');
+    expect(kernelSource).not.toContain('from "./应用生命周期.js"');
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {
