@@ -123,7 +123,14 @@ fn 根用例文件必须删除且应用入口不得回灌外层实现() {
             && !content.contains("pub use crate::realtime::application"),
         "src/应用/mod.rs 不得继续充当跨业务总入口；调用方必须直连各自 owner"
     );
-    for forbidden in ["axum", "sqlx", "socketioxide", "SocketRef", "StatusCode", "Router"] {
+    for forbidden in [
+        "axum",
+        "sqlx",
+        "socketioxide",
+        "SocketRef",
+        "StatusCode",
+        "Router",
+    ] {
         assert!(
             !content.contains(forbidden),
             "src/应用/mod.rs 不应回灌外层实现或协议类型: {forbidden}"
@@ -140,7 +147,10 @@ fn 根用例文件必须删除且应用入口不得回灌外层实现() {
 #[test]
 fn 应用总入口不得重导出业务模型() {
     let content = 读取("src/应用/mod.rs");
-    for forbidden in ["pub use crate::media::模型::*", "pub use crate::media::application"] {
+    for forbidden in [
+        "pub use crate::media::模型::*",
+        "pub use crate::media::application",
+    ] {
         assert!(
             !content.contains(forbidden),
             "src/应用/mod.rs 只能保留跨上下文共享端口和校验函数，不得重导出业务 owner 模型: {forbidden}"
@@ -188,6 +198,76 @@ fn 适配器不得横向借另一个适配器拼业务结果() {
         assert!(
             !content.contains(forbidden),
             "{path} 不得横向调用另一个适配器拼业务结果；业务裁决必须先回到 application/domain owner: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 媒体上传外壳必须持续变薄() {
+    let shell = 读取("src/外壳/mod.rs");
+    let shared = 读取("src/媒体/上传/外壳/媒体上传.rs");
+    let lines = 统计物理行数("src/媒体/上传/外壳/媒体上传.rs");
+    assert!(
+        lines <= 450,
+        "src/媒体/上传/外壳/媒体上传.rs 当前 {lines} 行；它只能保留上传壳共享协议小函数，真实端点必须落到各自 owner"
+    );
+
+    for (path, module_path_fragment, route_owner) in [
+        (
+            "src/媒体/上传/外壳/准备上传.rs",
+            "#[path = \"../媒体/上传/外壳/准备上传.rs\"]",
+            "媒体准备上传外壳::prepare_media_upload",
+        ),
+        (
+            "src/媒体/上传/外壳/source_hash复用.rs",
+            "#[path = \"../媒体/上传/外壳/source_hash复用.rs\"]",
+            "媒体_source_hash复用外壳::reuse_media_by_source_hash",
+        ),
+        (
+            "src/媒体/上传/外壳/转发附件.rs",
+            "#[path = \"../媒体/上传/外壳/转发附件.rs\"]",
+            "媒体附件转发外壳::forward_media_attachment",
+        ),
+        (
+            "src/媒体/上传/外壳/完成上传.rs",
+            "#[path = \"../媒体/上传/外壳/完成上传.rs\"]",
+            "媒体完成上传外壳::complete_media_upload",
+        ),
+        (
+            "src/媒体/上传/外壳/放弃上传.rs",
+            "#[path = \"../媒体/上传/外壳/放弃上传.rs\"]",
+            "媒体放弃上传外壳::abandon_media_upload",
+        ),
+        (
+            "src/媒体/上传/外壳/tus代理.rs",
+            "#[path = \"../媒体/上传/外壳/tus代理.rs\"]",
+            "媒体_tus代理外壳::proxy_tus_upload_transport",
+        ),
+    ] {
+        assert!(Path::new(path).exists(), "{path} 必须是真实端点 owner 文件");
+        assert!(
+            shell.contains(module_path_fragment),
+            "src/外壳/mod.rs 必须直接挂载真实端点 owner: {path}"
+        );
+        assert!(
+            shell.contains(route_owner),
+            "路由必须直连真实端点 owner，禁止通过媒体上传.rs 做一跳转发: {route_owner}"
+        );
+    }
+
+    for forbidden in [
+        "pub(super) async fn prepare_media_upload",
+        "pub(super) async fn reuse_media_by_source_hash",
+        "pub(super) async fn forward_media_attachment",
+        "pub(super) async fn complete_media_upload",
+        "pub(super) async fn abandon_media_upload",
+        "pub(super) async fn proxy_tus_upload_transport",
+        "选择协作分发共享载荷",
+        "完成媒体附件上传",
+    ] {
+        assert!(
+            !shared.contains(forbidden),
+            "src/媒体/上传/外壳/媒体上传.rs 不能继续承载端点或 complete 业务重活: {forbidden}"
         );
     }
 }

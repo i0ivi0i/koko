@@ -1,19 +1,20 @@
+use crate::{adapter::Pg仓储, media_distribution, realtime::shell as 实时外壳};
 use axum::{
-    Router,
     extract::DefaultBodyLimit,
     http::StatusCode,
     routing::{any, get, post},
+    Router,
 };
 use object_store::{
-    ObjectStore, ObjectStoreExt,
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
     path::Path as ObjectPath,
+    ObjectStore, ObjectStoreExt,
 };
 use socketioxide::{
-    SocketIo,
     extract::{Data, Extension, SocketRef, TryData},
     handler::ConnectHandler,
+    SocketIo,
 };
 use sqlx::PgPool;
 use std::{
@@ -21,30 +22,43 @@ use std::{
     fs, io,
     sync::{Arc, Mutex},
 };
-use crate::{adapter::Pg仓储, media_distribution, realtime::shell as 实时外壳};
 
-// 这三个私有子模块是 shell 内部的职责收口点。
+// 这些私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
 #[path = "../媒体/上传/外壳/tus回调.rs"]
 mod tus_hook外壳;
-#[path = "../后台/外壳.rs"]
-mod 后台外壳;
-#[path = "../媒体/上传/外壳/媒体上传.rs"]
-mod 媒体上传外壳;
-#[path = "../媒体/上传/内容解析.rs"]
-mod 媒体内容解析;
-#[path = "../媒体/资产/外壳.rs"]
-mod 媒体资产外壳;
-#[path = "../房间/外壳.rs"]
-mod 房间外壳;
 #[path = "前端静态入口.rs"]
 mod 前端静态入口;
-#[path = "媒体清理.rs"]
-pub mod 媒体清理;
 #[path = "协作分发做种.rs"]
 pub mod 协作分发做种;
 #[path = "协议响应.rs"]
 pub(crate) mod 协议响应;
+#[path = "../后台/外壳.rs"]
+mod 后台外壳;
+#[path = "../媒体/上传/外壳/source_hash复用.rs"]
+mod 媒体_source_hash复用外壳;
+#[path = "../媒体/上传/外壳/tus代理.rs"]
+mod 媒体_tus代理外壳;
+#[path = "../媒体/上传/外壳/媒体上传.rs"]
+mod 媒体上传共享外壳;
+#[path = "../媒体/上传/内容解析.rs"]
+mod 媒体内容解析;
+#[path = "../媒体/上传/外壳/准备上传.rs"]
+mod 媒体准备上传外壳;
+#[path = "../媒体/上传/外壳/完成上传.rs"]
+mod 媒体完成上传外壳;
+#[path = "../媒体/上传/外壳/放弃上传.rs"]
+mod 媒体放弃上传外壳;
+#[path = "媒体清理.rs"]
+pub mod 媒体清理;
+#[path = "../媒体/资产/外壳.rs"]
+mod 媒体资产外壳;
+#[path = "../媒体/上传/外壳/附件响应.rs"]
+mod 媒体附件上传响应外壳;
+#[path = "../媒体/上传/外壳/转发附件.rs"]
+mod 媒体附件转发外壳;
+#[path = "../房间/外壳.rs"]
+mod 房间外壳;
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
@@ -284,17 +298,17 @@ pub fn 构建路由(state: 应用状态) -> Router {
     let (socket_layer, io) = SocketIo::new_layer();
     注册realtime命名空间(&io, state.clone());
     let normalized_tus_base_path =
-        媒体上传外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
+        媒体_tus代理外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
     let tus_resource_proxy_path = format!("{normalized_tus_base_path}/{{*tus_upload_tail}}");
 
     Router::new()
         .route(
             normalized_tus_base_path.as_str(),
-            any(媒体上传外壳::proxy_tus_upload_transport),
+            any(媒体_tus代理外壳::proxy_tus_upload_transport),
         )
         .route(
             tus_resource_proxy_path.as_str(),
-            any(媒体上传外壳::proxy_tus_upload_transport),
+            any(媒体_tus代理外壳::proxy_tus_upload_transport),
         )
         .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
         .route(
@@ -303,23 +317,23 @@ pub fn 构建路由(state: 应用状态) -> Router {
         )
         .route(
             "/api/media/{attachment_kind}/prepare",
-            post(媒体上传外壳::prepare_media_upload),
+            post(媒体准备上传外壳::prepare_media_upload),
         )
         .route(
             "/api/media/{attachment_kind}/source-dedupe",
-            post(媒体上传外壳::reuse_media_by_source_hash),
+            post(媒体_source_hash复用外壳::reuse_media_by_source_hash),
         )
         .route(
             "/api/media/{attachment_kind}/forward",
-            post(媒体上传外壳::forward_media_attachment),
+            post(媒体附件转发外壳::forward_media_attachment),
         )
         .route(
             "/api/media/{attachment_id}/complete",
-            post(媒体上传外壳::complete_media_upload),
+            post(媒体完成上传外壳::complete_media_upload),
         )
         .route(
             "/api/media/{attachment_id}/abandon",
-            post(媒体上传外壳::abandon_media_upload),
+            post(媒体放弃上传外壳::abandon_media_upload),
         )
         .route("/internal/tus/hooks", post(tus_hook外壳::handle_tus_hook))
         .route(
@@ -474,5 +488,4 @@ mod tests {
 
         assert_eq!(命令.join_ticket.as_deref(), Some("ticket-valid"));
     }
-
 }

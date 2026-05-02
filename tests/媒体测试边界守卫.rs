@@ -129,25 +129,47 @@ fn 实时外壳必须显式依赖实时业务入口而不是继续偷连统一�
 #[test]
 fn 媒体上传与媒体资产外壳必须显式依赖媒体业务入口() {
     let shell = 读取("src/外壳/mod.rs");
-    let upload_owner = 读取("src/媒体/上传/外壳/媒体上传.rs");
+    let upload_shared = 读取("src/媒体/上传/外壳/媒体上传.rs");
     let asset_owner = 读取("src/媒体/资产/外壳.rs");
     assert!(
         !Path::new("src/媒体上传外壳.rs").exists(),
         "src/媒体上传外壳.rs 应该已经删除，不能继续保留根目录旧入口"
     );
-    assert!(
-        shell.contains("#[path = \"../媒体/上传/外壳/媒体上传.rs\"]"),
-        "src/外壳/mod.rs 应直接把媒体上传模块路径指到 src/媒体/上传/外壳/媒体上传.rs"
-    );
-    for (path, content) in [
-        ("src/媒体/上传/外壳/媒体上传.rs", upload_owner),
-        ("src/媒体/资产/外壳.rs", asset_owner),
+    for path_fragment in [
+        "#[path = \"../媒体/上传/外壳/媒体上传.rs\"]",
+        "#[path = \"../媒体/上传/外壳/准备上传.rs\"]",
+        "#[path = \"../媒体/上传/外壳/source_hash复用.rs\"]",
+        "#[path = \"../媒体/上传/外壳/转发附件.rs\"]",
+        "#[path = \"../媒体/上传/外壳/完成上传.rs\"]",
+        "#[path = \"../媒体/上传/外壳/放弃上传.rs\"]",
+        "#[path = \"../媒体/上传/外壳/tus代理.rs\"]",
     ] {
         assert!(
-            content.contains("crate::media"),
-            "{path} 尚未切到媒体业务入口，媒体 owner 仍会被统一用例反向绑住"
+            shell.contains(path_fragment),
+            "src/外壳/mod.rs 应直接把媒体上传端点 owner 模块路径挂出来: {path_fragment}"
         );
     }
+    assert!(
+        upload_shared.contains("它不承载 HTTP 路由"),
+        "src/媒体/上传/外壳/媒体上传.rs 现在只能是共享协议小函数，不得继续承载端点"
+    );
+    for path in [
+        "src/媒体/上传/外壳/准备上传.rs",
+        "src/媒体/上传/外壳/source_hash复用.rs",
+        "src/媒体/上传/外壳/转发附件.rs",
+        "src/媒体/上传/外壳/完成上传.rs",
+        "src/媒体/上传/外壳/放弃上传.rs",
+    ] {
+        let content = 读取(path);
+        assert!(
+            content.contains("crate::media"),
+            "{path} 尚未切到媒体业务入口，媒体上传端点 owner 仍会被统一用例反向绑住"
+        );
+    }
+    assert!(
+        asset_owner.contains("crate::media"),
+        "src/媒体/资产/外壳.rs 尚未切到媒体业务入口，媒体 owner 仍会被统一用例反向绑住"
+    );
 }
 
 #[test]
