@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
@@ -6,14 +6,36 @@ import { createFakeStorage, 假传输 } from "../common/聊天测试支架";
 import { 创建聊天应用内核 } from "../../总装/聊天应用内核";
 import { 创建内核依赖, 读取媒体编排供测试 } from "../common/聊天应用内核支架";
 
+const 前端根目录允许文件 = [
+  ".tsbuildinfo",
+  "入口.ts",
+  "app-sw.ts",
+  "build.mjs",
+  "css.d.ts",
+  "dev-seeder.d.mts",
+  "dev-seeder.mjs",
+  "idb-chunk-store.d.ts",
+  "index.html",
+  "media-sw.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "tsconfig.json",
+  "vitest.config.ts",
+  "webtorrent.d.ts",
+];
+
 describe("聊天应用内核 - 架构边界与公开入口", () => {
-  it("时间线合流不再在聊天应用内核里直接揉 messages 数组", () => {
+  it("时间线合流不再在聊天应用内核里直接揉 messages 数组，frontend 根目录也只保留白名单文件", () => {
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
+    const 根目录文件 = readdirSync(resolve(process.cwd()))
+      .filter((entry) => statSync(resolve(process.cwd(), entry)).isFile())
+      .sort();
 
     expect(existsSync(resolve(process.cwd(), "聊天应用内核.ts"))).toBe(false);
     expect(existsSync(resolve(process.cwd(), "聊天壳.ts"))).toBe(false);
     expect(existsSync(resolve(process.cwd(), "总装/聊天应用内核.ts"))).toBe(true);
     expect(existsSync(resolve(process.cwd(), "总装/聊天壳.ts"))).toBe(true);
+    expect(根目录文件).toEqual([...前端根目录允许文件].sort());
     expect(source).not.toContain("推进房间时间线(this.时间线状态.messages");
   });
 
@@ -67,7 +89,7 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).not.toContain("创建阅读推进编排({");
   });
 
-  it("聊天应用内核通过媒体播放会话门面接入媒体 owner，而不是继续直连旧媒体编排入口", () => {
+  it("聊天应用内核通过媒体播放会话应用接入媒体 owner，而不是继续直连旧媒体编排入口", () => {
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
     expect(source).toContain('from "../媒体/播放会话/应用.js"');

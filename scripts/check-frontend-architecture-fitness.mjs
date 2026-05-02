@@ -14,6 +14,23 @@ const 媒体查看器测试目录 = join(前端测试目录, "媒体查看器");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
+const 前端根目录允许文件 = new Set([
+  ".tsbuildinfo",
+  "入口.ts",
+  "app-sw.ts",
+  "build.mjs",
+  "css.d.ts",
+  "dev-seeder.d.mts",
+  "dev-seeder.mjs",
+  "idb-chunk-store.d.ts",
+  "index.html",
+  "media-sw.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "tsconfig.json",
+  "vitest.config.ts",
+  "webtorrent.d.ts",
+]);
 
 /**
  * 前端运行时 owner 注册表。
@@ -37,15 +54,8 @@ const 前端运行时Owner注册表 = [
 ];
 
 /**
- * 根目录零业务门面已经开始落地。
- * 这里仅保留尚未清零的兼容入口，并强制它们继续保持极薄，避免真实 owner 又偷偷回流到根目录。
- */
-const 前端迁移门面规则 = [
-];
-
-/**
- * 已经完成清零的根业务门面必须继续不存在。
- * 这样才能把门禁从“允许极薄门面”翻成“禁止根业务 owner 回流”。
+ * 已经完成清零的根业务旧入口必须继续不存在。
+ * 这样才能把门禁固定成“frontend 根目录只留入口/配置/声明/worker，业务 owner 一律不许回流”。
  */
 const 前端已清零根文件规则 = [
   {
@@ -361,6 +371,8 @@ const 转成仓库相对路径 = (absolutePath) =>
 const 读取源码 = (relativePath) =>
   readFileSync(join(仓库根目录, relativePath), "utf8");
 
+const 模块说明符正则 = /^\s*import(?:[\s\S]*?\bfrom\s*)?["']([^"']+)["']\s*;?|^\s*export[\s\S]*?\bfrom\s*["']([^"']+)["']\s*;?/gm;
+
 const 文件存在 = (absolutePath) => {
   try {
     return statSync(absolutePath).isFile();
@@ -373,6 +385,39 @@ const 去掉注释 = (source) =>
   source
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+const 提取模块说明符 = (source) => {
+  const specifiers = [];
+  for (const match of source.matchAll(模块说明符正则)) {
+    const specifier = match[1] ?? match[2];
+    if (specifier) {
+      specifiers.push(specifier);
+    }
+  }
+  return specifiers;
+};
+
+const 枚举相对导入候选路径 = (importerAbsolutePath, specifier) => {
+  if (!specifier.startsWith(".")) {
+    return [];
+  }
+
+  const resolved = resolve(dirname(importerAbsolutePath), specifier);
+  if (extname(resolved)) {
+    return [resolved];
+  }
+
+  return [
+    resolved,
+    `${resolved}.ts`,
+    `${resolved}.js`,
+    `${resolved}.mjs`,
+    `${resolved}.d.ts`,
+    join(resolved, "index.ts"),
+    join(resolved, "index.js"),
+    join(resolved, "index.mjs"),
+  ];
+};
 
 export const 统计有效源码行数 = (source) => {
   let 位于块注释内 = false;
@@ -544,68 +589,23 @@ const 检查Owner注册表 = () => {
   return violations;
 };
 
-const 检查迁移门面规则 = () => {
+const 检查前端根目录白名单 = () => {
   const violations = [];
-
-  for (const rule of 前端迁移门面规则) {
-    let facadeSource;
-    let ownerSource;
-    try {
-      facadeSource = 读取源码(rule.path);
-    } catch {
-      violations.push({
-        file: rule.path,
-        label: "migration facade missing",
-        detail: "迁移门面文件不存在",
-      });
+  for (const entry of readdirSync(前端目录)) {
+    const absolutePath = join(前端目录, entry);
+    const stats = statSync(absolutePath);
+    if (!stats.isFile()) {
       continue;
     }
-
-    try {
-      ownerSource = 读取源码(rule.ownerPath);
-    } catch {
-      violations.push({
-        file: rule.ownerPath,
-        label: "migration owner missing",
-        detail: "真实 owner 文件不存在",
-      });
+    if (前端根目录允许文件.has(entry)) {
       continue;
     }
-
-    for (const snippet of rule.requiredSnippets) {
-      if (facadeSource.includes(snippet)) {
-        continue;
-      }
-      violations.push({
-        file: rule.path,
-        label: "migration facade drift",
-        detail: `缺少门面片段: ${snippet}`,
-      });
-    }
-
-    for (const snippet of rule.forbiddenSnippets) {
-      if (!facadeSource.includes(snippet)) {
-        continue;
-      }
-      violations.push({
-        file: rule.path,
-        label: "migration facade owns implementation",
-        detail: `门面不应继续承载实现片段: ${snippet}`,
-      });
-    }
-
-    if (
-      rule.ownerPath.startsWith("frontend/后台/") &&
-      去掉注释(ownerSource).includes("/操作台/")
-    ) {
-      violations.push({
-        file: rule.ownerPath,
-        label: "migration owner semantic drift",
-        detail: "后台 owner 真实代码不应再引用操作台目录",
-      });
-    }
+    violations.push({
+      file: `frontend/${entry}`,
+      label: "unexpected frontend root file",
+      detail: "frontend 根目录只允许入口、配置、声明、service worker 和开发脚本白名单文件",
+    });
   }
-
   return violations;
 };
 
@@ -617,8 +617,8 @@ const 检查已清零根文件规则 = () => {
     if (文件存在(absolutePath)) {
       violations.push({
         file: rule.path,
-        label: "deleted root business facade revived",
-        detail: "根业务门面已经清零，不允许重新出现在 frontend/ 根目录",
+        label: "deleted root business file revived",
+        detail: "已清零的 frontend 根业务旧入口又出现了，必须删除并改回真实 owner",
       });
       continue;
     }
@@ -630,7 +630,7 @@ const 检查已清零根文件规则 = () => {
       violations.push({
         file: rule.ownerPath,
         label: "deleted root owner missing",
-        detail: "已清零根门面的真实 owner 文件不存在",
+        detail: "已清零旧根入口对应的真实 owner 文件不存在",
       });
       continue;
     }
@@ -643,6 +643,33 @@ const 检查已清零根文件规则 = () => {
         file: rule.ownerPath,
         label: "deleted root owner drift",
         detail: `真实 owner 缺少关键实现片段: ${snippet}`,
+      });
+    }
+  }
+
+  return violations;
+};
+
+const 检查旧根路径导入 = (directories) => {
+  const deletedRootTargets = new Map(
+    前端已清零根文件规则.map((rule) => [join(仓库根目录, rule.path), rule.path])
+  );
+  const scanFiles = directories.flatMap((directory) => 收集文件(directory));
+  const violations = [];
+
+  for (const absolutePath of scanFiles) {
+    const source = readFileSync(absolutePath, "utf8");
+    for (const specifier of 提取模块说明符(source)) {
+      const hit = 枚举相对导入候选路径(absolutePath, specifier).find((candidate) =>
+        deletedRootTargets.has(candidate)
+      );
+      if (!hit) {
+        continue;
+      }
+      violations.push({
+        file: 转成仓库相对路径(absolutePath),
+        label: "deleted frontend root import",
+        detail: `禁止继续 import 已清零旧根路径 ${deletedRootTargets.get(hit)}，应改向真实 owner`,
       });
     }
   }
@@ -814,8 +841,13 @@ export const 收集架构适应度违规 = () => {
   const files = 收集文件(前端目录);
   const 违规记录 = [
     ...检查Owner注册表(),
+    ...检查前端根目录白名单(),
     ...检查已清零根文件规则(),
-    ...检查迁移门面规则(),
+    ...检查旧根路径导入([
+      前端目录,
+      前端测试目录,
+      join(仓库根目录, "scripts"),
+    ]),
     ...检查未登记XStateOwner(files),
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
