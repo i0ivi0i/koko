@@ -252,7 +252,7 @@ describe("媒体共享契约", () => {
   });
 
   it("共享契约实现不应继续出现迁移期旧表面叙事", () => {
-    const source = readFileSync(new URL("../../src/契约.rs", import.meta.url), "utf-8");
+    const source = readFileSync(new URL("../../src/共享/契约基础.rs", import.meta.url), "utf-8");
     expect(source).not.toMatch(/迁移期.*表面/);
     expect(source.includes("流媒体视频")).toBe(false);
     expect(source.includes("流媒体音频")).toBe(false);
