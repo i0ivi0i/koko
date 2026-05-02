@@ -1,9 +1,9 @@
-use crate::{shared::contract, application};
+use crate::{application, media, shared::contract};
 
 /// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在媒体分发语义里。
 /// handler 只负责调度，不直接越层操纵仓储。
 pub fn 写入协作分发元数据(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl media::application::媒体仓储端口,
     请求: &application::协作分发元数据写入请求,
 ) -> Result<application::协作分发元数据快照, contract::错误码> {
     if 请求.附件标识.trim().is_empty()
@@ -21,7 +21,7 @@ pub fn 写入协作分发元数据(
 /// 2. 仍然强校验 peer_kind 与基础参数，避免 adapter 被脏数据污染；
 /// 3. 只写运行态表，不改 attachment 稳定分发表面。
 pub fn 写入协作分发swarm存活(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl media::application::媒体仓储端口,
     请求: &application::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
     if 请求.swarm_id.trim().is_empty()
@@ -39,7 +39,7 @@ pub fn 写入协作分发swarm存活(
 }
 
 pub fn 写入协作分发torrent元信息(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl media::application::媒体仓储端口,
     请求: &application::协作分发torrent元信息写入请求,
 ) -> Result<application::协作分发torrent元信息快照, contract::错误码> {
     if 请求.附件标识.trim().is_empty()
@@ -57,7 +57,7 @@ pub fn 写入协作分发torrent元信息(
 /// 2. 附件必须存在且 ready；
 /// 3. 实际可见性仍按“当前会话是否能看到引用该附件的消息”裁决。
 pub fn 读取附件内容(
-    仓储: &dyn application::仓储端口,
+    仓储: &impl media::application::媒体仓储端口,
     附件标识: &str,
     会话标识: &str,
     变体: application::附件内容变体,
@@ -94,7 +94,7 @@ pub fn 读取附件内容(
 /// - 业务层只回答“当前附件是什么、是否 ready、当前会话是否允许拿到 transport 线索”；
 /// - 不把存储键、房间 id、owner 等实现细节交给壳层。
 pub fn 查询媒体定位(
-    仓储: &dyn application::仓储端口,
+    仓储: &impl media::application::媒体仓储端口,
     附件标识: &str,
     会话标识: &str,
 ) -> Result<application::媒体定位结果, contract::错误码> {
@@ -146,7 +146,7 @@ pub fn 查询媒体定位(
 /// 1. 时间与限制参数必须合法；
 /// 2. 具体筛选条件由仓储实现保持与权威表一致。
 pub fn 列出待做种协作分发项(
-    仓储: &dyn application::仓储端口,
+    仓储: &impl media::application::媒体仓储端口,
     当前时间戳秒: i64,
     限制条数: i64,
 ) -> Result<Vec<application::待做种协作分发项>, contract::错误码> {

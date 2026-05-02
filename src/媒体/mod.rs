@@ -2,6 +2,9 @@
 /// 1. 上传：prepared -> ready 的附件成立链；
 /// 2. 协作分发：locator、内容读取、swarm 元数据与后台做种输入。
 ///
+/// 共享媒体 owner 只保留上传/分发都会复用的稳定仓储边界与少量跨子域编排。
+#[path = "应用.rs"]
+pub mod application;
 /// 第一阶段不复制契约，只先把 owner 从统一用例里迁出来。
 #[path = "协作分发/mod.rs"]
 pub mod distribution;

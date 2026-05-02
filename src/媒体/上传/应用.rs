@@ -1,10 +1,10 @@
-use crate::{shared::contract, application};
+use crate::{application, media, shared::contract};
 
 /// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
 /// 上传业务模块只承认“占位申请”和“prepared -> ready”两段真相，
 /// 不顺手创建消息，也不把运输层状态抬成消息事实。
 pub fn 准备媒体附件上传(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl media::application::媒体仓储端口,
     会话标识: &str,
     附件: &application::媒体附件准备请求,
 ) -> Result<application::媒体附件准备快照, contract::错误码> {
@@ -48,7 +48,7 @@ pub fn 准备媒体附件上传(
 /// 2. 附件仍归当前发送者所有；
 /// 3. 附件现在确实还处于 prepared。
 pub fn 读取待完成媒体附件(
-    仓储: &dyn application::仓储端口,
+    仓储: &impl media::application::媒体仓储端口,
     会话标识: &str,
     附件标识: &str,
 ) -> Result<application::待完成媒体附件读取结果, contract::错误码> {
@@ -75,7 +75,7 @@ pub fn 读取待完成媒体附件(
 /// 完成上传只负责把 prepared 升级成 ready。
 /// 它不创建消息，也不改变消息发送主链。
 pub fn 完成媒体附件上传(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl media::application::媒体仓储端口,
     会话标识: &str,
     附件: &application::媒体附件写入请求,
 ) -> Result<application::媒体附件快照, contract::错误码> {

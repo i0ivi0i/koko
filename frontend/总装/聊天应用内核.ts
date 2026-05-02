@@ -66,6 +66,10 @@ import {
   type 聊天视口状态,
   type 聊天输入状态,
 } from "./聊天状态.js";
+import {
+  应用聊天本地状态折叠,
+  type 聊天本地状态补丁,
+} from "./聊天本地状态折叠.js";
 import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
   创建房间视口Actor,
@@ -113,45 +117,6 @@ type 房间壳补丁 = Pick<
   | "recoveryState"
   | "lastRecoveryErrorCode"
 >;
-
-type 聊天本地状态补丁 = Partial<
-  聊天会话状态 &
-    聊天输入状态 &
-    聊天时间线状态 &
-    聊天视口状态 &
-    聊天流程状态 &
-    Omit<聊天运行时状态, "runtimeBudget">
-> & {
-  runtimeBudget?: Partial<聊天运行时预算状态>;
-};
-
-function 记录有变化字段<T extends object, K extends keyof T>(
-  currentState: T,
-  nextPatch: Partial<T>,
-  key: K,
-  nextValue: T[K],
-  onChange?: () => void
-): void {
-  if (Object.is(currentState[key], nextValue)) {
-    return;
-  }
-  nextPatch[key] = nextValue;
-  onChange?.();
-}
-
-function 浅比较对象<T extends object>(left: T, right: T): boolean {
-  if (left === right) {
-    return true;
-  }
-  const leftKeys = Object.keys(left) as Array<keyof T>;
-  const rightKeys = Object.keys(right) as Array<keyof T>;
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-  return leftKeys.every(
-    (key) => Object.hasOwn(right, key) && Object.is(left[key], right[key])
-  );
-}
 
 export type 聊天应用命令 =
   | { type: "BOOTSTRAP_REQUESTED" }
@@ -350,7 +315,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         ? { 预览缓存: this.平台桥接.视频预览仓库() }
         : {}),
       写入草稿列表: (nextDrafts) => {
-        this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
+        this.应用本地状态折叠({ composerMediaDrafts: nextDrafts });
       },
       请求重渲染: () => {
         this.deps.渲染桥.请求重渲染();
@@ -383,7 +348,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         处理房间号输入变更({
           value: command.value,
           写入房间号输入: (value) => {
-            this.应用本地状态补丁({ roomCodeInput: value });
+            this.应用本地状态折叠({ roomCodeInput: value });
           },
         });
         return;
@@ -391,7 +356,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         处理消息输入变更({
           value: command.value,
           写入消息输入: (value) => {
-            this.应用本地状态补丁({ messageInput: value });
+            this.应用本地状态折叠({ messageInput: value });
           },
         });
         return;
@@ -399,7 +364,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await 处理进房请求({
           roomCode: command.roomCode,
           写入房间号输入: (value) => {
-            this.应用本地状态补丁({ roomCodeInput: value });
+            this.应用本地状态折叠({ roomCodeInput: value });
           },
           触发进房: () => this.恢复编排端口.joinRoom(),
         });
@@ -408,7 +373,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await 处理历史房间进房请求({
           roomCode: command.roomCode,
           写入房间号输入: (value) => {
-            this.应用本地状态补丁({ roomCodeInput: value });
+            this.应用本地状态折叠({ roomCodeInput: value });
           },
           触发进房: () => this.恢复编排端口.joinRoom(),
         });
@@ -553,7 +518,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private 同步房间视口快照(): void {
-    this.应用本地状态补丁(投影视口快照到聊天视口状态(this.roomViewport.snapshot()));
+    this.应用本地状态折叠(投影视口快照到聊天视口状态(this.roomViewport.snapshot()));
   }
 
   private 登记程序滚动来源(source: 程序滚动来源): void {
@@ -595,7 +560,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 房间壳派生状态仍然要翻成真实 room event，而不是直接改房间真相。
    */
   写入视口调试状态供测试(patch: Partial<聊天视口调试状态>): void {
-    this.应用本地状态补丁(patch);
+    this.应用本地状态折叠(patch);
     const nextFirstUnreadEventPosition =
       Object.hasOwn(patch, "firstUnreadEventPosition")
         ? patch.firstUnreadEventPosition ?? null
@@ -740,7 +705,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
          * 缓存/存储只是本地加速层真相。
          * 加速层被驱逐时只能更新运行时状态，不能推断任何消息业务事实缺失。
          */
-        this.应用本地状态补丁({
+        this.应用本地状态折叠({
           accelerationState: command.snapshot.accelerationState,
         });
         return;
@@ -765,7 +730,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    */
   private 同步应用生命周期快照并执行副作用(): void {
     const snapshot = this.appLifecycle.snapshot();
-    this.应用本地状态补丁({
+    this.应用本地状态折叠({
       lifecycleVisibility: snapshot.visibility,
       lifecyclePhase: snapshot.phase,
       heavyWorkPolicy: snapshot.heavyWorkPolicy,
@@ -870,247 +835,47 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private 同步房间时间线快照(): void {
     const snapshot = this.roomTimeline.getSnapshot();
-    this.应用本地状态补丁(投影时间线快照到聊天时间线状态(snapshot));
+    this.应用本地状态折叠(投影时间线快照到聊天时间线状态(snapshot));
   }
 
   /**
    * 本地 slice 写入口只负责聊天内核自己拥有的状态。
    * room kernel 派生字段不会在这里落地，避免重新长回“共享大状态 + 多处 patch”。
    */
-  private 应用本地状态补丁(patch: 聊天本地状态补丁): boolean {
-    let 写入了本地补丁 = false;
-    let 消息列表发生变化 = false;
-    const 会话补丁: Partial<聊天会话状态> = {};
-    const 输入补丁: Partial<聊天输入状态> = {};
-    const 时间线补丁: Partial<聊天时间线状态> = {};
-    const 视口补丁: Partial<聊天视口状态> = {};
-    const 流程补丁: Partial<聊天流程状态> = {};
-    const 运行时补丁: Partial<聊天运行时状态> = {};
-
-    if (Object.hasOwn(patch, "deviceAnonymousToken")) {
-      记录有变化字段(
-        this.会话状态,
-        会话补丁,
-        "deviceAnonymousToken",
-        patch.deviceAnonymousToken ?? ""
-      );
-    }
-    if (Object.hasOwn(patch, "homeSessionItems")) {
-      记录有变化字段(
-        this.会话状态,
-        会话补丁,
-        "homeSessionItems",
-        patch.homeSessionItems ?? []
-      );
-    }
-    if (Object.hasOwn(patch, "roomCodeInput")) {
-      记录有变化字段(this.输入状态, 输入补丁, "roomCodeInput", patch.roomCodeInput ?? "");
-    }
-    if (Object.hasOwn(patch, "messageInput")) {
-      记录有变化字段(this.输入状态, 输入补丁, "messageInput", patch.messageInput ?? "");
-    }
-    if (Object.hasOwn(patch, "composerMediaDrafts")) {
-      记录有变化字段(
-        this.输入状态,
-        输入补丁,
-        "composerMediaDrafts",
-        patch.composerMediaDrafts ?? []
-      );
-    }
-    if (Object.hasOwn(patch, "messages")) {
-      记录有变化字段(this.时间线状态, 时间线补丁, "messages", patch.messages ?? [], () => {
-        消息列表发生变化 = true;
-      });
-    }
-    if (Object.hasOwn(patch, "hasMoreBefore")) {
-      记录有变化字段(
-        this.时间线状态,
-        时间线补丁,
-        "hasMoreBefore",
-        patch.hasMoreBefore ?? false
-      );
-    }
-    if (Object.hasOwn(patch, "historyLoading")) {
-      记录有变化字段(
-        this.时间线状态,
-        时间线补丁,
-        "historyLoading",
-        patch.historyLoading ?? false
-      );
-    }
-    if (Object.hasOwn(patch, "historyErrorCode")) {
-      记录有变化字段(
-        this.时间线状态,
-        时间线补丁,
-        "historyErrorCode",
-        patch.historyErrorCode ?? ""
-      );
-    }
-    if (Object.hasOwn(patch, "viewportMode")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "viewportMode",
-        patch.viewportMode ?? "离底浏览"
-      );
-    }
-    if (Object.hasOwn(patch, "candidateReadAnchorPosition")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "candidateReadAnchorPosition",
-        patch.candidateReadAnchorPosition ?? null
-      );
-    }
-    if (Object.hasOwn(patch, "hasUnreadNewerMessages")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "hasUnreadNewerMessages",
-        patch.hasUnreadNewerMessages ?? false
-      );
-    }
-    if (Object.hasOwn(patch, "lastReadEventPosition")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "lastReadEventPosition",
-        patch.lastReadEventPosition ?? null
-      );
-    }
-    if (Object.hasOwn(patch, "firstUnreadEventPosition")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "firstUnreadEventPosition",
-        patch.firstUnreadEventPosition ?? null
-      );
-    }
-    if (Object.hasOwn(patch, "initialUnreadSettled")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "initialUnreadSettled",
-        patch.initialUnreadSettled ?? false
-      );
-    }
-    if (Object.hasOwn(patch, "scrollPhase")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "scrollPhase",
-        patch.scrollPhase ?? "idle"
-      );
-    }
-    if (Object.hasOwn(patch, "hasUserScrollIntent")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "hasUserScrollIntent",
-        patch.hasUserScrollIntent ?? false
-      );
-    }
-    if (Object.hasOwn(patch, "pendingReadAnchorPosition")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "pendingReadAnchorPosition",
-        patch.pendingReadAnchorPosition ?? null
-      );
-    }
-    if (Object.hasOwn(patch, "historyLoadThrottleUntil")) {
-      记录有变化字段(
-        this.视口状态,
-        视口补丁,
-        "historyLoadThrottleUntil",
-        patch.historyLoadThrottleUntil ?? 0
-      );
-    }
-    if (Object.hasOwn(patch, "pending")) {
-      记录有变化字段(this.流程状态, 流程补丁, "pending", patch.pending ?? false);
-    }
-    if (Object.hasOwn(patch, "lifecycleVisibility")) {
-      记录有变化字段(
-        this.运行时状态,
-        运行时补丁,
-        "lifecycleVisibility",
-        patch.lifecycleVisibility ?? "visible"
-      );
-    }
-    if (Object.hasOwn(patch, "lifecyclePhase")) {
-      记录有变化字段(
-        this.运行时状态,
-        运行时补丁,
-        "lifecyclePhase",
-        patch.lifecyclePhase ?? "active"
-      );
-    }
-    if (Object.hasOwn(patch, "heavyWorkPolicy")) {
-      记录有变化字段(
-        this.运行时状态,
-        运行时补丁,
-        "heavyWorkPolicy",
-        patch.heavyWorkPolicy ?? "normal"
-      );
-    }
-    if (Object.hasOwn(patch, "swUpdateState")) {
-      记录有变化字段(
-        this.运行时状态,
-        运行时补丁,
-        "swUpdateState",
-        patch.swUpdateState ?? "idle"
-      );
-    }
-    if (Object.hasOwn(patch, "accelerationState")) {
-      记录有变化字段(
-        this.运行时状态,
-        运行时补丁,
-        "accelerationState",
-        patch.accelerationState ?? "best_effort"
-      );
-    }
-    if (Object.hasOwn(patch, "online")) {
-      记录有变化字段(this.运行时状态, 运行时补丁, "online", patch.online ?? true);
-    }
-    if (Object.hasOwn(patch, "runtimeBudget")) {
-      const nextRuntimeBudget = {
-        ...this.运行时状态.runtimeBudget,
-        ...patch.runtimeBudget,
-      };
-      if (!浅比较对象(this.运行时状态.runtimeBudget, nextRuntimeBudget)) {
-        运行时补丁.runtimeBudget = nextRuntimeBudget;
-      }
-    }
-
-    if (Object.keys(会话补丁).length > 0) {
-      this.会话状态 = { ...this.会话状态, ...会话补丁 };
-      写入了本地补丁 = true;
-    }
-    if (Object.keys(输入补丁).length > 0) {
-      this.输入状态 = { ...this.输入状态, ...输入补丁 };
-      写入了本地补丁 = true;
-    }
-    if (Object.keys(时间线补丁).length > 0) {
-      this.时间线状态 = { ...this.时间线状态, ...时间线补丁 };
-      写入了本地补丁 = true;
-    }
-    if (Object.keys(视口补丁).length > 0) {
-      this.视口状态 = { ...this.视口状态, ...视口补丁 };
-      写入了本地补丁 = true;
-    }
-    if (Object.keys(流程补丁).length > 0) {
-      this.流程状态 = { ...this.流程状态, ...流程补丁 };
-      写入了本地补丁 = true;
-    }
-    if (Object.keys(运行时补丁).length > 0) {
-      this.运行时状态 = { ...this.运行时状态, ...运行时补丁 };
-      写入了本地补丁 = true;
-    }
-
-    if (!写入了本地补丁) {
+  private 应用本地状态折叠(patch: 聊天本地状态补丁): boolean {
+    const 结果 = 应用聊天本地状态折叠(
+      {
+        会话状态: this.会话状态,
+        输入状态: this.输入状态,
+        时间线状态: this.时间线状态,
+        视口状态: this.视口状态,
+        流程状态: this.流程状态,
+        运行时状态: this.运行时状态,
+      },
+      patch
+    );
+    if (!结果.写入了本地补丁) {
       return false;
     }
-    if (消息列表发生变化) {
+    if (结果.会话状态) {
+      this.会话状态 = 结果.会话状态;
+    }
+    if (结果.输入状态) {
+      this.输入状态 = 结果.输入状态;
+    }
+    if (结果.时间线状态) {
+      this.时间线状态 = 结果.时间线状态;
+    }
+    if (结果.视口状态) {
+      this.视口状态 = 结果.视口状态;
+    }
+    if (结果.流程状态) {
+      this.流程状态 = 结果.流程状态;
+    }
+    if (结果.运行时状态) {
+      this.运行时状态 = 结果.运行时状态;
+    }
+    if (结果.消息列表发生变化) {
       this.媒体编排.同步消息附件播放结果();
     }
     this.deps.渲染桥.请求重渲染();
@@ -1180,7 +945,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 写入恢复编排状态(
     patch: Parameters<房间恢复编排依赖["写入恢复状态"]>[0]
   ): void {
-    this.应用本地状态补丁(patch);
+    this.应用本地状态折叠(patch);
     if (
       Object.hasOwn(patch, "initialUnreadSettled") &&
       patch.initialUnreadSettled === false &&
@@ -1211,7 +976,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 写入实时编排状态(
     patch: Parameters<房间实时编排依赖["写入实时状态"]>[0]
   ): void {
-    this.应用本地状态补丁(patch);
+    this.应用本地状态折叠(patch);
   }
 
   private 读取阅读推进状态(): ReturnType<阅读推进编排依赖["读取阅读状态"]> {
@@ -1235,7 +1000,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private 写入阅读状态(patch: Parameters<阅读推进编排依赖["写入阅读状态"]>[0]): void {
-    this.应用本地状态补丁(patch);
+    this.应用本地状态折叠(patch);
   }
 
   private 读取房间壳外观(): 房间壳外观 {
@@ -1311,7 +1076,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomTimeline.send({ type: "ROOM_SOFT_RESET" });
     this.同步房间时间线快照();
     this.roomViewport.send({ type: "ROOM_VIEW_EXITED" });
-    this.应用本地状态补丁({
+    this.应用本地状态折叠({
       messageInput: "",
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,

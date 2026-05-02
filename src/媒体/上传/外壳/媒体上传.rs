@@ -2,10 +2,11 @@ use super::{
     tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态, 构建共享仓储,
 };
 use crate::adapter::{媒体上传会话授权写入请求, 媒体上传运输记录};
+use crate::media::application::媒体仓储端口;
 use crate::media::distribution::application as 协作分发应用;
 use crate::media::upload::application as 上传应用;
 use crate::shell::协议响应::{err_resp, event_to_json, map_domain_err_tuple};
-use crate::{media_distribution, application, application::仓储端口};
+use crate::{media_distribution, application};
 use axum::{
     Json,
     body::Body,
@@ -363,11 +364,11 @@ async fn 构造ready媒体附件响应并触发做种(
             stale_seconds: state.swarm_peer_presence_stale_seconds,
         },
     );
-    if let Some(启动命令) = super::从协作分发响应构造做种启动命令(
+    if let Some(启动命令) = super::协作分发做种::从协作分发响应构造做种启动命令(
         &runtime_distribution,
         state.swarm_seeder_tracker_url.as_str(),
     ) {
-        if let Err(err) = super::尝试启动协作分发做种(state, &启动命令).await {
+        if let Err(err) = super::协作分发做种::尝试启动协作分发做种(state, &启动命令).await {
             tracing::warn!(
                 application = usecase_label,
                 phase = "seed_start_failed",
@@ -454,7 +455,8 @@ pub(super) async fn reuse_media_by_source_hash(
     let state_for_usecase = state.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        application::复用source_hash媒体附件(&mut repo, &request).map_err(map_domain_err_tuple)
+        crate::media::application::复用source_hash媒体附件(&mut repo, &request)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -566,7 +568,8 @@ pub(super) async fn forward_media_attachment(
     let state_for_usecase = state.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        application::转发媒体附件到房间(&mut repo, &request).map_err(map_domain_err_tuple)
+        crate::media::application::转发媒体附件到房间(&mut repo, &request)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let application::媒体附件转发结果 {
@@ -1095,12 +1098,12 @@ pub(super) async fn complete_media_upload(
         .map_err(map_domain_err_tuple)?;
         // canonical 资产是内容身份层事实，先写资产再绑定附件引用；
         // 后续 source_hash 命中才能复用同一资产，而不是复制旧附件或旧消息。
-        application::仓储端口::写入canonical媒体资产(
+        crate::media::application::媒体仓储端口::写入canonical媒体资产(
             &mut repo,
             &canonical_asset_request_for_write,
         )
         .map_err(map_domain_err_tuple)?;
-        application::仓储端口::绑定附件canonical媒体资产(
+        crate::media::application::媒体仓储端口::绑定附件canonical媒体资产(
             &mut repo,
             &snapshot.附件标识,
             canonical_asset_request_for_write.content_hash.as_str(),
@@ -1111,7 +1114,8 @@ pub(super) async fn complete_media_upload(
         协作分发应用::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
             .map_err(map_domain_err_tuple)?;
         if let Some(request) = streaming_manifest_request_for_write.as_ref() {
-            application::写入流媒体清单元数据(&mut repo, request).map_err(map_domain_err_tuple)?;
+            crate::media::application::写入流媒体清单元数据(&mut repo, request)
+                .map_err(map_domain_err_tuple)?;
         }
         Ok::<_, (StatusCode, &'static str, String)>(snapshot)
     })
@@ -1187,11 +1191,11 @@ pub(super) async fn complete_media_upload(
             // 1. 这里不改变“ready 真相已经落库”的结果；start 失败只记告警并交给后台对账补偿；
             // 2. 命令载荷严格来自同一份 runtime_distribution，避免再长第二套 transport 真相；
             // 3. 真正“谁该做种”的裁决仍在后端 owner，不在 sidecar 里发明业务语义。
-            if let Some(启动命令) = super::从协作分发响应构造做种启动命令(
+            if let Some(启动命令) = super::协作分发做种::从协作分发响应构造做种启动命令(
                 &runtime_distribution,
                 state.swarm_seeder_tracker_url.as_str(),
             ) {
-                if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await
+                if let Err(err) = super::协作分发做种::尝试启动协作分发做种(&state, &启动命令).await
                 {
                     tracing::warn!(
                         application = "完成媒体上传",
@@ -1291,7 +1295,7 @@ pub(super) async fn abandon_media_upload(
                 .map_err(map_domain_err_tuple)?,
             None => Vec::new(),
         };
-        application::放弃媒体上传(
+        crate::media::application::放弃媒体上传(
             &mut repo,
             &session_id_for_usecase,
             &attachment_id_for_usecase,
@@ -1340,7 +1344,7 @@ pub(super) async fn abandon_media_upload(
     }
 
     if let Some(upload_session_id) = upload_session_id.as_deref() {
-        if let Err(err) = super::执行一次媒体上传残留清理_按会话(
+        if let Err(err) = super::媒体清理::执行一次媒体上传残留清理_按会话(
             state.clone(),
             Some(upload_session_id),
         )

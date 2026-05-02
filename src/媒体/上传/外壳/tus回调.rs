@@ -3,8 +3,9 @@ use super::{
 };
 use crate::{
     adapter::{媒体上传运输回执写入参数, 媒体上传运输角色},
+    media::application::媒体仓储端口,
     shell::协议响应::{err_resp, map_domain_err_tuple},
-    application::{self, 仓储端口},
+    application,
 };
 use axum::{
     extract::State,

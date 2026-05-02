@@ -38,7 +38,7 @@ async fn 原始冷源超过24小时后会被后台清理并写入删除时间() 
 
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::引导匿名身份(&mut repo, &device_token)
+        koko::identity::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识
     })
@@ -66,7 +66,7 @@ async fn 原始冷源超过24小时后会被后台清理并写入删除时间() 
     let origin_storage_key = format!("images/{attachment_id_for_worker}/canonical.webp");
     写入测试对象(&state, &origin_storage_key, 最小webp字节()).await;
 
-    koko::shell::执行一次媒体冷源清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体冷源清理(state.clone())
         .await
         .expect("应能执行一次冷源清理");
 
@@ -123,7 +123,7 @@ async fn 共享canonical资产超过24小时只删除一次并同步标记所有
 
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::引导匿名身份(&mut repo, &device_token)
+        koko::identity::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识
     })
@@ -199,7 +199,7 @@ async fn 共享canonical资产超过24小时只删除一次并同步标记所有
     pool.close().await;
 
     写入测试对象(&state, &canonical_storage_key, 最小webp字节()).await;
-    koko::shell::执行一次媒体冷源清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体冷源清理(state.clone())
         .await
         .expect("应能执行一次 canonical 资产冷源清理");
 
@@ -269,7 +269,7 @@ async fn 视频mezzanine超过24小时后会被后台清理并写入删除时间
 
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::引导匿名身份(&mut repo, &device_token)
+        koko::identity::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识
     })
@@ -297,7 +297,7 @@ async fn 视频mezzanine超过24小时后会被后台清理并写入删除时间
     let mezzanine_storage_key = format!("videos/{attachment_id_for_worker}/mezzanine.mp4");
     写入测试对象(&state, &mezzanine_storage_key, 最小mp4字节()).await;
 
-    koko::shell::执行一次媒体冷源清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体冷源清理(state.clone())
         .await
         .expect("应能执行一次冷源清理");
 
@@ -354,7 +354,7 @@ async fn 视频流媒体清单超过24小时后会被后台清理并写入删除
 
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::引导匿名身份(&mut repo, &device_token)
+        koko::identity::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识
     })
@@ -406,7 +406,7 @@ async fn 视频流媒体清单超过24小时后会被后台清理并写入删除
     .await;
     写入测试对象(&state, &dash_segment_storage_key, 最小mp4字节()).await;
 
-    koko::shell::执行一次媒体冷源清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体冷源清理(state.clone())
         .await
         .expect("应能执行一次冷源清理");
 
@@ -469,9 +469,9 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -514,7 +514,7 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
             pool.close().await;
         });
 
-        koko::application::创建消息(
+        koko::message::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -559,7 +559,7 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
     .await;
     assert_eq!(presence_status, StatusCode::NO_CONTENT, "{presence_body:?}");
 
-    koko::shell::执行一次媒体冷源清理(state)
+    koko::shell::媒体清理::执行一次媒体冷源清理(state)
         .await
         .expect("应能执行一次冷源清理");
 
@@ -598,9 +598,9 @@ async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -633,7 +633,7 @@ async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
             pool.close().await;
         });
 
-        koko::application::创建消息(
+        koko::message::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -660,7 +660,7 @@ async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
     .await;
     let app = koko::shell::构建路由(state.clone());
 
-    koko::shell::执行一次媒体冷源清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体冷源清理(state.clone())
         .await
         .expect("应能执行一次冷源清理");
 

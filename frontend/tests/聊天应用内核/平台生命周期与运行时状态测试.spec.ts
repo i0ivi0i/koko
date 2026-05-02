@@ -140,14 +140,14 @@ describe("聊天应用内核 - 平台生命周期与运行时状态", () => {
       同步消息附件播放结果(): void;
     };
     const 同步消息附件播放结果 = vi.spyOn(媒体编排, "同步消息附件播放结果");
-    const 应用本地状态补丁 = (
+    const 应用本地状态折叠 = (
       kernel as unknown as {
-        应用本地状态补丁(patch: Record<string, unknown>): boolean;
+        应用本地状态折叠(patch: Record<string, unknown>): boolean;
       }
-    ).应用本地状态补丁.bind(kernel);
+    ).应用本地状态折叠.bind(kernel);
 
-    expect(应用本地状态补丁({ historyLoading: false })).toBe(false);
-    expect(应用本地状态补丁({ messages: 当前消息 })).toBe(false);
+    expect(应用本地状态折叠({ historyLoading: false })).toBe(false);
+    expect(应用本地状态折叠({ messages: 当前消息 })).toBe(false);
     expect(deps.滚动宿主.requestUpdate).not.toHaveBeenCalled();
     expect(同步消息附件播放结果).not.toHaveBeenCalled();
   });

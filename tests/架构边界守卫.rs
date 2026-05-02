@@ -89,19 +89,29 @@ fn 旧房间快照实现必须只留在_recovery_owner() {
 fn 根用例文件必须删除且应用入口不得回灌外层实现() {
     assert!(
         !Path::new("src/用例.rs").exists(),
-        "src/用例.rs 必须删除；应用层共享端口与仍未下沉的应用服务只能进 src/应用/mod.rs"
+        "src/用例.rs 必须删除；不能再把旧根用例文件当成任何长期入口"
     );
     let content = 读取("src/应用/mod.rs");
     assert!(
-        content.contains("crate::identity")
-            && content.contains("crate::room")
-            && content.contains("crate::recovery"),
-        "src/应用/mod.rs 必须显式指向业务 owner，不能把恢复 owner 漏回旧总文件"
+        !content.contains("pub use crate::identity::application")
+            && !content.contains("pub use crate::room::application")
+            && !content.contains("pub use crate::message::application")
+            && !content.contains("pub use crate::recovery::application")
+            && !content.contains("pub use crate::media::upload::application")
+            && !content.contains("pub use crate::media::distribution::application")
+            && !content.contains("pub use crate::realtime::application"),
+        "src/应用/mod.rs 不得继续充当跨业务总入口；调用方必须直连各自 owner"
     );
     for forbidden in ["axum", "sqlx", "socketioxide", "SocketRef", "StatusCode", "Router"] {
         assert!(
             !content.contains(forbidden),
             "src/应用/mod.rs 不应回灌外层实现或协议类型: {forbidden}"
+        );
+    }
+    for forbidden in ["Ok(None)", "Ok(vec![])", "Err(contract::错误码::系统错误)"] {
+        assert!(
+            !content.contains(forbidden),
+            "src/应用/mod.rs 不得继续用默认空实现掩盖缺能力: {forbidden}"
         );
     }
 }
@@ -218,6 +228,86 @@ fn 外壳层协议响应必须下沉到中文子模块() {
         assert!(
             !shell.contains(forbidden),
             "src/外壳/mod.rs 不应继续内嵌协议响应实现: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 外壳层媒体清理必须下沉到中文子模块() {
+    let shell = 读取("src/外壳/mod.rs");
+    assert!(
+        Path::new("src/外壳/媒体清理.rs").exists(),
+        "src/外壳/媒体清理.rs 缺失，说明媒体后台清理 owner 还没有从总壳文件下沉"
+    );
+    assert!(
+        shell.contains("#[path = \"媒体清理.rs\"]"),
+        "src/外壳/mod.rs 应显式挂载 src/外壳/媒体清理.rs"
+    );
+    for forbidden in [
+        "pub async fn 执行一次媒体冷源清理(",
+        "fn 上传残留清理原因标签(",
+        "async fn 执行一次媒体上传残留清理_按会话(",
+        "pub async fn 执行一次媒体上传残留清理(",
+    ] {
+        assert!(
+            !shell.contains(forbidden),
+            "src/外壳/mod.rs 不应继续内嵌媒体清理实现: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 外壳层协作分发做种必须下沉到中文子模块() {
+    let shell = 读取("src/外壳/mod.rs");
+    assert!(
+        Path::new("src/外壳/协作分发做种.rs").exists(),
+        "src/外壳/协作分发做种.rs 缺失，说明做种 sidecar owner 还没有从总壳文件下沉"
+    );
+    assert!(
+        shell.contains("#[path = \"协作分发做种.rs\"]"),
+        "src/外壳/mod.rs 应显式挂载 src/外壳/协作分发做种.rs"
+    );
+    for forbidden in [
+        "struct 协作分发做种启动命令",
+        "fn 读取sidecar媒体基准地址(",
+        "fn 归一化sidecar媒体地址(",
+        "fn 从协作分发响应构造做种启动命令(",
+        "async fn 尝试启动协作分发做种(",
+        "pub async fn 执行一次协作分发做种对账(",
+    ] {
+        assert!(
+            !shell.contains(forbidden),
+            "src/外壳/mod.rs 不应继续内嵌协作分发做种实现: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 外壳层tracker代理必须下沉到媒体协作分发子模块() {
+    let shell = 读取("src/外壳/mod.rs");
+    assert!(
+        Path::new("src/媒体/协作分发/tracker代理.rs").exists(),
+        "src/媒体/协作分发/tracker代理.rs 缺失，说明 tracker 协议适配还没有回到媒体协作分发 owner"
+    );
+    let distribution = 读取("src/媒体/协作分发/mod.rs");
+    assert!(
+        distribution.contains("#[path = \"tracker代理.rs\"]"),
+        "src/媒体/协作分发/mod.rs 应显式挂载 src/媒体/协作分发/tracker代理.rs"
+    );
+    for forbidden in [
+        "async fn proxy_swarm_tracker_announce(",
+        "enum Tracker代理错误",
+        "async fn relay_swarm_tracker_socket(",
+        "fn 拼接tracker上游查询(",
+        "fn 校验tracker首帧门禁(",
+        "fn 解析tracker首帧门禁字段(",
+        "fn 归一化tracker_info_hash(",
+        "fn axum_ws_message_to_tungstenite(",
+        "fn tungstenite_message_to_axum_ws(",
+    ] {
+        assert!(
+            !shell.contains(forbidden),
+            "src/外壳/mod.rs 不应继续内嵌 tracker 代理实现: {forbidden}"
         );
     }
 }

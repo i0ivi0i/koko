@@ -104,18 +104,18 @@ async fn 成员通过events接口只会拿到from之后的事件() {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
         let identity =
-            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let session_id = identity.会话标识;
         let initial_alias = identity.展示花名;
         let room =
-            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        koko::application::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "first")
+        koko::message::application::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "first")
             .expect("应能发送第一条消息");
-        koko::application::发送文本消息(&mut repo, &room_id, &session_id, "c-2", "second")
+        koko::message::application::发送文本消息(&mut repo, &room_id, &session_id, "c-2", "second")
             .expect("应能发送第二条消息");
         (session_id, room_id, initial_alias)
     })

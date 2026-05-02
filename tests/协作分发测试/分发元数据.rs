@@ -147,7 +147,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
     let database_url = cfg.database_url.clone();
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::引导匿名身份(&mut repo, &device_token)
+        koko::identity::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识
     })
@@ -171,7 +171,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
     let shared_swarm_id_for_worker = shared_swarm_id.clone();
     let result = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let first = koko::application::写入协作分发元数据(
+        let first = koko::media::distribution::application::写入协作分发元数据(
             &mut repo,
             &koko::application::协作分发元数据写入请求 {
                 附件标识: attachment_id_first_for_worker.clone(),
@@ -181,7 +181,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
                 web_seed_until秒: 1_775_942_400,
             },
         );
-        let second = koko::application::写入协作分发元数据(
+        let second = koko::media::distribution::application::写入协作分发元数据(
             &mut repo,
             &koko::application::协作分发元数据写入请求 {
                 附件标识: attachment_id_second_for_worker.clone(),

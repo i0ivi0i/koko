@@ -86,7 +86,7 @@ where
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
-            if let Err(err) = crate::shell::执行一次媒体冷源清理(cleanup_state.clone()).await
+            if let Err(err) = crate::shell::媒体清理::执行一次媒体冷源清理(cleanup_state.clone()).await
             {
                 tracing::error!(
                     application = "媒体冷源清理",
@@ -97,7 +97,7 @@ where
                 );
             }
             if let Err(err) =
-                crate::shell::执行一次媒体上传残留清理(cleanup_state.clone()).await
+                crate::shell::媒体清理::执行一次媒体上传残留清理(cleanup_state.clone()).await
             {
                 tracing::error!(
                     application = "上传残留清理",
@@ -122,7 +122,7 @@ where
             interval.tick().await;
             // 做种续租不能挂在冷源清理周期上；ticket TTL 更短时必须按独立 cadence 刷新 sidecar。
             if let Err(err) =
-                crate::shell::执行一次协作分发做种对账(seed_reconcile_state.clone()).await
+                crate::shell::协作分发做种::执行一次协作分发做种对账(seed_reconcile_state.clone()).await
             {
                 tracing::error!(
                     application = "协作分发做种对账",

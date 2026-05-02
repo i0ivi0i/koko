@@ -53,6 +53,8 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
     expect(source).toContain("创建聊天内核平台桥接(");
     expect(source).toContain("private readonly 平台桥接: 聊天内核平台端口;");
+    expect(existsSync(resolve(process.cwd(), "总装/聊天本地状态折叠.ts"))).toBe(true);
+    expect(source).toContain('from "./聊天本地状态折叠.js"');
     expect(source).toContain("this.平台桥接.聊天房间传输()");
     expect(source).toContain("this.平台桥接.聊天实时连接()");
     expect(source).toContain("this.平台桥接.媒体传输()");
@@ -70,6 +72,9 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).not.toContain("投影媒体传输端口");
     expect(source).not.toContain("this.platform.storage.壳层记忆()");
     expect(source).not.toContain("this.platform.snapshot()");
+    expect(source).not.toContain("private 应用本地状态补丁(");
+    expect(source).not.toContain("function 记录有变化字段(");
+    expect(source).not.toContain("function 浅比较对象(");
   });
 
   it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {

@@ -121,7 +121,7 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
     .await;
     断言TusHook已接受(final_status, &final_body);
 
-    koko::shell::执行一次媒体上传残留清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体上传残留清理(state.clone())
         .await
         .expect("应能执行一次上传残留清理");
 
@@ -236,7 +236,7 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
     .await
     .expect("测试需要先把 upload token 标成过期");
 
-    koko::shell::执行一次媒体上传残留清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体上传残留清理(state.clone())
         .await
         .expect("应能执行一次上传残留清理");
 
@@ -385,7 +385,7 @@ async fn 后台会收口历史rustus残留locator而不再让清理卡住() {
     .await
     .expect("测试需要先把 upload token 标成过期");
 
-    koko::shell::执行一次媒体上传残留清理(state.clone())
+    koko::shell::媒体清理::执行一次媒体上传残留清理(state.clone())
         .await
         .expect("历史 rustus locator 不应让上传残留清理整体失败");
 

@@ -450,7 +450,7 @@ describe("浏览器端应用平台化基线", () => {
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
-    expect(source).toContain('path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 1500');
+    expect(source).toContain('path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 1250');
     expect(source).toContain('path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 1650');
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');

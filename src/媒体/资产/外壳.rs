@@ -1059,7 +1059,7 @@ pub(super) async fn load_media_torrent(
         let repo = 构建共享仓储(&state_for_usecase);
         协作分发应用::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
             .map_err(map_domain_err_tuple)?;
-        application::读取协作分发torrent元信息(&repo, &attachment_id_for_usecase)
+        crate::media::application::读取协作分发torrent元信息(&repo, &attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)
     })
     .await
@@ -1113,7 +1113,7 @@ pub(super) async fn update_media_distribution_presence(
     let session_id_for_usecase = query.session_id.clone();
     match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        application::写入协作分发存活(
+        crate::media::application::写入协作分发存活(
             &mut repo,
             &application::协作分发存活写入请求 {
                 附件标识: attachment_id_for_usecase,
