@@ -85,6 +85,23 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("this.kernel.replaceSnapshot(");
   });
 
+  it("聊天壳会把布局观测与文本布局派生收进独立中文 owner，而不是继续堆在总装壳文件里", () => {
+    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const layoutOwnerSource = 读取前端源码("总装/聊天壳布局协作.ts");
+
+    expect(existsSync(resolve(process.cwd(), "总装/聊天壳布局协作.ts"))).toBe(true);
+    expect(shellSource).toContain('from "./聊天壳布局协作.js"');
+    expect(layoutOwnerSource).toContain("export class 聊天壳布局观测器");
+    expect(layoutOwnerSource).toContain("export function 按房间宽度派生消息文本布局环境");
+    expect(shellSource).not.toContain("function 按房间宽度派生消息文本布局环境");
+    expect(shellSource).not.toContain("function 附件内容地址表相同");
+    expect(shellSource).not.toContain("private 同步房间宽度观察(): void");
+    expect(shellSource).not.toContain("private 同步操作台输入组观察(): void");
+    expect(shellSource).not.toContain("private 清理房间宽度观察(): void");
+    expect(shellSource).not.toContain("private 清理操作台输入组观察(): void");
+    expect(shellSource).not.toContain("private 读取当前房间宽度(): number");
+  });
+
   it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const recoverySource = 读取前端源码("恢复/壳层/房间恢复编排.ts");

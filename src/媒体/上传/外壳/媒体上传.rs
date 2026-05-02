@@ -1,10 +1,10 @@
 use super::{
-    err_resp, map_domain_err_tuple, tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
-    构建共享仓储,
+    tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态, 构建共享仓储,
 };
 use crate::adapter::{媒体上传会话授权写入请求, 媒体上传运输记录};
 use crate::media::distribution::application as 协作分发应用;
 use crate::media::upload::application as 上传应用;
+use crate::shell::协议响应::{err_resp, event_to_json, map_domain_err_tuple};
 use crate::{media_distribution, usecase, usecase::仓储端口};
 use axum::{
     Json,
@@ -598,7 +598,7 @@ pub(super) async fn forward_media_attachment(
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "message": super::event_to_json(消息事件, Some(session_id.as_str())),
+            "message": event_to_json(消息事件, Some(session_id.as_str())),
             "attachment": attachment,
         })),
     )

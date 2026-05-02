@@ -27,6 +27,11 @@ import {
   派生跳到最新入口文案,
   type 消息文本布局环境,
 } from "../房间消息窗/视图.js";
+import {
+  聊天壳布局观测器,
+  按房间宽度派生消息文本布局环境,
+  附件内容地址表相同,
+} from "./聊天壳布局协作.js";
 
 function 派生媒体草稿失败文案(errorCode: string): string {
   switch (errorCode) {
@@ -51,58 +56,6 @@ function 派生媒体草稿失败文案(errorCode: string): string {
   }
 }
 
-function 按房间宽度派生消息文本布局环境(roomWidth: number): 消息文本布局环境 {
-  const 宿主宽度 = Math.max(1, roomWidth || globalThis.innerWidth || 1024);
-  const 气泡外框附加宽度 =
-    默认消息文本布局环境.bubbleHorizontalPadding +
-    默认消息文本布局环境.bubbleHorizontalBorderWidth;
-  const bubbleMaxWidth =
-    宿主宽度 <= 640
-      ? Math.min(宿主宽度 * 0.96, 780)
-      : 宿主宽度 >= 768
-        ? Math.min(宿主宽度 * 0.9, 920)
-        : Math.min(宿主宽度 * 0.93, 840);
-  const 多行正文上限 = Math.max(120, bubbleMaxWidth - 气泡外框附加宽度);
-  const 单行正文直通上限 = Math.max(
-    多行正文上限,
-    Math.min(
-      多行正文上限 + 56,
-      Math.max(120, 宿主宽度 - 气泡外框附加宽度 - 8),
-      420
-    )
-  );
-
-  return {
-    ...默认消息文本布局环境,
-    maxContentWidth: 多行正文上限,
-    singleLineMaxContentWidth: 单行正文直通上限,
-  };
-}
-
-function 附件内容地址表相同(
-  left: 聊天应用快照["media"]["contentUrlByAttachmentId"],
-  right: 聊天应用快照["media"]["contentUrlByAttachmentId"]
-): boolean {
-  if (left === right) {
-    return true;
-  }
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-  return leftKeys.every((key) => {
-    const leftEntry = left[key];
-    const rightEntry = right[key];
-    return (
-      leftEntry !== undefined &&
-      rightEntry !== undefined &&
-      leftEntry.originalSrc === rightEntry.originalSrc &&
-      leftEntry.thumbnailSrc === rightEntry.thumbnailSrc
-    );
-  });
-}
-
 declare global {
   var __kokoBudgetSnapshot: (() => 聊天运行时预算状态) | undefined;
 }
@@ -113,13 +66,13 @@ export class 聊天壳 extends LitElement {
    * render 路径禁止再同步读几何；这里只把 resize 信号翻译成一次缓存同步。
    */
   private readonly handleViewportResize = (): void => {
-    this.同步消息文本布局环境();
+    this.布局观测器.同步消息文本布局环境(this.shadowRoot);
   };
 
-  private 房间宽度观察目标: HTMLElement | null = null;
-  private 房间宽度观察器: ResizeObserver | null = null;
-  private 操作台输入组观察目标: HTMLElement | null = null;
-  private 操作台输入组观察器: ResizeObserver | null = null;
+  private readonly 布局观测器 = new 聊天壳布局观测器({
+    同步房间宽度: (width) => this.应用消息文本布局宽度(width),
+    同步操作台输入组宽度: (width) => this.应用操作台输入组宽度(width),
+  });
   private 操作台输入组宽度缓存 = Math.min(globalThis.innerWidth || 390, 560);
   private 消息文本布局宽度缓存 = Math.max(1, globalThis.innerWidth || 1024);
   private 消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(
@@ -1116,8 +1069,8 @@ export class 聊天壳 extends LitElement {
   }
 
   override updated(): void {
-    this.同步房间宽度观察();
-    this.同步操作台输入组观察();
+    this.布局观测器.同步房间宽度观察(this.shadowRoot);
+    this.布局观测器.同步操作台输入组观察(this.shadowRoot);
     this.同步预算烟测探针();
   }
 
@@ -1126,8 +1079,7 @@ export class 聊天壳 extends LitElement {
     if (globalThis.__kokoBudgetSnapshot === this.读取预算烟测快照) {
       globalThis.__kokoBudgetSnapshot = undefined;
     }
-    this.清理房间宽度观察();
-    this.清理操作台输入组观察();
+    this.布局观测器.释放();
     this.装配.销毁();
     super.disconnectedCallback();
   }
@@ -1440,12 +1392,6 @@ export class 聊天壳 extends LitElement {
     this.requestUpdate();
   }
 
-  private 清理房间宽度观察(): void {
-    this.房间宽度观察器?.disconnect();
-    this.房间宽度观察器 = null;
-    this.房间宽度观察目标 = null;
-  }
-
   private 应用操作台输入组宽度(width: number): void {
     const nextWidth = Math.max(
       180,
@@ -1458,71 +1404,8 @@ export class 聊天壳 extends LitElement {
     this.requestUpdate();
   }
 
-  private 清理操作台输入组观察(): void {
-    this.操作台输入组观察器?.disconnect();
-    this.操作台输入组观察器 = null;
-    this.操作台输入组观察目标 = null;
-  }
-
-  private 同步操作台输入组观察(): void {
-    const inputGroup =
-      (this.shadowRoot?.querySelector("#shellConsoleInputGroup") as HTMLElement | null) ?? null;
-    if (inputGroup === this.操作台输入组观察目标) {
-      return;
-    }
-    this.清理操作台输入组观察();
-    if (!inputGroup) {
-      return;
-    }
-    this.操作台输入组观察目标 = inputGroup;
-    if (typeof ResizeObserver !== "function") {
-      return;
-    }
-    this.操作台输入组观察器 = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-      this.应用操作台输入组宽度(entry.contentRect.width);
-    });
-    this.操作台输入组观察器.observe(inputGroup);
-  }
-
-  private 读取当前房间宽度(): number {
-    const roomView =
-      (this.房间宽度观察目标 ??
-        ((this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null));
-    return roomView?.clientWidth || globalThis.innerWidth || 1024;
-  }
-
   private 同步消息文本布局环境(): void {
-    this.应用消息文本布局宽度(this.读取当前房间宽度());
-  }
-
-  private 同步房间宽度观察(): void {
-    const roomView =
-      (this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null;
-    if (roomView === this.房间宽度观察目标) {
-      return;
-    }
-    this.清理房间宽度观察();
-    if (!roomView) {
-      return;
-    }
-    this.房间宽度观察目标 = roomView;
-    if (typeof ResizeObserver === "function") {
-      this.房间宽度观察器 = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (!entry) {
-          return;
-        }
-        this.应用消息文本布局宽度(
-          entry.contentRect.width || roomView.clientWidth || globalThis.innerWidth || 1024
-        );
-      });
-      this.房间宽度观察器.observe(roomView);
-    }
-    this.同步消息文本布局环境();
+    this.布局观测器.同步消息文本布局环境(this.shadowRoot);
   }
 
   private 读取消息文本布局环境(): 消息文本布局环境 {

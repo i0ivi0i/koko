@@ -1,11 +1,11 @@
 use axum::{
-    Json, Router,
+    Router,
     extract::{
         DefaultBodyLimit, OriginalUri, State,
         ws::{CloseFrame as AxumCloseFrame, Message as AxumWsMessage, WebSocket, WebSocketUpgrade},
     },
-    http::{HeaderValue, StatusCode, header},
-    response::{Html, IntoResponse},
+    http::StatusCode,
+    response::IntoResponse,
     routing::{any, get, post},
 };
 use futures_util::{SinkExt, StreamExt};
@@ -15,7 +15,6 @@ use object_store::{
     local::LocalFileSystem,
     path::Path as ObjectPath,
 };
-use serde::{Deserialize, Serialize};
 use socketioxide::{
     SocketIo,
     extract::{Data, Extension, SocketRef, TryData},
@@ -29,12 +28,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio_tungstenite::tungstenite;
-use tower_http::{
-    services::{ServeDir, ServeFile},
-    set_header::response::SetResponseHeaderLayer,
-};
-
-use crate::{adapter::Pg仓储, contract, media::distribution::application as 协作分发应用, media_distribution};
+use crate::{adapter::Pg仓储, media::distribution::application as 协作分发应用, media_distribution};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
@@ -52,6 +46,10 @@ mod 媒体资产外壳;
 mod 实时外壳;
 #[path = "房间/外壳.rs"]
 mod 房间外壳;
+#[path = "外壳/前端静态入口.rs"]
+mod 前端静态入口;
+#[path = "外壳/协议响应.rs"]
+pub(crate) mod 协议响应;
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
@@ -1280,78 +1278,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
             "/api/admin/rooms/{room_id}",
             get(后台外壳::admin_room_detail),
         )
-        .merge(构建前端静态资源路由())
+        .merge(前端静态入口::构建前端静态资源路由())
         .layer(DefaultBodyLimit::max(媒体上传HTTP请求体上限字节数))
         .layer(socket_layer)
         .with_state(state)
-}
-
-fn 构建前端静态资源路由() -> Router<应用状态> {
-    let html_router = Router::<应用状态>::new()
-        // 入口 HTML 必须始终回源确认最新 manifest。
-        // 只有这样，浏览器才能持续拿到当前这轮构建对应的 hashed 资源 URL。
-        .route("/", get(load_frontend_index))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("no-cache"),
-        ));
-    let root_scope_service_worker_router = Router::<应用状态>::new()
-        // App shell worker 负责根导航兜底。
-        // 它必须挂在根路径，浏览器才能以 "/" scope 接管离线重载与房间恢复。
-        .route_service("/app-sw.js", ServeFile::new("frontend/dist/app-sw.js"))
-        .route_service("/media-sw.js", ServeFile::new("frontend/dist/media-sw.js"))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::HeaderName::from_static("service-worker-allowed"),
-            HeaderValue::from_static("/"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("no-cache"),
-        ));
-    let assets_router = Router::<应用状态>::new()
-        // 带 hash 的静态资源 URL 已经自带内容指纹。
-        // 因此这里改成长期强缓存，避免继续让移动端在每个子资源上反复回源。
-        .nest_service("/dist", ServeDir::new("frontend/dist"))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=31536000, immutable"),
-        ));
-    html_router
-        .merge(root_scope_service_worker_router)
-        .merge(assets_router)
-}
-
-#[derive(Deserialize)]
-struct 前端静态资源清单 {
-    app_js: String,
-    app_css: String,
-}
-
-fn 读取前端静态资源清单() -> Result<前端静态资源清单, String> {
-    let raw = fs::read_to_string("frontend/dist/asset-manifest.json")
-        .map_err(|err| format!("读取前端静态资源清单失败: {err}"))?;
-    serde_json::from_str::<前端静态资源清单>(&raw)
-        .map_err(|err| format!("解析前端静态资源清单失败: {err}"))
-}
-
-fn 渲染前端入口_html() -> Result<String, String> {
-    let template = fs::read_to_string("frontend/index.html")
-        .map_err(|err| format!("读取前端入口模板失败: {err}"))?;
-    let manifest = 读取前端静态资源清单()?;
-    Ok(template
-        .replace("{{APP_CSS_PATH}}", manifest.app_css.as_str())
-        .replace("{{APP_JS_PATH}}", manifest.app_js.as_str()))
-}
-
-async fn load_frontend_index() -> impl IntoResponse {
-    match 渲染前端入口_html() {
-        Ok(html) => Html(html).into_response(),
-        Err(err) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("渲染前端入口失败: {err}"),
-        ),
-    }
 }
 
 /// 注册单节点 realtime 命名空间。
@@ -1410,167 +1340,6 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
 /// 约束：热路径只复用共享连接池，不在 handler 里重复建池。
 pub(crate) fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
     Pg仓储::从连接池构建(state.pool.clone(), state.runtime_handle.clone())
-}
-
-/// 统一错误响应体（跨 HTTP 接口稳定结构）。
-#[derive(Serialize)]
-struct ApiError {
-    /// 稳定错误码，供前端逻辑判断。
-    code: &'static str,
-    /// 可读错误信息，主要用于显示和排障。
-    message: String,
-}
-
-/// 领域事件 -> 传输 JSON 的稳定映射层。
-/// 约束：只做字段翻译，不添加业务语义。
-pub(crate) fn events_to_json(
-    events: Vec<contract::领域事件>,
-    session_id: Option<&str>,
-) -> Vec<serde_json::Value> {
-    events
-        .into_iter()
-        .map(|event| event_to_json(event, session_id))
-        .collect()
-}
-
-fn attachments_to_json(
-    attachments: &[contract::附件快照],
-    session_id: Option<&str>,
-) -> Vec<serde_json::Value> {
-    attachments
-        .iter()
-        .map(|attachment| match attachment {
-            contract::附件快照::图片(image) => {
-                serde_json::json!({
-                    "kind": "image",
-                    "attachment_id": image.附件标识,
-                    "width": image.宽,
-                    "height": image.高,
-                    "has_preview_asset": false
-                })
-            }
-            contract::附件快照::视频(video) => {
-                let mut payload = serde_json::json!({
-                    "kind": "video",
-                    "attachment_id": video.附件标识,
-                    "width": video.宽,
-                    "height": video.高,
-                    "has_preview_asset": video.有预览图
-                });
-                if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
-                    video.附件标识.as_str(),
-                    session_id,
-                    video.有预览图,
-                ) {
-                    payload["preview_asset"] = preview_asset;
-                }
-                payload
-            }
-        })
-        .collect()
-}
-
-/// 单条领域事件 -> JSON。
-pub(crate) fn event_to_json(
-    event: contract::领域事件,
-    session_id: Option<&str>,
-) -> serde_json::Value {
-    match event {
-        contract::领域事件::消息已创建 {
-            房间标识,
-            消息标识,
-            客户端消息标识,
-            发送者会话标识,
-            发送者花名,
-            文本,
-            附件,
-            事件位置,
-        } => serde_json::json!({
-            "type": "message_created",
-            "room_id": 房间标识,
-            "message_id": 消息标识,
-            "client_message_id": 客户端消息标识,
-            "sender_session_id": 发送者会话标识,
-            "sender_display_alias": 发送者花名,
-            "text": 文本,
-            "body": 文本,
-            "attachments": attachments_to_json(&附件, session_id),
-            "event_position": 事件位置
-        }),
-    }
-}
-
-/// 领域错误码 -> HTTP 状态码 + 稳定错误码的映射表。
-/// 约束：这里不做领域判断，只做“已得到错误码”的协议转码。
-pub(crate) fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str, String) {
-    match code {
-        contract::错误码::参数非法 => (
-            StatusCode::BAD_REQUEST,
-            "invalid_argument",
-            "请求参数非法".to_string(),
-        ),
-        contract::错误码::会话无效 => (
-            StatusCode::UNAUTHORIZED,
-            "invalid_session",
-            "会话无效".to_string(),
-        ),
-        contract::错误码::房间不存在 => (
-            StatusCode::NOT_FOUND,
-            "room_not_found",
-            "房间不存在".to_string(),
-        ),
-        contract::错误码::成员资格不足 => (
-            StatusCode::FORBIDDEN,
-            "membership_required",
-            "成员资格不足".to_string(),
-        ),
-        contract::错误码::附件不存在 => (
-            StatusCode::NOT_FOUND,
-            "attachment_not_found",
-            "附件不存在".to_string(),
-        ),
-        contract::错误码::附件不属于当前发送者 => (
-            StatusCode::FORBIDDEN,
-            "attachment_not_owned",
-            "附件不属于当前发送者".to_string(),
-        ),
-        contract::错误码::附件未就绪 => (
-            StatusCode::CONFLICT,
-            "attachment_not_ready",
-            "附件尚未就绪".to_string(),
-        ),
-        contract::错误码::附件类型不支持 => (
-            StatusCode::BAD_REQUEST,
-            "attachment_type_not_allowed",
-            "附件类型不支持".to_string(),
-        ),
-        contract::错误码::附件数量超限 => (
-            StatusCode::BAD_REQUEST,
-            "attachment_count_exceeded",
-            "附件数量超限".to_string(),
-        ),
-        _ => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "系统错误".to_string(),
-        ),
-    }
-}
-
-/// 统一 API 错误响应构造器。
-fn err_resp(
-    status: StatusCode,
-    code: &'static str,
-    message: impl Into<String>,
-) -> axum::response::Response {
-    (
-        status,
-        Json(ApiError {
-            code,
-            message: message.into(),
-        }),
-    )
-        .into_response()
 }
 
 #[cfg(test)]

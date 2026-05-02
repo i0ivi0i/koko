@@ -143,9 +143,9 @@ fn 后端根目录只允许合法入口_迁移门面或已登记散落_owner() {
 fn 后端迁移门面只能变薄不能变厚() {
     let budgets = [
         ("src/契约.rs", 328usize),
-        ("src/用例.rs", 1445usize),
-        ("src/适配.rs", 861usize),
-        ("src/外壳.rs", 1676usize),
+        ("src/用例.rs", 960usize),
+        ("src/适配.rs", 790usize),
+        ("src/外壳.rs", 1585usize),
     ];
 
     for (path, budget) in budgets {
@@ -153,6 +153,57 @@ fn 后端迁移门面只能变薄不能变厚() {
         assert!(
             lines <= budget,
             "{path} 当前 {lines} 行，超过迁移门面预算 {budget}；迁移门面只允许变薄，不允许继续长胖"
+        );
+    }
+}
+
+#[test]
+fn 外壳层前端静态入口必须下沉到中文子模块() {
+    let shell = 读取("src/外壳.rs");
+    assert!(
+        Path::new("src/外壳/前端静态入口.rs").exists(),
+        "src/外壳/前端静态入口.rs 缺失，说明前端静态入口 owner 还没有从根外壳文件下沉"
+    );
+    assert!(
+        shell.contains("#[path = \"外壳/前端静态入口.rs\"]"),
+        "src/外壳.rs 应显式挂载 src/外壳/前端静态入口.rs"
+    );
+    for forbidden in [
+        "fn 构建前端静态资源路由()",
+        "struct 前端静态资源清单",
+        "fn 读取前端静态资源清单()",
+        "fn 渲染前端入口_html()",
+        "async fn load_frontend_index()",
+    ] {
+        assert!(
+            !shell.contains(forbidden),
+            "src/外壳.rs 不应继续内嵌前端静态入口实现: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 外壳层协议响应必须下沉到中文子模块() {
+    let shell = 读取("src/外壳.rs");
+    assert!(
+        Path::new("src/外壳/协议响应.rs").exists(),
+        "src/外壳/协议响应.rs 缺失，说明协议响应 owner 还没有从根外壳文件下沉"
+    );
+    assert!(
+        shell.contains("#[path = \"外壳/协议响应.rs\"]"),
+        "src/外壳.rs 应显式挂载 src/外壳/协议响应.rs"
+    );
+    for forbidden in [
+        "struct ApiError",
+        "pub(crate) fn events_to_json(",
+        "fn attachments_to_json(",
+        "pub(crate) fn event_to_json(",
+        "pub(crate) fn map_domain_err_tuple(",
+        "fn err_resp(",
+    ] {
+        assert!(
+            !shell.contains(forbidden),
+            "src/外壳.rs 不应继续内嵌协议响应实现: {forbidden}"
         );
     }
 }

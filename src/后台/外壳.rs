@@ -1,5 +1,6 @@
 use super::应用状态;
 use crate::contract;
+use crate::shell::协议响应::{err_resp, map_domain_err_tuple};
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -88,7 +89,7 @@ fn 校验后台请求(
         ),
     }
 
-    Some(super::err_resp(status, code, message))
+    Some(err_resp(status, code, message))
 }
 
 /// 后台登录入口。
@@ -114,7 +115,7 @@ pub(super) async fn admin_login(
             error_code = "admin_auth_failed",
             "管理员登录被拒绝"
         );
-        return super::err_resp(
+        return err_resp(
             StatusCode::UNAUTHORIZED,
             "admin_auth_failed",
             "管理员账号或密码错误",
@@ -160,7 +161,7 @@ pub(super) async fn admin_overview(
     let state = state.clone();
     let result = task::spawn_blocking(move || {
         let repo = super::构建共享仓储(&state);
-        repo.后台概览().map_err(super::map_domain_err_tuple)
+        repo.后台概览().map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -175,7 +176,7 @@ pub(super) async fn admin_overview(
                 error = %err,
                 "后台概览查询任务执行失败"
             );
-            return super::err_resp(
+            return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
@@ -210,7 +211,7 @@ pub(super) async fn admin_overview(
                 error_code = "system_error",
                 "后台概览查询返回了错误的快照类型"
             );
-            super::err_resp(
+            err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 "返回快照类型不匹配",
@@ -225,7 +226,7 @@ pub(super) async fn admin_overview(
                 error_code = code,
                 "后台概览查询被拒绝"
             );
-            super::err_resp(status, code, message)
+            err_resp(status, code, message)
         }
     }
 }
@@ -254,7 +255,7 @@ pub(super) async fn admin_rooms(
     let state = state.clone();
     let result = task::spawn_blocking(move || {
         let repo = super::构建共享仓储(&state);
-        repo.后台房间列表().map_err(super::map_domain_err_tuple)
+        repo.后台房间列表().map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -269,7 +270,7 @@ pub(super) async fn admin_rooms(
                 error = %err,
                 "后台房间列表查询任务执行失败"
             );
-            return super::err_resp(
+            return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
@@ -302,7 +303,7 @@ pub(super) async fn admin_rooms(
                 error_code = "system_error",
                 "后台房间列表查询返回了错误的快照类型"
             );
-            super::err_resp(
+            err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 "返回快照类型不匹配",
@@ -317,7 +318,7 @@ pub(super) async fn admin_rooms(
                 error_code = code,
                 "后台房间列表查询被拒绝"
             );
-            super::err_resp(status, code, message)
+            err_resp(status, code, message)
         }
     }
 }
@@ -350,7 +351,7 @@ pub(super) async fn admin_room_detail(
     let result = task::spawn_blocking(move || {
         let repo = super::构建共享仓储(&state);
         repo.后台房间详情(&room_id_copy)
-            .map_err(super::map_domain_err_tuple)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -366,7 +367,7 @@ pub(super) async fn admin_room_detail(
                 error = %err,
                 "后台房间详情查询任务执行失败"
             );
-            return super::err_resp(
+            return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
@@ -409,7 +410,7 @@ pub(super) async fn admin_room_detail(
                 error_code = "system_error",
                 "后台房间详情查询返回了错误的快照类型"
             );
-            super::err_resp(
+            err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 "返回快照类型不匹配",
@@ -425,7 +426,7 @@ pub(super) async fn admin_room_detail(
                 error_code = code,
                 "后台房间详情查询被拒绝"
             );
-            super::err_resp(status, code, message)
+            err_resp(status, code, message)
         }
     }
 }

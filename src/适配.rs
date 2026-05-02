@@ -15,6 +15,10 @@ mod 媒体附件适配;
 mod 房间阅读适配;
 #[path = "消息/适配.rs"]
 mod 消息事件适配;
+pub(crate) use 媒体附件适配::{
+    媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输回执写入参数, 媒体上传运输角色,
+    媒体上传运输记录,
+};
 
 /// PostgreSQL 适配层只做持久化翻译与事务提交，不承载业务规则。
 ///
@@ -26,91 +30,6 @@ pub struct Pg仓储 {
     handle: tokio::runtime::Handle,
     owned_runtime: Option<tokio::runtime::Runtime>,
     pool: PgPool,
-}
-
-/// 上传会话授权写入请求只描述 Tus sidecar 所需的最小事实：
-/// - attachment_id 仍是业务附件锚点；
-/// - upload_session_id 是“一次上传生命周期”的运输锚点；
-/// - upload_token 只属于上传会话，不再错误地复制到每一条 partial/final transport 上。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传会话授权写入请求 {
-    pub 上传会话标识: String,
-    pub 附件标识: String,
-    pub 运输方式: String,
-    pub 上传令牌: String,
-    pub 令牌有效期秒数: i64,
-}
-
-/// 上传会话记录服务于 shell / hook 判断“这次 token 到底属于哪个 attachment/session”。
-/// 注意：
-/// 1. 这里仍然是 adapter 侧运输事实，不上浮为领域消息真相；
-/// 2. 令牌有效性、会话是否已放弃，都只服务上传链收口，不服务房间成员或权限判断。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传会话记录 {
-    pub 上传会话标识: String,
-    pub 附件标识: String,
-    pub 运输方式: String,
-    pub 上传令牌: String,
-    pub 令牌仍有效: bool,
-    pub 废弃时间戳秒: Option<i64>,
-}
-
-/// 单条上传运输回执在 adapter 边界上的最小输入。
-/// 把上传链八个字段收口成一个结构体，避免跨层函数长期维持高参数噪音。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传运输回执写入参数 {
-    pub 上传会话标识: String,
-    pub 附件标识: String,
-    pub 运输方式: String,
-    pub 运输角色: 媒体上传运输角色,
-    pub concat_order: Option<i32>,
-    pub transport_upload_id: String,
-    pub storage_locator: String,
-    pub byte_size: i64,
-}
-
-/// partial / final / single 只在 adapter 停留，用来翻译 Tus Concatenation 协议负载。
-/// 业务层依然只认“transport finished != attachment ready”这一条稳定原则。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum 媒体上传运输角色 {
-    单文件,
-    分片,
-    最终合并,
-}
-
-impl 媒体上传运输角色 {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::单文件 => "single",
-            Self::分片 => "partial",
-            Self::最终合并 => "final",
-        }
-    }
-
-    pub(crate) fn from_db(value: &str) -> Result<Self, contract::错误码> {
-        match value {
-            "single" => Ok(Self::单文件),
-            "partial" => Ok(Self::分片),
-            "final" => Ok(Self::最终合并),
-            _ => Err(contract::错误码::系统错误),
-        }
-    }
-}
-
-/// transport 记录只描述某一条 single / partial / final 上传事实。
-/// 它不拥有 token，也不负责声明哪个 transport 才是业务可 complete 的 canonical final。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传运输记录 {
-    pub 上传会话标识: String,
-    pub 附件标识: String,
-    pub 运输方式: String,
-    pub 运输角色: 媒体上传运输角色,
-    pub concat_order: Option<i32>,
-    pub transport_upload_id: Option<String>,
-    pub storage_locator: Option<String>,
-    pub 字节大小: Option<i64>,
-    pub 完成时间戳秒: Option<i64>,
-    pub 废弃时间戳秒: Option<i64>,
 }
 
 /// 生成迁移窗口内仍需保留的兼容匿名身份短标识。

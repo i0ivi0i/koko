@@ -1,4 +1,4 @@
-use crate::shell::{event_to_json, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
+use crate::shell::{协议响应::{event_to_json, events_to_json, map_domain_err_tuple}, 应用状态, 构建共享仓储};
 use crate::contract;
 use crate::message::application as 消息应用;
 use crate::realtime::application as 实时应用;
@@ -800,7 +800,7 @@ mod 实时外壳测试 {
     fn 发送成功时仍然通过room_event表达权威事实而不是control_result成功() {
         // 这条测试锁住“消息成立真相”的承载通道。
         // 发送成功必须表现为领域事件 payload，而不是再长出一个 control_result 成功分支。
-        let payload = super::event_to_json(
+        let payload = crate::shell::协议响应::event_to_json(
             contract::领域事件::消息已创建 {
                 房间标识: "room-1".to_string(),
                 消息标识: "msg-1".to_string(),
@@ -824,7 +824,7 @@ mod 实时外壳测试 {
 
     #[test]
     fn room_event在无会话上下文时仍会带出附件是否有静态封面的稳定事实() {
-        let payload = super::event_to_json(
+        let payload = crate::shell::协议响应::event_to_json(
             contract::领域事件::消息已创建 {
                 房间标识: "room-1".to_string(),
                 消息标识: "msg-1".to_string(),
