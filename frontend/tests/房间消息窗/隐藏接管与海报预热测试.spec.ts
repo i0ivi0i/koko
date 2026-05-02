@@ -52,7 +52,17 @@ describe("房间消息窗媒体查看器 - 隐藏接管与海报预热", () => {
         updatedAt: 1_715_000_000_000,
       },
     };
-    Object.defineProperty(pane, "时间线自动播冻结帧", {
+    const 画面缓存Owner = (
+      pane as unknown as {
+        时间线画面缓存Owner: {
+          时间线自动播冻结帧: Map<
+            string,
+            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+          >;
+        };
+      }
+    ).时间线画面缓存Owner;
+    Object.defineProperty(画面缓存Owner, "时间线自动播冻结帧", {
       configurable: true,
       value: new Map([
         [
@@ -145,22 +155,22 @@ describe("房间消息窗媒体查看器 - 隐藏接管与海报预热", () => {
     vi.stubGlobal("FileReader", 假FileReader);
 
     try {
-      (
+      const 画面缓存Owner = (
         pane as unknown as {
-          捕获时间线自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void;
+          时间线画面缓存Owner: {
+            捕获自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void;
+            时间线自动播冻结帧: Map<string, { dataUrl: string }>;
+          };
         }
-      ).捕获时间线自动播冻结帧("att-freeze-async", video);
+      ).时间线画面缓存Owner;
+      画面缓存Owner.捕获自动播冻结帧("att-freeze-async", video);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(drawImage).toHaveBeenCalledTimes(1);
       expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/webp", 0.82);
       expect(toDataURL).not.toHaveBeenCalled();
       expect(
-        (
-          pane as unknown as {
-            时间线自动播冻结帧: Map<string, { dataUrl: string }>;
-          }
-        ).时间线自动播冻结帧.get("att-freeze-async")?.dataUrl
+        画面缓存Owner.时间线自动播冻结帧.get("att-freeze-async")?.dataUrl
       ).toBe("data:image/webp;base64,freeze");
     } finally {
       createElement.mockRestore();

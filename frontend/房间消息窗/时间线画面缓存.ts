@@ -1,0 +1,222 @@
+import type { 媒体播放位置 } from "../媒体/媒体播放.js";
+import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js";
+import type { 视频预览状态 } from "../媒体/视频预览.js";
+import { 读取BlobDataUrl } from "../媒体/视频元数据.js";
+import type { 时间线自动播冻结帧 } from "./附件渲染.js";
+import type { 聊天列表展示项 } from "./视图.js";
+
+const 时间线自动播冻结帧最大边长 = 480;
+const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
+
+interface 时间线画面缓存Owner依赖 {
+  读取视频当前播放源: (video: HTMLVideoElement) => string | null;
+  归一化时间线视频播放源: (src: string | null) => string | null;
+  读取预览状态: (attachmentId: string) => 视频预览状态 | null;
+  请求刷新: () => void;
+}
+
+const 读取当前视频附件标识 = (items: 聊天列表展示项[]): Set<string> => {
+  const attachmentIds = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== "message") {
+      continue;
+    }
+    for (const attachment of item.attachments) {
+      if (attachment.kind === "video") {
+        attachmentIds.add(attachment.attachmentId);
+      }
+    }
+  }
+  return attachmentIds;
+};
+
+const 删除已退场附件 = <T>(cache: Map<string, T>, 当前视频附件: Set<string>): void => {
+  for (const attachmentId of cache.keys()) {
+    if (!当前视频附件.has(attachmentId)) {
+      cache.delete(attachmentId);
+    }
+  }
+};
+
+/**
+ * 时间线画面缓存 owner 只保存“已经从真实视频确认过的画面事实”。
+ *
+ * 它不拥有播放器、不改媒体字节来源，也不替代 runtime snapshot：
+ * 1. 首帧缓存只记录附件和同源 src，避免无 poster 视频反复黑闪；
+ * 2. 冻结帧只来自刚播放过的同一颗 video，用来承接 owner 退场瞬间；
+ * 3. 消息窗只把浏览器信号交给这里，渲染时读取投影结果。
+ */
+export class 时间线画面缓存Owner {
+  private readonly 时间线视频首帧就绪源 = new Map<string, string>();
+  private readonly 时间线自动播冻结帧 = new Map<string, 时间线自动播冻结帧>();
+  private readonly 时间线自动播冻结帧导出中 = new Map<string, string>();
+
+  constructor(private readonly 依赖: 时间线画面缓存Owner依赖) {}
+
+  清空(): void {
+    this.时间线视频首帧就绪源.clear();
+    this.时间线自动播冻结帧.clear();
+    this.时间线自动播冻结帧导出中.clear();
+  }
+
+  同步当前视频附件(items: 聊天列表展示项[]): Set<string> {
+    const 当前视频附件 = 读取当前视频附件标识(items);
+    删除已退场附件(this.时间线视频首帧就绪源, 当前视频附件);
+    删除已退场附件(this.时间线自动播冻结帧, 当前视频附件);
+    删除已退场附件(this.时间线自动播冻结帧导出中, 当前视频附件);
+    return 当前视频附件;
+  }
+
+  读取首帧是否就绪(attachmentId: string, src: string | null): boolean {
+    const normalizedSrc = this.依赖.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
+      return false;
+    }
+    return this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc;
+  }
+
+  读取已就绪首帧预览源(attachmentId: string): string | null {
+    const previewState = this.依赖.读取预览状态(attachmentId);
+    if (previewState?.phase === "missing_source") {
+      return null;
+    }
+    const src = this.时间线视频首帧就绪源.get(attachmentId) ?? null;
+    if (!src || 视频地址属于旧流媒体清单(src)) {
+      return null;
+    }
+    return src;
+  }
+
+  标记首帧已就绪(attachmentId: string, src: string | null): void {
+    const normalizedSrc = this.依赖.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
+      return;
+    }
+    if (this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc) {
+      /**
+       * 同源缓存已命中时仍刷新一次，因为当前 DOM 可能刚从虚拟卸载后重新拿到首帧。
+       * 这次刷新让遮挡层按“当前节点已出帧”退场，而不是沿用旧节点的视觉状态。
+       */
+      this.依赖.请求刷新();
+      return;
+    }
+    this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
+    this.依赖.请求刷新();
+  }
+
+  读取自动播冻结帧(
+    attachmentId: string,
+    src: string | null,
+    position: 媒体播放位置 | null
+  ): 时间线自动播冻结帧 | null {
+    if (!position) {
+      return null;
+    }
+    const frame = this.时间线自动播冻结帧.get(attachmentId) ?? null;
+    const normalizedExpectedSrc = this.依赖.归一化时间线视频播放源(src);
+    const normalizedFrameSrc = this.依赖.归一化时间线视频播放源(frame?.src ?? null);
+    if (
+      !frame ||
+      !normalizedExpectedSrc ||
+      !normalizedFrameSrc ||
+      normalizedExpectedSrc !== normalizedFrameSrc ||
+      !frame.dataUrl.startsWith("data:image/")
+    ) {
+      return null;
+    }
+    if (
+      Math.abs(frame.currentTime - position.currentTime) >
+      时间线自动播冻结帧允许时间偏差秒
+    ) {
+      return null;
+    }
+    return frame;
+  }
+
+  捕获自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void {
+    const src = this.依赖.读取视频当前播放源(video);
+    const currentTime = video.currentTime;
+    if (
+      !attachmentId ||
+      !src ||
+      !Number.isFinite(currentTime) ||
+      currentTime < 0 ||
+      video.readyState < video.HAVE_CURRENT_DATA ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      return;
+    }
+    const previousFrame = this.时间线自动播冻结帧.get(attachmentId);
+    if (
+      previousFrame?.src === src &&
+      Math.abs(previousFrame.currentTime - currentTime) < 0.5
+    ) {
+      return;
+    }
+    const captureKey = `${src}\u0000${Math.round(currentTime * 2) / 2}`;
+    if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+      return;
+    }
+    try {
+      const scale = Math.min(
+        1,
+        时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
+      );
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return;
+      }
+      context.drawImage(video, 0, 0, width, height);
+      if (typeof canvas.toBlob !== "function") {
+        return;
+      }
+      this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
+      canvas.toBlob((blob) => {
+        void (async () => {
+          try {
+            if (!blob || blob.type !== "image/webp") {
+              return;
+            }
+            const dataUrl = await 读取BlobDataUrl(blob);
+            if (!dataUrl?.startsWith("data:image/webp")) {
+              return;
+            }
+            if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
+              return;
+            }
+            const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
+            if (
+              latestFrame?.src === src &&
+              Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
+              latestFrame.dataUrl === dataUrl
+            ) {
+              return;
+            }
+            this.时间线自动播冻结帧.set(attachmentId, {
+              src,
+              currentTime,
+              dataUrl,
+              updatedAt: Date.now(),
+            });
+            this.依赖.请求刷新();
+          } finally {
+            if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+              this.时间线自动播冻结帧导出中.delete(attachmentId);
+            }
+          }
+        })();
+      }, "image/webp", 0.82);
+    } catch {
+      // Canvas 失败只影响暂停帧，不扩大成业务错误；播放链仍由唯一播放器继续承接。
+      if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+        this.时间线自动播冻结帧导出中.delete(attachmentId);
+      }
+    }
+  }
+}

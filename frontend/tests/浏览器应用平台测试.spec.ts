@@ -519,7 +519,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
     expect(source).toContain(
-      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 1890'
+      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1250, maxPhysicalLines: 1520'
     );
     expect(source).toContain(
       'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929'

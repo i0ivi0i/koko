@@ -12,8 +12,6 @@ import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 消息视频自动播候选 } from "../媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "../媒体/媒体查看器.js";
-import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器.js";
-import { 读取BlobDataUrl } from "../媒体/视频元数据.js";
 import {
   渲染消息附件,
   读取保存续帧是否允许承接时间线预览底板 as 读取保存续帧是否允许承接时间线预览底板投影,
@@ -24,7 +22,6 @@ import {
   读取时间线视频预算投影 as 读取时间线视频预算投影计算,
   读取时间线预览视频是否允许渲染 as 读取时间线预览视频是否允许渲染投影,
 } from "./附件渲染.js";
-import type { 时间线自动播冻结帧 } from "./附件渲染.js";
 import {
   估算媒体附件布局高度,
   估算消息行高度,
@@ -36,18 +33,19 @@ import {
 } from "./消息虚拟列表.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 import { 自动播候选观察Owner } from "./自动播候选观察器.js";
-
-type 时间线视频附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
+import { 时间线播放器宿主Owner } from "./时间线播放器宿主.js";
+import { 时间线画面缓存Owner } from "./时间线画面缓存.js";
+import {
+  媒体窗口观察Owner,
+  读取即将渲染的时间线视频附件,
+  读取允许渲染真实预览视频附件集合,
+  type 时间线视频附件,
+} from "./媒体窗口.js";
 
 const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
 const 自动播时间戳常规上报最小变化秒 = 0.75;
-const 近视口真实预览视频预算上限 = 2;
-const 近视口活媒体会话预算上限 = 24;
-const 近视口活视频会话预算上限 = 4;
 const 自动播观察候选上限 = 12;
 const 首帧预热候选上限 = 2;
-const 时间线自动播冻结帧最大边长 = 480;
-const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
 
 /**
  * 真正的房间消息窗 owner 收进本文件：
@@ -55,7 +53,7 @@ const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
  * 2. 这里统一承接消息列表虚拟化、局部媒体交互和滚动观察；
  * 3. 聊天壳内部直连这里，避免根目录再次回流成展示总控。
  *
- * 房间消息窗只承接消息视口内部的表达与交互转发：
+ * 房间消息窗只承接消息视口内部的表达与交互回抛：
  * 1. 它渲染消息列表、局部历史提示和“跳到最新”入口；
  * 2. 它把滚动意图、滚动事件和跳转动作回抛给外层壳；
  * 3. 它不持有第二份消息真状态，也不在这里偷写业务判断。
@@ -90,6 +88,9 @@ export class 房间消息窗 extends LitElement {
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
   private readonly 自动播候选观察Owner: 自动播候选观察Owner;
+  private readonly 媒体窗口观察Owner: 媒体窗口观察Owner;
+  private readonly 时间线播放器宿主Owner: 时间线播放器宿主Owner;
+  private readonly 时间线画面缓存Owner: 时间线画面缓存Owner;
   private readonly 失效视频封面地址 = new Map<string, string>();
   private readonly 自动播位置上报记录 = new Map<
     string,
@@ -103,32 +104,13 @@ export class 房间消息窗 extends LitElement {
    * 4. 一旦外层 snapshot 追平或更新更晚，仍然以外层回灌为准。
    */
   /**
-   * 时间线视频首帧就绪缓存：
-   * - key: attachmentId
-   * - value: 已经确认拿到首帧的 video src
-   *
-   * 设计约束：
-   * 1. 只缓存“哪一个 src 已经成功出首帧”，不缓存像素数据；
-   * 2. src 变化后会自动重新进入 gated，避免沿用旧 src 的就绪结论；
-   * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
-   */
-  private readonly 时间线视频首帧就绪源 = new Map<string, string>();
-  /**
-   * 时间线自动播冻结帧：
-   * 1. 这不是媒体字节真相，也不是第二播放器，只是从“刚刚真实播放过的同一颗 video”截下来的 UI 暂停帧；
-   * 2. 它只负责高速/远距离回滑时，在新 `<video>` 完成 metadata/seek/canplay 前顶住像素；
-   * 3. 匹配必须同时满足同源 src 与续播时间接近，避免把旧附件、旧 source 或首帧封面误当续播画面。
-  */
-  private readonly 时间线自动播冻结帧 = new Map<string, 时间线自动播冻结帧>();
-  private readonly 时间线自动播冻结帧导出中 = new Map<string, string>();
-  /**
    * canonical player 可见接管就绪缓存：
    * - key: attachmentId
    * - value: 已经在隐藏预热宿主上完成 source/time 对齐、可以揭帘到可见卡片的 src
    *
    * 设计约束：
    * 1. 这不是普通预览 `<video>` 的首帧 ready，而是“唯一播放器自己已经准备好接管可见表面”；
-   * 2. 不能与 `时间线视频首帧就绪源` 复用，否则预览壳刚 ready 就会误判成 canonical 也 ready；
+   * 2. 不能与普通预览首帧 ready 缓存复用，否则预览壳刚 ready 就会误判成 canonical 也 ready；
    * 3. reveal gate 只认这张表，确保用户永远看不到 canonical player 在可见卡片上现场换源/seek。
    */
   private readonly 时间线唯一播放器可见接管就绪源 = new Map<string, string>();
@@ -147,7 +129,6 @@ export class 房间消息窗 extends LitElement {
    * 4. 所以这里单独记“最近刚退场的 owner”，只允许这一条桥承接退场连续性，不泄漏成通用预览真相。
    */
   private 最近退场Owner附件Id: string | null = null;
-  private 上次媒体窗口附件签名 = "";
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -194,6 +175,37 @@ export class 房间消息窗 extends LitElement {
       读取连通状态: () => this.isConnected,
       候选上限: 自动播观察候选上限,
     });
+    this.媒体窗口观察Owner = new 媒体窗口观察Owner((attachmentIds) => {
+      this.dispatchEvent(
+        new CustomEvent<{ attachmentIds: string[] }>("room-media-window-observed", {
+          detail: {
+            attachmentIds,
+          },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    });
+    this.时间线播放器宿主Owner = new 时间线播放器宿主Owner({
+      读取宿主根: () => this,
+      恢复播放位置: (attachmentId, video) =>
+        this.恢复时间线自动播播放位置(attachmentId, video),
+      标记首帧已就绪: (attachmentId, currentSrc) =>
+        this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, currentSrc),
+      标记可见接管已就绪: (attachmentId, video) =>
+        this.标记时间线唯一播放器可见接管已就绪(attachmentId, video),
+      广播播放位置: (attachmentId, video, force = false, allowReleasedOwner = false) =>
+        this.广播自动播播放位置(attachmentId, video, force, allowReleasedOwner),
+      广播媒体会话信号: (attachmentId, signal) =>
+        this.广播媒体会话信号(attachmentId, signal),
+    });
+    this.时间线画面缓存Owner = new 时间线画面缓存Owner({
+      读取视频当前播放源: (video) => this.读取视频当前播放源(video),
+      归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
+      读取预览状态: (attachmentId) =>
+        this.mediaPreviewByAttachmentId[attachmentId] ?? null,
+      请求刷新: () => this.requestUpdate(),
+    });
   }
 
   /**
@@ -208,12 +220,12 @@ export class 房间消息窗 extends LitElement {
   override disconnectedCallback(): void {
     this.自动播候选观察Owner.取消自动播候选调度();
     this.自动播候选观察Owner.清理自动播候选观察();
-    读取默认全局唯一播放器().同步时间线自动播(null);
+    this.时间线播放器宿主Owner.停止();
     this.失效视频封面地址.clear();
-    this.时间线视频首帧就绪源.clear();
-    this.时间线自动播冻结帧.clear();
+    this.时间线画面缓存Owner.清空();
     this.时间线唯一播放器可见接管就绪源.clear();
     this.时间线隐藏接管附件Id = null;
+    this.媒体窗口观察Owner.重置();
     this.自动播位置上报记录.clear();
     super.disconnectedCallback();
   }
@@ -265,7 +277,7 @@ export class 房间消息窗 extends LitElement {
          * 2. 紧接着外层再回灌一条更近位置，露出的 preview 就会在用户眼前 seek 一下；
          * 3. 这里先把最后一拍位置灌回本地桥，再对齐底板 preview，用户看到的才是同一帧退场。
          */
-        读取默认全局唯一播放器().冲刷当前时间线播放位置();
+        this.时间线播放器宿主Owner.冲刷当前播放位置();
         this.同步即将退场Owner底板预览(previousOwnerAttachmentId);
         this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
         this.最近退场Owner附件Id = previousOwnerAttachmentId;
@@ -314,7 +326,7 @@ export class 房间消息窗 extends LitElement {
        * DOM 已经从隐藏宿主切到可见宿主，但属性没有变，不能等 updateComplete.then 才迁移唯一播放器。
        * 这里同步一次宿主指针，避免真实浏览器里出现一帧到数帧的 owner -> 空 -> owner 接管空窗。
        */
-      this.同步时间线唯一播放器宿主();
+      this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
     }
     this.揭开已就绪的时间线隐藏接管宿主();
     const scrollContainer = this.messageScrollRef.value;
@@ -334,7 +346,13 @@ export class 房间消息窗 extends LitElement {
       return;
     }
     const virtualItems = this.读取当前虚拟消息项();
-    this.dispatch媒体窗口观察(virtualItems);
+    this.媒体窗口观察Owner.dispatch媒体窗口观察({
+      items: this.items,
+      virtualItems,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+      最近退场Owner附件Id: this.最近退场Owner附件Id,
+      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
+    });
     this.自动播候选观察Owner.同步自动播候选观察(scrollContainer);
     if (this.自动播候选观察Owner.自动播候选观察器) {
       return;
@@ -345,27 +363,7 @@ export class 房间消息窗 extends LitElement {
   }
 
   private 同步时间线视频首帧就绪缓存(): void {
-    const 当前视频附件 = new Set<string>();
-    for (const item of this.items) {
-      if (item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (attachment.kind === "video") {
-          当前视频附件.add(attachment.attachmentId);
-        }
-      }
-    }
-    for (const attachmentId of this.时间线视频首帧就绪源.keys()) {
-      if (!当前视频附件.has(attachmentId)) {
-        this.时间线视频首帧就绪源.delete(attachmentId);
-      }
-    }
-    for (const attachmentId of this.时间线自动播冻结帧.keys()) {
-      if (!当前视频附件.has(attachmentId)) {
-        this.时间线自动播冻结帧.delete(attachmentId);
-      }
-    }
+    const 当前视频附件 = this.时间线画面缓存Owner.同步当前视频附件(this.items);
     for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
       if (!当前视频附件.has(attachmentId)) {
         this.时间线唯一播放器可见接管就绪源.delete(attachmentId);
@@ -382,10 +380,34 @@ export class 房间消息窗 extends LitElement {
     previewVideoSrcByAttachmentId: Map<string, string>;
     canonicalVideoSrcByAttachmentId: Map<string, string>;
   } {
-    const 可渲染真实预览视频附件 = this.读取允许渲染真实预览视频的附件集合(virtualItems);
+    const 可渲染真实预览视频附件 = 读取允许渲染真实预览视频附件集合({
+      items: this.items,
+      virtualItems,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+      最近退场Owner附件Id: this.最近退场Owner附件Id,
+      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
+      inlineAutoplayPositionByAttachmentId: this.inlineAutoplayPositionByAttachmentId,
+      读取时间线视频已就绪首帧预览源: (attachmentId) =>
+        this.时间线画面缓存Owner.读取已就绪首帧预览源(attachmentId),
+    });
     const previewVideoSrcByAttachmentId = new Map<string, string>();
     const canonicalVideoSrcByAttachmentId = new Map<string, string>();
-    for (const attachment of this.读取即将渲染的时间线视频附件(virtualItems)) {
+    for (const attachment of 读取即将渲染的时间线视频附件({
+      items: this.items,
+      virtualItems,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+      最近退场Owner附件Id: this.最近退场Owner附件Id,
+      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
+      时间线隐藏接管附件Id: this.时间线隐藏接管附件Id,
+      dom视频附件标识: Array.from(
+        this.querySelectorAll<HTMLElement>(
+          "video.message-video-preview[data-attachment-id]," +
+            ".message-video-canonical-host[data-attachment-id]," +
+            ".message-video-canonical-stage-host[data-attachment-id]"
+        ),
+        (video) => video.dataset.attachmentId
+      ),
+    })) {
       const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
       const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
       const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
@@ -397,7 +419,7 @@ export class 房间消息窗 extends LitElement {
       const savedTimelineFrame =
         this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
       const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-      const knownReadyTimelineFrameSrc = this.读取时间线视频已就绪首帧预览源(
+      const knownReadyTimelineFrameSrc = this.时间线画面缓存Owner.读取已就绪首帧预览源(
         attachment.attachmentId
       );
       const shouldReuseSavedTimelineFrameAsPreview =
@@ -419,7 +441,7 @@ export class 房间消息窗 extends LitElement {
         budget.previewVideoSrc ??
         (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
         knownReadyTimelineFrameSrc;
-      const hasKnownReadyPreviewFrame = this.读取时间线视频首帧是否就绪(
+      const hasKnownReadyPreviewFrame = this.时间线画面缓存Owner.读取首帧是否就绪(
         attachment.attachmentId,
         timelinePreviewVideoSrc
       );
@@ -449,70 +471,6 @@ export class 房间消息窗 extends LitElement {
       previewVideoSrcByAttachmentId,
       canonicalVideoSrcByAttachmentId,
     };
-  }
-
-  private 读取即将渲染的时间线视频附件(
-    virtualItems: 消息虚拟项[]
-  ): 时间线视频附件[] {
-    const attachmentsById = new Map<string, 时间线视频附件>();
-    const unresolvedAttachmentIds = new Set<string>();
-    const pushAttachment = (attachment: 消息展示项["attachments"][number]): void => {
-      if (attachment.kind !== "video" || attachmentsById.has(attachment.attachmentId)) {
-        return;
-      }
-      attachmentsById.set(attachment.attachmentId, attachment);
-      unresolvedAttachmentIds.delete(attachment.attachmentId);
-    };
-    const pushAttachmentId = (attachmentId: string | null | undefined): void => {
-      const normalized = attachmentId?.trim() ?? "";
-      if (!normalized || attachmentsById.has(normalized)) {
-        return;
-      }
-      unresolvedAttachmentIds.add(normalized);
-    };
-
-    for (const virtualItem of virtualItems) {
-      const item = this.items[virtualItem.index];
-      if (!item || item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        pushAttachment(attachment);
-      }
-    }
-
-    pushAttachmentId(this.inlineAutoplayOwnerAttachmentId);
-    pushAttachmentId(this.最近退场Owner附件Id);
-    pushAttachmentId(this.时间线隐藏接管附件Id);
-
-    for (const video of this.querySelectorAll<HTMLElement>(
-      "video.message-video-preview[data-attachment-id]," +
-        ".message-video-canonical-host[data-attachment-id]," +
-        ".message-video-canonical-stage-host[data-attachment-id]"
-    )) {
-      pushAttachmentId(video.dataset.attachmentId);
-    }
-
-    if (unresolvedAttachmentIds.size > 0) {
-      for (const item of this.items) {
-        if (item.kind !== "message") {
-          continue;
-        }
-        for (const attachment of item.attachments) {
-          if (
-            attachment.kind === "video" &&
-            unresolvedAttachmentIds.has(attachment.attachmentId)
-          ) {
-            pushAttachment(attachment);
-          }
-        }
-        if (unresolvedAttachmentIds.size === 0) {
-          break;
-        }
-      }
-    }
-
-    return Array.from(attachmentsById.values());
   }
 
   private 释放时间线预览视频资源(video: HTMLVideoElement): void {
@@ -571,160 +529,6 @@ export class 房间消息窗 extends LitElement {
         continue;
       }
       host.dataset.videoSrc = "";
-    }
-  }
-
-  private 读取时间线视频首帧是否就绪(attachmentId: string, src: string | null): boolean {
-    const normalizedSrc = this.归一化时间线视频播放源(src);
-    if (!normalizedSrc) {
-      return false;
-    }
-    return this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc;
-  }
-
-  private 读取时间线视频已就绪首帧预览源(attachmentId: string): string | null {
-    const previewState = this.mediaPreviewByAttachmentId[attachmentId] ?? null;
-    if (previewState?.phase === "missing_source") {
-      return null;
-    }
-    const src = this.时间线视频首帧就绪源.get(attachmentId) ?? null;
-    if (!src || 视频地址属于旧流媒体清单(src)) {
-      return null;
-    }
-    return src;
-  }
-
-  private 标记时间线视频首帧已就绪(attachmentId: string, src: string | null): void {
-    const normalizedSrc = this.归一化时间线视频播放源(src);
-    if (!normalizedSrc) {
-      return;
-    }
-    if (this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc) {
-      /**
-       * 同一个 src 可能对应高速虚拟卸载后重新挂载的一颗新 `<video>`：
-       * 源级缓存已经命中，但当前 DOM 刚刚 `loadeddata`，仍需要重新渲染一次，
-       * 让 poster/guard 按“当前 DOM 已出帧”退场，避免卡在遮挡态。
-       */
-      this.requestUpdate();
-      return;
-    }
-    this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
-    this.requestUpdate();
-  }
-
-  private 读取时间线自动播冻结帧(
-    attachmentId: string,
-    src: string | null,
-    position: 媒体播放位置 | null
-  ): 时间线自动播冻结帧 | null {
-    if (!position) {
-      return null;
-    }
-    const frame = this.时间线自动播冻结帧.get(attachmentId) ?? null;
-    const normalizedExpectedSrc = this.归一化时间线视频播放源(src);
-    const normalizedFrameSrc = this.归一化时间线视频播放源(frame?.src ?? null);
-    if (
-      !frame ||
-      !normalizedExpectedSrc ||
-      !normalizedFrameSrc ||
-      normalizedExpectedSrc !== normalizedFrameSrc ||
-      !frame.dataUrl.startsWith("data:image/")
-    ) {
-      return null;
-    }
-    if (
-      Math.abs(frame.currentTime - position.currentTime) >
-      时间线自动播冻结帧允许时间偏差秒
-    ) {
-      return null;
-    }
-    return frame;
-  }
-
-  private 捕获时间线自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void {
-    const src = this.读取视频当前播放源(video);
-    const currentTime = video.currentTime;
-    if (
-      !attachmentId ||
-      !src ||
-      !Number.isFinite(currentTime) ||
-      currentTime < 0 ||
-      video.readyState < video.HAVE_CURRENT_DATA ||
-      video.videoWidth <= 0 ||
-      video.videoHeight <= 0
-    ) {
-      return;
-    }
-    const previousFrame = this.时间线自动播冻结帧.get(attachmentId);
-    if (
-      previousFrame?.src === src &&
-      Math.abs(previousFrame.currentTime - currentTime) < 0.5
-    ) {
-      return;
-    }
-    const captureKey = `${src}\u0000${Math.round(currentTime * 2) / 2}`;
-    if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-      return;
-    }
-    try {
-      const scale = Math.min(
-        1,
-        时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
-      );
-      const width = Math.max(1, Math.round(video.videoWidth * scale));
-      const height = Math.max(1, Math.round(video.videoHeight * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return;
-      }
-      context.drawImage(video, 0, 0, width, height);
-      if (typeof canvas.toBlob !== "function") {
-        return;
-      }
-      this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
-      canvas.toBlob((blob) => {
-        void (async () => {
-          try {
-            if (!blob || blob.type !== "image/webp") {
-              return;
-            }
-            const dataUrl = await 读取BlobDataUrl(blob);
-            if (!dataUrl?.startsWith("data:image/webp")) {
-              return;
-            }
-            if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
-              return;
-            }
-            const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
-            if (
-              latestFrame?.src === src &&
-              Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
-              latestFrame.dataUrl === dataUrl
-            ) {
-              return;
-            }
-            this.时间线自动播冻结帧.set(attachmentId, {
-              src,
-              currentTime,
-              dataUrl,
-              updatedAt: Date.now(),
-            });
-            this.requestUpdate();
-          } finally {
-            if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-              this.时间线自动播冻结帧导出中.delete(attachmentId);
-            }
-          }
-        })();
-      }, "image/webp", 0.82);
-    } catch {
-      // Canvas 可能因为解码器、浏览器策略或测试环境不可用而拒绝截图；失败时继续走原播放链，不扩大成业务错误。
-      if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-        this.时间线自动播冻结帧导出中.delete(attachmentId);
-      }
     }
   }
 
@@ -802,7 +606,7 @@ export class 房间消息窗 extends LitElement {
      * 所以这里要在更新完成后显式再同步一次唯一播放器宿主，把同一颗壳从 hidden stage 迁回可见卡片。
      */
     void this.updateComplete.then(() => {
-      this.同步时间线唯一播放器宿主();
+      this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
     });
   }
 
@@ -830,7 +634,7 @@ export class 房间消息窗 extends LitElement {
      */
     this.requestUpdate();
     void this.updateComplete.then(() => {
-      this.同步时间线唯一播放器宿主();
+      this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
     });
   }
 
@@ -857,7 +661,7 @@ export class 房间消息窗 extends LitElement {
     if (!currentSrc) {
       return;
     }
-    if (this.读取时间线视频首帧是否就绪(attachmentId, currentSrc)) {
+    if (this.时间线画面缓存Owner.读取首帧是否就绪(attachmentId, currentSrc)) {
       return;
     }
     if (previewVideo.currentTime > 0) {
@@ -1013,8 +817,8 @@ export class 房间消息窗 extends LitElement {
      * 2. 同时强制刷新一把本地位置桥，兜住 runtime snapshot 慢一拍的窗口；
      * 3. 如果旧版本 DOM 里还残留 preview video，只允许顺手对齐它，不能再依赖它做第二播放表面。
      */
-    this.标记时间线视频首帧已就绪(attachmentId, canonicalSrc);
-    this.捕获时间线自动播冻结帧(attachmentId, canonicalVideo);
+    this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, canonicalSrc);
+    this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, canonicalVideo);
     if (!hasNewerLocalBridge) {
       this.广播自动播播放位置(attachmentId, canonicalVideo, true, true);
     }
@@ -1147,7 +951,7 @@ export class 房间消息窗 extends LitElement {
      * 这里的 Map 只做高频事件节流，不作为续播真相；真正恢复来源仍是外层回灌的 snapshot。
      */
     if (force || allowReleasedOwner) {
-      this.捕获时间线自动播冻结帧(attachmentId, video);
+      this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video);
     }
     this.自动播位置上报记录.set(attachmentId, {
       src,
@@ -1191,7 +995,7 @@ export class 房间消息窗 extends LitElement {
      * 因此这里显式补一次 `play()`，并在 owner 退场时显式 `pause()`，
      * 让自动播行为稳定且可预期，避免“看起来是自动播 owner 但画面不动”的回归。
      */
-    this.同步时间线唯一播放器宿主();
+    this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       "video.message-video-preview[data-attachment-id]"
     );
@@ -1220,7 +1024,7 @@ export class 房间消息窗 extends LitElement {
         });
       }
       if (!video.paused) {
-        this.捕获时间线自动播冻结帧(attachmentId, video);
+        this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video);
         this.广播自动播播放位置(
           attachmentId,
           video,
@@ -1285,153 +1089,6 @@ export class 房间消息窗 extends LitElement {
 
   private 读取当前虚拟消息项(): 消息虚拟项[] {
     return this.补齐首帧消息虚拟项(this.读取消息虚拟器().getVirtualItems());
-  }
-
-  private 读取当前媒体窗口附件标识(virtualItems = this.读取当前虚拟消息项()): string[] {
-    const attachmentIds: string[] = [];
-    const seen = new Set<string>();
-    let mediaCount = 0;
-    let videoCount = 0;
-    const push = (
-      attachmentId: string | null | undefined,
-      kind: "image" | "video"
-    ): void => {
-      const normalized = attachmentId?.trim() ?? "";
-      if (!normalized || seen.has(normalized)) {
-        return;
-      }
-      if (mediaCount >= 近视口活媒体会话预算上限) {
-        return;
-      }
-      if (kind === "video" && videoCount >= 近视口活视频会话预算上限) {
-        return;
-      }
-      seen.add(normalized);
-      attachmentIds.push(normalized);
-      mediaCount += 1;
-      if (kind === "video") {
-        videoCount += 1;
-      }
-    };
-    /**
-     * 当前媒体窗口事件必须先做预算裁剪，再把附件集合回抛给编排层：
-     * 1. owner / 刚退场 owner / 可见自动播候选优先占据热会话名额；
-     * 2. 其余附件再按当前虚拟窗口里的消息顺序补齐；
-     * 3. 这样单屏多附件消息不会把“当前窗口”偷换成“整屏全部附件都算活会话”。
-     */
-    push(this.inlineAutoplayOwnerAttachmentId, "video");
-    push(this.最近退场Owner附件Id, "video");
-    for (const [attachmentId] of Array.from(this.自动播候选观察Owner.自动播候选可见条目.entries()).sort(
-      (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
-    )) {
-      push(attachmentId, "video");
-    }
-    for (const virtualItem of virtualItems) {
-      const item = this.items[virtualItem.index];
-      if (!item || item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        push(attachment.attachmentId, attachment.kind);
-      }
-    }
-    return attachmentIds;
-  }
-
-  private 读取允许渲染真实预览视频的附件集合(
-    virtualItems = this.读取当前虚拟消息项()
-  ): Set<string> {
-    const orderedAttachmentIds: string[] = [];
-    const seen = new Set<string>();
-    const push = (attachmentId: string | null | undefined): void => {
-      const normalized = attachmentId?.trim() ?? "";
-      if (!normalized || seen.has(normalized)) {
-        return;
-      }
-      seen.add(normalized);
-      orderedAttachmentIds.push(normalized);
-    };
-
-    /**
-     * 真实 preview `<video>` 的预算优先级固定为：
-     * 1. 当前 owner / 刚退场 owner 先保住连续性；
-     * 2. 当前虚拟窗口里已经有保存续播位置的卡片优先，因为高速回滑时它们最容易被用户看见闪回 poster；
-     * 3. 当前虚拟窗口里已经真实出过首帧的卡片优先，因为编排冷快照可能比虚拟回滑慢一拍；
-     * 4. 已进入近视口候选的卡片优先；
-     * 5. 其余只允许当前虚拟窗口里最靠前的一小撮视频继续挂真实 `<video>`。
-     *
-     * 这样做的目的不是“所有历史视频都别显示”，而是让真正重的 DOM/解码表面收敛到稳定上限。
-     */
-    push(this.inlineAutoplayOwnerAttachmentId);
-    push(this.最近退场Owner附件Id);
-    for (const virtualItem of virtualItems) {
-      const item = this.items[virtualItem.index];
-      if (!item || item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (attachment.kind !== "video") {
-          continue;
-        }
-        const position = this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
-        if (
-          position?.src &&
-          Number.isFinite(position.currentTime) &&
-          position.currentTime > 0
-        ) {
-          push(attachment.attachmentId);
-        }
-      }
-    }
-    for (const virtualItem of virtualItems) {
-      const item = this.items[virtualItem.index];
-      if (!item || item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (
-          attachment.kind === "video" &&
-          this.读取时间线视频已就绪首帧预览源(attachment.attachmentId)
-        ) {
-          push(attachment.attachmentId);
-        }
-      }
-    }
-    for (const [attachmentId] of Array.from(this.自动播候选观察Owner.自动播候选可见条目.entries()).sort(
-      (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
-    )) {
-      push(attachmentId);
-    }
-    for (const virtualItem of virtualItems) {
-      const item = this.items[virtualItem.index];
-      if (!item || item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (attachment.kind === "video") {
-          push(attachment.attachmentId);
-        }
-      }
-    }
-    return new Set(orderedAttachmentIds.slice(0, 近视口真实预览视频预算上限));
-  }
-
-  private dispatch媒体窗口观察(virtualItems = this.读取当前虚拟消息项()): void {
-    const attachmentIds = this.读取当前媒体窗口附件标识(virtualItems);
-    const signature = attachmentIds.join("\u0000");
-    if (signature === this.上次媒体窗口附件签名) {
-      return;
-    }
-    this.上次媒体窗口附件签名 = signature;
-    this.dispatchEvent(
-      new CustomEvent<{ attachmentIds: string[] }>("room-media-window-observed", {
-        detail: {
-          attachmentIds,
-        },
-        bubbles: true,
-        composed: true,
-      })
-    );
   }
 
   private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
@@ -1520,69 +1177,6 @@ export class 房间消息窗 extends LitElement {
       inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
       recentlyReleasedOwnerAttachmentId: this.最近退场Owner附件Id,
       normalizeSrc: (src) => this.归一化时间线视频播放源(src),
-    });
-  }
-
-  private 同步时间线唯一播放器宿主(): void {
-    const 全局唯一播放器 = 读取默认全局唯一播放器();
-    const ownerAttachmentId = this.inlineAutoplayOwnerAttachmentId;
-    if (!ownerAttachmentId) {
-      全局唯一播放器.同步时间线自动播(null);
-      return;
-    }
-    const visibleHost = this.querySelector<HTMLElement>(
-      `.message-video-canonical-host[data-attachment-id="${ownerAttachmentId}"]`
-    );
-    const stageHost = this.querySelector<HTMLElement>(
-      `.message-video-canonical-stage-host[data-attachment-id="${ownerAttachmentId}"]`
-    );
-    const host = visibleHost ?? stageHost;
-    const src = host?.dataset.videoSrc?.trim() ?? "";
-    // 时间线唯一播放器只接受正式唯一链的 file 源，旧 manifest/dash 残留必须当场拦下。
-    const kind = host?.dataset.videoKind === "file" ? "file" : null;
-    const width = Number(host?.dataset.videoWidth ?? "0");
-    const height = Number(host?.dataset.videoHeight ?? "0");
-    if (!host || !host.isConnected || !src) {
-      // owner 仍存在但虚拟宿主暂不在 DOM 时，不把唯一播放器误翻译成“停止播放”。
-      全局唯一播放器.暂停当前时间线播放();
-      return;
-    }
-    if (
-      !kind ||
-      视频地址属于旧流媒体清单(src) ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    ) {
-      全局唯一播放器.同步时间线自动播(null);
-      return;
-    }
-    全局唯一播放器.同步时间线自动播({
-      attachmentId: ownerAttachmentId,
-      mountTarget: host,
-      source: {
-        kind,
-        src,
-        posterSrc: host.dataset.videoPoster?.trim() || null,
-        width,
-        height,
-      },
-      回调: {
-        恢复播放位置: (video) => {
-          this.恢复时间线自动播播放位置(ownerAttachmentId, video);
-        },
-        标记首帧已就绪: (currentSrc) => {
-          this.标记时间线视频首帧已就绪(ownerAttachmentId, currentSrc);
-        },
-        标记可见接管已就绪: (video) => {
-          this.标记时间线唯一播放器可见接管已就绪(ownerAttachmentId, video);
-        },
-        广播播放位置: (video, force = false, allowReleasedOwner = false) => {
-          this.广播自动播播放位置(ownerAttachmentId, video, force, allowReleasedOwner);
-        },
-        广播媒体会话信号: (signal) => {
-          this.广播媒体会话信号(ownerAttachmentId, signal);
-        },
-      },
     });
   }
 
@@ -1741,7 +1335,7 @@ export class 房间消息窗 extends LitElement {
         读取保存续帧是否允许承接时间线预览底板: (input) =>
           this.读取保存续帧是否允许承接时间线预览底板(input),
         读取时间线视频已就绪首帧预览源: (attachmentId) =>
-          this.读取时间线视频已就绪首帧预览源(attachmentId),
+          this.时间线画面缓存Owner.读取已就绪首帧预览源(attachmentId),
         读取时间线视频预算投影: (attachment, previewVideoSrcCandidate) =>
           this.读取时间线视频预算投影(attachment, previewVideoSrcCandidate),
         读取时间线唯一播放器是否可见接管就绪: (attachmentId, src) =>
@@ -1751,16 +1345,16 @@ export class 房间消息窗 extends LitElement {
         读取时间线现有预览视频是否可继续显示: (attachmentId, src) =>
           this.读取时间线现有预览视频是否可继续显示(attachmentId, src),
         读取时间线自动播冻结帧: (attachmentId, src, position) =>
-          this.读取时间线自动播冻结帧(attachmentId, src, position),
+          this.时间线画面缓存Owner.读取自动播冻结帧(attachmentId, src, position),
         读取时间线视频首帧是否就绪: (attachmentId, src) =>
-          this.读取时间线视频首帧是否就绪(attachmentId, src),
+          this.时间线画面缓存Owner.读取首帧是否就绪(attachmentId, src),
         归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
         读取时间线预览视频是否允许渲染: (budget, input) =>
           this.读取时间线预览视频是否允许渲染(budget, input),
         恢复时间线自动播播放位置: (attachmentId, video, input) =>
           this.恢复时间线自动播播放位置(attachmentId, video, input),
         标记时间线视频首帧已就绪: (attachmentId, src) =>
-          this.标记时间线视频首帧已就绪(attachmentId, src),
+          this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, src),
         标记视频封面加载失败: (attachmentId, event) =>
           this.标记视频封面加载失败(attachmentId, event),
         广播媒体会话信号: (attachmentId, signal) =>
@@ -1828,7 +1422,16 @@ export class 房间消息窗 extends LitElement {
   override render() {
     const virtualizer = this.读取消息虚拟器();
     const virtualItems = this.补齐首帧消息虚拟项(virtualizer.getVirtualItems());
-    const 可渲染真实预览视频附件 = this.读取允许渲染真实预览视频的附件集合(virtualItems);
+    const 可渲染真实预览视频附件 = 读取允许渲染真实预览视频附件集合({
+      items: this.items,
+      virtualItems,
+      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+      最近退场Owner附件Id: this.最近退场Owner附件Id,
+      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
+      inlineAutoplayPositionByAttachmentId: this.inlineAutoplayPositionByAttachmentId,
+      读取时间线视频已就绪首帧预览源: (attachmentId) =>
+        this.时间线画面缓存Owner.读取已就绪首帧预览源(attachmentId),
+    });
     return html`
       <div
         id="messageScroll"
