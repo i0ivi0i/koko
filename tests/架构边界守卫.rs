@@ -273,6 +273,39 @@ fn 媒体上传外壳必须持续变薄() {
 }
 
 #[test]
+fn 总装和总外壳必须持续变薄() {
+    // 总装/总外壳只允许承担启动接线、route mount 和状态装配。
+    // 这里用单向预算防止测试、协议细节或业务裁决重新回流到根层。
+    for (path, budget) in [("src/总装.rs", 900usize), ("src/外壳/mod.rs", 478usize)] {
+        let lines = 统计物理行数(path);
+        assert!(
+            lines <= budget,
+            "{path} 当前 {lines} 行，必须只保留装配/配置骨架；测试和具体 owner 逻辑要下沉"
+        );
+    }
+}
+
+#[test]
+fn 总装不得承载业务裁决() {
+    // 这些词代表业务成立性或媒体/房间 owner 的内部语义；
+    // 一旦出现在总装层，通常说明装配根重新偷做 usecase/domain 的裁决。
+    let text = 读取("src/总装.rs");
+    for forbidden in [
+        "查询附件可读内容",
+        "source_hash",
+        "加载房间快照",
+        "成员资格",
+        "权限裁决",
+        "消息成立",
+    ] {
+        assert!(
+            !text.contains(forbidden),
+            "src/总装.rs 只能装配和读取启动配置，不能承载业务裁决: {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn 后端生产文件不得使用兜底桶命名() {
     let forbidden_fragments = [
         "utils", "helper", "helpers", "misc", "facade", "compat", "legacy", "fallback", "wrapper",
