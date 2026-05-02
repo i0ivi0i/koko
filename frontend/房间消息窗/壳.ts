@@ -35,6 +35,7 @@ import {
   type 消息虚拟范围,
 } from "./消息虚拟列表.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
+import { 自动播候选观察Owner } from "./自动播候选观察器.js";
 
 type 时间线视频附件 = Extract<消息展示项["attachments"][number], { kind: "video" }>;
 
@@ -88,13 +89,7 @@ export class 房间消息窗 extends LitElement {
   declare inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
-  private 自动播候选调度句柄: number | null = null;
-  private 自动播候选调度兜底定时器: ReturnType<typeof setTimeout> | null = null;
-  private 自动播候选滚动容器: HTMLElement | null = null;
-  private 自动播候选观察根: HTMLElement | null = null;
-  private 自动播候选观察器: IntersectionObserver | null = null;
-  private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
-  private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
+  private readonly 自动播候选观察Owner: 自动播候选观察Owner;
   private readonly 失效视频封面地址 = new Map<string, string>();
   private readonly 自动播位置上报记录 = new Map<
     string,
@@ -178,6 +173,27 @@ export class 房间消息窗 extends LitElement {
     this.inlineAutoplayOwnerAttachmentId = null;
     this.inlineAutoplayPlaybackByAttachmentId = {};
     this.inlineAutoplayPositionByAttachmentId = {};
+    this.自动播候选观察Owner = new 自动播候选观察Owner({
+      读取视频按钮: () =>
+        this.querySelectorAll<HTMLButtonElement>(
+          "button.message-video-preview-trigger[data-attachment-id]"
+        ),
+      派发候选: (candidates) => {
+        this.预热自动播候选首帧(candidates);
+        this.dispatchEvent(
+          new CustomEvent<{ candidates: 消息视频自动播候选[] }>(
+            "room-inline-autoplay-observed",
+            {
+              detail: { candidates },
+              bubbles: true,
+              composed: true,
+            }
+          )
+        );
+      },
+      读取连通状态: () => this.isConnected,
+      候选上限: 自动播观察候选上限,
+    });
   }
 
   /**
@@ -320,7 +336,7 @@ export class 房间消息窗 extends LitElement {
     const virtualItems = this.读取当前虚拟消息项();
     this.dispatch媒体窗口观察(virtualItems);
     this.同步自动播候选观察(scrollContainer);
-    if (this.自动播候选观察器) {
+    if (this.自动播候选观察Owner.自动播候选观察器) {
       return;
     }
     // 只有旧环境缺少 IntersectionObserver 时，才在低频更新点同步量测兜底。
@@ -1217,261 +1233,39 @@ export class 房间消息窗 extends LitElement {
   }
 
   private dispatch自动播候选(scrollContainer: HTMLElement): void {
-    const candidates = this.读取自动播候选(scrollContainer);
-    this.预热自动播候选首帧(candidates);
-    this.dispatchEvent(
-      new CustomEvent<{ candidates: 消息视频自动播候选[] }>("room-inline-autoplay-observed", {
-        detail: { candidates },
-        bubbles: true,
-        composed: true,
-      })
-    );
+    this.自动播候选观察Owner.dispatch自动播候选(scrollContainer);
   }
 
-  /**
-   * 滚动与 Lit 更新会在一帧内连发；这里把候选读取收口到同一帧只跑一次，
-   * 避免时间线里每次滚轮抖动都重新全量量测所有视频卡片。
-   */
   private 调度自动播候选(scrollContainer: HTMLElement): void {
-    this.自动播候选滚动容器 = scrollContainer;
-    if (this.自动播候选调度句柄 !== null) {
-      return;
-    }
-    /**
-     * 真浏览器里优先跟着下一帧统一量测，避免每次滚动都同步扫一遍视频卡片。
-     * 但测试环境或低活跃 tab 可能长期不给 rAF；那就必须有一条单次兜底，
-     * 否则候选会永远停在“滚动发生前的旧矩形”，自动播 owner 根本拿不到更新。
-     */
-    const 执行候选调度 = (): void => {
-      if (this.自动播候选调度句柄 !== null) {
-        window.cancelAnimationFrame(this.自动播候选调度句柄);
-        this.自动播候选调度句柄 = null;
-      }
-      if (this.自动播候选调度兜底定时器 !== null) {
-        clearTimeout(this.自动播候选调度兜底定时器);
-        this.自动播候选调度兜底定时器 = null;
-      }
-      const nextScrollContainer = this.自动播候选滚动容器;
-      this.自动播候选滚动容器 = null;
-      if (!nextScrollContainer || !this.isConnected) {
-        return;
-      }
-      this.dispatch自动播候选(nextScrollContainer);
-    };
-    this.自动播候选调度句柄 = window.requestAnimationFrame(() => {
-      执行候选调度();
-    });
-    this.自动播候选调度兜底定时器 = setTimeout(() => {
-      执行候选调度();
-    }, 32);
+    this.自动播候选观察Owner.调度自动播候选(scrollContainer);
   }
 
   private 取消自动播候选调度(): void {
-    if (this.自动播候选调度句柄 !== null) {
-      window.cancelAnimationFrame(this.自动播候选调度句柄);
-      this.自动播候选调度句柄 = null;
-    }
-    if (this.自动播候选调度兜底定时器 !== null) {
-      clearTimeout(this.自动播候选调度兜底定时器);
-      this.自动播候选调度兜底定时器 = null;
-    }
-    this.自动播候选滚动容器 = null;
+    this.自动播候选观察Owner.取消自动播候选调度();
   }
 
   private 清理自动播候选观察(): void {
-    this.自动播候选观察器?.disconnect();
-    this.自动播候选观察器 = null;
-    this.自动播候选观察根 = null;
-    this.自动播候选观察目标.clear();
-    this.自动播候选可见条目.clear();
+    this.自动播候选观察Owner.清理自动播候选观察();
   }
 
-  /**
-   * 自动播候选不只服务“谁现在开播”，还要服务“下一条视频能否提前长出稳定 `<video>` 壳”：
-   * 1. 已经可见的按钮返回真实 `visibilityRatio`，供 owner 裁决使用；
-   * 2. 刚贴到视口边缘外的一小段按钮返回 `visibilityRatio=0`，只作为预热候选，不抢 owner；
-   * 3. 这样可避免视频露头后才第一次 `img -> video` 换壳，而不需要新增第二套预热状态机。
-   */
   private 根据矩形计算自动播候选(
     attachmentId: string,
     rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
     viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
   ): 消息视频自动播候选 | null {
-    if (!attachmentId || rect.height <= 0) {
-      return null;
-    }
-    const distanceToViewportCenter = Math.abs(
-      (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
-    );
-    const visibleTop = Math.max(rect.top, viewportRect.top);
-    const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
-    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-    if (visibleHeight > 0) {
-      const effectiveVisibleHeightBase = Math.max(
-        1,
-        Math.min(rect.height, viewportRect.height > 0 ? viewportRect.height : rect.height)
-      );
-      return {
-        attachmentId,
-        visibilityRatio: Math.min(1, visibleHeight / effectiveVisibleHeightBase),
-        distanceToViewportCenter,
-      };
-    }
-    /**
-     * 预热窗口不能只盯着“已经贴边的一条卡片”：
-     * - 正式媒体会话从 locator / cache / swarm 解析到可播 src 本身就有异步成本；
-     * - 如果只在 `edgeGap <= rect.height` 时才开始，用户一次较快滚动就可能先看到 poster，再等 `<video>` 长出来；
-     * - 这里把预热边界放宽到“距离当前视口不足一屏”，仍然只预热当前虚拟 DOM 里离视口最近的一批视频，
-     *   但能给正式会话留出足够的解析提前量。
-     */
-    const 预热边界像素 = Math.max(rect.height, viewportRect.height);
-    const edgeGap =
-      rect.bottom <= viewportRect.top
-        ? viewportRect.top - rect.bottom
-        : rect.top >= viewportRect.bottom
-          ? rect.top - viewportRect.bottom
-          : 0;
-    if (edgeGap > 预热边界像素) {
-      return null;
-    }
-    return {
+    return this.自动播候选观察Owner.根据矩形计算自动播候选(
       attachmentId,
-      visibilityRatio: 0,
-      distanceToViewportCenter,
-    };
-  }
-
-  private 量测按钮自动播候选(
-    button: HTMLButtonElement,
-    viewportRect: DOMRect
-  ): 消息视频自动播候选 | null {
-    const attachmentId = button.dataset.attachmentId ?? "";
-    if (!attachmentId) {
-      return null;
-    }
-    return this.根据矩形计算自动播候选(
-      attachmentId,
-      button.getBoundingClientRect(),
+      rect,
       viewportRect
     );
   }
 
-  /**
-   * 列表自动播只关心“真正进入滚动容器视口的少量视频卡片”：
-   * 1. Chrome/现代浏览器优先走 IntersectionObserver，避免每帧对整列视频按钮同步量测；
-   * 2. 观察器只维护候选快照，真正何时派发仍收口到现有 rAF 节流，不额外发明新 owner；
-   * 3. 旧环境缺少观察器时再回退到同步扫描，保证行为不丢。
-   */
   private 同步自动播候选观察(scrollContainer: HTMLElement): void {
-    if (typeof IntersectionObserver !== "function") {
-      this.清理自动播候选观察();
-      return;
-    }
-    if (this.自动播候选观察根 !== scrollContainer) {
-      this.清理自动播候选观察();
-      this.自动播候选观察根 = scrollContainer;
-      this.自动播候选观察器 = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (!(entry.target instanceof HTMLButtonElement)) {
-              continue;
-            }
-            const button = entry.target;
-            const currentAttachmentId = button.dataset.attachmentId ?? "";
-            const knownAttachmentId =
-              this.自动播候选观察目标.get(button) ?? currentAttachmentId;
-            if (knownAttachmentId !== currentAttachmentId && knownAttachmentId !== "") {
-              this.自动播候选可见条目.delete(knownAttachmentId);
-            }
-            if (currentAttachmentId !== "") {
-              this.自动播候选观察目标.set(button, currentAttachmentId);
-            }
-            const rootBounds = entry.rootBounds ?? null;
-            if (!rootBounds) {
-              continue;
-            }
-            const candidate = this.根据矩形计算自动播候选(
-              currentAttachmentId,
-              entry.boundingClientRect,
-              rootBounds
-            );
-            if (!candidate) {
-              if (currentAttachmentId !== "") {
-                this.自动播候选可见条目.delete(currentAttachmentId);
-              }
-              continue;
-            }
-            this.自动播候选可见条目.set(currentAttachmentId, candidate);
-          }
-          this.调度自动播候选(scrollContainer);
-        },
-        {
-          root: scrollContainer,
-          threshold: [0, 0.25, 0.5, 0.75, 1],
-        }
-      );
-    }
-    const observer = this.自动播候选观察器;
-    if (!observer) {
-      return;
-    }
-    const currentButtons = new Set(
-      this.querySelectorAll<HTMLButtonElement>(
-        "button.message-video-preview-trigger[data-attachment-id]"
-      )
-    );
-    for (const [button, attachmentId] of this.自动播候选观察目标) {
-      if (currentButtons.has(button)) {
-        continue;
-      }
-      observer.unobserve(button);
-      this.自动播候选观察目标.delete(button);
-      if (attachmentId !== "") {
-        this.自动播候选可见条目.delete(attachmentId);
-      }
-    }
-    for (const button of currentButtons) {
-      const attachmentId = button.dataset.attachmentId ?? "";
-      const previousAttachmentId = this.自动播候选观察目标.get(button);
-      if (previousAttachmentId === undefined) {
-        this.自动播候选观察目标.set(button, attachmentId);
-        observer.observe(button);
-      } else if (previousAttachmentId !== attachmentId) {
-        if (previousAttachmentId !== "") {
-          this.自动播候选可见条目.delete(previousAttachmentId);
-        }
-        this.自动播候选观察目标.set(button, attachmentId);
-      }
-    }
+    this.自动播候选观察Owner.同步自动播候选观察(scrollContainer);
   }
 
-  /**
-   * 消息窗只把“浏览器当前看到了什么”翻成候选集合：
-   * - 可见比例和距视口中心的距离是壳层事实；
-   * - 真正谁拥有自动播资格，必须继续交给上层编排裁决。
-   */
   private 读取自动播候选(scrollContainer: HTMLElement): 消息视频自动播候选[] {
-    const 裁剪预算 = (candidates: Iterable<消息视频自动播候选>): 消息视频自动播候选[] =>
-      Array.from(candidates)
-        .sort(
-          (left, right) =>
-            left.distanceToViewportCenter - right.distanceToViewportCenter ||
-            right.visibilityRatio - left.visibilityRatio ||
-            left.attachmentId.localeCompare(right.attachmentId)
-        )
-        .slice(0, 自动播观察候选上限);
-    if (this.自动播候选观察器) {
-      return 裁剪预算(this.自动播候选可见条目.values());
-    }
-    const viewportRect = scrollContainer.getBoundingClientRect();
-    const videoEntries = Array.from(
-      this.querySelectorAll<HTMLButtonElement>("button.message-video-preview-trigger[data-attachment-id]")
-    );
-    return 裁剪预算(
-      videoEntries
-        .map((entry) => this.量测按钮自动播候选(entry, viewportRect))
-        .filter((candidate): candidate is 消息视频自动播候选 => candidate !== null)
-    );
+    return this.自动播候选观察Owner.读取自动播候选(scrollContainer);
   }
 
   private dispatchJumpToLatest(): void {
@@ -1563,7 +1357,7 @@ export class 房间消息窗 extends LitElement {
      */
     push(this.inlineAutoplayOwnerAttachmentId, "video");
     push(this.最近退场Owner附件Id, "video");
-    for (const [attachmentId] of Array.from(this.自动播候选可见条目.entries()).sort(
+    for (const [attachmentId] of Array.from(this.自动播候选观察Owner.自动播候选可见条目.entries()).sort(
       (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
     )) {
       push(attachmentId, "video");
@@ -1639,7 +1433,7 @@ export class 房间消息窗 extends LitElement {
         }
       }
     }
-    for (const [attachmentId] of Array.from(this.自动播候选可见条目.entries()).sort(
+    for (const [attachmentId] of Array.from(this.自动播候选观察Owner.自动播候选可见条目.entries()).sort(
       (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
     )) {
       push(attachmentId);

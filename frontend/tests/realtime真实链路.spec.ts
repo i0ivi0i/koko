@@ -48,7 +48,7 @@ afterEach(() => {
 
 beforeAll(() => {
   ensureBackendBinaryPrepared();
-}, 120000);
+}, 300000);
 
 describe("realtime真实链路", () => {
   it(

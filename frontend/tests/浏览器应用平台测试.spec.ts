@@ -468,6 +468,20 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 1650');
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
+    expect(source).toContain(
+      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 2000'
+    );
+    expect(source).toContain(
+      'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929'
+    );
+  });
+
+  it("realtime真实链路的构建预热不应被120秒 beforeAll hook 超时误杀", () => {
+    const source = 读取前端源码("tests/realtime真实链路.spec.ts");
+
+    expect(source).toContain("beforeAll(() => {");
+    expect(source).toContain("ensureBackendBinaryPrepared();");
+    expect(source).toContain("}, 300000);");
   });
 
   it("架构适应度热点门禁会按有效源码行数裁决，而不是把注释和空行也算成热点增长", async () => {

@@ -269,8 +269,8 @@ const 禁止新增前端文件规则 = [
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
   { path: "frontend/总装/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
-  { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1850, maxPhysicalLines: 2200 },
-  { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 820, maxPhysicalLines: 930 },
+  { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 2000 },
+  { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929 },
   { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },
   { path: "frontend/房间消息窗/视图.ts", maxEffectiveLines: 780, maxPhysicalLines: 900 },
   { path: "frontend/房间消息窗/文本布局.ts", maxEffectiveLines: 240, maxPhysicalLines: 300 },

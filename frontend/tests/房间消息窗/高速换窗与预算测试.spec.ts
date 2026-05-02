@@ -9,6 +9,24 @@ import {
   创建媒体消息项,
 } from "../common/房间消息窗媒体支架";
 
+type 自动播候选测试项 = {
+  attachmentId: string;
+  visibilityRatio: number;
+  distanceToViewportCenter: number;
+};
+
+type 自动播候选观察Owner测试接口 = {
+  自动播候选观察器: IntersectionObserver | null;
+  自动播候选可见条目: Map<string, 自动播候选测试项>;
+};
+
+const 读取自动播候选观察Owner = (pane: 房间消息窗): 自动播候选观察Owner测试接口 =>
+  (
+    pane as unknown as {
+      自动播候选观察Owner: 自动播候选观察Owner测试接口;
+    }
+  ).自动播候选观察Owner;
+
 describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
   it("近视口预算收紧后，非 owner 历史视频最多只保留两颗真实 preview video", async () => {
     const pane = 创建媒体消息窗();
@@ -87,15 +105,10 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
       value: 4,
     });
 
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
-    内部面板.自动播候选可见条目.clear();
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
+    自动播观察Owner.自动播候选可见条目.clear();
     for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -160,15 +173,10 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
       value: 1,
     });
 
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
-    内部面板.自动播候选可见条目.clear();
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
+    自动播观察Owner.自动播候选可见条目.clear();
     for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -226,14 +234,9 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
         updatedAt: 1_777_400_000_000,
       },
     };
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
     for (const [index, attachmentId] of attachmentIds.slice(1, 7).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -332,15 +335,10 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
       )
     ).toBeNull();
 
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
-    内部面板.自动播候选可见条目.clear();
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
+    自动播观察Owner.自动播候选可见条目.clear();
     for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -448,15 +446,10 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
         formalByteSource: "none",
       },
     };
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
-    内部面板.自动播候选可见条目.clear();
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
+    自动播观察Owner.自动播候选可见条目.clear();
     for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -540,15 +533,10 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     pane.jumpToLatestLabel = "黑底测试虚拟卸载";
     await pane.updateComplete;
 
-    const 内部面板 = pane as unknown as {
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
-    };
-    内部面板.自动播候选可见条目.clear();
+    const 自动播观察Owner = 读取自动播候选观察Owner(pane);
+    自动播观察Owner.自动播候选可见条目.clear();
     for (const [index, attachmentId] of otherIds.slice(0, 6).entries()) {
-      内部面板.自动播候选可见条目.set(attachmentId, {
+      自动播观察Owner.自动播候选可见条目.set(attachmentId, {
         attachmentId,
         visibilityRatio: 1,
         distanceToViewportCenter: index,
@@ -601,17 +589,13 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
   it("房间首轮更新时，自动播候选也会先做视频预算裁剪，再回抛给外层编排", async () => {
     const pane = 创建媒体消息窗();
     const 内部面板 = pane as unknown as {
-      自动播候选观察器: IntersectionObserver | null;
-      自动播候选可见条目: Map<
-        string,
-        { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }
-      >;
+      自动播候选观察Owner: 自动播候选观察Owner测试接口;
       读取自动播候选(
         scrollContainer: HTMLElement
-      ): Array<{ attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number }>;
+      ): Array<自动播候选测试项>;
     };
-    内部面板.自动播候选观察器 = {} as IntersectionObserver;
-    内部面板.自动播候选可见条目 = new Map(
+    内部面板.自动播候选观察Owner.自动播候选观察器 = {} as IntersectionObserver;
+    内部面板.自动播候选观察Owner.自动播候选可见条目 = new Map(
       Array.from({ length: 16 }, (_, index) => [
         `att-autoplay-budget-${index + 1}`,
         {
