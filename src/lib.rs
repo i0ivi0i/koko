@@ -5,7 +5,7 @@
 /// 2. 新增模块前先判断是否真的需要新文件，优先收口职责而不是碎片化。
 /// 3. 模块名对应 DDD 分层语义：adapter/assembly/contract/domain/entry/shell/application。
 /// 4. 第一波真 DDD 收口先新增 application/identity/room/message/shared 业务模块，旧总文件只作为待删除债务存在。
-#[path = "适配.rs"]
+#[path = "适配/mod.rs"]
 pub mod adapter;
 #[path = "应用/mod.rs"]
 pub mod application;

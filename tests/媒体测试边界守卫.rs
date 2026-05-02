@@ -138,15 +138,19 @@ fn 媒体上传与媒体资产外壳必须显式依赖媒体业务入口() {
 
 #[test]
 fn 媒体附件适配必须收进_媒体_子域() {
-    let adapter_root = 读取("src/适配.rs");
+    assert!(
+        !Path::new("src/适配.rs").exists(),
+        "src/适配.rs 必须删除；PostgreSQL 适配 owner 只能进 src/适配/mod.rs"
+    );
+    let adapter_root = 读取("src/适配/mod.rs");
     let owner = 读取("src/媒体/适配.rs");
     assert!(
         !Path::new("src/媒体附件适配.rs").exists(),
         "src/媒体附件适配.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        adapter_root.contains("#[path = \"媒体/适配.rs\"]"),
-        "src/适配.rs 应直接把媒体附件适配模块路径指到 src/媒体/适配.rs"
+        adapter_root.contains("#[path = \"../媒体/适配.rs\"]"),
+        "src/适配/mod.rs 应直接把媒体附件适配模块路径指到 src/媒体/适配.rs"
     );
     assert!(
         owner.contains("fn 查询附件快照(")

@@ -135,7 +135,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    let temporary_old_roots = ["适配.rs", "外壳.rs"]
+    let temporary_old_roots = ["外壳.rs"]
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
@@ -160,7 +160,6 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
 #[test]
 fn 后端旧根文件删除前只能变薄不能变厚() {
     let budgets = [
-        ("src/适配.rs", 790usize),
         ("src/外壳.rs", 1585usize),
     ];
 
@@ -244,15 +243,19 @@ fn 房间外壳必须收进房间子域() {
 
 #[test]
 fn 房间阅读适配必须收进房间子域() {
-    let adapter_root = 读取("src/适配.rs");
+    assert!(
+        !Path::new("src/适配.rs").exists(),
+        "src/适配.rs 必须删除；PostgreSQL 适配 owner 只能进 src/适配/mod.rs"
+    );
+    let adapter_root = 读取("src/适配/mod.rs");
     let owner = 读取("src/房间/适配.rs");
     assert!(
         !Path::new("src/房间阅读适配.rs").exists(),
         "src/房间阅读适配.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        adapter_root.contains("#[path = \"房间/适配.rs\"]"),
-        "src/适配.rs 应直接把房间阅读适配路径指到 src/房间/适配.rs"
+        adapter_root.contains("#[path = \"../房间/适配.rs\"]"),
+        "src/适配/mod.rs 应直接把房间阅读适配路径指到 src/房间/适配.rs"
     );
     assert!(
         owner.contains("async fn 按短码进房或建房_异步(")
@@ -263,15 +266,19 @@ fn 房间阅读适配必须收进房间子域() {
 
 #[test]
 fn 消息事件适配必须收进消息子域() {
-    let adapter_root = 读取("src/适配.rs");
+    assert!(
+        !Path::new("src/适配.rs").exists(),
+        "src/适配.rs 必须删除；PostgreSQL 适配 owner 只能进 src/适配/mod.rs"
+    );
+    let adapter_root = 读取("src/适配/mod.rs");
     let owner = 读取("src/消息/适配.rs");
     assert!(
         !Path::new("src/消息事件适配.rs").exists(),
         "src/消息事件适配.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        adapter_root.contains("#[path = \"消息/适配.rs\"]"),
-        "src/适配.rs 应直接把消息事件适配路径指到 src/消息/适配.rs"
+        adapter_root.contains("#[path = \"../消息/适配.rs\"]"),
+        "src/适配/mod.rs 应直接把消息事件适配路径指到 src/消息/适配.rs"
     );
     assert!(
         owner.contains("fn 行转消息事件(") && owner.contains("async fn 查询消息页("),
@@ -321,7 +328,7 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let 未收口热点 = [
         ("src/应用/mod.rs", 200usize),
         ("src/外壳.rs", 200usize),
-        ("src/适配.rs", 120usize),
+        ("src/适配/mod.rs", 120usize),
         ("frontend/总装/聊天应用内核.ts", 200usize),
         ("frontend/总装/聊天壳.ts", 200usize),
         ("frontend/媒体/播放会话/应用.ts", 200usize),
