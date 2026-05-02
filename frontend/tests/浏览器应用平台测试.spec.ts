@@ -102,6 +102,20 @@ describe("浏览器端应用平台化基线", () => {
     expect(shellSource).not.toContain("private 读取当前房间宽度(): number");
   });
 
+  it("聊天壳会把操作台模板与输入高度推导收进独立视图 owner，而不是继续塞在壳组件类里", () => {
+    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const consoleViewSource = 读取前端源码("总装/聊天壳操作台视图.ts");
+
+    expect(existsSync(resolve(process.cwd(), "总装/聊天壳操作台视图.ts"))).toBe(true);
+    expect(shellSource).toContain('from "./聊天壳操作台视图.js"');
+    expect(shellSource).toContain("渲染聊天壳操作台({");
+    expect(consoleViewSource).toContain("export function 渲染聊天壳操作台");
+    expect(consoleViewSource).toContain("function 读取操作台主输入高度");
+    expect(shellSource).not.toContain("private renderShellConsole(");
+    expect(shellSource).not.toContain("private 读取操作台主输入高度(");
+    expect(shellSource).not.toContain("function 派生媒体草稿失败文案(");
+  });
+
   it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const recoverySource = 读取前端源码("恢复/壳层/房间恢复编排.ts");

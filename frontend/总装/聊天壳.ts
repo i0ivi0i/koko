@@ -4,19 +4,13 @@ import type { 聊天应用快照 } from "./聊天应用内核.js";
 import "../房间消息窗/壳.js";
 import type { 聊天运行时预算状态 } from "./聊天状态.js";
 import {
-  创建操作台附件入口编排,
-  默认统一媒体文件选择配置,
-} from "../操作台/index.js";
-import {
   type 媒体会话信号,
   type 媒体播放位置,
   type 媒体查看器打开请求,
 } from "../媒体/index.js";
 import type { 前端传输端口 } from "../平台/传输.js";
-import { 默认文本布局器 } from "../房间消息窗/文本布局.js";
 import { 创建聊天壳应用装配 } from "./应用装配.js";
 import {
-  默认消息文本布局环境,
   派生壳主舞台模式,
   派生控制台模式,
   派生壳级操作台状态,
@@ -32,29 +26,7 @@ import {
   按房间宽度派生消息文本布局环境,
   附件内容地址表相同,
 } from "./聊天壳布局协作.js";
-
-function 派生媒体草稿失败文案(errorCode: string): string {
-  switch (errorCode) {
-    case "attachment_too_large":
-      return "失败：附件超过大小上限";
-    case "attachment_upload_stalled":
-      return "失败：上传超时，请重试";
-    case "attachment_upload_network_error":
-      return "失败：网络中断或浏览器拦截了上传";
-    case "attachment_type_not_allowed":
-      return "失败：不支持的媒体类型";
-    case "invalid_session":
-      return "失败：会话已失效，请刷新后重试";
-    case "invalid_argument":
-      return "失败：上传请求无效，请重试";
-    case "system_error":
-      return "失败：服务器处理失败，请稍后重试";
-    case "attachment_upload_failed":
-      return "失败：上传失败，请重试";
-    default:
-      return `失败：${errorCode || "attachment_upload_failed"}`;
-  }
-}
+import { 渲染聊天壳操作台 } from "./聊天壳操作台视图.js";
 
 declare global {
   var __kokoBudgetSnapshot: (() => 聊天运行时预算状态) | undefined;
@@ -1158,229 +1130,6 @@ export class 聊天壳 extends LitElement {
     }).primaryAction.disabled;
   }
 
-  private 读取操作台主输入高度(isMessageMode: boolean, value: string): number {
-    if (!isMessageMode) {
-      return 50;
-    }
-
-    const inputGroupWidth = this.操作台输入组宽度缓存;
-    const 附件入口宽度 = this.读取聊天快照().roomId ? 84 : 0;
-    const 输入框总宽度 = Math.max(180, inputGroupWidth - 附件入口宽度);
-    const 输入框内容宽度 = Math.max(120, 输入框总宽度 - 34);
-    const layout = 默认文本布局器.布局纯文本({
-      text: value.length > 0 ? value : " ",
-      width: 输入框内容宽度,
-      fontFamily: 默认消息文本布局环境.fontFamily,
-      fontSize: 默认消息文本布局环境.fontSize,
-      fontWeight: 默认消息文本布局环境.fontWeight,
-      lineHeight: 默认消息文本布局环境.lineHeight,
-      whiteSpace: "pre-wrap",
-      wordBreak: "normal",
-    });
-
-    /**
-     * 高度继续由 Pretext 的行数裁决，宿主 textarea 只负责输入事件与焦点。
-     * 这里补上当前输入框的垂直内边距和边框，再用单行最小高度兜住空态。
-     */
-    return Math.max(50, Math.max(1, layout.lineCount) * 22 + 26);
-  }
-
-  /**
-   * 操作台本体继续只维护一套骨架；
-   * 真正的显示语义已经上收给 presenter，这里只负责：
-   * - 套用同一套 selector；
-   * - 绑定输入事件；
-   * - 选择当前 submit 入口。
-   */
-  private renderShellConsole(input: {
-    mode: "hidden" | "join" | "message";
-    statusText: string;
-    statusAttention: boolean;
-  }) {
-    const consoleState = 派生壳级操作台状态({
-      consoleMode: input.mode,
-      roomCodeInput: this.读取聊天快照().roomCodeInput,
-      messageInput: this.读取聊天快照().messageInput,
-      pending: this.读取聊天快照().pending,
-      statusText: input.statusText,
-      statusAttention: input.statusAttention,
-      composerMediaDrafts: this.读取聊天快照().composerMediaDrafts,
-    });
-    const isMessageMode = consoleState.mode === "message";
-    const isHiddenMode = consoleState.mode === "hidden";
-    const primaryInputHeight = this.读取操作台主输入高度(
-      isMessageMode,
-      consoleState.primaryInput.value
-    );
-    const composerDrafts = isMessageMode ? this.读取聊天快照().composerMediaDrafts : [];
-    const 附件入口编排 = 创建操作台附件入口编排({
-      auxSlot: consoleState.auxSlot,
-      获取统一媒体文件输入: () =>
-        this.shadowRoot?.querySelector<HTMLInputElement>(
-          `#${默认统一媒体文件选择配置.inputId}`
-        ) ?? null,
-      处理选择媒体文件: async (files) => {
-        await this.kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files });
-      },
-    });
-    const 统一媒体文件选择配置 = 附件入口编排.统一媒体文件选择配置;
-
-    return html`
-      <footer id="shellConsole" class="composer-bar">
-        <div
-          id="shellConsoleStatus"
-          class="composer-status ${consoleState.statusAttention ? "attention" : ""}"
-        >
-          ${consoleState.statusText}
-        </div>
-        ${composerDrafts.length > 0
-          ? html`
-              <div id="composerMediaDrafts" class="composer-drafts">
-                ${composerDrafts.map(
-                  (draft) => html`
-                    <div
-                      class="composer-draft"
-                      data-draft-card-id=${draft.localId}
-                    >
-                      ${draft.kind === "video"
-                        ? draft.previewUrl
-                          ? html`
-                              <img
-                                class="composer-draft-thumb"
-                                data-draft-id=${draft.localId}
-                                src=${draft.previewUrl}
-                                alt=${draft.fileName}
-                              />
-                            `
-                          : html`
-                              <div
-                                class="composer-draft-thumb composer-draft-video-placeholder"
-                                data-draft-id=${draft.localId}
-                                data-video-draft-placeholder="true"
-                                aria-label=${`${draft.fileName} 本地视频草稿占位`}
-                              >
-                                <span class="composer-draft-video-badge">视频</span>
-                              </div>
-                            `
-                        : html`
-                            <img
-                              class="composer-draft-thumb"
-                              data-draft-id=${draft.localId}
-                              src=${draft.previewUrl}
-                              alt=${draft.fileName}
-                            />
-                          `}
-                      <div class="composer-draft-meta">
-                        <div class="composer-draft-name">${draft.fileName}</div>
-                        <div
-                          class="composer-draft-status"
-                          data-status=${draft.status}
-                        >
-                          ${draft.status === "ready"
-                            ? "可发送"
-                            : draft.status === "transporting"
-                              ? "上传中"
-                              : draft.status === "processing"
-                                ? "处理中"
-                              : 派生媒体草稿失败文案(draft.errorCode)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        class="composer-draft-remove"
-                        data-draft-remove-id=${draft.localId}
-                        @click=${() => this.removeComposerDraft(draft.localId)}
-                      >
-                        移除
-                      </button>
-                      ${draft.status === "failed" &&
-                      draft.errorCode !== "attachment_too_large" &&
-                      draft.errorCode !== "attachment_type_not_allowed"
-                        ? html`
-                            <button
-                              type="button"
-                              class="composer-draft-remove"
-                              data-draft-resume-id=${draft.localId}
-                              @click=${() => this.resumeComposerDraft(draft.localId)}
-                            >
-                              继续上传
-                            </button>
-                            <button
-                              type="button"
-                              class="composer-draft-remove"
-                              data-draft-restart-id=${draft.localId}
-                              @click=${() => this.restartComposerDraft(draft.localId)}
-                            >
-                              重新上传
-                            </button>
-                          `
-                        : null}
-                    </div>
-                  `
-                )}
-              </div>
-            `
-          : null}
-        <form id="shellConsoleForm" class="shell-console-form" @submit=${this.submitShellConsole}>
-          <div
-            id="shellConsoleMainRow"
-            ?inert=${isHiddenMode}
-          >
-            <div id="shellConsoleInputGroup">
-              <div
-                id="shellConsoleAuxSlot"
-                class="shell-console-aux-slot"
-                ?hidden=${!consoleState.auxSlot.visible}
-              >
-                <input
-                  id=${统一媒体文件选择配置.inputId}
-                  type="file"
-                  accept=${统一媒体文件选择配置.accept}
-                  ?multiple=${统一媒体文件选择配置.multiple}
-                  hidden
-                  @change=${附件入口编排.处理统一媒体文件变更}
-                />
-                <button
-                  id=${统一媒体文件选择配置.buttonId}
-                  type="button"
-                  class="composer-aux-button"
-                  aria-label="选择图片或视频"
-                  ?disabled=${consoleState.auxSlot.disabled}
-                  @click=${() => 附件入口编排.执行默认附件能力()}
-                >
-                  ${consoleState.auxSlot.label}
-                </button>
-              </div>
-              <textarea
-                id="shellConsolePrimaryInput"
-                class="text-input"
-                data-role=${isMessageMode ? "composer-editor" : "room-code-editor"}
-                placeholder=${consoleState.primaryInput.placeholder}
-                enterkeyhint=${consoleState.primaryInput.enterKeyHint}
-                .value=${consoleState.primaryInput.value}
-                ?disabled=${consoleState.primaryInput.disabled}
-                rows="1"
-                style=${`height: ${primaryInputHeight}px;`}
-                @input=${(event: Event) =>
-                  this.handleShellConsolePrimaryInput(event, isMessageMode)}
-                @keydown=${(event: KeyboardEvent) =>
-                  this.handleShellConsolePrimaryKeydown(event, isMessageMode)}
-              ></textarea>
-            </div>
-            <button
-              id="shellConsolePrimaryAction"
-              class="primary-button"
-              type="submit"
-              ?disabled=${consoleState.primaryAction.disabled}
-            >
-              ${consoleState.primaryAction.label}
-            </button>
-          </div>
-        </form>
-      </footer>
-    `;
-  }
-
   private 应用消息文本布局宽度(roomWidth: number): void {
     const nextWidth = Math.max(1, Math.round(roomWidth || globalThis.innerWidth || 1024));
     if (nextWidth === this.消息文本布局宽度缓存) {
@@ -1467,7 +1216,7 @@ export class 聊天壳 extends LitElement {
       roomId: 聊天快照.roomId,
     });
     const homeSessionViewItems = 派生首页会话展示项(聊天快照.homeSessionItems);
-    const shellConsole = this.renderShellConsole({
+    const shellConsole = 渲染聊天壳操作台({
       mode: consoleMode,
       statusText:
         consoleMode === "hidden"
@@ -1476,6 +1225,26 @@ export class 聊天壳 extends LitElement {
             ? (recoveryHint || "在这里输入消息，发送后会实时出现在房间里。")
             : "在这里输入房间短码，进入对应群聊空间。",
       statusAttention: consoleMode === "message" ? Boolean(recoveryHint) : false,
+      roomId: 聊天快照.roomId,
+      roomCodeInput: 聊天快照.roomCodeInput,
+      messageInput: 聊天快照.messageInput,
+      pending: 聊天快照.pending,
+      composerMediaDrafts: 聊天快照.composerMediaDrafts,
+      操作台输入组宽度: this.操作台输入组宽度缓存,
+      获取统一媒体文件输入: () =>
+        this.shadowRoot?.querySelector<HTMLInputElement>('#shellConsoleAuxSlot input[type="file"]') ??
+        null,
+      处理选择媒体文件: async (files) => {
+        await this.kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files });
+      },
+      提交操作台: (event) => this.submitShellConsole(event),
+      处理主输入: (event, isMessageMode) =>
+        this.handleShellConsolePrimaryInput(event, isMessageMode),
+      处理主输入按键: (event, isMessageMode) =>
+        this.handleShellConsolePrimaryKeydown(event, isMessageMode),
+      移除媒体草稿: (localId) => this.removeComposerDraft(localId),
+      继续上传媒体草稿: (localId) => this.resumeComposerDraft(localId),
+      重新上传媒体草稿: (localId) => this.restartComposerDraft(localId),
     });
     if (shellView === "boot") {
       return html`

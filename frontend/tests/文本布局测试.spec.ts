@@ -15,13 +15,15 @@ describe("文本布局器", () => {
   it("文本布局 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("房间消息窗/文本布局.ts");
     const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const shellConsoleViewSource = 读取前端源码("总装/聊天壳操作台视图.ts");
     const viewSource = 读取前端源码("房间消息窗/视图.ts");
 
     expect(existsSync(resolve(process.cwd(), "文本布局.ts"))).toBe(false);
     expect(ownerSource).toContain("export function 创建文本布局器()");
     expect(ownerSource).toContain("export const 默认文本布局器 = 创建文本布局器()");
-    expect(shellSource).toContain('from "../房间消息窗/文本布局.js"');
+    expect(shellSource).toContain('from "./聊天壳操作台视图.js"');
     expect(shellSource).not.toContain('from "./文本布局.js"');
+    expect(shellConsoleViewSource).toContain('from "../房间消息窗/文本布局.js"');
     expect(viewSource).toContain('from "./文本布局.js"');
     expect(viewSource).not.toContain('from "../文本布局.js"');
   });

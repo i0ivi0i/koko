@@ -1,10 +1,6 @@
 import type { 媒体种类 } from "../../聊天共享/契约.js";
 import type { 媒体会话端口, 媒体播放结果 } from "../index.js";
-
-type 媒体附件条目 = {
-  attachmentId: string;
-  kind: 媒体种类;
-};
+import type { 媒体附件条目 } from "./窗口附件协作.js";
 
 type 窗口会话协作依赖 = {
   读取当前房间媒体附件(): 媒体附件条目[];

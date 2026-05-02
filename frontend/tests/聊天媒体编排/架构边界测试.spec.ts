@@ -101,10 +101,19 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
 
     expect(source).toContain('from "../壳层/窗口会话协作.js"');
+    expect(source).toContain('from "../壳层/窗口附件协作.js"');
     expect(source).toContain("创建窗口会话协作(");
+    expect(source).toContain("创建窗口附件协作(");
     expect(source).not.toContain("const 清理失活媒体会话 =");
     expect(source).not.toContain("const 按当前窗口重同步消息附件播放结果 =");
     expect(source).not.toContain("const 补齐当前房间媒体会话 =");
+    expect(source).not.toContain("const 读取当前房间媒体附件 =");
+    expect(source).not.toContain("const 读取当前房间缓存帮助附件 =");
+    expect(source).not.toContain("const 读取当前帮助窗口附件标识 =");
+    expect(source).not.toContain("const 读取当前房间帮助附件候选 =");
+    expect(source).not.toContain("const 同步附件标识集合 =");
+    expect(source).not.toContain("const 读取当前活跃媒体窗口附件 =");
+    expect(source).not.toContain("const 读取附件条目 =");
   });
 
   it("聊天媒体编排不再直接拥有协作分发应用 owner", () => {
