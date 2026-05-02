@@ -522,7 +522,13 @@ describe("浏览器端应用平台化基线", () => {
       'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1250, maxPhysicalLines: 1520'
     );
     expect(source).toContain(
-      'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929'
+      'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 290, maxPhysicalLines: 330'
+    );
+    expect(source).toContain(
+      'path: "frontend/房间消息窗/视频附件渲染.ts", maxEffectiveLines: 540, maxPhysicalLines: 570'
+    );
+    expect(source).toContain(
+      'path: "frontend/房间消息窗/图片附件渲染.ts", maxEffectiveLines: 80, maxPhysicalLines: 95'
     );
   });
 
@@ -536,6 +542,23 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("private 根据矩形计算自动播候选(");
     expect(source).not.toContain("private 同步自动播候选观察(");
     expect(source).not.toContain("private 读取自动播候选(");
+  });
+
+  it("附件渲染必须按图片和视频 owner 拆分，并禁止重新读取旧媒体真相", () => {
+    const attachmentSource = 读取前端源码("房间消息窗/附件渲染.ts");
+    const imageSource = 读取前端源码("房间消息窗/图片附件渲染.ts");
+    const videoSource = 读取前端源码("房间消息窗/视频附件渲染.ts");
+
+    expect(attachmentSource).toContain('from "./图片附件渲染.js"');
+    expect(attachmentSource).toContain('from "./视频附件渲染.js"');
+    expect(imageSource).toContain("export const 渲染图片附件");
+    expect(videoSource).toContain("export const 渲染视频附件");
+
+    for (const source of [imageSource, videoSource]) {
+      expect(source).not.toMatch(
+        /originalSrc|original_url|manifest|reuseOnly|WebTorrent|videojs|全局唯一播放器|资产协作分发运行时/
+      );
+    }
   });
 
   it("realtime真实链路的构建预热不应被120秒 beforeAll hook 超时误杀", () => {
