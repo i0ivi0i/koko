@@ -173,7 +173,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let first = koko::media::distribution::application::写入协作分发元数据(
             &mut repo,
-            &koko::application::协作分发元数据写入请求 {
+            &koko::media::模型::协作分发元数据写入请求 {
                 附件标识: attachment_id_first_for_worker.clone(),
                 content_id: format!("content_{attachment_id_first_for_worker}"),
                 content_hash: shared_hash.to_string(),
@@ -183,7 +183,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
         );
         let second = koko::media::distribution::application::写入协作分发元数据(
             &mut repo,
-            &koko::application::协作分发元数据写入请求 {
+            &koko::media::模型::协作分发元数据写入请求 {
                 附件标识: attachment_id_second_for_worker.clone(),
                 content_id: format!("content_{attachment_id_second_for_worker}"),
                 content_hash: shared_hash.to_string(),

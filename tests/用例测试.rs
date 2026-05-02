@@ -150,7 +150,7 @@ struct 假仓储 {
     设备匿名身份: HashMap<String, 测试匿名身份记录>,
     房间阅读位置: HashMap<(String, String), i64>,
     历史页读取参数: RefCell<Vec<(String, i64, i64)>>,
-    附件: HashMap<String, koko::application::附件读取结果>,
+    附件: HashMap<String, koko::media::模型::附件读取结果>,
 }
 
 #[derive(Clone)]
@@ -165,12 +165,12 @@ impl 假仓储 {
         &mut self,
         附件标识: &str,
         所属匿名身份标识: &str,
-        种类: koko::application::附件种类读取结果,
-        状态: koko::application::附件状态读取结果,
+        种类: koko::media::模型::附件种类读取结果,
+        状态: koko::media::模型::附件状态读取结果,
     ) {
         self.附件.insert(
             附件标识.to_string(),
-            koko::application::附件读取结果 {
+            koko::media::模型::附件读取结果 {
                 附件标识: 附件标识.to_string(),
                 所属匿名身份标识: 所属匿名身份标识.to_string(),
                 种类,
@@ -413,7 +413,7 @@ impl koko::application::仓储端口 for 假仓储 {
     fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<koko::application::附件读取结果>, koko::shared::contract::错误码> {
+    ) -> Result<Option<koko::media::模型::附件读取结果>, koko::shared::contract::错误码> {
         Ok(self.附件.get(附件标识).cloned())
     }
 }
@@ -457,7 +457,7 @@ impl koko::application::Realtime仓储端口 for 假仓储 {
     async fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<koko::application::附件读取结果>, koko::shared::contract::错误码> {
+    ) -> Result<Option<koko::media::模型::附件读取结果>, koko::shared::contract::错误码> {
         <Self as koko::application::仓储端口>::查询附件快照(self, 附件标识)
     }
 
@@ -654,8 +654,8 @@ fn 非ready附件不能创建消息() {
     repo.放入附件(
         "att-1",
         &sender_identity,
-        koko::application::附件种类读取结果::图片,
-        koko::application::附件状态读取结果::处理中,
+        koko::media::模型::附件种类读取结果::图片,
+        koko::media::模型::附件状态读取结果::处理中,
     );
 
     let result = koko::message::application::创建消息(
@@ -684,8 +684,8 @@ fn 附件owner不匹配时拒绝创建消息() {
     repo.放入附件(
         "att-owner-mismatch",
         "a-other",
-        koko::application::附件种类读取结果::图片,
-        koko::application::附件状态读取结果::就绪,
+        koko::media::模型::附件种类读取结果::图片,
+        koko::media::模型::附件状态读取结果::就绪,
     );
 
     let result = koko::message::application::创建消息(

@@ -5,7 +5,6 @@ use crate::{
     adapter::{媒体上传运输回执写入参数, 媒体上传运输角色},
     media::application::媒体仓储端口,
     shell::协议响应::{err_resp, map_domain_err_tuple},
-    application,
 };
 use axum::{
     extract::State,
@@ -283,7 +282,7 @@ async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> R
                 "附件不再处于待上传状态".to_string(),
             ));
         };
-        if !matches!(prepared.状态, application::附件状态读取结果::已准备) {
+        if !matches!(prepared.状态, crate::media::模型::附件状态读取结果::已准备) {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
@@ -459,7 +458,7 @@ async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> 
                 "附件不再处于待上传状态".to_string(),
             ));
         };
-        if !matches!(prepared.状态, application::附件状态读取结果::已准备) {
+        if !matches!(prepared.状态, crate::media::模型::附件状态读取结果::已准备) {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",

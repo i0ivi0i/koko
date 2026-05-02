@@ -6,8 +6,8 @@ use crate::{application, media, shared::contract};
 pub fn 准备媒体附件上传(
     仓储: &mut impl media::application::媒体仓储端口,
     会话标识: &str,
-    附件: &application::媒体附件准备请求,
-) -> Result<application::媒体附件准备快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件准备请求,
+) -> Result<crate::media::模型::媒体附件准备快照, contract::错误码> {
     if 附件.附件标识.trim().is_empty()
         || 附件.mime_type.trim().is_empty()
         || 附件.原始内容存储键.trim().is_empty()
@@ -17,7 +17,7 @@ pub fn 准备媒体附件上传(
     }
     application::校验实时连接会话(仓储, 会话标识)?;
     if let Some(source_hash) = 附件.source_hash.as_deref() {
-        if !application::是64位小写hex(source_hash)
+        if !crate::media::模型::是64位小写hex(source_hash)
             || 附件.source_byte_size.is_none_or(|byte_size| byte_size <= 0)
         {
             return Err(contract::错误码::参数非法);
@@ -51,7 +51,7 @@ pub fn 读取待完成媒体附件(
     仓储: &impl media::application::媒体仓储端口,
     会话标识: &str,
     附件标识: &str,
-) -> Result<application::待完成媒体附件读取结果, contract::错误码> {
+) -> Result<crate::media::模型::待完成媒体附件读取结果, contract::错误码> {
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
@@ -66,7 +66,7 @@ pub fn 读取待完成媒体附件(
     if prepared.所属匿名身份标识 != 所属匿名身份标识 {
         return Err(contract::错误码::附件不属于当前发送者);
     }
-    if prepared.状态 != application::附件状态读取结果::已准备 {
+    if prepared.状态 != crate::media::模型::附件状态读取结果::已准备 {
         return Err(contract::错误码::附件未就绪);
     }
     Ok(prepared)
@@ -77,8 +77,8 @@ pub fn 读取待完成媒体附件(
 pub fn 完成媒体附件上传(
     仓储: &mut impl media::application::媒体仓储端口,
     会话标识: &str,
-    附件: &application::媒体附件写入请求,
-) -> Result<application::媒体附件快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件写入请求,
+) -> Result<crate::media::模型::媒体附件快照, contract::错误码> {
     let prepared = 读取待完成媒体附件(仓储, 会话标识, &附件.附件标识)?;
     if prepared.种类 != 附件.种类 {
         return Err(contract::错误码::附件类型不支持);

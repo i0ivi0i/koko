@@ -1,4 +1,3 @@
-use crate::application;
 use axum::http::{HeaderMap, Uri};
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -60,9 +59,9 @@ pub(crate) fn 构造协作分发元数据写入请求(
     附件标识: &str,
     共享字节: &[u8],
     ready_epoch秒: i64,
-) -> application::协作分发元数据写入请求 {
+) -> crate::media::模型::协作分发元数据写入请求 {
     let content_hash = 生成内容哈希(共享字节);
-    application::协作分发元数据写入请求 {
+    crate::media::模型::协作分发元数据写入请求 {
         附件标识: 附件标识.to_string(),
         content_id: format!("content_{附件标识}"),
         content_hash: content_hash.clone(),
@@ -204,7 +203,7 @@ fn 协作分发媒体可用性转状态码(availability: 协作分发媒体可�
 /// 2. 无可用来源时先给短连接窗口，再进入无在线种子；
 /// 3. 禁止并行维护第二套可用性字段。
 fn 裁决协作分发媒体状态码(
-    snapshot: &application::协作分发元数据快照,
+    snapshot: &crate::media::模型::协作分发元数据快照,
     web_seed仍可用: bool,
     附件已删除: bool,
     now_epoch秒: i64,
@@ -334,7 +333,7 @@ pub(crate) enum 协作分发入群票据校验诊断 {
 /// 3. READY/CONNECTING_TO_PEERS 允许签票，便于前端在短窗口里快速探测恢复；
 /// 4. info hash 缺失时也不签，避免发出 tracker 根本无法校验的票。
 fn 签发协作分发join_ticket(
-    snapshot: &application::协作分发元数据快照,
+    snapshot: &crate::media::模型::协作分发元数据快照,
     上下文: &协作分发响应上下文<'_>,
     media_state_code: &str,
 ) -> Option<协作分发入群票据签发结果> {
@@ -400,7 +399,7 @@ pub(crate) fn 诊断协作分发join_ticket(
 /// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / media_state；
 /// 3. join_ticket/ticket_expires_at 只表达 swarm 门禁，不扩散成页面流程字段。
 pub(crate) fn 协作分发快照转响应值(
-    snapshot: &application::协作分发元数据快照,
+    snapshot: &crate::media::模型::协作分发元数据快照,
     上下文: 协作分发响应上下文<'_>,
 ) -> serde_json::Value {
     let web_seed_relative_path = format!(
@@ -581,7 +580,7 @@ mod tests {
 
     #[test]
     fn 冷源提前失效但web_seed_until仍在未来时不会长期误报连接群友() {
-        let snapshot = application::协作分发元数据快照 {
+        let snapshot = crate::media::模型::协作分发元数据快照 {
             附件标识: "att-preview-stuck".to_string(),
             content_id: "content_att-preview-stuck".to_string(),
             content_hash: "hash-preview-stuck".to_string(),

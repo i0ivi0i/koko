@@ -1,5 +1,8 @@
-use crate::{shared::contract, domain, application};
-use crate::application::{附件状态读取结果, 附件种类读取结果};
+use crate::{
+    application, domain,
+    media::模型::{附件状态读取结果, 附件种类读取结果},
+    shared::contract,
+};
 
 /// 发送文本消息主链：
 /// 这里只是“纯文本消息”的语义别名，真正消息成立仍统一走 `创建消息`。

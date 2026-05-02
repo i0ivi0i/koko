@@ -6,7 +6,7 @@ use crate::media::application::媒体仓储端口;
 use crate::media::distribution::application as 协作分发应用;
 use crate::media::upload::application as 上传应用;
 use crate::shell::协议响应::{err_resp, event_to_json, map_domain_err_tuple};
-use crate::{media_distribution, application};
+use crate::media_distribution;
 use axum::{
     Json,
     body::Body,
@@ -170,14 +170,14 @@ pub(super) async fn prepare_media_upload(
     let attachment_id = 生成附件标识();
     let upload_session_id = 生成媒体上传会话标识();
     let storage_prefix = match media_kind {
-        application::媒体附件类型::图片 => "images",
-        application::媒体附件类型::视频 => "videos",
+        crate::media::模型::媒体附件类型::图片 => "images",
+        crate::media::模型::媒体附件类型::视频 => "videos",
     };
     let original_storage_key = format!(
         "{storage_prefix}/{attachment_id}/original{}",
         推导原始内容扩展名(&media_kind, mime_type.as_str())
     );
-    let prepare_request = application::媒体附件准备请求 {
+    let prepare_request = crate::media::模型::媒体附件准备请求 {
         附件标识: attachment_id.clone(),
         种类: media_kind.clone(),
         mime_type: mime_type.clone(),
@@ -326,8 +326,8 @@ async fn 构造ready媒体附件响应并触发做种(
     state: &应用状态,
     headers: &HeaderMap,
     session_id: &str,
-    附件: &application::媒体附件快照,
-    协作分发: &application::协作分发元数据快照,
+    附件: &crate::media::模型::媒体附件快照,
+    协作分发: &crate::media::模型::协作分发元数据快照,
     usecase_label: &'static str,
 ) -> serde_json::Value {
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
@@ -343,7 +343,7 @@ async fn 构造ready媒体附件响应并触发做种(
         session_id,
         "original",
     );
-    let 冷源仍可用 = application::冷源当前可用(
+    let 冷源仍可用 = crate::media::模型::冷源当前可用(
         Some(original_url.as_str()),
         Some(协作分发.web_seed_until秒),
         None,
@@ -394,7 +394,7 @@ async fn 构造ready媒体附件响应并触发做种(
     let preview_asset = super::媒体资产外壳::构造预览资源响应体(
         附件.附件标识.as_str(),
         Some(session_id),
-        matches!(附件.种类, application::媒体附件类型::视频) && 附件.允许缩略图,
+        matches!(附件.种类, crate::media::模型::媒体附件类型::视频) && 附件.允许缩略图,
     );
     super::媒体资产外壳::媒体附件快照转响应体(附件, media_asset, preview_asset)
 }
@@ -443,7 +443,7 @@ pub(super) async fn reuse_media_by_source_hash(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let attachment_id = 生成附件标识();
-    let request = application::SourceHash媒体复用请求 {
+    let request = crate::media::模型::SourceHash媒体复用请求 {
         会话标识: session_id.clone(),
         房间标识: room_id.clone(),
         附件标识: attachment_id.clone(),
@@ -471,7 +471,7 @@ pub(super) async fn reuse_media_by_source_hash(
         }
     };
 
-    let application::SourceHash媒体复用结果::Reused(命中) = result
+    let crate::media::模型::SourceHash媒体复用结果::Reused(命中) = result
     else {
         return (
             StatusCode::OK,
@@ -552,7 +552,7 @@ pub(super) async fn forward_media_attachment(
         .map(|value| value.trim().to_string())
         .unwrap_or_default();
     let attachment_id = 生成附件标识();
-    let request = application::媒体附件转发请求 {
+    let request = crate::media::模型::媒体附件转发请求 {
         会话标识: session_id.clone(),
         目标房间标识: target_room_id,
         源附件标识: source_attachment_id,
@@ -568,7 +568,7 @@ pub(super) async fn forward_media_attachment(
             .map_err(map_domain_err_tuple)
     })
     .await;
-    let application::媒体附件转发结果 {
+    let crate::media::模型::媒体附件转发结果 {
         消息事件,
         附件,
         协作分发,
@@ -781,11 +781,11 @@ pub(super) async fn complete_media_upload(
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs() as i64)
         .unwrap_or(0);
-    let 原始冷源到期时间戳秒 = ready_epoch秒 + application::媒体原始冷源保留秒数;
+    let 原始冷源到期时间戳秒 = ready_epoch秒 + crate::media::模型::媒体原始冷源保留秒数;
     let streaming_manifest_request = None;
     let (ready_request, distribution_request, torrent_request, canonical_asset_request) =
         match &prepared.种类 {
-            application::媒体附件类型::图片 => {
+            crate::media::模型::媒体附件类型::图片 => {
                 let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
                     Ok(bytes) => bytes,
                     Err(err) => {
@@ -876,7 +876,7 @@ pub(super) async fn complete_media_upload(
                         format!("写入 canonical 图片对象失败: {err}"),
                     );
                 }
-                let ready_request = application::媒体附件写入请求 {
+                let ready_request = crate::media::模型::媒体附件写入请求 {
                     附件标识: attachment_id.clone(),
                     种类: prepared.种类.clone(),
                     mime_type: parsed.mime_type,
@@ -893,13 +893,13 @@ pub(super) async fn complete_media_upload(
                     回退母本存储键: None,
                     回退母本到期时间戳秒: None,
                 };
-                let torrent_request = application::协作分发torrent元信息写入请求 {
+                let torrent_request = crate::media::模型::协作分发torrent元信息写入请求 {
                     附件标识: attachment_id.clone(),
                     torrent_bytes: torrent.torrent_bytes,
                     torrent_info_hash: torrent.torrent_info_hash,
                     piece_length字节: torrent.piece_length_bytes,
                 };
-                let canonical_asset_request = application::Canonical媒体资产写入请求 {
+                let canonical_asset_request = crate::media::模型::Canonical媒体资产写入请求 {
                     content_hash: distribution_request.content_hash.clone(),
                     种类: ready_request.种类.clone(),
                     mime_type: ready_request.mime_type.clone(),
@@ -920,7 +920,7 @@ pub(super) async fn complete_media_upload(
                     canonical_asset_request,
                 )
             }
-            application::媒体附件类型::视频 => {
+            crate::media::模型::媒体附件类型::视频 => {
                 let 视频解析开始 = Instant::now();
                 let parsed = match 媒体内容解析::校验canonical视频文件内容(
                     temp_file_path.as_path(),
@@ -1032,7 +1032,7 @@ pub(super) async fn complete_media_upload(
                 };
                 记录complete阶段耗时("generate_torrent", torrent生成开始);
                 drop(canonical_video_mapping);
-                let ready_request = application::媒体附件写入请求 {
+                let ready_request = crate::media::模型::媒体附件写入请求 {
                     附件标识: attachment_id.clone(),
                     种类: prepared.种类.clone(),
                     mime_type: parsed.mime_type,
@@ -1049,13 +1049,13 @@ pub(super) async fn complete_media_upload(
                     回退母本存储键: None,
                     回退母本到期时间戳秒: None,
                 };
-                let torrent_request = application::协作分发torrent元信息写入请求 {
+                let torrent_request = crate::media::模型::协作分发torrent元信息写入请求 {
                     附件标识: attachment_id.clone(),
                     torrent_bytes: torrent.torrent_bytes,
                     torrent_info_hash: torrent.torrent_info_hash,
                     piece_length字节: torrent.piece_length_bytes,
                 };
-                let canonical_asset_request = application::Canonical媒体资产写入请求 {
+                let canonical_asset_request = crate::media::模型::Canonical媒体资产写入请求 {
                     content_hash: distribution_request.content_hash.clone(),
                     种类: ready_request.种类.clone(),
                     mime_type: ready_request.mime_type.clone(),
@@ -1142,7 +1142,7 @@ pub(super) async fn complete_media_upload(
                 Option<i64>,
                 Option<i64>,
             ) = (None, Some(原始冷源到期时间戳秒), None);
-            let distribution_snapshot = application::协作分发元数据快照 {
+            let distribution_snapshot = crate::media::模型::协作分发元数据快照 {
                 附件标识: attachment_id.clone(),
                 content_id: distribution_request.content_id.clone(),
                 content_hash: distribution_request.content_hash.clone(),
@@ -1162,7 +1162,7 @@ pub(super) async fn complete_media_upload(
                 session_id.as_str(),
                 "original",
             );
-            let 冷源仍可用 = application::冷源当前可用(
+            let 冷源仍可用 = crate::media::模型::冷源当前可用(
                 Some(original_url.as_str()),
                 冷备层到期时间戳秒,
                 冷备层删除时间戳秒,
@@ -1218,7 +1218,7 @@ pub(super) async fn complete_media_upload(
             let preview_asset = super::媒体资产外壳::构造预览资源响应体(
                 snapshot.附件标识.as_str(),
                 Some(session_id.as_str()),
-                matches!(snapshot.种类, application::媒体附件类型::视频) && snapshot.允许缩略图,
+                matches!(snapshot.种类, crate::media::模型::媒体附件类型::视频) && snapshot.允许缩略图,
             );
             tracing::info!(
                 application = "完成媒体上传",
@@ -1573,10 +1573,10 @@ fn 读取媒体_tus内部上传入口(state: &应用状态) -> String {
 
 fn 解析媒体类型(
     raw_kind: &str,
-) -> Result<application::媒体附件类型, (StatusCode, &'static str, &'static str)> {
+) -> Result<crate::media::模型::媒体附件类型, (StatusCode, &'static str, &'static str)> {
     match raw_kind {
-        "image" => Ok(application::媒体附件类型::图片),
-        "video" => Ok(application::媒体附件类型::视频),
+        "image" => Ok(crate::media::模型::媒体附件类型::图片),
+        "video" => Ok(crate::media::模型::媒体附件类型::视频),
         _ => Err((
             StatusCode::BAD_REQUEST,
             "attachment_type_not_allowed",
@@ -1586,17 +1586,17 @@ fn 解析媒体类型(
 }
 
 fn 推导原始内容扩展名(
-    kind: &application::媒体附件类型, mime_type: &str
+    kind: &crate::media::模型::媒体附件类型, mime_type: &str
 ) -> &'static str {
     match kind {
-        application::媒体附件类型::图片 => match mime_type {
+        crate::media::模型::媒体附件类型::图片 => match mime_type {
             "image/png" => ".png",
             "image/jpeg" => ".jpg",
             "image/webp" => ".webp",
             "image/gif" => ".gif",
             _ => ".bin",
         },
-        application::媒体附件类型::视频 => match mime_type {
+        crate::media::模型::媒体附件类型::视频 => match mime_type {
             "video/mp4" => ".mp4",
             "video/webm" => ".webm",
             "video/quicktime" => ".mov",
@@ -1616,19 +1616,19 @@ struct 协作分发共享载荷<'a> {
 }
 
 fn 选择协作分发共享载荷<'a>(
-    kind: &application::媒体附件类型,
+    kind: &crate::media::模型::媒体附件类型,
     原始mime_type: &str,
     原始字节: &'a [u8],
     canonical视频字节: Option<&'a [u8]>,
 ) -> Result<协作分发共享载荷<'a>, &'static str> {
     match kind {
-        application::媒体附件类型::图片 => Ok(协作分发共享载荷 {
+        crate::media::模型::媒体附件类型::图片 => Ok(协作分发共享载荷 {
             字节: 原始字节,
             稳定扩展名: 推导原始内容扩展名(kind, 原始mime_type),
         }),
         // 视频对外长期可播放的 canonical 已经由客户端预制成 mp4；
         // swarm 也必须复用同一份字节与扩展，不能再等待后端 mezzanine 或分段产物。
-        application::媒体附件类型::视频 => {
+        crate::media::模型::媒体附件类型::视频 => {
             let Some(canonical视频字节) = canonical视频字节 else {
                 return Err("视频协作分发缺少 canonical 视频载荷");
             };
@@ -1774,7 +1774,7 @@ fn 读取媒体_tus对外地址(state: &应用状态) -> String {
 }
 
 fn 校验媒体准备请求(
-    kind: &application::媒体附件类型,
+    kind: &crate::media::模型::媒体附件类型,
     mime_type: &str,
     byte_size: i64,
 ) -> Result<(), (StatusCode, &'static str, &'static str)> {
@@ -1785,7 +1785,7 @@ fn 校验媒体准备请求(
         return Err((StatusCode::BAD_REQUEST, "invalid_argument", "媒体大小非法"));
     }
     match kind {
-        application::媒体附件类型::图片 => {
+        crate::media::模型::媒体附件类型::图片 => {
             if !mime_type.starts_with("image/") {
                 return Err((
                     StatusCode::BAD_REQUEST,
@@ -1801,7 +1801,7 @@ fn 校验媒体准备请求(
                 ));
             }
         }
-        application::媒体附件类型::视频 => {
+        crate::media::模型::媒体附件类型::视频 => {
             if !mime_type.starts_with("video/") {
                 return Err((
                     StatusCode::BAD_REQUEST,
@@ -1938,7 +1938,7 @@ mod tests {
     #[test]
     fn 视频协作分发共享载荷会收口到canonical_mp4而不是继续沿用原片mime() {
         let 共享载荷 = 选择协作分发共享载荷(
-            &application::媒体附件类型::视频,
+            &crate::media::模型::媒体附件类型::视频,
             "video/quicktime",
             b"original-mov",
             Some(b"canonical-mp4"),

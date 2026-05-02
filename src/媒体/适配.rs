@@ -1,6 +1,6 @@
 use sqlx::{PgPool, Row, postgres::PgRow};
 
-use crate::{shared::contract, media_distribution, application};
+use crate::{media_distribution, shared::contract};
 
 use super::Pg仓储;
 
@@ -99,14 +99,14 @@ pub(crate) struct 媒体上传运输记录 {
 /// 这里只有数据库状态翻译，不在 adapter 层追加“自动修正”之类的业务判断。
 fn 解析附件状态(
     raw_status: &str,
-) -> Result<application::附件状态读取结果, contract::错误码> {
+) -> Result<crate::media::模型::附件状态读取结果, contract::错误码> {
     match raw_status {
-        "prepared" => Ok(application::附件状态读取结果::已准备),
-        "uploading" => Ok(application::附件状态读取结果::上传中),
-        "processing" => Ok(application::附件状态读取结果::处理中),
-        "ready" => Ok(application::附件状态读取结果::就绪),
-        "failed" => Ok(application::附件状态读取结果::失败),
-        "expired" | "canceled" | "abandoned" => Ok(application::附件状态读取结果::已过期),
+        "prepared" => Ok(crate::media::模型::附件状态读取结果::已准备),
+        "uploading" => Ok(crate::media::模型::附件状态读取结果::上传中),
+        "processing" => Ok(crate::media::模型::附件状态读取结果::处理中),
+        "ready" => Ok(crate::media::模型::附件状态读取结果::就绪),
+        "failed" => Ok(crate::media::模型::附件状态读取结果::失败),
+        "expired" | "canceled" | "abandoned" => Ok(crate::media::模型::附件状态读取结果::已过期),
         _ => Err(contract::错误码::系统错误),
     }
 }
@@ -147,11 +147,11 @@ fn 行转媒体上传运输记录(
 
 fn 解析上传残留清理原因(
     raw: &str,
-) -> Result<application::上传残留清理原因, contract::错误码> {
+) -> Result<crate::media::模型::上传残留清理原因, contract::错误码> {
     match raw {
-        "abandoned_session" => Ok(application::上传残留清理原因::已放弃会话),
-        "finalized_partial" => Ok(application::上传残留清理原因::最终合并后的分片残留),
-        "expired_unfinished" => Ok(application::上传残留清理原因::已过期未完成上传),
+        "abandoned_session" => Ok(crate::media::模型::上传残留清理原因::已放弃会话),
+        "finalized_partial" => Ok(crate::media::模型::上传残留清理原因::最终合并后的分片残留),
+        "expired_unfinished" => Ok(crate::media::模型::上传残留清理原因::已过期未完成上传),
         _ => Err(contract::错误码::系统错误),
     }
 }
@@ -187,7 +187,7 @@ async fn 查询匿名身份数据库主键_异步(
 pub(super) async fn 查询附件快照_异步(
     pool: &PgPool,
     附件标识: &str,
-) -> Result<Option<application::附件读取结果>, contract::错误码> {
+) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
     let row = sqlx::query(
         "SELECT a.attachment_id,
                 ai.identity_uuid::text AS owner_identity_text,
@@ -217,15 +217,15 @@ pub(super) async fn 查询附件快照_异步(
 
     row.map(|row| {
         let kind = match row.get::<String, _>("kind").as_str() {
-            "image" => application::附件种类读取结果::图片,
-            "video" => application::附件种类读取结果::视频,
-            "audio" => application::附件种类读取结果::语音,
-            "gif" => application::附件种类读取结果::GIF,
-            "file" => application::附件种类读取结果::文件,
+            "image" => crate::media::模型::附件种类读取结果::图片,
+            "video" => crate::media::模型::附件种类读取结果::视频,
+            "audio" => crate::media::模型::附件种类读取结果::语音,
+            "gif" => crate::media::模型::附件种类读取结果::GIF,
+            "file" => crate::media::模型::附件种类读取结果::文件,
             _ => return Err(contract::错误码::系统错误),
         };
         let status = 解析附件状态(row.get::<String, _>("status").as_str())?;
-        Ok(application::附件读取结果 {
+        Ok(crate::media::模型::附件读取结果 {
             附件标识: row.get("attachment_id"),
             所属匿名身份标识: row.get("owner_identity_text"),
             种类: kind,
@@ -246,7 +246,7 @@ pub(super) async fn 查询附件快照_异步(
 pub(super) fn 查询附件快照(
     repo: &Pg仓储,
     附件标识: &str,
-) -> Result<Option<application::附件读取结果>, contract::错误码> {
+) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
     repo.在运行时执行(查询附件快照_异步(&repo.pool, 附件标识))
 }
 
@@ -255,7 +255,7 @@ pub(super) fn 查询附件快照(
 async fn 查询待完成媒体附件_异步(
     pool: &PgPool,
     附件标识: &str,
-) -> Result<Option<application::待完成媒体附件读取结果>, contract::错误码> {
+) -> Result<Option<crate::media::模型::待完成媒体附件读取结果>, contract::错误码> {
     let row = sqlx::query(
         "SELECT a.attachment_id,
                 ai.identity_uuid::text AS owner_identity_text,
@@ -276,11 +276,11 @@ async fn 查询待完成媒体附件_异步(
 
     row.map(|row| {
         let kind = match row.get::<String, _>("kind").as_str() {
-            "image" => application::媒体附件类型::图片,
-            "video" => application::媒体附件类型::视频,
+            "image" => crate::media::模型::媒体附件类型::图片,
+            "video" => crate::media::模型::媒体附件类型::视频,
             _ => return Err(contract::错误码::系统错误),
         };
-        Ok(application::待完成媒体附件读取结果 {
+        Ok(crate::media::模型::待完成媒体附件读取结果 {
             附件标识: row.get("attachment_id"),
             所属匿名身份标识: row.get("owner_identity_text"),
             当前上传会话标识: row.get("current_upload_session_id"),
@@ -297,7 +297,7 @@ async fn 查询待完成媒体附件_异步(
 pub(super) fn 查询待完成媒体附件(
     repo: &Pg仓储,
     附件标识: &str,
-) -> Result<Option<application::待完成媒体附件读取结果>, contract::错误码> {
+) -> Result<Option<crate::media::模型::待完成媒体附件读取结果>, contract::错误码> {
     repo.在运行时执行(查询待完成媒体附件_异步(&repo.pool, 附件标识))
 }
 
@@ -305,12 +305,12 @@ pub(super) fn 查询待完成媒体附件(
 async fn 创建预备媒体附件记录_异步(
     pool: &PgPool,
     所属匿名身份标识: &str,
-    附件: &application::媒体附件准备请求,
-) -> Result<application::媒体附件准备快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件准备请求,
+) -> Result<crate::media::模型::媒体附件准备快照, contract::错误码> {
     let owner_db_id = 查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
     let kind = match 附件.种类 {
-        application::媒体附件类型::图片 => "image",
-        application::媒体附件类型::视频 => "video",
+        crate::media::模型::媒体附件类型::图片 => "image",
+        crate::media::模型::媒体附件类型::视频 => "video",
     };
 
     sqlx::query(
@@ -327,21 +327,21 @@ async fn 创建预备媒体附件记录_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(application::媒体附件准备快照 {
+    Ok(crate::media::模型::媒体附件准备快照 {
         附件标识: 附件.附件标识.clone(),
         种类: 附件.种类.clone(),
         mime_type: 附件.mime_type.clone(),
         字节大小: 附件.字节大小,
         原始内容存储键: 附件.原始内容存储键.clone(),
-        状态: application::附件状态读取结果::已准备,
+        状态: crate::media::模型::附件状态读取结果::已准备,
     })
 }
 
 pub(super) fn 创建预备媒体附件记录(
     repo: &mut Pg仓储,
     所属匿名身份标识: &str,
-    附件: &application::媒体附件准备请求,
-) -> Result<application::媒体附件准备快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件准备请求,
+) -> Result<crate::media::模型::媒体附件准备快照, contract::错误码> {
     repo.在运行时执行(创建预备媒体附件记录_异步(
         &repo.pool,
         所属匿名身份标识,
@@ -388,12 +388,12 @@ pub(super) fn 回滚预备媒体附件记录(
 async fn 创建媒体附件记录_异步(
     pool: &PgPool,
     所属匿名身份标识: &str,
-    附件: &application::媒体附件写入请求,
-) -> Result<application::媒体附件快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件写入请求,
+) -> Result<crate::media::模型::媒体附件快照, contract::错误码> {
     let owner_db_id = 查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
     let kind = match 附件.种类 {
-        application::媒体附件类型::图片 => "image",
-        application::媒体附件类型::视频 => "video",
+        crate::media::模型::媒体附件类型::图片 => "image",
+        crate::media::模型::媒体附件类型::视频 => "video",
     };
 
     sqlx::query(
@@ -454,7 +454,7 @@ async fn 创建媒体附件记录_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(application::媒体附件快照 {
+    Ok(crate::media::模型::媒体附件快照 {
         附件标识: 附件.附件标识.clone(),
         种类: 附件.种类.clone(),
         mime_type: 附件.mime_type.clone(),
@@ -462,15 +462,15 @@ async fn 创建媒体附件记录_异步(
         宽: 附件.宽,
         高: 附件.高,
         允许缩略图: 附件.缩略图存储键.is_some(),
-        状态: application::附件状态读取结果::就绪,
+        状态: crate::media::模型::附件状态读取结果::就绪,
     })
 }
 
 pub(super) fn 创建媒体附件记录(
     repo: &mut Pg仓储,
     所属匿名身份标识: &str,
-    附件: &application::媒体附件写入请求,
-) -> Result<application::媒体附件快照, contract::错误码> {
+    附件: &crate::media::模型::媒体附件写入请求,
+) -> Result<crate::media::模型::媒体附件快照, contract::错误码> {
     repo.在运行时执行(创建媒体附件记录_异步(
         &repo.pool,
         所属匿名身份标识,
@@ -520,19 +520,19 @@ pub(super) fn 记录附件source_hash(
     ))
 }
 
-fn 媒体附件类型转数据库值(种类: &application::媒体附件类型) -> &'static str {
+fn 媒体附件类型转数据库值(种类: &crate::media::模型::媒体附件类型) -> &'static str {
     match 种类 {
-        application::媒体附件类型::图片 => "image",
-        application::媒体附件类型::视频 => "video",
+        crate::media::模型::媒体附件类型::图片 => "image",
+        crate::media::模型::媒体附件类型::视频 => "video",
     }
 }
 
 fn 行转可复用媒体资产(
     row: PgRow,
-) -> Result<application::可复用媒体资产, contract::错误码> {
+) -> Result<crate::media::模型::可复用媒体资产, contract::错误码> {
     let kind = match row.get::<String, _>("kind").as_str() {
-        "image" => application::媒体附件类型::图片,
-        "video" => application::媒体附件类型::视频,
+        "image" => crate::media::模型::媒体附件类型::图片,
+        "video" => crate::media::模型::媒体附件类型::视频,
         _ => return Err(contract::错误码::系统错误),
     };
     let width = row
@@ -541,7 +541,7 @@ fn 行转可复用媒体资产(
     let height = row
         .get::<Option<i32>, _>("height")
         .ok_or(contract::错误码::系统错误)?;
-    Ok(application::可复用媒体资产 {
+    Ok(crate::media::模型::可复用媒体资产 {
         content_hash: row.get("content_hash"),
         种类: kind,
         mime_type: row.get("mime_type"),
@@ -564,8 +564,8 @@ async fn 查询可复用source_hash媒体资产_异步(
     当前匿名身份标识: &str,
     source_hash: &str,
     source_byte_size: i64,
-    种类: application::媒体附件类型,
-) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
+    种类: crate::media::模型::媒体附件类型,
+) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
     let kind = 媒体附件类型转数据库值(&种类);
     let row = sqlx::query(
         "SELECT
@@ -627,8 +627,8 @@ pub(super) fn 查询可复用source_hash媒体资产(
     当前匿名身份标识: &str,
     source_hash: &str,
     source_byte_size: i64,
-    种类: application::媒体附件类型,
-) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
+    种类: crate::media::模型::媒体附件类型,
+) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
     repo.在运行时执行(查询可复用source_hash媒体资产_异步(
         &repo.pool,
         会话标识,
@@ -644,8 +644,8 @@ async fn 查询可转发媒体资产_异步(
     pool: &PgPool,
     会话标识: &str,
     源附件标识: &str,
-    种类: application::媒体附件类型,
-) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
+    种类: crate::media::模型::媒体附件类型,
+) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
     let kind = 媒体附件类型转数据库值(&种类);
     let row = sqlx::query(
         "SELECT
@@ -691,8 +691,8 @@ pub(super) fn 查询可转发媒体资产(
     repo: &Pg仓储,
     会话标识: &str,
     源附件标识: &str,
-    种类: application::媒体附件类型,
-) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
+    种类: crate::media::模型::媒体附件类型,
+) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
     repo.在运行时执行(查询可转发媒体资产_异步(
         &repo.pool,
         会话标识,
@@ -703,7 +703,7 @@ pub(super) fn 查询可转发媒体资产(
 
 async fn 写入canonical媒体资产_异步(
     pool: &PgPool,
-    请求: &application::Canonical媒体资产写入请求,
+    请求: &crate::media::模型::Canonical媒体资产写入请求,
 ) -> Result<(), contract::错误码> {
     let kind = 媒体附件类型转数据库值(&请求.种类);
     sqlx::query(
@@ -760,7 +760,7 @@ async fn 写入canonical媒体资产_异步(
 
 pub(super) fn 写入canonical媒体资产(
     repo: &mut Pg仓储,
-    请求: &application::Canonical媒体资产写入请求,
+    请求: &crate::media::模型::Canonical媒体资产写入请求,
 ) -> Result<(), contract::错误码> {
     repo.在运行时执行(写入canonical媒体资产_异步(&repo.pool, 请求))
 }
@@ -800,8 +800,8 @@ pub(super) fn 绑定附件canonical媒体资产(
 /// 它们继续围绕 attachment_id 收口，避免形成第二条“媒体分发主链”。
 async fn 写入协作分发元数据_异步(
     pool: &PgPool,
-    请求: &application::协作分发元数据写入请求,
-) -> Result<application::协作分发元数据快照, contract::错误码> {
+    请求: &crate::media::模型::协作分发元数据写入请求,
+) -> Result<crate::media::模型::协作分发元数据快照, contract::错误码> {
     sqlx::query(
         "INSERT INTO attachment_distribution_metadata \
             (attachment_id, content_id, content_hash, swarm_id, web_seed_until) \
@@ -821,7 +821,7 @@ async fn 写入协作分发元数据_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(application::协作分发元数据快照 {
+    Ok(crate::media::模型::协作分发元数据快照 {
         附件标识: 请求.附件标识.clone(),
         content_id: 请求.content_id.clone(),
         content_hash: 请求.content_hash.clone(),
@@ -836,15 +836,15 @@ async fn 写入协作分发元数据_异步(
 
 pub(super) fn 写入协作分发元数据(
     repo: &mut Pg仓储,
-    请求: &application::协作分发元数据写入请求,
-) -> Result<application::协作分发元数据快照, contract::错误码> {
+    请求: &crate::media::模型::协作分发元数据写入请求,
+) -> Result<crate::media::模型::协作分发元数据快照, contract::错误码> {
     repo.在运行时执行(写入协作分发元数据_异步(&repo.pool, 请求))
 }
 
 async fn 查询协作分发元数据_异步(
     pool: &PgPool,
     附件标识: &str,
-) -> Result<Option<application::协作分发元数据快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::协作分发元数据快照>, contract::错误码> {
     let row = sqlx::query(
         "SELECT dm.attachment_id,
                 dm.content_id,
@@ -874,14 +874,14 @@ async fn 查询协作分发元数据_异步(
          WHERE dm.attachment_id = $1",
     )
     .bind(附件标识)
-    .bind(application::协作分发存活类型片段peer)
-    .bind(application::协作分发存活类型完整peer)
-    .bind(application::协作分发存活类型后端强种子)
+    .bind(crate::media::模型::协作分发存活类型片段peer)
+    .bind(crate::media::模型::协作分发存活类型完整peer)
+    .bind(crate::media::模型::协作分发存活类型后端强种子)
     .fetch_optional(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(row.map(|row| application::协作分发元数据快照 {
+    Ok(row.map(|row| crate::media::模型::协作分发元数据快照 {
         附件标识: row.get("attachment_id"),
         content_id: row.get("content_id"),
         content_hash: row.get("content_hash"),
@@ -897,7 +897,7 @@ async fn 查询协作分发元数据_异步(
 pub(super) fn 查询协作分发元数据(
     repo: &Pg仓储,
     附件标识: &str,
-) -> Result<Option<application::协作分发元数据快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::协作分发元数据快照>, contract::错误码> {
     repo.在运行时执行(查询协作分发元数据_异步(&repo.pool, 附件标识))
 }
 
@@ -910,7 +910,7 @@ async fn 列出待做种协作分发项_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待做种协作分发项>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待做种协作分发项>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT a.attachment_id,
                 s.session_id AS owner_session_id,
@@ -968,7 +968,7 @@ async fn 列出待做种协作分发项_异步(
                 );
                 return None;
             }
-            Some(application::待做种协作分发项 {
+            Some(crate::media::模型::待做种协作分发项 {
                 附件标识: attachment_id,
                 会话标识: row.get("owner_session_id"),
                 content_id: row.get("content_id"),
@@ -985,7 +985,7 @@ pub(super) fn 列出待做种协作分发项(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待做种协作分发项>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待做种协作分发项>, contract::错误码> {
     repo.在运行时执行(列出待做种协作分发项_异步(
         &repo.pool,
         当前时间戳秒,
@@ -999,7 +999,7 @@ pub(super) fn 列出待做种协作分发项(
 /// 3. `last_seen_at` 统一由后端时钟写入，避免前端各自发明在线真相。
 async fn 写入协作分发swarm存活_异步(
     pool: &PgPool,
-    请求: &application::协作分发swarm存活写入请求,
+    请求: &crate::media::模型::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
     sqlx::query(
         "INSERT INTO swarm_peer_presence \
@@ -1023,15 +1023,15 @@ async fn 写入协作分发swarm存活_异步(
 
 pub(super) fn 写入协作分发swarm存活(
     repo: &mut Pg仓储,
-    请求: &application::协作分发swarm存活写入请求,
+    请求: &crate::media::模型::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
     repo.在运行时执行(写入协作分发swarm存活_异步(&repo.pool, 请求))
 }
 
 async fn 写入协作分发torrent元信息_异步(
     pool: &PgPool,
-    请求: &application::协作分发torrent元信息写入请求,
-) -> Result<application::协作分发torrent元信息快照, contract::错误码> {
+    请求: &crate::media::模型::协作分发torrent元信息写入请求,
+) -> Result<crate::media::模型::协作分发torrent元信息快照, contract::错误码> {
     sqlx::query(
         "UPDATE attachment_distribution_metadata \
          SET torrent_bytes = $2, \
@@ -1047,7 +1047,7 @@ async fn 写入协作分发torrent元信息_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(application::协作分发torrent元信息快照 {
+    Ok(crate::media::模型::协作分发torrent元信息快照 {
         附件标识: 请求.附件标识.clone(),
         torrent_bytes: 请求.torrent_bytes.clone(),
         torrent_info_hash: 请求.torrent_info_hash.clone(),
@@ -1057,15 +1057,15 @@ async fn 写入协作分发torrent元信息_异步(
 
 pub(super) fn 写入协作分发torrent元信息(
     repo: &mut Pg仓储,
-    请求: &application::协作分发torrent元信息写入请求,
-) -> Result<application::协作分发torrent元信息快照, contract::错误码> {
+    请求: &crate::media::模型::协作分发torrent元信息写入请求,
+) -> Result<crate::media::模型::协作分发torrent元信息快照, contract::错误码> {
     repo.在运行时执行(写入协作分发torrent元信息_异步(&repo.pool, 请求))
 }
 
 async fn 查询协作分发torrent元信息_异步(
     pool: &PgPool,
     附件标识: &str,
-) -> Result<Option<application::协作分发torrent元信息快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::协作分发torrent元信息快照>, contract::错误码> {
     let row = sqlx::query(
         "SELECT attachment_id, torrent_bytes, torrent_info_hash, piece_length_bytes \
          FROM attachment_distribution_metadata \
@@ -1079,7 +1079,7 @@ async fn 查询协作分发torrent元信息_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(row.map(|row| application::协作分发torrent元信息快照 {
+    Ok(row.map(|row| crate::media::模型::协作分发torrent元信息快照 {
         附件标识: row.get("attachment_id"),
         torrent_bytes: row.get("torrent_bytes"),
         torrent_info_hash: row.get("torrent_info_hash"),
@@ -1090,7 +1090,7 @@ async fn 查询协作分发torrent元信息_异步(
 pub(super) fn 查询协作分发torrent元信息(
     repo: &Pg仓储,
     附件标识: &str,
-) -> Result<Option<application::协作分发torrent元信息快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::协作分发torrent元信息快照>, contract::错误码> {
     repo.在运行时执行(查询协作分发torrent元信息_异步(
         &repo.pool,
         附件标识,
@@ -1099,8 +1099,8 @@ pub(super) fn 查询协作分发torrent元信息(
 
 async fn 写入流媒体清单元数据_异步(
     pool: &PgPool,
-    请求: &application::流媒体清单写入请求,
-) -> Result<application::流媒体清单快照, contract::错误码> {
+    请求: &crate::media::模型::流媒体清单写入请求,
+) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
     sqlx::query(
         "INSERT INTO attachment_streaming_manifests \
             (attachment_id, hls_master_storage_key, dash_mpd_storage_key, streaming_expires_at, streaming_deleted_at) \
@@ -1120,7 +1120,7 @@ async fn 写入流媒体清单元数据_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(application::流媒体清单快照 {
+    Ok(crate::media::模型::流媒体清单快照 {
         附件标识: 请求.附件标识.clone(),
         hls主清单存储键: 请求.hls主清单存储键.clone(),
         dash主清单存储键: 请求.dash主清单存储键.clone(),
@@ -1131,15 +1131,15 @@ async fn 写入流媒体清单元数据_异步(
 
 pub(super) fn 写入流媒体清单元数据(
     repo: &mut Pg仓储,
-    请求: &application::流媒体清单写入请求,
-) -> Result<application::流媒体清单快照, contract::错误码> {
+    请求: &crate::media::模型::流媒体清单写入请求,
+) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
     repo.在运行时执行(写入流媒体清单元数据_异步(&repo.pool, 请求))
 }
 
 async fn 查询流媒体清单元数据_异步(
     pool: &PgPool,
     附件标识: &str,
-) -> Result<Option<application::流媒体清单快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
     let row = sqlx::query(
         "SELECT attachment_id, hls_master_storage_key, dash_mpd_storage_key, \
                 EXTRACT(EPOCH FROM streaming_expires_at)::BIGINT AS streaming_expires_at_epoch, \
@@ -1152,7 +1152,7 @@ async fn 查询流媒体清单元数据_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(row.map(|row| application::流媒体清单快照 {
+    Ok(row.map(|row| crate::media::模型::流媒体清单快照 {
         附件标识: row.get("attachment_id"),
         hls主清单存储键: row.get("hls_master_storage_key"),
         dash主清单存储键: row.get("dash_mpd_storage_key"),
@@ -1164,7 +1164,7 @@ async fn 查询流媒体清单元数据_异步(
 pub(super) fn 查询流媒体清单元数据(
     repo: &Pg仓储,
     附件标识: &str,
-) -> Result<Option<application::流媒体清单快照>, contract::错误码> {
+) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
     repo.在运行时执行(查询流媒体清单元数据_异步(&repo.pool, 附件标识))
 }
 
@@ -1174,7 +1174,7 @@ async fn 列出待清理流媒体清单_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理流媒体清单>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT attachment_id, hls_master_storage_key, dash_mpd_storage_key \
          FROM attachment_streaming_manifests \
@@ -1192,7 +1192,7 @@ async fn 列出待清理流媒体清单_异步(
 
     Ok(rows
         .into_iter()
-        .map(|row| application::待清理流媒体清单 {
+        .map(|row| crate::media::模型::待清理流媒体清单 {
             附件标识: row.get("attachment_id"),
             hls主清单存储键: row.get("hls_master_storage_key"),
             dash主清单存储键: row.get("dash_mpd_storage_key"),
@@ -1204,7 +1204,7 @@ pub(super) fn 列出待清理流媒体清单(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理流媒体清单>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
     repo.在运行时执行(列出待清理流媒体清单_异步(
         &repo.pool,
         当前时间戳秒,
@@ -1253,13 +1253,13 @@ async fn 查询附件可读内容_异步(
     pool: &PgPool,
     附件标识: &str,
     会话标识: &str,
-    变体: application::附件内容变体,
-) -> Result<Option<application::附件内容读取结果>, contract::错误码> {
+    变体: crate::media::模型::附件内容变体,
+) -> Result<Option<crate::media::模型::附件内容读取结果>, contract::错误码> {
     let 变体标签 = match 变体 {
-        application::附件内容变体::原图 => "origin_raw",
-        application::附件内容变体::缩略图 => "preview",
-        application::附件内容变体::完整图 => "full",
-        application::附件内容变体::资产原图 => "asset_original",
+        crate::media::模型::附件内容变体::原图 => "origin_raw",
+        crate::media::模型::附件内容变体::缩略图 => "preview",
+        crate::media::模型::附件内容变体::完整图 => "full",
+        crate::media::模型::附件内容变体::资产原图 => "asset_original",
     };
     let owner_identity = Pg仓储::查询会话所属匿名身份_异步(pool, 会话标识).await?;
     let row = sqlx::query(
@@ -1317,7 +1317,7 @@ async fn 查询附件可读内容_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(row.map(|row| application::附件内容读取结果 {
+    Ok(row.map(|row| crate::media::模型::附件内容读取结果 {
         mime_type: row.get("mime_type"),
         存储键: row.get("storage_key"),
     }))
@@ -1327,8 +1327,8 @@ pub(super) fn 查询附件可读内容(
     repo: &Pg仓储,
     附件标识: &str,
     会话标识: &str,
-    变体: application::附件内容变体,
-) -> Result<Option<application::附件内容读取结果>, contract::错误码> {
+    变体: crate::media::模型::附件内容变体,
+) -> Result<Option<crate::media::模型::附件内容读取结果>, contract::错误码> {
     repo.在运行时执行(查询附件可读内容_异步(
         &repo.pool,
         附件标识,
@@ -1539,7 +1539,7 @@ async fn 列出待清理媒体冷源_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理媒体冷源>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理媒体冷源>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT attachment_id, storage_key
          FROM attachments
@@ -1564,7 +1564,7 @@ async fn 列出待清理媒体冷源_异步(
 
     Ok(rows
         .into_iter()
-        .map(|row| application::待清理媒体冷源 {
+        .map(|row| crate::media::模型::待清理媒体冷源 {
             附件标识: row.get("attachment_id"),
             原始内容存储键: row.get("storage_key"),
         })
@@ -1575,7 +1575,7 @@ pub(super) fn 列出待清理媒体冷源(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理媒体冷源>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理媒体冷源>, contract::错误码> {
     repo.在运行时执行(列出待清理媒体冷源_异步(
         &repo.pool,
         当前时间戳秒,
@@ -1622,7 +1622,7 @@ async fn 列出待清理canonical媒体资产_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理Canonical媒体资产>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理Canonical媒体资产>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT content_hash, storage_key
          FROM canonical_media_assets
@@ -1639,7 +1639,7 @@ async fn 列出待清理canonical媒体资产_异步(
 
     Ok(rows
         .into_iter()
-        .map(|row| application::待清理Canonical媒体资产 {
+        .map(|row| crate::media::模型::待清理Canonical媒体资产 {
             content_hash: row.get("content_hash"),
             存储键: row.get("storage_key"),
         })
@@ -1650,7 +1650,7 @@ pub(super) fn 列出待清理canonical媒体资产(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理Canonical媒体资产>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理Canonical媒体资产>, contract::错误码> {
     repo.在运行时执行(列出待清理canonical媒体资产_异步(
         &repo.pool,
         当前时间戳秒,
@@ -1719,7 +1719,7 @@ async fn 列出待清理媒体回退母本_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理媒体回退母本>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理媒体回退母本>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT attachment_id, mezzanine_storage_key
          FROM attachments
@@ -1740,7 +1740,7 @@ async fn 列出待清理媒体回退母本_异步(
 
     Ok(rows
         .into_iter()
-        .map(|row| application::待清理媒体回退母本 {
+        .map(|row| crate::media::模型::待清理媒体回退母本 {
             附件标识: row.get("attachment_id"),
             回退母本存储键: row.get("mezzanine_storage_key"),
         })
@@ -1751,7 +1751,7 @@ pub(super) fn 列出待清理媒体回退母本(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理媒体回退母本>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理媒体回退母本>, contract::错误码> {
     repo.在运行时执行(列出待清理媒体回退母本_异步(
         &repo.pool,
         当前时间戳秒,
@@ -1800,7 +1800,7 @@ async fn 列出待清理上传残留_异步(
     pool: &PgPool,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理上传残留>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理上传残留>, contract::错误码> {
     let rows = sqlx::query(
         "SELECT
             t.attachment_id,
@@ -1880,7 +1880,7 @@ async fn 列出待清理上传残留_异步(
             let Some(storage_locator) = storage_locator else {
                 return Err(contract::错误码::系统错误);
             };
-            Ok(application::待清理上传残留 {
+            Ok(crate::media::模型::待清理上传残留 {
                 附件标识: row.get("attachment_id"),
                 上传会话标识: row.get("upload_session_id"),
                 临时文件定位: storage_locator,
@@ -1894,7 +1894,7 @@ pub(super) fn 列出待清理上传残留(
     repo: &Pg仓储,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<application::待清理上传残留>, contract::错误码> {
+) -> Result<Vec<crate::media::模型::待清理上传残留>, contract::错误码> {
     repo.在运行时执行(列出待清理上传残留_异步(
         &repo.pool,
         当前时间戳秒,
@@ -1907,12 +1907,12 @@ pub(super) fn 列出待清理上传残留(
 async fn 标记上传残留已清理_异步(
     pool: &PgPool,
     上传会话标识: &str,
-    清理原因: application::上传残留清理原因,
+    清理原因: crate::media::模型::上传残留清理原因,
     清理时间戳秒: i64,
 ) -> Result<(), contract::错误码> {
     let mut tx = pool.begin().await.map_err(|_| contract::错误码::系统错误)?;
     match 清理原因 {
-        application::上传残留清理原因::已放弃会话 => {
+        crate::media::模型::上传残留清理原因::已放弃会话 => {
             sqlx::query(
                 "UPDATE attachment_upload_transports
                  SET storage_locator = NULL
@@ -1924,7 +1924,7 @@ async fn 标记上传残留已清理_异步(
             .await
             .map_err(|_| contract::错误码::系统错误)?;
         }
-        application::上传残留清理原因::最终合并后的分片残留 => {
+        crate::media::模型::上传残留清理原因::最终合并后的分片残留 => {
             sqlx::query(
                 "UPDATE attachment_upload_transports
                  SET storage_locator = NULL
@@ -1937,7 +1937,7 @@ async fn 标记上传残留已清理_异步(
             .await
             .map_err(|_| contract::错误码::系统错误)?;
         }
-        application::上传残留清理原因::已过期未完成上传 => {
+        crate::media::模型::上传残留清理原因::已过期未完成上传 => {
             sqlx::query(
                 "UPDATE attachment_upload_transports
                  SET storage_locator = NULL
@@ -1978,7 +1978,7 @@ async fn 标记上传残留已清理_异步(
 pub(super) fn 标记上传残留已清理(
     repo: &mut Pg仓储,
     上传会话标识: &str,
-    清理原因: application::上传残留清理原因,
+    清理原因: crate::media::模型::上传残留清理原因,
     清理时间戳秒: i64,
 ) -> Result<(), contract::错误码> {
     repo.在运行时执行(标记上传残留已清理_异步(

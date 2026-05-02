@@ -138,6 +138,17 @@ fn 根用例文件必须删除且应用入口不得回灌外层实现() {
 }
 
 #[test]
+fn 应用总入口不得重导出业务模型() {
+    let content = 读取("src/应用/mod.rs");
+    for forbidden in ["pub use crate::media::模型::*", "pub use crate::media::application"] {
+        assert!(
+            !content.contains(forbidden),
+            "src/应用/mod.rs 只能保留跨上下文共享端口和校验函数，不得重导出业务 owner 模型: {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn 应用端口不得提供默认空实现() {
     for path in [
         "src/应用/mod.rs",

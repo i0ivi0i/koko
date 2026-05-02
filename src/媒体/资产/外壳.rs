@@ -1,6 +1,6 @@
 use crate::media::distribution::application as 协作分发应用;
 use crate::shell::协议响应::{err_resp, map_domain_err_tuple};
-use crate::{shared::contract, media_distribution, application};
+use crate::{media_distribution, shared::contract};
 use super::{应用状态, 构建共享仓储};
 use axum::{
     Json,
@@ -19,7 +19,7 @@ use tokio::task;
 /// 附件内容 query 的内部稳定形状。
 struct ParsedAttachmentContentQuery {
     session_id: String,
-    variant: application::附件内容变体,
+    variant: crate::media::模型::附件内容变体,
 }
 
 /// 只需要 session_id 的媒体资源 query 内部稳定形状。
@@ -42,7 +42,7 @@ struct 标准字节范围 {
 /// 这里集中表达所有非业务真相输入，避免 helper 把一长串位置参数越传越胖。
 pub(super) struct 媒体资产响应上下文<'a> {
     pub 运行态分发: Option<&'a serde_json::Value>,
-    pub 分发快照: Option<&'a application::协作分发元数据快照>,
+    pub 分发快照: Option<&'a crate::media::模型::协作分发元数据快照>,
     pub 原始地址: String,
     pub 原始冷源到期时间戳秒: Option<i64>,
     pub 原始冷源删除时间戳秒: Option<i64>,
@@ -62,7 +62,7 @@ struct 定位媒体资产响应上下文<'a> {
 struct 单文件视频资产响应参数<'a> {
     附件标识: &'a str,
     运行态分发: &'a serde_json::Value,
-    分发快照: &'a application::协作分发元数据快照,
+    分发快照: &'a crate::media::模型::协作分发元数据快照,
     canonical地址: String,
     mime_type: &'a str,
     宽: Option<i32>,
@@ -77,7 +77,7 @@ struct Blob媒体资产响应参数<'a> {
     附件标识: &'a str,
     会话标识: &'a str,
     运行态分发: Option<&'a serde_json::Value>,
-    分发快照: Option<&'a application::协作分发元数据快照>,
+    分发快照: Option<&'a crate::media::模型::协作分发元数据快照>,
     旧原始地址: String,
     mime_type: &'a str,
     宽: Option<i32>,
@@ -106,8 +106,8 @@ fn parse_attachment_content_query(
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
     {
-        None | Some("original") => application::附件内容变体::原图,
-        Some("thumbnail") => application::附件内容变体::缩略图,
+        None | Some("original") => crate::media::模型::附件内容变体::原图,
+        Some("thumbnail") => crate::media::模型::附件内容变体::缩略图,
         Some(_) => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -146,7 +146,7 @@ fn parse_distribution_presence_payload(
 ) -> Result<ParsedDistributionPresencePayload, (StatusCode, &'static str, String)> {
     if raw_body.is_empty() {
         return Ok(ParsedDistributionPresencePayload {
-            peer_kind: application::协作分发存活类型旁观意图.to_string(),
+            peer_kind: crate::media::模型::协作分发存活类型旁观意图.to_string(),
         });
     }
     let value: serde_json::Value = serde_json::from_slice(raw_body).map_err(|err| {
@@ -161,17 +161,17 @@ fn parse_distribution_presence_payload(
         .and_then(|item| item.as_str())
         .map(str::trim)
         .filter(|item| !item.is_empty())
-        .unwrap_or(application::协作分发存活类型旁观意图);
-    if !application::是有效协作分发存活类型(peer_kind) {
+        .unwrap_or(crate::media::模型::协作分发存活类型旁观意图);
+    if !crate::media::模型::是有效协作分发存活类型(peer_kind) {
         return Err((
             StatusCode::BAD_REQUEST,
             "invalid_argument",
             format!(
                 "peer_kind 仅支持 {} / {} / {} / {}",
-                application::协作分发存活类型旁观意图,
-                application::协作分发存活类型片段peer,
-                application::协作分发存活类型完整peer,
-                application::协作分发存活类型后端强种子
+                crate::media::模型::协作分发存活类型旁观意图,
+                crate::media::模型::协作分发存活类型片段peer,
+                crate::media::模型::协作分发存活类型完整peer,
+                crate::media::模型::协作分发存活类型后端强种子
             ),
         ));
     }
@@ -279,21 +279,21 @@ fn 构造content_range值(range: &标准字节范围, 总字节数: u64) -> Stri
 /// 下面这组 helper 的 owner 已经跟着“媒体资产外壳”一起迁移。
 /// 原因是它们表达的是媒体资产 HTTP 协议面，而不是房间查询协议面；
 /// 继续留在房间壳只会让兄弟模块反向依赖一个并不拥有该真相的文件。
-pub(super) fn 媒体类型转标签(kind: &application::媒体附件类型) -> &'static str {
+pub(super) fn 媒体类型转标签(kind: &crate::media::模型::媒体附件类型) -> &'static str {
     match kind {
-        application::媒体附件类型::图片 => "image",
-        application::媒体附件类型::视频 => "video",
+        crate::media::模型::媒体附件类型::图片 => "image",
+        crate::media::模型::媒体附件类型::视频 => "video",
     }
 }
 
-fn 附件状态转标签(status: &application::附件状态读取结果) -> &'static str {
+fn 附件状态转标签(status: &crate::media::模型::附件状态读取结果) -> &'static str {
     match status {
-        application::附件状态读取结果::已准备 => "prepared",
-        application::附件状态读取结果::上传中 => "uploading",
-        application::附件状态读取结果::处理中 => "processing",
-        application::附件状态读取结果::就绪 => "ready",
-        application::附件状态读取结果::失败 => "failed",
-        application::附件状态读取结果::已过期 => "deleted",
+        crate::media::模型::附件状态读取结果::已准备 => "prepared",
+        crate::media::模型::附件状态读取结果::上传中 => "uploading",
+        crate::media::模型::附件状态读取结果::处理中 => "processing",
+        crate::media::模型::附件状态读取结果::就绪 => "ready",
+        crate::media::模型::附件状态读取结果::失败 => "failed",
+        crate::media::模型::附件状态读取结果::已过期 => "deleted",
     }
 }
 
@@ -338,7 +338,7 @@ fn 媒体冷源描述转响应体(origin: &contract::媒体冷源描述) -> serd
 }
 
 fn 从运行态协作分发响应提取共享分发表面(
-    snapshot: &application::协作分发元数据快照,
+    snapshot: &crate::media::模型::协作分发元数据快照,
     runtime_distribution: &serde_json::Value,
 ) -> contract::媒体分发描述 {
     let announce_urls = runtime_distribution["announce_urls"]
@@ -405,8 +405,8 @@ pub(super) fn 构造预览资源响应体(
     }))
 }
 
-fn 媒体允许投影静态预览(kind: &application::媒体附件类型, 有预览图: bool) -> bool {
-    matches!(kind, application::媒体附件类型::视频) && 有预览图
+fn 媒体允许投影静态预览(kind: &crate::media::模型::媒体附件类型, 有预览图: bool) -> bool {
+    matches!(kind, crate::media::模型::媒体附件类型::视频) && 有预览图
 }
 
 /// 图片 blob 主链统一收口到 `/api/media/{id}/blob/*`，
@@ -452,7 +452,7 @@ fn 构造单文件视频资产响应体(
             "canonical": 变体描述转响应体(&canonical),
         },
         "distribution": 媒体分发描述转响应体(&distribution),
-        "origin": 媒体冷源描述转响应体(&application::构造媒体冷源描述(
+        "origin": 媒体冷源描述转响应体(&crate::media::模型::构造媒体冷源描述(
             Some(参数.canonical地址.clone()),
             参数.原始冷源到期时间戳秒,
             参数.原始冷源删除时间戳秒,
@@ -484,7 +484,7 @@ fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> 
                 从运行态协作分发响应提取共享分发表面(snapshot, runtime)
             })
         }),
-        冷源: application::构造媒体冷源描述(
+        冷源: crate::media::模型::构造媒体冷源描述(
             Some(参数.旧原始地址),
             参数.原始冷源到期时间戳秒,
             参数.原始冷源删除时间戳秒,
@@ -497,11 +497,11 @@ fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> 
 /// 统一把 ready 附件快照翻译成媒体资产协议面。
 /// 这个拼装阶段只负责协议投影，不在这里发明新的媒体业务真相。
 pub(super) fn 构造媒体资产响应体(
-    snapshot: &application::媒体附件快照,
+    snapshot: &crate::media::模型::媒体附件快照,
     上下文: 媒体资产响应上下文<'_>,
 ) -> Option<serde_json::Value> {
     match &snapshot.种类 {
-        application::媒体附件类型::视频 => Some(构造单文件视频资产响应体(
+        crate::media::模型::媒体附件类型::视频 => Some(构造单文件视频资产响应体(
             单文件视频资产响应参数 {
                 附件标识: snapshot.附件标识.as_str(),
                 运行态分发: 上下文.运行态分发?,
@@ -515,7 +515,7 @@ pub(super) fn 构造媒体资产响应体(
                 当前时间戳秒: 上下文.当前时间戳秒,
             },
         )),
-        application::媒体附件类型::图片 => {
+        crate::media::模型::媒体附件类型::图片 => {
             Some(构造blob媒体资产响应体(Blob媒体资产响应参数 {
                 附件标识: snapshot.附件标识.as_str(),
                 会话标识: 上下文.会话标识,
@@ -534,11 +534,11 @@ pub(super) fn 构造媒体资产响应体(
 }
 
 fn 构造定位媒体资产响应体(
-    locator: &application::媒体定位结果,
+    locator: &crate::media::模型::媒体定位结果,
     上下文: 定位媒体资产响应上下文<'_>,
 ) -> Option<(&'static str, serde_json::Value)> {
     match &locator.种类 {
-        application::媒体附件类型::视频 => Some((
+        crate::media::模型::媒体附件类型::视频 => Some((
             "file_asset",
             构造单文件视频资产响应体(单文件视频资产响应参数 {
                 附件标识: locator.附件标识.as_str(),
@@ -553,7 +553,7 @@ fn 构造定位媒体资产响应体(
                 当前时间戳秒: 上下文.当前时间戳秒,
             }),
         )),
-        application::媒体附件类型::图片 => Some((
+        crate::media::模型::媒体附件类型::图片 => Some((
             "blob_asset",
             构造blob媒体资产响应体(Blob媒体资产响应参数 {
                 附件标识: locator.附件标识.as_str(),
@@ -573,7 +573,7 @@ fn 构造定位媒体资产响应体(
 }
 
 pub(super) fn 媒体附件快照转响应体(
-    snapshot: &application::媒体附件快照,
+    snapshot: &crate::media::模型::媒体附件快照,
     media_asset: Option<serde_json::Value>,
     preview_asset: Option<serde_json::Value>,
 ) -> serde_json::Value {
@@ -760,7 +760,7 @@ pub(super) async fn load_media_locator(
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or_default();
-    let 冷源仍可用 = application::冷源当前可用(
+    let 冷源仍可用 = crate::media::模型::冷源当前可用(
         Some(original_url.as_str()),
         locator.原始冷源到期时间戳秒,
         locator.原始冷源删除时间戳秒,
@@ -777,7 +777,7 @@ pub(super) async fn load_media_locator(
                 ticket_secret: state.swarm_ticket_secret.as_deref(),
                 ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                 冷源仍可用,
-                附件已删除: locator.状态 == application::附件状态读取结果::已过期,
+                附件已删除: locator.状态 == crate::media::模型::附件状态读取结果::已过期,
                 now_epoch秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
             },
@@ -831,7 +831,7 @@ pub(super) async fn load_blob_asset_content(
         Err((status, code, message)) => return err_resp(status, code, message),
     };
     let attachment_variant = match blob_variant.as_str() {
-        "canonical" => application::附件内容变体::原图,
+        "canonical" => crate::media::模型::附件内容变体::原图,
         _ => {
             return err_resp(
                 StatusCode::BAD_REQUEST,
@@ -855,7 +855,7 @@ async fn 读取受控附件内容响应(
     state: 应用状态,
     attachment_id: String,
     session_id: String,
-    variant: application::附件内容变体,
+    variant: crate::media::模型::附件内容变体,
     headers: HeaderMap,
 ) -> axum::response::Response {
     tracing::info!(
@@ -1115,7 +1115,7 @@ pub(super) async fn update_media_distribution_presence(
         let mut repo = 构建共享仓储(&state_for_usecase);
         crate::media::application::写入协作分发存活(
             &mut repo,
-            &application::协作分发存活写入请求 {
+            &crate::media::模型::协作分发存活写入请求 {
                 附件标识: attachment_id_for_usecase,
                 会话标识: session_id_for_usecase,
                 存活类型: presence_payload.peer_kind.clone(),

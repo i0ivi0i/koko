@@ -1,10 +1,8 @@
-use crate::{shared::contract, domain};
+use crate::{domain, media::模型::附件读取结果, shared::contract};
 
 /// 跨业务仍共同消费的应用层入口。
 ///
 /// 这里不再回灌任何业务 owner，只保留跨上下文共享的最小端口与校验逻辑。
-pub use crate::media::模型::*;
-
 /// 应用层只编排业务动作，持久化细节通过端口下沉到适配层实现。
 ///
 /// 维护者说明：

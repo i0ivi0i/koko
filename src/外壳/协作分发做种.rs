@@ -148,7 +148,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
 
     let mut active_info_hashes = HashSet::new();
     for 待做种 in 待做种项 {
-        let distribution_snapshot = crate::application::协作分发元数据快照 {
+        let distribution_snapshot = crate::media::模型::协作分发元数据快照 {
             附件标识: 待做种.附件标识.clone(),
             content_id: 待做种.content_id.clone(),
             content_hash: 待做种.content_hash.clone(),
@@ -200,11 +200,11 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
             let mut repo = 构建共享仓储(&state_for_presence);
             协作分发应用::写入协作分发swarm存活(
                 &mut repo,
-                &crate::application::协作分发swarm存活写入请求 {
+                &crate::media::模型::协作分发swarm存活写入请求 {
                     swarm_id,
                     附件标识: attachment_id,
                     会话标识: 后端强种子系统会话标识.to_string(),
-                    存活类型: crate::application::协作分发存活类型后端强种子.to_string(),
+                    存活类型: crate::media::模型::协作分发存活类型后端强种子.to_string(),
                     最近peer存活时间戳秒: 当前时间戳秒,
                 },
             )
