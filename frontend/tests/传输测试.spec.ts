@@ -100,6 +100,7 @@ describe("传输", () => {
     const recoverySource = readFileSync(resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"), "utf8");
     const readSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
     const mediaSource = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
+    const mediaDraftSource = readFileSync(resolve(process.cwd(), "媒体/播放会话/草稿发布.ts"), "utf8");
     const adminQuerySource = readFileSync(resolve(process.cwd(), "后台/查询编排.ts"), "utf8");
     const adminSessionSource = readFileSync(resolve(process.cwd(), "后台/会话编排.ts"), "utf8");
 
@@ -123,10 +124,10 @@ describe("传输", () => {
     expect(readSource).not.toContain("deps.transport.createSocket");
 
     expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId, signal)");
-    expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash)");
-    expect(mediaSource).toContain("deps.transport().reuseMediaBySourceHash(kind, input)");
     expect(mediaSource).toContain("deps.transport().forwardMediaAttachment(kind, input)");
     expect(mediaSource).toContain("deps.transport().buildAttachmentContentUrl(");
+    expect(mediaDraftSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash)");
+    expect(mediaDraftSource).toContain("deps.transport().reuseMediaBySourceHash(kind, input)");
     expect(mediaSource).not.toContain("deps.transport().adminLogin");
     expect(mediaSource).not.toContain("deps.transport().joinOrCreateRoom");
 

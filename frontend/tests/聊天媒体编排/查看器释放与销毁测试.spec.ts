@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
+import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 创建内存媒体缓存仓库 } from "../../媒体";
 import { 生成视频消息, 生成图片消息, 生成连续视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
@@ -29,7 +29,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
+    const { 创建媒体播放会话应用: 创建媒体播放会话应用带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 释放附件播放资源 = vi.fn();
     const 激活协作补齐 = vi.fn(async () => {});
 
@@ -92,7 +92,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排带协作分发桩({
+    const 编排 = 创建媒体播放会话应用带协作分发桩({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -225,7 +225,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
   it("连续观看多个可见视频再关闭查看器后，正式播放结果不会按观看次数累积", async () => {
     const 消息列表 = 生成连续视频消息(6);
     const 释放附件播放资源 = vi.fn();
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () =>
         ({
           loadMediaLocator: vi.fn(async () => {
@@ -355,7 +355,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
+    const { 创建媒体播放会话应用: 创建媒体播放会话应用带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 释放附件播放资源 = vi.fn();
 
     const transport: 前端传输端口 = {
@@ -375,7 +375,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排带协作分发桩({
+    const 编排 = 创建媒体播放会话应用带协作分发桩({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成图片消息("att-image-destroy-1")],

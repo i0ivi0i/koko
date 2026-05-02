@@ -5,15 +5,7 @@ import type {
   媒体种类,
 } from "../../聊天共享/契约.js";
 import type { 媒体传输端口 } from "../../平台/传输.js";
-import type { 聊天运行时预算状态 } from "../../总装/聊天状态.js";
-import {
-  type 信息流视频预算投影,
-} from "../信息流视频预算.js";
-import {
-  创建媒体运行时Actor,
-  投影媒体运行时预算,
-  type 媒体运行时事件,
-} from "../运行时.js";
+import { 创建媒体运行时Actor } from "../运行时.js";
 import {
   创建查看器会话协作,
   type 查看器会话协作端口,
@@ -31,7 +23,6 @@ import {
 } from "../壳层/协作补齐协作.js";
 import {
   创建媒体快照投影协作,
-  type 附件内容地址快照,
 } from "../壳层/快照投影协作.js";
 import { 创建窗口会话协作 } from "../壳层/窗口会话协作.js";
 import {
@@ -45,64 +36,38 @@ import {
   创建内存媒体定位缓存仓库,
   创建内存媒体缓存仓库,
   创建媒体播放器,
-  创建媒体发布器,
   创建媒体会话,
   创建媒体查看器,
   从媒体源抓取视频预览,
-  写入媒体草稿 as 写入媒体草稿状态,
-  更新媒体草稿状态 as 更新媒体草稿状态值,
-  移除媒体草稿 as 移除媒体草稿状态,
-  排序消息视频自动播候选,
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
   type 媒体定位缓存仓库,
-  type 媒体草稿状态补丁,
   type 媒体查看器打开请求,
   type 媒体会话信号,
-  type 媒体会话快照,
   type 媒体会话端口,
   type 媒体播放结果,
   type 媒体播放位置,
   type 协作分发会话事件,
   type 预览缓存端口,
-  type 视频预览状态,
   type WebTorrentSessionLifecycleSnapshot,
 } from "../index.js";
+import {
+  投影媒体播放会话快照,
+  投影媒体播放会话预算,
+  type 媒体播放会话快照,
+  type 媒体播放会话预算快照,
+} from "./会话投影.js";
+import { 创建播放会话草稿发布, type 播放会话媒体发布器 } from "./草稿发布.js";
+import { 创建播放会话运行时副作用 } from "./运行时副作用.js";
+import { 同步自动播候选预热 } from "./自动播候选预热.js";
+import { 释放查看器正式播放占用 } from "./查看器播放释放.js";
+
+export type { 媒体播放会话快照, 媒体播放会话预算快照 } from "./会话投影.js";
 
 type 程序滚动来源 = "media_viewer_open";
 
-export type 聊天媒体快照 = {
-  playbackByAttachmentId: Record<string, 媒体播放结果>;
-  previewByAttachmentId: Record<string, 视频预览状态>;
-  sessionByAttachmentId: Record<string, 媒体会话快照>;
-  contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
-  videoBudgetByAttachmentId: Record<string, 信息流视频预算投影>;
-  inlineAutoplayOwnerAttachmentId: string | null;
-  inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
-  inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
-};
-
-type 聊天媒体预算快照 = Pick<
-  聊天运行时预算状态,
-  | "activeVideoCount"
-  | "activeFormalPlayerCount"
-  | "activeVideoSessionCount"
-  | "activeMediaSessionCount"
-  | "autoplayOwnerCount"
-  | "activeSwarmCount"
-  | "inflightLocatorCount"
-  | "inflightManifestOrRangeCount"
-  | "hiddenHeavyTaskCount"
-  | "wholeFileHeavySessionCount"
-  | "zeroRefHeavySessionCount"
-  | "zeroRefLightHelpSessionCount"
-  | "zeroRefWholeFileReaderCount"
-  | "longTaskCount"
-  | "focusedVideoBudget"
->;
-
-type 聊天媒体编排依赖 = {
+export type 媒体播放会话应用依赖 = {
   transport(): 媒体传输端口;
   读取会话编号(): string;
   读取当前房间标识?(): string | null;
@@ -119,9 +84,9 @@ type 聊天媒体编排依赖 = {
   抓取视频预览?: typeof 从媒体源抓取视频预览;
 };
 
-export interface 聊天媒体编排端口 {
-  snapshot(): 聊天媒体快照;
-  读取预算(): 聊天媒体预算快照;
+export interface 媒体播放会话应用端口 {
+  snapshot(): 媒体播放会话快照;
+  读取预算(): 媒体播放会话预算快照;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
   转发媒体附件(kind: 媒体种类, input: 媒体附件转发请求): Promise<媒体附件转发结果>;
   移除媒体草稿(localId: string): void;
@@ -184,7 +149,6 @@ const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
 const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
 const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
-const 自动播预览预热候选上限 = 2;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -194,7 +158,9 @@ const 自动播预览预热候选上限 = 2;
  *
  * 它不拥有聊天时间线真相，也不直接暴露 transport。
  */
-export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天媒体编排端口 {
+export function 创建媒体播放会话应用(
+  deps: 媒体播放会话应用依赖
+): 媒体播放会话应用端口 {
   const 媒体运行时 = 创建媒体运行时Actor();
   let 媒体缓存已启动 = false;
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
@@ -288,114 +254,28 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     return true;
   };
-  const 释放查看器正式播放占用 = (attachmentId: string | null | undefined): boolean => {
-    const normalizedAttachmentId = attachmentId?.trim() ?? "";
-    if (!normalizedAttachmentId) {
-      return false;
-    }
-    const session = 媒体会话表.get(normalizedAttachmentId);
-    if (!session?.snapshot().playback) {
-      return false;
-    }
-    /**
-     * viewer 退场时只释放正式播放 consumer，不销毁时间线会话壳：
-     * 1. 预览状态仍由视频预览协作保留；
-     * 2. WebTorrent 未完成补齐可由运行时降成零引用轻帮助态；
-     * 3. playback 必须从会话快照清掉，避免看过的视频长期回灌成真实卡片 `<video>`。
-     */
-    释放附件播放资源({
-      attachmentId: normalizedAttachmentId,
-      consumerId: 构造媒体会话ConsumerId(normalizedAttachmentId),
-    });
-    const 当前查看器请求 = 读取媒体运行时上下文().currentViewerRequest;
-    if (
-      当前查看器请求 &&
-      当前查看器请求.startAttachmentId !== normalizedAttachmentId &&
-      当前查看器请求.items.some((item) => item.attachmentId === normalizedAttachmentId)
-    ) {
-      /**
-       * 查看器切到下一条视频后，旧附件 playback 清理只服务于时间线减负；
-       * 已交付给 viewer 的新 request 不应因为旧附件降重又被反向同步成空 src。
-       */
-      跳过查看器同步的播放释放附件.add(normalizedAttachmentId);
-    }
-    session.send({ type: "PLAYBACK_RELEASED" });
-    return true;
-  };
-  const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
-    const before = 媒体运行时.getSnapshot();
-    媒体运行时.send(event);
-    void 同步媒体运行时快照并执行副作用(before);
-  };
-  const 同步媒体运行时快照并执行副作用 = async (
-    before = 媒体运行时.getSnapshot()
-  ): Promise<void> => {
-    const after = 媒体运行时.getSnapshot();
-    const beforeContext = before.context;
-    const afterContext = after.context;
-    const 旧查看器附件标识 = beforeContext.currentViewerRequest?.startAttachmentId ?? null;
-    const 当前查看器附件标识 = afterContext.currentViewerRequest?.startAttachmentId ?? null;
-    const 自动播位置已变化 =
-      beforeContext.inlineAutoplayPositionByAttachmentId !==
-      afterContext.inlineAutoplayPositionByAttachmentId;
-    const 自动播消息流投影已变化 =
-      beforeContext.inlineAutoplayOwnerAttachmentId !==
-        afterContext.inlineAutoplayOwnerAttachmentId ||
-      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback ||
-      /**
-       * viewer 打开期间，最新播放位置需要继续写回唯一位置真相，
-       * 但消息流表面此时并不在屏幕上，不该因为每次位置变化就重渲染壳层。
-       *
-       * 只有当消息流重新成为有效表面时（例如 viewer 已关闭），
-       * 位置变化才需要驱动一次重渲染，让 inline 立刻按最新时间归位。
-       */
-      (!afterContext.currentViewerRequest && 自动播位置已变化);
-
-    自动播协作.同步媒体运行时上下文变化({
-      before: beforeContext,
-      after: afterContext,
-    });
-
-    if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
-      /**
-       * 关闭 viewer 只代表“查看器 owner 退场”，不代表附件生命周期结束：
-       * 1. 同一附件可能仍在当前时间线里，需要立刻回到 inline preview / autoplay 候选；
-       * 2. 前台正式播放 consumer 会在本轮同步末尾退场，这里只清 viewer 会话本身；
-       * 3. 时间线会话壳、预览状态和轻帮助态仍交给当前窗口/帮助链统一裁决，避免 viewer 变成第二套附件生命周期真相。
-       */
-      查看器会话协作.处理查看器请求已清空();
-    }
-
-    if (afterContext.currentViewerRequest) {
-      查看器会话协作.同步当前查看器请求();
-    }
-
-    if (旧查看器附件标识 && 旧查看器附件标识 !== 当前查看器附件标识) {
-      释放查看器正式播放占用(旧查看器附件标识);
-    }
-
-    if (
-      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback &&
-      afterContext.inlineAutoplayPlayback?.kind === "video" &&
-      afterContext.inlineAutoplayPlayback.mode === "swarm"
-    ) {
-      /**
-       * autoplay 的正式 swarm 播放真相一旦到位，preview 也必须立刻获知：
-       * 1. 先前处于 `missing_source` 的 poster 可以借这条热链立即补齐；
-       * 2. 这里复用同一条 autoplay 播放源，不额外重建第二条冷源或第二个 owner；
-       * 3. 这样“自动播已热、预览还在缺源”的断层就能被同一次 runtime 变更收口。
-       */
-      触发视频预览收敛(afterContext.inlineAutoplayPlayback.attachmentId);
-    }
-
-    if (自动播消息流投影已变化) {
-      /**
-       * 自动播 owner / playback / position 真相已经改了，但它们不走聊天基础状态那条 patch 链；
-       * 这里必须主动触发一次壳层刷新，避免视频要等下一次无关滚动/输入才从 poster 切进来。
-       */
-      deps.请求重渲染();
-    }
-  };
+  const 运行时副作用 = 创建播放会话运行时副作用({
+    读取运行时快照: () => 媒体运行时.getSnapshot(),
+    发送运行时事件: (event) => {
+      媒体运行时.send(event);
+    },
+    自动播协作: () => 自动播协作,
+    查看器会话协作: () => 查看器会话协作,
+    释放查看器正式播放占用: (attachmentId) =>
+      释放查看器正式播放占用({
+        attachmentId,
+        媒体会话表,
+        读取当前查看器请求: () => 读取媒体运行时上下文().currentViewerRequest,
+        释放附件播放资源,
+        构造媒体会话ConsumerId,
+        跳过查看器同步的播放释放附件,
+      }),
+    触发视频预览收敛: (attachmentId) => {
+      触发视频预览收敛(attachmentId);
+    },
+    请求重渲染: deps.请求重渲染,
+  });
+  const 接收媒体运行时事实 = 运行时副作用.接收媒体运行时事实;
   const 转发媒体查看器会话信号 = (attachmentId: string, signal: 媒体会话信号): void => {
     媒体会话表.get(attachmentId)?.send(signal);
   };
@@ -413,51 +293,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
   });
 
-  const 写入草稿列表 = (
-    nextDrafts: 媒体附件草稿[],
-    previewUrlsToRevoke: string[] = []
-  ): void => {
-    deps.写入草稿列表(nextDrafts);
-    deps.回收媒体草稿预览地址(previewUrlsToRevoke);
-  };
-
-  const 写入媒体草稿 = (draft: 媒体附件草稿): void => {
-    const result = 写入媒体草稿状态(deps.读取草稿(), draft);
-    写入草稿列表(result.草稿列表, result.需要回收的预览地址);
-  };
-
-  const 更新媒体草稿状态 = (localId: string, patch: 媒体草稿状态补丁): void => {
-    const result = 更新媒体草稿状态值(deps.读取草稿(), localId, patch);
-    写入草稿列表(result.草稿列表, result.需要回收的预览地址);
-  };
-
-  const 移除媒体草稿 = (localId: string): void => {
-    const result = 移除媒体草稿状态(deps.读取草稿(), localId);
-    写入草稿列表(result.草稿列表, result.需要回收的预览地址);
-  };
-
-  const 清空媒体草稿 = (): void => {
-    const previewUrls = deps.读取草稿().map((draft) => draft.previewUrl);
-    写入草稿列表([], previewUrls);
-  };
-
-  let 媒体发布器 = 创建媒体发布器({
-    getSessionId: () => deps.读取会话编号(),
-    getCurrentRoomId: () => deps.读取当前房间标识?.() ?? null,
-    reuseMediaBySourceHash: (kind, input) =>
-      deps.transport().reuseMediaBySourceHash(kind, input),
-    prepareMediaUpload: (kind, sessionId, file, sourceHash) =>
-      deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash),
-    abandonMediaUpload: (sessionId, attachmentId) =>
-      deps.transport().abandonMediaUpload(sessionId, attachmentId),
-    completeMediaUpload: (sessionId, attachmentId) =>
-      deps.transport().completeMediaUpload(sessionId, attachmentId),
-    readDrafts: () => deps.读取草稿(),
-    writeDraft: 写入媒体草稿,
-    updateDraft: 更新媒体草稿状态,
-    removeDraft: 移除媒体草稿,
-    clearDrafts: 清空媒体草稿,
-  });
+  const 草稿发布 = 创建播放会话草稿发布(deps);
+  let 媒体发布器: 播放会话媒体发布器 = 草稿发布.创建媒体发布器();
 
   const 窗口附件协作 = 创建窗口附件协作({
     读取消息: deps.读取消息,
@@ -760,24 +597,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     接收媒体运行时事实,
   });
 
-  const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
-    for (const candidate of candidates.slice(0, 自动播预览预热候选上限)) {
-      const attachment = 窗口附件协作.读取附件条目(candidate.attachmentId);
-      if (!attachment || attachment.kind !== "video") {
-        continue;
-      }
-      /**
-       * 可见自动播候选只允许停留在“高价值预热信号”这一层：
-       * 1. 真正的正式播放 bootstrap 只能等它真的成为 autoplay owner 或 viewer owner；
-       * 2. 否则“只是可见”就会被误抬成正式播放，再继续串味成帮助资格与 peer presence；
-       * 3. 这里因此只保留 preview 收敛信号，不再提前 `session.启动()`。
-       */
-      触发视频预览收敛(attachment.attachmentId, {
-        trigger: "visible_candidate",
-      });
-    }
-  };
-
   const 窗口会话协作 = 创建窗口会话协作({
     读取当前房间媒体附件: 窗口附件协作.读取当前房间媒体附件,
     读取当前活跃媒体窗口附件: 窗口附件协作.读取当前活跃媒体窗口附件,
@@ -840,7 +659,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     } else {
       协作分发应用.销毁();
     }
-    void 同步媒体运行时快照并执行副作用(before);
+    void 运行时副作用.同步媒体运行时快照并执行副作用(before);
     if (input.停止媒体运行时) {
       媒体运行时.stop();
     }
@@ -865,32 +684,22 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   });
 
   return {
-    snapshot(): 聊天媒体快照 {
-      return {
-        playbackByAttachmentId: 媒体快照投影协作.读取媒体播放结果表(),
-        previewByAttachmentId: 视频预览协作.读取视频预览状态表(),
-        sessionByAttachmentId: 媒体快照投影协作.读取媒体会话快照表(),
-        contentUrlByAttachmentId: 媒体快照投影协作.读取附件内容地址表(),
-        videoBudgetByAttachmentId: 媒体快照投影协作.读取信息流视频预算表(),
-        inlineAutoplayOwnerAttachmentId:
-          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
-        inlineAutoplayPlaybackByAttachmentId: 自动播协作.读取自动播播放结果表(),
-        inlineAutoplayPositionByAttachmentId: {
-          ...读取媒体运行时上下文().inlineAutoplayPositionByAttachmentId,
-        },
-      };
+    snapshot(): 媒体播放会话快照 {
+      return 投影媒体播放会话快照({
+        媒体快照投影协作,
+        视频预览状态表: 视频预览协作.读取视频预览状态表(),
+        自动播协作,
+        运行时上下文: 读取媒体运行时上下文(),
+      });
     },
 
-    读取预算(): 聊天媒体预算快照 {
-      const mediaSessions = Array.from(媒体会话表.values(), (session) => session.snapshot());
-      const videoBudgets = 媒体快照投影协作.读取信息流视频预算表();
-      return {
-        activeMediaSessionCount: mediaSessions.length,
-        activeVideoSessionCount: mediaSessions.filter((session) => session.kind === "video").length,
-        ...投影媒体运行时预算(媒体运行时.getSnapshot()),
-        ...协作分发应用.读取预算(),
-        focusedVideoBudget: 媒体快照投影协作.缓存重点信息流视频预算(videoBudgets),
-      };
+    读取预算(): 媒体播放会话预算快照 {
+      return 投影媒体播放会话预算({
+        媒体会话表,
+        媒体运行时快照: 媒体运行时.getSnapshot(),
+        协作分发应用,
+        媒体快照投影协作,
+      });
     },
 
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
@@ -934,19 +743,19 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
       const 当前自动播上下文 = 读取媒体运行时上下文();
-      const preheatCandidates = 排序消息视频自动播候选(
+      const { 自动播候选已变化 } = 同步自动播候选预热({
         candidates,
-        当前自动播上下文.inlineAutoplayPendingAttachmentId ??
-          当前自动播上下文.inlineAutoplayOwnerAttachmentId
-      ).slice(0, 自动播预览预热候选上限);
-      const 自动播候选已变化 = 窗口附件协作.同步附件标识集合(
+        currentOwnerOrPendingAttachmentId:
+          当前自动播上下文.inlineAutoplayPendingAttachmentId ??
+          当前自动播上下文.inlineAutoplayOwnerAttachmentId,
         当前自动播候选附件Id集合,
-        preheatCandidates.map((candidate) => candidate.attachmentId)
-      );
+        同步附件标识集合: 窗口附件协作.同步附件标识集合,
+        读取附件条目: 窗口附件协作.读取附件条目,
+        触发视频预览收敛,
+      });
       if (自动播候选已变化) {
         窗口会话协作.按当前窗口重同步消息附件播放结果();
       }
-      预热自动播候选媒体会话(preheatCandidates);
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
         candidates,
@@ -1065,7 +874,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       const before = 媒体运行时.getSnapshot();
       媒体运行时.send({ type: "VIEWER_CLOSED" });
       媒体查看器.销毁();
-      void 同步媒体运行时快照并执行副作用(before);
+      void 运行时副作用.同步媒体运行时快照并执行副作用(before);
     },
 
     设置媒体发布器供测试(publisher): void {
@@ -1074,26 +883,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     写入媒体草稿列表供测试(drafts): void {
-      const 旧草稿预览地址 = deps.读取草稿().map((draft) => draft.previewUrl);
-      const 保留中的预览地址 = new Set(drafts.map((draft) => draft.previewUrl));
-      const 需要回收的预览地址 = 旧草稿预览地址.filter(
-        (previewUrl) => !保留中的预览地址.has(previewUrl)
-      );
-      写入草稿列表([...drafts], 需要回收的预览地址);
+      草稿发布.写入媒体草稿列表供测试(drafts);
     },
   };
-}
-/**
- * 收口现有装配依赖面：
- * 1. 根级 聊天媒体编排.ts 删除后，聊天内核继续通过播放会话应用入口接入媒体 owner；
- * 2. 这里同时导出旧命名与模块入口命名，避免测试和装配层重新长出第二套根路径。
- */
-export type 媒体播放会话应用依赖 = Parameters<typeof 创建聊天媒体编排>[0];
-export type 媒体播放会话应用端口 = 聊天媒体编排端口;
-export type 媒体播放会话快照 = 聊天媒体快照;
-
-export function 创建媒体播放会话应用(
-  deps: 媒体播放会话应用依赖
-): 媒体播放会话应用端口 {
-  return 创建聊天媒体编排(deps);
 }

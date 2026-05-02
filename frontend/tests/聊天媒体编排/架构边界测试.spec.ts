@@ -128,6 +128,39 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(source).not.toContain("const 解析协作分发源 =");
   });
 
+  it("播放会话应用必须把草稿发布、运行时副作用和快照预算投影交给明确 owner", () => {
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
+    const draftSource = readFileSync(resolve(process.cwd(), "媒体/播放会话/草稿发布.ts"), "utf8");
+    const runtimeSource = readFileSync(resolve(process.cwd(), "媒体/播放会话/运行时副作用.ts"), "utf8");
+    const projectionSource = readFileSync(resolve(process.cwd(), "媒体/播放会话/会话投影.ts"), "utf8");
+    const autoplayPreheatSource = readFileSync(
+      resolve(process.cwd(), "媒体/播放会话/自动播候选预热.ts"),
+      "utf8"
+    );
+    const viewerReleaseSource = readFileSync(
+      resolve(process.cwd(), "媒体/播放会话/查看器播放释放.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('from "./草稿发布.js"');
+    expect(source).toContain('from "./运行时副作用.js"');
+    expect(source).toContain('from "./会话投影.js"');
+    expect(source).toContain('from "./自动播候选预热.js"');
+    expect(source).toContain('from "./查看器播放释放.js"');
+    expect(draftSource).toContain("export function 创建播放会话草稿发布");
+    expect(runtimeSource).toContain("export function 创建播放会话运行时副作用");
+    expect(projectionSource).toContain("export function 投影媒体播放会话快照");
+    expect(projectionSource).toContain("export function 投影媒体播放会话预算");
+    expect(autoplayPreheatSource).toContain("export function 同步自动播候选预热");
+    expect(viewerReleaseSource).toContain("export function 释放查看器正式播放占用");
+    expect(source).not.toContain("function 创建聊天媒体编排");
+    expect(source).not.toContain("return 创建聊天媒体编排(deps)");
+    expect(source).not.toContain("写入媒体草稿 as 写入媒体草稿状态");
+    expect(source).not.toContain("const 同步媒体运行时快照并执行副作用 =");
+    expect(source).not.toContain("const 释放查看器正式播放占用 =");
+    expect(source).not.toContain("排序消息视频自动播候选");
+  });
+
   it("聊天媒体编排统一复用附件释放和关停 helper，不再在多处复制销毁序列", () => {
     const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 

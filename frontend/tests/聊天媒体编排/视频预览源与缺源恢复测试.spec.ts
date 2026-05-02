@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
+import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 生成锚点视频播放结果, 刷新异步队列, 创建延后Promise } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
@@ -27,7 +27,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
+    const { 创建媒体播放会话应用: 创建媒体播放会话应用带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 抓取视频预览 = vi.fn(async (input: { src: string }) => ({
       objectUrl: `blob:preview-${attachmentId}`,
       source: input.src.startsWith("blob:http://media.local/swarm-preview-")
@@ -94,7 +94,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
         throw new Error("unused");
       }),
     } as unknown as 前端传输端口;
-    const 编排 = 创建聊天媒体编排带协作分发桩({
+    const 编排 = 创建媒体播放会话应用带协作分发桩({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -214,7 +214,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       height: null,
     }));
 
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -433,7 +433,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -555,7 +555,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -651,7 +651,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
+    const { 创建媒体播放会话应用: 创建媒体播放会话应用带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 延后播放结果 = 创建延后Promise<媒体播放结果>();
     let locatorCallCount = 0;
     const transport: 前端传输端口 = {
@@ -725,7 +725,7 @@ describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
       height: 720,
     }));
 
-    const 编排 = 创建聊天媒体编排带协作分发桩({
+    const 编排 = 创建媒体播放会话应用带协作分发桩({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],

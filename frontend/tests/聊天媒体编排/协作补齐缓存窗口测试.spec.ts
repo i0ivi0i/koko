@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
+import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 创建内存媒体缓存仓库 } from "../../媒体";
 import { 生成图片消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
@@ -26,7 +26,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取当前房间标识: () => "r-current",
@@ -132,7 +132,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
+    const { 创建媒体播放会话应用: 创建媒体播放会话应用带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 激活协作补齐 = vi.fn(async () => {});
     const 释放附件播放资源 = vi.fn();
     const 当前消息 = {
@@ -156,7 +156,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
       }),
     } as unknown as 前端传输端口;
 
-    const 编排 = 创建聊天媒体编排带协作分发桩({
+    const 编排 = 创建媒体播放会话应用带协作分发桩({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => 当前消息.value,

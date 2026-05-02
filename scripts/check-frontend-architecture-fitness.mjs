@@ -317,7 +317,12 @@ const 热点文件行数上限 = [
   { path: "frontend/总装/聊天内核状态投影.ts", maxEffectiveLines: 150, maxPhysicalLines: 170 },
   { path: "frontend/总装/聊天内核平台运行时.ts", maxEffectiveLines: 110, maxPhysicalLines: 125 },
   { path: "frontend/总装/聊天内核通知副作用.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
-  { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
+  { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 800, maxPhysicalLines: 900 },
+  { path: "frontend/媒体/播放会话/会话投影.ts", maxEffectiveLines: 105, maxPhysicalLines: 115 },
+  { path: "frontend/媒体/播放会话/草稿发布.ts", maxEffectiveLines: 105, maxPhysicalLines: 120 },
+  { path: "frontend/媒体/播放会话/运行时副作用.ts", maxEffectiveLines: 75, maxPhysicalLines: 90 },
+  { path: "frontend/媒体/播放会话/自动播候选预热.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
+  { path: "frontend/媒体/播放会话/查看器播放释放.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
   { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
 ];

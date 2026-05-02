@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
+import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 生成连续视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
@@ -23,7 +23,7 @@ describe("聊天媒体编排 - 预算与窗口收敛", () => {
         throw new Error("unused");
       }),
     } as unknown as 前端传输端口;
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -99,7 +99,7 @@ describe("聊天媒体编排 - 预算与窗口收敛", () => {
 
   it("同步消息附件播放结果后，只保留近视口/当前交互窗口内的活媒体会话，而不是整房历史全养活", async () => {
     const 消息列表 = 生成连续视频消息(20);
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () =>
         ({
           loadMediaLocator: vi.fn(async () => {
@@ -154,7 +154,7 @@ describe("聊天媒体编排 - 预算与窗口收敛", () => {
 
   it("窗口真相未到前，不会先把整房历史附件拉成活媒体会话", async () => {
     const 消息列表 = 生成连续视频消息(20);
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () =>
         ({
           loadMediaLocator: vi.fn(async () => {

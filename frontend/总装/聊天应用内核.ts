@@ -105,13 +105,13 @@ import {
 } from "../媒体/index.js";
 import {
   创建媒体播放会话应用,
-  type 媒体播放会话快照 as 聊天媒体快照,
-  type 媒体播放会话应用端口 as 聊天媒体编排端口,
+  type 媒体播放会话快照,
+  type 媒体播放会话应用端口,
 } from "../媒体/播放会话/应用.js";
 
 export type 聊天应用快照 = 聊天状态 & {
   bootstrapState: 房间壳外观["bootstrapState"];
-  media: 聊天媒体快照;
+  media: 媒体播放会话快照;
 };
 
 export type 聊天应用命令 =
@@ -222,7 +222,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 实时连接: 聊天实时连接端口;
   private 媒体传输: 媒体传输端口;
   private storage: 前端存储端口;
-  private readonly 媒体编排: 聊天媒体编排端口;
+  private readonly 媒体编排: 媒体播放会话应用端口;
 
   /**
    * 恢复专用补锚标记仍只属于阅读/滚动协作链路。

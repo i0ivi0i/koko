@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
+import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 消息事件 } from "../../聊天共享/契约";
@@ -68,7 +68,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
         }
       ) => Promise<媒体播放结果>>()
       .mockResolvedValue(playback);
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -178,7 +178,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
         throw new Error("unused");
       }),
     } as unknown as 前端传输端口;
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => attachmentIds.map(生成视频消息),
@@ -275,7 +275,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
       ) => Promise<媒体播放结果>>()
       .mockResolvedValue(playback);
     const 激活协作补齐 = vi.fn(async () => {});
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => [生成视频消息(attachmentId)],
@@ -383,7 +383,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
     const 当前消息 = {
       value: [生成视频消息(attachmentId), 生成视频消息(nextAttachmentId)] as 消息事件[],
     };
-    const 编排 = 创建聊天媒体编排({
+    const 编排 = 创建媒体播放会话应用({
       transport: () => transport,
       读取会话编号: () => "s-test",
       读取消息: () => 当前消息.value,
