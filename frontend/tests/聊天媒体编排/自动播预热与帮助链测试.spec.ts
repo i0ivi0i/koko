@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../聊天媒体编排";
+import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
-import type { 前端传输端口 } from "../../传输";
-import type { 消息事件 } from "../../契约";
+import type { 前端传输端口 } from "../../平台/传输";
+import type { 消息事件 } from "../../聊天共享/契约";
 import type { 媒体播放结果 } from "../../媒体";
 
 describe("聊天媒体编排 - 自动播预热与帮助链", () => {

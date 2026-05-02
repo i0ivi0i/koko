@@ -231,7 +231,7 @@ const 前端禁回流片段规则 = [
   },
   {
     label: "chat media owner fallback",
-    path: "frontend/聊天媒体编排.ts",
+    path: "frontend/媒体/播放会话/应用.ts",
     pattern:
       /创建资产协作分发运行时|const 启动查看器起始附件会话\s*=|const 补启动查看器正式会话Consumer\s*=|const 当前请求命中热自动播会话\s*=/g,
   },
@@ -268,7 +268,7 @@ const 热点文件行数上限 = [
   { path: "frontend/时间线/滚动器.ts", maxEffectiveLines: 470, maxPhysicalLines: 540 },
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500, maxPhysicalLines: 1500 },
   { path: "frontend/聊天壳.ts", maxEffectiveLines: 1750, maxPhysicalLines: 1800 },
-  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
+  { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
   { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
   { path: "frontend/聊天恢复/壳层/房间快照恢复.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
@@ -450,7 +450,7 @@ const 平台内层Import违规 = (relativePath, source) => {
   ];
   const 平台传输直连允许文件 = new Set([
     "frontend/聊天壳.ts",
-    "frontend/聊天媒体编排.ts",
+    "frontend/媒体/播放会话/应用.ts",
     "frontend/聊天应用内核.ts",
     "frontend/总装/应用装配.ts",
     "frontend/总装/聊天应用编排桥接.ts",

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../聊天媒体编排";
+import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
 import { 创建内存媒体缓存仓库 } from "../../媒体";
 import { 生成视频消息, 生成图片消息, 生成连续视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
-import type { 前端传输端口 } from "../../传输";
+import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
 
 describe("聊天媒体编排 - 查看器释放与销毁", () => {
@@ -29,7 +29,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../聊天媒体编排");
+    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 释放附件播放资源 = vi.fn();
     const 激活协作补齐 = vi.fn(async () => {});
 
@@ -355,7 +355,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       }),
     }));
 
-    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../聊天媒体编排");
+    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../../媒体/播放会话/应用");
     const 释放附件播放资源 = vi.fn();
 
     const transport: 前端传输端口 = {

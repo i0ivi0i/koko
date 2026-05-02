@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../../存储";
+import { 创建浏览器存储 } from "../../平台/存储";
 import { createFakeStorage, 假传输, 创建房间快照 } from "../common/聊天测试支架";
 import { 创建聊天应用内核 } from "../../聊天应用内核";
 import { 创建内核依赖, 读取媒体编排供测试 } from "../common/聊天应用内核支架";
@@ -10,7 +10,7 @@ import type { 媒体会话信号 } from "../../媒体/媒体会话";
 
 describe("聊天应用内核 - 媒体 owner 链与查看器关闭", () => {
   it("正式查看器、inline autoplay、协作分发预算变化都必须来自同一条媒体 owner 链，而不是聊天媒体编排自己补状态", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
     expect(source).not.toContain("inlineAutoplayPlaybackByAttachmentId =");
     expect(source).not.toContain("发送资产协作分发事件(");

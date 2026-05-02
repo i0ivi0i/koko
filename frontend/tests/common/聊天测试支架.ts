@@ -31,7 +31,7 @@ import type {
   后台房间详情,
   媒体附件转发请求,
   媒体附件转发结果,
-} from "../../契约";
+} from "../../聊天共享/契约";
 import { 聊天壳 } from "../../聊天壳";
 import type { Socket } from "socket.io-client";
 

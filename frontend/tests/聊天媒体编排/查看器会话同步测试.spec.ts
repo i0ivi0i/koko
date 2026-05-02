@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { 创建聊天媒体编排 } from "../../聊天媒体编排";
+import { 创建聊天媒体编排 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 生成图片消息, 生成锚点视频播放结果, 刷新异步队列, 创建延后Promise } from "../common/聊天媒体编排支架";
-import type { 前端传输端口 } from "../../传输";
+import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
 
 describe("聊天媒体编排 - 查看器会话同步", () => {

@@ -1,4 +1,4 @@
-import type { 消息事件 } from "../../契约";
+import type { 消息事件 } from "../../聊天共享/契约";
 import type { 媒体播放结果 } from "../../媒体";
 
 export const 生成视频消息 = (attachmentId: string): 消息事件 =>

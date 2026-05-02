@@ -1,15 +1,17 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("聊天媒体编排 - 架构边界", () => {
   it("聊天媒体编排当前通过 runtime / player / viewer / distribution seam 协调媒体，不直接手搓底层浏览器能力", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
+
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
 
     expect(source).toContain("创建媒体运行时Actor");
     expect(source).toContain("创建媒体播放器");
     expect(source).toContain("创建媒体查看器");
-    expect(source).toContain('from "./媒体/协作分发/应用.js"');
+    expect(source).toContain('from "../协作分发/应用.js"');
     expect(source).toContain("创建媒体协作分发应用");
     expect(source).not.toContain("new WebTorrent");
     expect(source).not.toContain("navigator.serviceWorker");
@@ -18,11 +20,13 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联查看器打开/同步/关闭协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/查看器/应用.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../查看器/应用.js"');
     expect(source).toContain("创建媒体查看器应用(");
-    expect(source).toContain('from "./媒体/壳层/查看器会话协作.js"');
+    expect(source).toContain('from "../壳层/查看器会话协作.js"');
     expect(source).toContain("创建查看器会话协作(");
     expect(source).not.toContain("const 投影查看器请求到当前播放真相 =");
     expect(source).not.toContain("const 是否应等待本地完整视频会话真相 =");
@@ -34,9 +38,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联自动播稳定等待与播放结果解析", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/壳层/自动播协作.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../壳层/自动播协作.js"');
     expect(source).toContain("创建自动播协作(");
     expect(source).not.toContain("let inlineAutoplay启动定时器");
     expect(source).not.toContain("let inlineAutoplay解析代次");
@@ -47,9 +53,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联视频预览缺源阻断与缓存重试", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/壳层/视频预览协作.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../壳层/视频预览协作.js"');
     expect(source).toContain("创建视频预览协作(");
     expect(source).not.toContain("const 视频预览状态表 =");
     expect(source).not.toContain("const 视频预览解析代次表 =");
@@ -60,9 +68,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联协作补齐恢复与帮助链集合", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/壳层/协作补齐协作.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../壳层/协作补齐协作.js"');
     expect(source).toContain("创建协作补齐协作(");
     expect(source).not.toContain("const 已进入帮助链附件 =");
     expect(source).not.toContain("const 已恢复帮助任务附件 =");
@@ -72,9 +82,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联媒体快照与预算投影协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/壳层/快照投影协作.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../壳层/快照投影协作.js"');
     expect(source).toContain("创建媒体快照投影协作(");
     expect(source).not.toContain("const 读取附件内容地址表 =");
     expect(source).not.toContain("const 读取媒体会话快照表 =");
@@ -84,9 +96,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接内联窗口附件与媒体会话同步协作", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/壳层/窗口会话协作.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../壳层/窗口会话协作.js"');
     expect(source).toContain("创建窗口会话协作(");
     expect(source).not.toContain("const 清理失活媒体会话 =");
     expect(source).not.toContain("const 按当前窗口重同步消息附件播放结果 =");
@@ -94,9 +108,11 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排不再直接拥有协作分发应用 owner", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/协作分发/应用.js"');
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
+
+    expect(source).toContain('from "../协作分发/应用.js"');
     expect(source).toContain("创建媒体协作分发应用(");
     expect(source).not.toContain("创建资产协作分发运行时");
     expect(source).not.toContain("const 刷新协作分发入群定位 =");
@@ -104,7 +120,9 @@ describe("聊天媒体编排 - 架构边界", () => {
   });
 
   it("聊天媒体编排统一复用附件释放和关停 helper，不再在多处复制销毁序列", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "媒体/播放会话/应用.ts"), "utf8");
+
+    expect(existsSync(resolve(process.cwd(), "聊天媒体编排.ts"))).toBe(false);
 
     expect(source).toContain("const 释放媒体附件会话 =");
     expect(source).toContain("const 执行媒体编排关停 =");

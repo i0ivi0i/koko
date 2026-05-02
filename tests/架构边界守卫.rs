@@ -106,7 +106,7 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
         ("src/适配.rs", 120usize),
         ("frontend/聊天应用内核.ts", 200usize),
         ("frontend/聊天壳.ts", 200usize),
-        ("frontend/聊天媒体编排.ts", 200usize),
+        ("frontend/媒体/播放会话/应用.ts", 200usize),
     ]
     .into_iter()
     .filter(|(path, budget)| 统计物理行数(path) > *budget)
@@ -145,7 +145,7 @@ fn 根目录业务文件必须逐个登记到完成矩阵() {
         "src/外壳.rs",
         "frontend/聊天应用内核.ts",
         "frontend/聊天壳.ts",
-        "frontend/聊天媒体编排.ts",
+        "frontend/媒体/播放会话/应用.ts",
         "frontend/房间消息窗.ts",
         "frontend/媒体运行时.ts",
         "frontend/房间内核.ts",
