@@ -23,7 +23,7 @@ pub mod message;
 pub mod media;
 #[path = "外壳.rs"]
 pub mod shell;
-#[path = "媒体协作分发.rs"]
+#[path = "媒体/协作分发/共享语义.rs"]
 pub mod media_distribution;
 #[path = "实时/mod.rs"]
 pub mod realtime;

@@ -38,15 +38,15 @@ use crate::{adapter::Pg仓储, contract, media::distribution::application as 协
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
-#[path = "tus_hook外壳.rs"]
+#[path = "媒体/上传/外壳/tus回调.rs"]
 mod tus_hook外壳;
 #[path = "后台外壳.rs"]
 mod 后台外壳;
-#[path = "媒体上传外壳.rs"]
+#[path = "媒体/上传/外壳/媒体上传.rs"]
 mod 媒体上传外壳;
-#[path = "媒体内容解析.rs"]
+#[path = "媒体/上传/内容解析.rs"]
 mod 媒体内容解析;
-#[path = "媒体资产外壳.rs"]
+#[path = "媒体/资产/外壳.rs"]
 mod 媒体资产外壳;
 #[path = "实时外壳.rs"]
 mod 实时外壳;

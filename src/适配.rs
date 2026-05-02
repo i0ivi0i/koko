@@ -9,7 +9,7 @@ use crate::{
     user_identity,
 };
 
-#[path = "媒体附件适配.rs"]
+#[path = "媒体/适配.rs"]
 mod 媒体附件适配;
 #[path = "房间阅读适配.rs"]
 mod 房间阅读适配;
