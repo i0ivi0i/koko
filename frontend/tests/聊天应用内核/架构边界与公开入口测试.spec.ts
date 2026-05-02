@@ -50,6 +50,10 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
   it("聊天应用内核不再直接依赖完整浏览器应用平台全表面，而是只消费窄平台桥接", () => {
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
+    const notificationSource = readFileSync(
+      resolve(process.cwd(), "总装/聊天内核通知副作用.ts"),
+      "utf8"
+    );
 
     expect(source).toContain("创建聊天内核平台桥接(");
     expect(source).toContain("private readonly 平台桥接: 聊天内核平台端口;");
@@ -59,8 +63,12 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).toContain("this.平台桥接.聊天实时连接()");
     expect(source).toContain("this.平台桥接.媒体传输()");
     expect(source).toContain("this.平台桥接.壳层记忆()");
-    expect(source).toContain("const platformSnapshot = this.平台桥接.snapshot()");
-    expect(source).toContain("void this.平台桥接.dispatch({");
+    expect(source).toContain('from "./聊天内核通知副作用.js"');
+    expect(source).toContain("处理权威新消息平台副作用({");
+    expect(source).not.toContain("const platformSnapshot = this.平台桥接.snapshot()");
+    expect(source).not.toContain("void this.平台桥接.dispatch({");
+    expect(notificationSource).toContain("const platformSnapshot = input.平台桥接.snapshot()");
+    expect(notificationSource).toContain("void input.平台桥接.dispatch({");
     expect(source).not.toContain("navigator.serviceWorker");
     expect(source).not.toContain("window.addEventListener");
     expect(source).not.toContain("new BroadcastChannel");

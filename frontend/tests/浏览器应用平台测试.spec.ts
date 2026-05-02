@@ -186,6 +186,25 @@ describe("浏览器端应用平台化基线", () => {
     expect(swarmSource).not.toContain("navigator.serviceWorker.ready");
   });
 
+  it("聊天壳样式和内核状态投影必须有明确 owner，内核不得保留一跳媒体包装方法", () => {
+    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
+    const styleSource = 读取前端源码("总装/聊天壳样式.ts");
+    const projectionSource = 读取前端源码("总装/聊天内核状态投影.ts");
+
+    expect(shellSource).toContain('from "./聊天壳样式.js"');
+    expect(shellSource).toContain("static override styles = 聊天壳样式;");
+    expect(shellSource).not.toContain("static override styles = css`");
+    expect(styleSource).toContain("export const 聊天壳样式 = css`");
+
+    expect(kernelSource).toContain('from "./聊天内核状态投影.js"');
+    expect(projectionSource).toContain("export function 投影恢复编排状态");
+    expect(projectionSource).toContain("export function 投影阅读推进状态");
+    expect(kernelSource).not.toMatch(
+      /private async 处理选择媒体文件|private 移除媒体草稿|private async 继续上传媒体草稿|private async 重新上传媒体草稿|private 打开媒体查看器/
+    );
+  });
+
   it("应用运行时只负责把浏览器事件翻成内核 command，不再知道具体 owner 动词", () => {
     const source = 读取前端源码("平台/应用运行时.ts");
 
@@ -514,8 +533,18 @@ describe("浏览器端应用平台化基线", () => {
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
-    expect(source).toContain('path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 1250');
-    expect(source).toContain('path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 1650');
+    expect(source).toContain(
+      'path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 850, maxPhysicalLines: 960'
+    );
+    expect(source).toContain(
+      'path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 460, maxPhysicalLines: 560'
+    );
+    expect(source).toContain(
+      'path: "frontend/总装/聊天壳样式.ts", maxEffectiveLines: 760, maxPhysicalLines: 900'
+    );
+    expect(source).toContain(
+      'path: "frontend/总装/聊天内核状态投影.ts", maxEffectiveLines: 150, maxPhysicalLines: 170'
+    );
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
     expect(source).toContain(
