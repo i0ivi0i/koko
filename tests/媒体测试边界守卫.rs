@@ -1,4 +1,5 @@
 use std::fs;
+use std::mem::size_of;
 use std::path::Path;
 
 fn 读取(path: &str) -> String {
@@ -22,6 +23,16 @@ fn 媒体测试支撑顶层只应保留稳定出口() {
     assert!(
         !content.contains("pub fn ") && !content.contains("pub async fn "),
         "tests/测试支撑/媒体.rs 应只保留 re-export，不应重新长出实现体"
+    );
+}
+
+#[test]
+fn source_hash复用结果枚举不得把大快照塞进枚举本体() {
+    let actual_size = size_of::<koko::media::模型::SourceHash媒体复用结果>();
+    let pointer_budget = size_of::<usize>() * 4;
+    assert!(
+        actual_size <= pointer_budget,
+        "SourceHash 媒体复用结果当前 {actual_size} 字节，超过 {pointer_budget} 字节；Miss/Reused 控制流不应把 ready 附件和分发快照直接塞进枚举本体"
     );
 }
 

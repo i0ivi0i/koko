@@ -1275,7 +1275,7 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
             &identity.会话标识,
             &format!("deleted-client-{uniq}"),
             "",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能先创建带视频附件的消息");
 
@@ -1707,10 +1707,7 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
             .unwrap_or(false),
         "对账触发的 webSeedUrl 必须是绝对 URL，避免 sidecar 对相对地址解释不一致"
     );
-    assert!(
-        records.reconcile_payloads.len() >= 1,
-        "对账应至少下发一次 reconcile 清单"
-    );
+    assert!(!records.reconcile_payloads.is_empty(), "对账应至少下发一次 reconcile 清单");
     let reconcile_contains_target = records.reconcile_payloads.iter().any(|payload| {
         payload["activeInfoHashes"]
             .as_array()

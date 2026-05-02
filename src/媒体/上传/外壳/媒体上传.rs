@@ -471,11 +471,7 @@ pub(super) async fn reuse_media_by_source_hash(
         }
     };
 
-    let application::SourceHash媒体复用结果::Reused {
-        附件,
-        协作分发,
-        torrent: _,
-    } = result
+    let application::SourceHash媒体复用结果::Reused(命中) = result
     else {
         return (
             StatusCode::OK,
@@ -488,8 +484,8 @@ pub(super) async fn reuse_media_by_source_hash(
         &state,
         &headers,
         session_id.as_str(),
-        &附件,
-        &协作分发,
+        &命中.附件,
+        &命中.协作分发,
         "source_hash媒体复用",
     )
     .await;

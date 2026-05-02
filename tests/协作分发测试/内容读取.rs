@@ -395,7 +395,7 @@ async fn legacy附件没有分发表时原图内容读取仍按origin窗口工�
         .expect("应能直连数据库插入 legacy 附件");
     插入ready图片附件记录(
         &pool,
-        &bootstrap["session_id"].as_str().expect("session_id"),
+        bootstrap["session_id"].as_str().expect("session_id"),
         &attachment_id,
     )
     .await;

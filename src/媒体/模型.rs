@@ -184,11 +184,14 @@ pub struct SourceHash媒体复用请求 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceHash媒体复用结果 {
     Miss,
-    Reused {
-        附件: 媒体附件快照,
-        协作分发: 协作分发元数据快照,
-        torrent: 协作分发torrent元信息快照,
-    },
+    Reused(Box<SourceHash媒体复用命中>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceHash媒体复用命中 {
+    pub 附件: 媒体附件快照,
+    pub 协作分发: 协作分发元数据快照,
+    pub torrent: 协作分发torrent元信息快照,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

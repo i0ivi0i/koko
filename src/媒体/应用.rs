@@ -293,11 +293,11 @@ pub fn 复用source_hash媒体附件(
         }),
     )?;
 
-    Ok(SourceHash媒体复用结果::Reused {
+    Ok(SourceHash媒体复用结果::Reused(Box::new(SourceHash媒体复用命中 {
         附件: snapshot,
         协作分发: distribution,
         torrent,
-    })
+    })))
 }
 
 /// 转发只复用现有媒体资产，再把新附件继续送回统一消息主链。
