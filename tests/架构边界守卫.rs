@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -7,6 +8,19 @@ fn 读取(path: &str) -> String {
 
 fn 统计物理行数(path: &str) -> usize {
     读取(path).lines().count()
+}
+
+// 这里直接枚举 src 根目录的 .rs 文件，防止后续有人往根目录偷偷加新的业务文件却没进矩阵和门禁。
+fn 枚举后端根_rs文件() -> BTreeSet<String> {
+    fs::read_dir("src")
+        .expect("应能读取 src 根目录")
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            (path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
+                .then(|| entry.file_name().to_string_lossy().into_owned())
+        })
+        .collect()
 }
 
 #[test]
@@ -98,6 +112,60 @@ fn 统一契约门面不得混入页面文案布局词或框架类型() {
 }
 
 #[test]
+fn 后端根目录只允许合法入口_迁移门面或已登记散落_owner() {
+    let actual = 枚举后端根_rs文件();
+    let expected = [
+        "lib.rs",
+        "main.rs",
+        "入口.rs",
+        "总装.rs",
+        "契约.rs",
+        "用例.rs",
+        "适配.rs",
+        "外壳.rs",
+        "实时外壳.rs",
+        "媒体附件适配.rs",
+        "媒体内容解析.rs",
+        "媒体上传外壳.rs",
+        "媒体资产外壳.rs",
+        "媒体协作分发.rs",
+        "tus_hook外壳.rs",
+        "房间外壳.rs",
+        "房间阅读适配.rs",
+        "消息事件适配.rs",
+        "用户身份.rs",
+        "后台外壳.rs",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        actual, expected,
+        "src 根目录 .rs 文件集合发生变化；新增或删除根文件前必须先更新完成矩阵、门禁和迁移裁决"
+    );
+}
+
+#[test]
+fn 后端迁移门面只能变薄不能变厚() {
+    let budgets = [
+        ("src/契约.rs", 328usize),
+        ("src/用例.rs", 1445usize),
+        ("src/适配.rs", 861usize),
+        ("src/外壳.rs", 1676usize),
+        ("src/实时外壳.rs", 7usize),
+    ];
+
+    for (path, budget) in budgets {
+        let lines = 统计物理行数(path);
+        assert!(
+            lines <= budget,
+            "{path} 当前 {lines} 行，超过迁移门面预算 {budget}；迁移门面只允许变薄，不允许继续长胖"
+        );
+    }
+}
+
+#[test]
 fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = [
@@ -139,6 +207,7 @@ fn 根目录业务文件必须逐个登记到完成矩阵() {
         "src/消息事件适配.rs",
         "src/用户身份.rs",
         "src/后台外壳.rs",
+        "src/实时外壳.rs",
         "src/用例.rs",
         "src/契约.rs",
         "src/适配.rs",
