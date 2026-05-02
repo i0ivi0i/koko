@@ -16,7 +16,7 @@ _项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 - 基础设施、协议、性能敏感组件和工程工具链默认复用成熟方案；自研前先比较 Rust 生态与 `学习/` 候选，并说清为何不能复用。
 - 复用不是偷懒，而是把通用难题交给长期打磨的生态；项目代码应收缩到业务真相、稳定契约和薄适配层。
 - 默认纯 Rust、高性能 Rust 生态、最新稳定版；不能升级或必须引入额外语言/运行时时，要写清阻塞证据、风险和退场计划。
-- 项目开发、代码编写、bug 维修、功能增删改都必须服从真 DDD 领域驱动开发的 Onion Architecture：依赖只能向内指向 domain/application，domain 禁止依赖 UI、DB、网络、框架和外部协议，外层只做适配、翻译和编排，任何绕开洋葱边界的快捷改法都禁止落地。
+- 项目开发、代码编写、bug 维修、功能增删改都必须服从真 DDD 领域驱动开发的 Onion Clean Architecture；前端和后端都不是例外：依赖只能向内指向 domain/application，domain 禁止依赖 UI、DB、网络、浏览器、框架和外部协议，外层只做适配、翻译和编排，任何绕开洋葱边界的快捷改法都禁止落地。
 - 当前形态是模块化单体 + Rust 六边形边界；删掉 `axum/dioxus/sqlx/socketioxide` 后，核心业务仍应可测试、可复用、可被 CLI 和未来移动端使用。
 - 每个改动先判层：`domain / application / contract / adapter / shell`；domain/application 决定业务真相，其他层只翻译、投影或编排。
 - `contract` 是多壳共核的唯一共享表面，只放稳定 command/query/event/snapshot/error；禁止混入某壳专属文案、布局、流程或框架类型。
