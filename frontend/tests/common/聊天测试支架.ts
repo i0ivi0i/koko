@@ -1,7 +1,7 @@
 import { expect, vi } from "vitest";
 import "../../聊天壳";
-import { 创建浏览器存储 } from "../../存储";
-import type { 前端传输端口 } from "../../传输";
+import { 创建浏览器存储 } from "../../平台/存储";
+import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
 import { 创建房间内核, 派生房间壳外观 } from "../../房间/运行时";
 import {
@@ -9,7 +9,7 @@ import {
   投影时间线快照到聊天时间线状态,
   type 房间时间线事件,
 } from "../../时间线/运行时";
-import { 初始聊天状态, type 聊天状态 } from "../../状态";
+import { 初始聊天状态, type 聊天状态 } from "../../总装/聊天状态";
 import type {
   媒体查看器打开请求,
   媒体播放结果,
@@ -826,7 +826,7 @@ export async function 读取房间恢复编排工厂(): Promise<(deps: Record<st
   let 创建房间恢复编排: unknown;
   try {
     // 公共测试支架已经下沉到 tests/common，动态导入要同步回到 frontend 根上的真实模块位置。
-    const modulePath = "../../房间恢复编排";
+    const modulePath = "../../恢复/壳层/房间恢复编排";
     ({ 创建房间恢复编排 } = await import(/* @vite-ignore */ modulePath));
   } catch {
     创建房间恢复编排 = undefined;
@@ -1045,7 +1045,7 @@ export async function 读取房间实时编排工厂(): Promise<(deps: Record<st
   let 创建房间实时编排: unknown;
   try {
     // 这里保持和恢复编排相同的相对路径规则，避免测试支架迁移后继续指向旧目录。
-    const modulePath = "../../房间实时编排";
+    const modulePath = "../../实时/应用";
     ({ 创建房间实时编排 } = await import(/* @vite-ignore */ modulePath));
   } catch {
     创建房间实时编排 = undefined;
@@ -1147,8 +1147,8 @@ export function 创建实时编排测试场景(input: {
 export async function 读取阅读推进编排工厂(): Promise<(deps: Record<string, unknown>) => Record<string, unknown>> {
   let 创建阅读推进编排: unknown;
   try {
-    // 阅读推进编排和前两者一样，都位于 frontend 根目录，不再沿用旧 spec 文件的相对路径。
-    const modulePath = "../../阅读推进编排";
+    // 阅读推进 owner 已经收进房间壳层，测试只直接连接真实 owner。
+    const modulePath = "../../房间/壳层/阅读推进";
     ({ 创建阅读推进编排 } = await import(/* @vite-ignore */ modulePath));
   } catch {
     创建阅读推进编排 = undefined;

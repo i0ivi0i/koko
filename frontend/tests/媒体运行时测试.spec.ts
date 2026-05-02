@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { 创建媒体运行时Actor, 投影媒体运行时预算 } from "../媒体运行时.js";
+import { 创建媒体运行时Actor, 投影媒体运行时预算 } from "../媒体/运行时.js";
 import type { 媒体播放结果 } from "../媒体/媒体播放.js";
 
 const 读取前端源码 = (relativePath: string): string =>
@@ -22,15 +22,13 @@ const 创建视频查看器请求 = (attachmentId: string) => ({
 });
 
 describe("媒体运行时", () => {
-  it("根文件退成媒体运行时 owner 门面，媒体编排与媒体壳层内部直连媒体 owner", () => {
-    const facadeSource = 读取前端源码("媒体运行时.ts");
+  it("媒体运行时 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("媒体/运行时.ts");
     const mediaOrchestratorSource = 读取前端源码("聊天媒体编排.ts");
     const autoplayShellSource = 读取前端源码("媒体/壳层/自动播协作.ts");
     const previewShellSource = 读取前端源码("媒体/壳层/视频预览协作.ts");
 
-    expect(facadeSource).toContain('export * from "./媒体/运行时.js"');
-    expect(facadeSource).not.toContain("const 媒体运行时机 = createMachine(");
+    expect(existsSync(resolve(process.cwd(), "媒体运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 媒体运行时机 = createMachine(");
     expect(ownerSource).toContain("export function 创建媒体运行时Actor()");
     expect(mediaOrchestratorSource).toContain('from "./媒体/运行时.js"');

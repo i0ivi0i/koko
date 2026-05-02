@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../../媒体/媒体播放";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "../../媒体/媒体查看器";
-import type { 房间消息窗 } from "../../房间消息窗";
+import type { 房间消息窗 } from "../../房间消息窗/壳";
 import {
   安装消息窗直达全屏模拟,
   创建媒体消息窗,

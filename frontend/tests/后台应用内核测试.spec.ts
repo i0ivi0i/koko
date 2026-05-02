@@ -1,18 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { 创建后台应用内核 } from "../后台应用内核";
-import { 创建后台查询编排 } from "../后台查询编排";
+import { 创建后台应用内核 } from "../后台/应用内核";
+import { 创建后台查询编排 } from "../后台/查询编排";
 import type {
   后台房间列表,
   后台房间详情,
   后台概览,
   后台登录结果,
-} from "../契约";
+} from "../聊天共享/契约";
 import type {
   后台会话传输端口,
   后台查询传输端口,
-} from "../传输";
+} from "../平台/传输";
 
 class 假后台内核传输 implements 后台查询传输端口, 后台会话传输端口 {
   readonly 调用记录: string[] = [];
@@ -39,36 +39,30 @@ class 假后台内核传输 implements 后台查询传输端口, 后台会话传
 }
 
 describe("后台应用内核", () => {
-  it("后台 owner 应该收进 frontend/后台 模块，根文件只保留迁移门面", () => {
+  it("后台 owner 应该收进 frontend/后台 模块，旧根门面已经删除", () => {
     const ownerDir = resolve(process.cwd(), "后台");
-    const queryFacadeSource = readFileSync(resolve(process.cwd(), "后台查询编排.ts"), "utf8");
-    const sessionFacadeSource = readFileSync(resolve(process.cwd(), "后台会话编排.ts"), "utf8");
-    const shellFacadeSource = readFileSync(resolve(process.cwd(), "后台壳编排.ts"), "utf8");
-    const kernelFacadeSource = readFileSync(resolve(process.cwd(), "后台应用内核.ts"), "utf8");
 
     const queryOwnerPath = resolve(ownerDir, "查询编排.ts");
     const sessionOwnerPath = resolve(ownerDir, "会话编排.ts");
     const shellOwnerPath = resolve(ownerDir, "壳编排.ts");
     const kernelOwnerPath = resolve(ownerDir, "应用内核.ts");
 
+    expect(existsSync(resolve(process.cwd(), "后台查询编排.ts"))).toBe(false);
+    expect(existsSync(resolve(process.cwd(), "后台会话编排.ts"))).toBe(false);
+    expect(existsSync(resolve(process.cwd(), "后台壳编排.ts"))).toBe(false);
+    expect(existsSync(resolve(process.cwd(), "后台应用内核.ts"))).toBe(false);
     expect(existsSync(queryOwnerPath)).toBe(true);
     expect(existsSync(sessionOwnerPath)).toBe(true);
     expect(existsSync(shellOwnerPath)).toBe(true);
     expect(existsSync(kernelOwnerPath)).toBe(true);
 
-    expect(queryFacadeSource).toContain('export * from "./后台/查询编排.js";');
-    expect(sessionFacadeSource).toContain('export * from "./后台/会话编排.js";');
-    expect(shellFacadeSource).toContain('export * from "./后台/壳编排.js";');
-    expect(kernelFacadeSource).toContain('export * from "./后台/应用内核.js";');
-    expect(kernelFacadeSource).not.toContain("class 后台应用内核");
-
     const queryOwnerSource = readFileSync(queryOwnerPath, "utf8");
     const sessionOwnerSource = readFileSync(sessionOwnerPath, "utf8");
     const kernelOwnerSource = readFileSync(kernelOwnerPath, "utf8");
 
-    expect(queryOwnerSource).toContain('import type { 后台查询传输端口 } from "../传输.js";');
+    expect(queryOwnerSource).toContain('import type { 后台查询传输端口 } from "../平台/传输.js";');
     expect(queryOwnerSource).not.toContain("type 前端传输端口");
-    expect(sessionOwnerSource).toContain('import type { 后台会话传输端口 } from "../传输.js";');
+    expect(sessionOwnerSource).toContain('import type { 后台会话传输端口 } from "../平台/传输.js";');
     expect(sessionOwnerSource).not.toContain("type 前端传输端口");
     expect(kernelOwnerSource).toContain("后台查询传输?: 后台查询传输端口;");
     expect(kernelOwnerSource).toContain("后台会话传输?: 后台会话传输端口;");

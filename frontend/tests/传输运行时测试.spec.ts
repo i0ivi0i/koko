@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { 前端传输端口 } from "../传输";
+import type { 前端传输端口 } from "../平台/传输";
 import type { 生命周期快照 } from "../平台";
 import { 创建传输运行时 } from "../平台/传输运行时";
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,13 +9,13 @@ import {
   读取房间实时编排工厂,
 } from "./common/聊天测试支架";
 describe("房间实时编排", () => {
-  it("旧房间实时编排文件必须退成实时应用门面", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+  it("实时应用 owner 直接提供房间实时编排兼容导出，旧根门面已删除", () => {
+    const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
-    expect(source).toContain('from "./实时/应用.js"');
-    expect(source).toContain("创建实时应用");
-    expect(source).not.toContain("let realtimeSocket");
-    expect(source).not.toContain("function ensureRealtimeSocket");
+    expect(existsSync(resolve(process.cwd(), "房间实时编排.ts"))).toBe(false);
+    expect(source).toContain("export const 创建房间实时编排 = 创建实时应用;");
+    expect(source).toContain("export type 房间实时编排依赖 = 实时应用依赖;");
+    expect(source).toContain("export type 房间实时编排端口 = 实时应用端口;");
   });
 
   it("socket 回调不会直接宣布 reconnecting，而是先回灌给 realtime owner", () => {

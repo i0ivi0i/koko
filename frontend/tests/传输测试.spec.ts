@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,12 +10,11 @@ vi.mock("socket.io-client", () => ({
   io: ioSpy,
 }));
 
-import { 创建前端传输 } from "../传输";
-import type { 匿名身份快照 } from "../契约";
+import { 创建前端传输 } from "../平台/传输";
+import type { 匿名身份快照 } from "../聊天共享/契约";
 
 const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
 const 创建HTTPS测试传输 = () => 创建前端传输("https://localhost");
-const 读取传输门面源码 = () => readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 const 读取平台传输Owner源码 = () =>
   readFileSync(resolve(process.cwd(), "平台/传输.ts"), "utf8");
 
@@ -25,13 +24,10 @@ describe("传输", () => {
     vi.restoreAllMocks();
   });
 
-  it("根目录传输只保留兼容门面，真实组合根必须收进平台 owner", () => {
-    const facadeSource = 读取传输门面源码();
+  it("平台传输 owner 已经成为唯一入口，旧根门面已删除", () => {
     const ownerSource = 读取平台传输Owner源码();
 
-    expect(facadeSource).toContain('export * from "./平台/传输.js";');
-    expect(facadeSource).not.toContain("export function 创建前端传输(");
-    expect(facadeSource).not.toContain("const 实时连接 = new 实时连接适配(baseUrl);");
+    expect(existsSync(resolve(process.cwd(), "传输.ts"))).toBe(false);
     expect(ownerSource).toContain("export function 创建前端传输(");
   });
 
@@ -622,7 +618,7 @@ describe("传输", () => {
   });
 
   it("契约禁止把 room_id 描述成 source_hash 的唯一搜索范围", () => {
-    const source = readFileSync(resolve(process.cwd(), "契约.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "聊天共享/契约.ts"), "utf8");
 
     expect(source).toContain("room_id 是目标房间发送裁决锚点");
     expect(source).not.toContain("只能在当前会话可见的房间事实内查询命中");

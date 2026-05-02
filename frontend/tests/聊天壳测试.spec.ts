@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../存储";
+import { 创建浏览器存储 } from "../平台/存储";
 import {
   createFakeStorage,
   假传输,
@@ -35,9 +35,9 @@ import {
   派生壳级操作台状态,
   派生首页会话展示项,
   type 聊天列表展示项,
-} from "../视图";
-import type { 房间消息窗 } from "../房间消息窗";
-import type { 匿名身份引导结果 } from "../契约";
+} from "../房间消息窗/视图";
+import type { 房间消息窗 } from "../房间消息窗/壳";
+import type { 匿名身份引导结果 } from "../聊天共享/契约";
 import { 聊天壳 } from "../聊天壳";
 
 const 查询查看器关闭按钮 = (): HTMLButtonElement | null => {

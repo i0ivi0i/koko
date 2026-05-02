@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { 创建媒体协作分发应用 } from "../媒体/协作分发/应用.js";
-import type { 媒体定位结果 } from "../契约.js";
+import type { 媒体定位结果 } from "../聊天共享/契约.js";
 import type { 资产协作分发运行时端口 } from "../媒体/资产协作分发运行时.js";
 
 describe("媒体协作分发应用", () => {

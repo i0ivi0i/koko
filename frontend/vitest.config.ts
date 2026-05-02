@@ -4,7 +4,7 @@ import path from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      debug: path.resolve(__dirname, "调试兼容.ts"),
+      debug: path.resolve(__dirname, "平台", "调试兼容.ts"),
     },
     conditions: ["p2pml:core-as-bundle"],
   },

@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { 消息事件, 附件快照, 图片附件快照, 视频附件快照 } from "../契约";
-import { 默认消息文本布局环境, 派生消息展示项 } from "../视图";
+import type { 消息事件, 附件快照, 图片附件快照, 视频附件快照 } from "../聊天共享/契约";
+import { 默认消息文本布局环境, 派生消息展示项 } from "../房间消息窗/视图";
 import { 安装测试文本测量画布 } from "./common/聊天测试支架";
 
 const 读取前端源码 = (relativePath: string): string =>
@@ -58,8 +58,7 @@ function 创建消息事件(
 }
 
 describe("视图 / 消息展示项派生", () => {
-  it("根文件退成展示门面，聊天展示 owner 与后台展示 owner 分别收口", () => {
-    const facadeSource = 读取前端源码("视图.ts");
+  it("展示 owner 直连生效，旧根门面已经删除", () => {
     const messagePaneViewSource = 读取前端源码("房间消息窗/视图.ts");
     const adminViewSource = 读取前端源码("后台/视图.ts");
     const shellSource = 读取前端源码("聊天壳.ts");
@@ -68,10 +67,7 @@ describe("视图 / 消息展示项派生", () => {
     const messageVirtualListSource = 读取前端源码("房间消息窗/消息虚拟列表.ts");
     const adminShellSource = 读取前端源码("后台/壳.ts");
 
-    expect(facadeSource).toContain('export * from "./房间消息窗/视图.js"');
-    expect(facadeSource).toContain('export * from "./后台/视图.js"');
-    expect(facadeSource).not.toContain("export function 派生聊天列表展示项(");
-    expect(facadeSource).not.toContain("export function 格式化后台概览(");
+    expect(existsSync(resolve(process.cwd(), "视图.ts"))).toBe(false);
     expect(messagePaneViewSource).toContain("export function 派生聊天列表展示项(");
     expect(messagePaneViewSource).toContain("export function 派生壳级操作台状态(");
     expect(adminViewSource).toContain("export function 格式化后台概览(");

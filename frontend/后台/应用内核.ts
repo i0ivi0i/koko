@@ -6,7 +6,7 @@ import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
 } from "../平台/index.js";
-import type { 后台会话传输端口, 后台查询传输端口 } from "../传输.js";
+import type { 后台会话传输端口, 后台查询传输端口 } from "../平台/传输.js";
 
 export type 后台应用命令 =
   | { type: "USERNAME_CHANGED"; value: string }

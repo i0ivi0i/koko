@@ -11,7 +11,7 @@ import {
 import {
   type 房间实时编排依赖,
   type 房间实时编排端口,
-} from "./房间实时编排.js";
+} from "./实时/应用.js";
 import {
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
@@ -47,8 +47,8 @@ import {
   type 聊天实时连接端口,
   type 聊天房间传输端口,
   type 前端传输端口,
-} from "./传输.js";
-import type { 前端存储端口 } from "./存储.js";
+} from "./平台/传输.js";
+import type { 前端存储端口 } from "./平台/存储.js";
 import {
   初始聊天运行时状态,
   初始聊天运行时预算状态,

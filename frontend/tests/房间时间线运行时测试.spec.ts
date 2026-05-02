@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -8,8 +8,7 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("房间时间线运行时", () => {
-  it("根文件退成时间线运行时 owner 门面，内部引用直连时间线 owner", () => {
-    const facadeSource = 读取前端源码("房间时间线运行时.ts");
+  it("时间线运行时 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/运行时.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
@@ -18,8 +17,7 @@ describe("房间时间线运行时", () => {
     const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
 
-    expect(facadeSource).toContain('export * from "./时间线/运行时.js"');
-    expect(facadeSource).not.toContain("const 房间时间线机 = createMachine(");
+    expect(existsSync(resolve(process.cwd(), "房间时间线运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间时间线机 = createMachine(");
     expect(ownerSource).toContain("export function 创建房间时间线Actor()");
     expect(kernelSource).toContain('from "./时间线/运行时.js"');
@@ -37,7 +35,7 @@ describe("房间时间线运行时", () => {
   });
 
   it("快照、历史页和 realtime 追加会按同一 reducer 排序去重", async () => {
-    const { 创建房间时间线Actor } = await import("../房间时间线运行时");
+    const { 创建房间时间线Actor } = await import("../时间线/运行时");
 
     const actor = 创建房间时间线Actor();
 
@@ -113,7 +111,7 @@ describe("房间时间线运行时", () => {
   });
 
   it("重复事件不会因为 snapshot 和 realtime 并流而插出双份消息", async () => {
-    const { 创建房间时间线Actor } = await import("../房间时间线运行时");
+    const { 创建房间时间线Actor } = await import("../时间线/运行时");
 
     const actor = 创建房间时间线Actor();
 
@@ -170,7 +168,7 @@ describe("房间时间线运行时", () => {
   });
 
   it("latestEventPosition 只会前进，不会被旧页或旧增量回退", async () => {
-    const { 创建房间时间线Actor } = await import("../房间时间线运行时");
+    const { 创建房间时间线Actor } = await import("../时间线/运行时");
 
     const actor = 创建房间时间线Actor();
 
@@ -207,7 +205,7 @@ describe("房间时间线运行时", () => {
   });
 
   it("软重置会清空当前房间时间线事实", async () => {
-    const { 创建房间时间线Actor } = await import("../房间时间线运行时");
+    const { 创建房间时间线Actor } = await import("../时间线/运行时");
 
     const actor = 创建房间时间线Actor();
 

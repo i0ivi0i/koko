@@ -1,9 +1,9 @@
 import { vi } from "vitest";
 import { 读取默认全局唯一播放器 } from "../../媒体/全局唯一播放器";
 import { 创建VideoJs播放器壳 } from "../../媒体/videojs播放器壳.js";
-import type { 房间消息窗 } from "../../房间消息窗";
-import type { 消息展示项 } from "../../视图";
-import "../../房间消息窗";
+import type { 房间消息窗 } from "../../房间消息窗/壳";
+import type { 消息展示项 } from "../../房间消息窗/视图";
+import "../../房间消息窗/壳";
 
 export const 安装消息窗直达全屏模拟 = () => {
   const fullscreenDescriptor = Object.getOwnPropertyDescriptor(document, "fullscreenElement");

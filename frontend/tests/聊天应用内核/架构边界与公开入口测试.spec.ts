@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../../存储";
+import { 创建浏览器存储 } from "../../平台/存储";
 import { createFakeStorage, 假传输 } from "../common/聊天测试支架";
 import { 创建聊天应用内核 } from "../../聊天应用内核";
 import { 创建内核依赖, 读取媒体编排供测试 } from "../common/聊天应用内核支架";
@@ -73,9 +73,10 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
   it("滚动观察命令不再把 DOM 容器穿过运行时和聊天内核", () => {
     const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
-    const runtimeSource = readFileSync(resolve(process.cwd(), "应用运行时.ts"), "utf8");
+    const runtimeSource = readFileSync(resolve(process.cwd(), "平台/应用运行时.ts"), "utf8");
     const shellSource = readFileSync(resolve(process.cwd(), "聊天壳.ts"), "utf8");
 
+    expect(existsSync(resolve(process.cwd(), "应用运行时.ts"))).toBe(false);
     expect(kernelSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
     expect(kernelSource).not.toContain("处理聊天视口滚动(scrollContainer: HTMLElement): void");
     expect(runtimeSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
@@ -99,11 +100,9 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("聊天应用编排桥接会把平台依赖裁成窄平台桥接，而不是偷拿聊天业务真相", () => {
-    const facadeSource = readFileSync(resolve(process.cwd(), "聊天应用编排桥接.ts"), "utf8");
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
 
-    expect(facadeSource).toContain('export * from "./总装/聊天应用编排桥接.js"');
-    expect(facadeSource).not.toContain("export interface 聊天内核平台端口");
+    expect(existsSync(resolve(process.cwd(), "聊天应用编排桥接.ts"))).toBe(false);
     expect(source).toContain("export interface 聊天内核平台端口");
     expect(source).toContain("export function 创建聊天内核平台桥接(");
     expect(source).toContain("聊天房间传输()");

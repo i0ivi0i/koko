@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../存储";
+import { 创建浏览器存储 } from "../平台/存储";
 import {
   createFakeStorage,
   假传输,
@@ -27,8 +27,8 @@ import {
   派生控制台模式,
   派生壳级操作台状态,
   派生首页会话展示项,
-} from "../视图";
-import type { 匿名身份引导结果, 房间历史页 } from "../契约";
+} from "../房间消息窗/视图";
+import type { 匿名身份引导结果, 房间历史页 } from "../聊天共享/契约";
 import { 聊天壳 } from "../聊天壳";
 describe("聊天壳集成 / 恢复失败与历史分页", () => {
   beforeEach(() => {

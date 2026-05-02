@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../聊天壳.js", () => ({}));
-vi.mock("../后台壳.js", () => ({}));
+vi.mock("../后台/壳.js", () => ({}));
 
 const 启动平台 = vi.fn();
 

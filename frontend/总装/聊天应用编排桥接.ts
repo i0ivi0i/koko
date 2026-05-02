@@ -28,8 +28,8 @@ import {
   type 媒体传输端口,
   type 聊天实时连接端口,
   type 聊天房间传输端口,
-} from "../传输.js";
-import type { 前端存储端口 } from "../存储.js";
+} from "../平台/传输.js";
+import type { 前端存储端口 } from "../平台/存储.js";
 
 export interface 内核恢复编排桥接依赖 {
   读取恢复状态: 房间恢复编排依赖["读取恢复状态"];

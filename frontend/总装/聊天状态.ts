@@ -1,11 +1,11 @@
 import type { 消息事件 } from "../聊天共享/契约.js";
-import type { 首页房间历史条目 } from "../存储.js";
+import type { 首页房间历史条目 } from "../平台/存储.js";
 import type { 媒体附件草稿 } from "../媒体/媒体草稿.js";
 import type { 信息流视频预算投影 } from "../媒体/信息流视频预算.js";
 
 /**
  * 真正的聊天壳总状态 owner 收进本文件：
- * 1. 根级 `frontend/状态.ts` 只保留兼容门面；
+ * 1. 根级 `frontend/状态.ts` 已删除，不再保留第二入口；
  * 2. 这里承接聊天壳快照、slice 初始态和测试支架依赖的总拼装；
  * 3. 生产模块内部优先直连这里，避免根目录状态桶再次回流。
  */

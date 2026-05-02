@@ -1,19 +1,17 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { 创建房间视口Actor } from "../房间视口运行时";
+import { 创建房间视口Actor } from "../时间线/视口运行时";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("房间视口运行时", () => {
-  it("根文件退成时间线视口 owner 门面，聊天内核内部直连新 owner", () => {
-    const facadeSource = 读取前端源码("房间视口运行时.ts");
+  it("时间线视口 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/视口运行时.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
 
-    expect(facadeSource).toContain('export * from "./时间线/视口运行时.js"');
-    expect(facadeSource).not.toContain("const 房间视口机 = createMachine(");
+    expect(existsSync(resolve(process.cwd(), "房间视口运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间视口机 = createMachine(");
     expect(ownerSource).toContain("export function 创建房间视口Actor()");
     expect(kernelSource).toContain('from "./时间线/视口运行时.js"');

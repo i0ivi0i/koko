@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果, 媒体播放位置 } from "../../媒体/媒体播放";
-import type { 房间消息窗 } from "../../房间消息窗";
+import type { 房间消息窗 } from "../../房间消息窗/壳";
 import { 读取默认全局唯一播放器 } from "../../媒体/全局唯一播放器";
 import {
   创建单视频消息项,

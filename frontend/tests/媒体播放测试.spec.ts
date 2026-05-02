@@ -5,7 +5,7 @@ import {
   协作分发JoinTicket失效错误,
   协作分发运行时环境不支持错误,
 } from "../媒体/媒体协作分发";
-import { Http接口错误 } from "../传输";
+import { Http接口错误 } from "../平台/传输";
 
 describe("媒体播放器", () => {
   it("媒体播放模块不应继续保留第二链兼容叙事", () => {

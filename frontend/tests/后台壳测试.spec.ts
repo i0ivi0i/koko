@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import "../后台壳";
-import type { 前端传输端口 } from "../传输";
+import "../后台/壳";
+import type { 前端传输端口 } from "../平台/传输";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -20,9 +20,9 @@ import type {
   媒体上传准备结果,
   房间快照,
   房间历史页,
-} from "../契约";
-import { 后台壳 } from "../后台壳";
-import type { 后台应用内核端口 } from "../后台应用内核";
+} from "../聊天共享/契约";
+import { 后台壳 } from "../后台/壳";
+import type { 后台应用内核端口 } from "../后台/应用内核";
 import type { Socket } from "socket.io-client";
 
 const 空Socket = {

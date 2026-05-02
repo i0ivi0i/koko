@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -8,15 +8,13 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("实时会话运行时", () => {
-  it("根文件退成实时 owner 门面，聊天内核与实时侧内部直连实时 owner", () => {
-    const facadeSource = 读取前端源码("实时会话运行时.ts");
+  it("实时会话 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("实时/会话运行时.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
     const controlSource = 读取前端源码("聊天实时/壳层/实时控制面协作.ts");
 
-    expect(facadeSource).toContain('export * from "./实时/会话运行时.js"');
-    expect(facadeSource).not.toContain("const 实时会话机 = createMachine(");
+    expect(existsSync(resolve(process.cwd(), "实时会话运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 实时会话机 = createMachine(");
     expect(ownerSource).toContain("export function 创建实时会话Actor()");
     expect(kernelSource).toContain('from "./实时/会话运行时.js"');
@@ -28,7 +26,7 @@ describe("实时会话运行时", () => {
   });
 
   it("平台 lifecycle hidden/background 后 realtime 会进入 reduced，而不是继续当 active", async () => {
-    const { 创建实时会话Actor } = await import("../实时会话运行时");
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
 
     const actor = 创建实时会话Actor();
 
@@ -56,7 +54,7 @@ describe("实时会话运行时", () => {
   });
 
   it("offline -> online 会进入 reconnecting，并标记需要统一重建订阅", async () => {
-    const { 创建实时会话Actor } = await import("../实时会话运行时");
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
 
     const actor = 创建实时会话Actor();
 
@@ -87,7 +85,7 @@ describe("实时会话运行时", () => {
   });
 
   it("controller ready 之前挂起的后台排空请求只会保留一份 pending", async () => {
-    const { 创建实时会话Actor } = await import("../实时会话运行时");
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
 
     const actor = 创建实时会话Actor();
 
@@ -102,7 +100,7 @@ describe("实时会话运行时", () => {
   });
 
   it("socket 断开不会直接改聊天快照，而是先把 realtime 会话推进到 reconnecting", async () => {
-    const { 创建实时会话Actor } = await import("../实时会话运行时");
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
 
     const actor = 创建实时会话Actor();
 

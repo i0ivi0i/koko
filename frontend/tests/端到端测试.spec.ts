@@ -2,9 +2,9 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
-import "../后台壳";
+import "../后台/壳";
 import { 聊天壳 } from "../聊天壳";
-import { 后台壳 } from "../后台壳";
+import { 后台壳 } from "../后台/壳";
 import {
   安装测试文本测量画布,
   createFakeStorage,
@@ -12,7 +12,7 @@ import {
   注入媒体查看器供测试,
   等待组件稳定,
 } from "./common/聊天测试支架";
-import type { 前端传输端口 } from "../传输";
+import type { 前端传输端口 } from "../平台/传输";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -30,7 +30,7 @@ import type {
   媒体上传准备结果,
   房间历史页,
   房间快照,
-} from "../契约";
+} from "../聊天共享/契约";
 import type { Socket } from "socket.io-client";
 
 /**

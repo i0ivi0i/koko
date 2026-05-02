@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,15 +10,13 @@ import {
   读取房间恢复编排工厂,
 } from "./common/聊天测试支架";
 describe("房间恢复编排", () => {
-  it("根文件退成恢复壳层门面，真实实现收进恢复 owner", () => {
-    const facadeSource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+  it("恢复编排 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = readFileSync(
       resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"),
       "utf8"
     );
 
-    expect(facadeSource).toContain('export * from "./恢复/壳层/房间恢复编排.js"');
-    expect(facadeSource).not.toContain("export function 创建房间恢复编排(");
+    expect(existsSync(resolve(process.cwd(), "房间恢复编排.ts"))).toBe(false);
     expect(ownerSource).toContain("export function 创建房间恢复编排(");
     expect(ownerSource).toContain('from "../应用.js"');
   });

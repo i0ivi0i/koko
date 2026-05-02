@@ -1,11 +1,12 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
 import type { 浏览器应用平台事件 } from "../平台/浏览器应用平台";
 import type { 生命周期快照 } from "../平台/生命周期运行时";
 import type { 服务工作线程运行时事件 } from "../平台/服务工作线程运行时";
-import type { 前端传输端口 } from "../传输";
+import type { 前端传输端口 } from "../平台/传输";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
@@ -87,11 +88,12 @@ describe("浏览器端应用平台化基线", () => {
   it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const recoverySource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
-    const realtimeSource = 读取前端源码("房间实时编排.ts");
+    const realtimeSource = 读取前端源码("实时/应用.ts");
     const readSource = 读取前端源码("房间/壳层/阅读推进.ts");
-    const scrollerSource = 读取前端源码("房间滚动器.ts");
+    const scrollerSource = 读取前端源码("时间线/滚动器.ts");
 
     expect(kernelSource).not.toContain("private chatState:");
+    expect(existsSync(resolve(process.cwd(), "房间实时编排.ts"))).toBe(false);
 
     expect(recoverySource).not.toContain("读取状态(): 聊天状态");
     expect(recoverySource).not.toContain("更新状态(patch: Partial<聊天状态>)");
@@ -230,9 +232,10 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/聊天媒体编排.ts");
   });
 
-  it("架构适应度门禁会把后台根文件锁成迁移门面，避免后台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把后台根文件锁成已清零目标，避免后台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
+    expect(source).toContain("const 前端已清零根文件规则 = [");
     expect(source).toContain('path: "frontend/后台壳.ts"');
     expect(source).toContain('path: "frontend/后台应用内核.ts"');
     expect(source).toContain('path: "frontend/后台查询编排.ts"');
@@ -242,140 +245,142 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/后台/应用内核.ts");
   });
 
-  it("架构适应度门禁会把传输根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把传输根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/传输.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/传输.ts"');
   });
 
-  it("架构适应度门禁会把存储根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把存储根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/存储.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/存储.ts"');
   });
 
-  it("架构适应度门禁会把调试兼容根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把调试兼容根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/调试兼容.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/调试兼容.ts"');
   });
 
-  it("架构适应度门禁会把应用生命周期根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把应用生命周期根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/应用生命周期.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/应用生命周期.ts"');
   });
 
-  it("架构适应度门禁会把应用运行时根文件锁成迁移门面，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把应用运行时根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/应用运行时.ts"');
     expect(source).toContain('ownerPath: "frontend/平台/应用运行时.ts"');
   });
 
-  it("架构适应度门禁会把聊天应用编排桥接根文件锁成迁移门面，避免总装 owner 又散回根目录", () => {
+  it("架构适应度门禁会把聊天应用编排桥接根文件锁成已清零目标，避免总装 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/聊天应用编排桥接.ts"');
     expect(source).toContain('ownerPath: "frontend/总装/聊天应用编排桥接.ts"');
   });
 
-  it("架构适应度门禁会把阅读推进编排根文件锁成迁移门面，避免房间壳层 owner 又散回根目录", () => {
+  it("架构适应度门禁会把阅读推进编排根文件锁成已清零目标，避免房间壳层 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/阅读推进编排.ts"');
     expect(source).toContain('ownerPath: "frontend/房间/壳层/阅读推进.ts"');
   });
 
-  it("架构适应度门禁会把房间恢复编排根文件锁成迁移门面，避免恢复壳层 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间恢复编排根文件锁成已清零目标，避免恢复壳层 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间恢复编排.ts"');
     expect(source).toContain('ownerPath: "frontend/恢复/壳层/房间恢复编排.ts"');
   });
 
-  it("架构适应度门禁会把房间时间线根文件锁成迁移门面，避免时间线 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间时间线根文件锁成已清零目标，避免时间线 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
+    expect(source).toContain("const 前端已清零根文件规则 = [");
+    expect(source).toContain("检查已清零根文件规则");
     expect(source).toContain('path: "frontend/房间时间线.ts"');
     expect(source).toContain('ownerPath: "frontend/时间线/领域.ts"');
   });
 
-  it("架构适应度门禁会把实时会话运行时根文件锁成迁移门面，避免实时 owner 又散回根目录", () => {
+  it("架构适应度门禁会把实时会话运行时根文件锁成已清零目标，避免实时 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/实时会话运行时.ts"');
     expect(source).toContain('ownerPath: "frontend/实时/会话运行时.ts"');
   });
 
-  it("架构适应度门禁会把房间视口运行时根文件锁成迁移门面，避免时间线视口 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间视口运行时根文件锁成已清零目标，避免时间线视口 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间视口运行时.ts"');
     expect(source).toContain('ownerPath: "frontend/时间线/视口运行时.ts"');
   });
 
-  it("架构适应度门禁会把房间时间线运行时根文件锁成迁移门面，避免时间线运行时 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间时间线运行时根文件锁成已清零目标，避免时间线运行时 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间时间线运行时.ts"');
     expect(source).toContain('ownerPath: "frontend/时间线/运行时.ts"');
   });
 
-  it("架构适应度门禁会把房间内核根文件锁成迁移门面，避免房间运行时 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间内核根文件锁成已清零目标，避免房间运行时 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间内核.ts"');
     expect(source).toContain('ownerPath: "frontend/房间/运行时.ts"');
   });
 
-  it("架构适应度门禁会把房间滚动器根文件锁成迁移门面，避免时间线滚动 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间滚动器根文件锁成已清零目标，避免时间线滚动 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间滚动器.ts"');
     expect(source).toContain('ownerPath: "frontend/时间线/滚动器.ts"');
   });
 
-  it("架构适应度门禁会把媒体运行时根文件锁成迁移门面，避免媒体 owner 又散回根目录", () => {
+  it("架构适应度门禁会把媒体运行时根文件锁成已清零目标，避免媒体 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/媒体运行时.ts"');
     expect(source).toContain('ownerPath: "frontend/媒体/运行时.ts"');
   });
 
-  it("架构适应度门禁会把文本布局根文件锁成迁移门面，避免文本几何 owner 又散回根目录", () => {
+  it("架构适应度门禁会把文本布局根文件锁成已清零目标，避免文本几何 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/文本布局.ts"');
     expect(source).toContain('ownerPath: "frontend/房间消息窗/文本布局.ts"');
   });
 
-  it("架构适应度门禁会把视图根文件锁成迁移门面，避免展示 owner 又散回根目录", () => {
+  it("架构适应度门禁会把视图根文件锁成已清零目标，避免展示 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/视图.ts"');
     expect(source).toContain('ownerPath: "frontend/房间消息窗/视图.ts"');
   });
 
-  it("架构适应度门禁会把房间消息窗根文件锁成迁移门面，避免消息窗 owner 又散回根目录", () => {
+  it("架构适应度门禁会把房间消息窗根文件锁成已清零目标，避免消息窗 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/房间消息窗.ts"');
     expect(source).toContain('ownerPath: "frontend/房间消息窗/壳.ts"');
   });
 
-  it("架构适应度门禁会把共享契约根文件锁成迁移门面，避免稳定协议面又散回根目录", () => {
+  it("架构适应度门禁会把共享契约根文件锁成已清零目标，避免稳定协议面又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/契约.ts"');
     expect(source).toContain('ownerPath: "frontend/聊天共享/契约.ts"');
   });
 
-  it("架构适应度门禁会把聊天状态根文件锁成迁移门面，避免总状态桶又散回根目录", () => {
+  it("架构适应度门禁会把聊天状态根文件锁成已清零目标，避免总状态桶又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/状态.ts"');
@@ -411,7 +416,7 @@ describe("浏览器端应用平台化基线", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('label: "room message pane WebTorrent byte owner barrier"');
-    expect(source).toContain("frontend/房间消息窗.ts");
+    expect(source).toContain("frontend/房间消息窗/壳.ts");
     expect(source).toContain("new\\s+WebTorrent");
     expect(source).toContain("createServer");
     expect(source).toContain("streamURL");
@@ -492,9 +497,7 @@ const stillKeep = true;
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
-    const adminFacadeSource = 读取前端源码("后台壳.ts");
     const adminOwnerSource = 读取前端源码("后台/壳.ts");
-    const adminKernelFacadeSource = 读取前端源码("后台应用内核.ts");
     const adminKernelOwnerSource = 读取前端源码("后台/应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
@@ -504,10 +507,6 @@ const stillKeep = true;
     expect(kernelSource).toContain("this.平台桥接.聊天房间传输()");
     expect(kernelSource).not.toContain("this.platform.transport.transport()");
     expect(kernelSource).toContain('from "./平台/index.js"');
-
-    expect(adminFacadeSource).toContain('export { 后台壳 } from "./后台/壳.js"');
-    expect(adminFacadeSource).toContain('import "./后台/壳.js"');
-    expect(adminKernelFacadeSource).toContain('export * from "./后台/应用内核.js"');
 
     expect(adminOwnerSource).toContain('from "./应用内核.js"');
     expect(adminOwnerSource).not.toContain('from "../平台/index.js"');
@@ -522,73 +521,61 @@ const stillKeep = true;
     expect(adminKernelOwnerSource).not.toContain("detailText:");
   });
 
-  it("平台传输运行时直接依赖平台 owner，根目录传输只保留兼容门面", () => {
-    const transportFacadeSource = 读取前端源码("传输.ts");
+  it("平台传输运行时直接依赖平台 owner，旧根门面已经删除", () => {
     const transportOwnerSource = 读取前端源码("平台/传输.ts");
     const transportRuntimeSource = 读取前端源码("平台/传输运行时.ts");
 
-    expect(transportFacadeSource).toContain('export * from "./平台/传输.js"');
-    expect(transportFacadeSource).not.toContain("export function 创建前端传输(");
+    expect(existsSync(resolve(process.cwd(), "传输.ts"))).toBe(false);
     expect(transportOwnerSource).toContain("export function 创建前端传输(");
     expect(transportRuntimeSource).toContain('from "./传输.js"');
     expect(transportRuntimeSource).not.toContain('from "../传输.js"');
   });
 
-  it("平台存储运行时直接依赖平台 owner，根目录存储只保留兼容门面", () => {
-    const storageFacadeSource = 读取前端源码("存储.ts");
+  it("平台存储运行时直接依赖平台 owner，旧根门面已经删除", () => {
     const storageOwnerSource = 读取前端源码("平台/存储.ts");
     const storageRuntimeSource = 读取前端源码("平台/存储运行时.ts");
 
-    expect(storageFacadeSource).toContain('export * from "./平台/存储.js"');
-    expect(storageFacadeSource).not.toContain("export function 创建浏览器存储(");
+    expect(existsSync(resolve(process.cwd(), "存储.ts"))).toBe(false);
     expect(storageOwnerSource).toContain("export function 创建浏览器存储(");
     expect(storageRuntimeSource).toContain('from "./存储.js"');
     expect(storageRuntimeSource).not.toContain('from "../存储.js"');
   });
 
-  it("构建 alias 直指平台调试兼容 owner，根目录调试兼容只保留兼容门面", () => {
-    const debugFacadeSource = 读取前端源码("调试兼容.ts");
+  it("构建 alias 直指平台调试兼容 owner，旧根门面已经删除", () => {
     const debugOwnerSource = 读取前端源码("平台/调试兼容.ts");
     const buildSource = 读取前端源码("build.mjs");
 
-    expect(debugFacadeSource).toContain('export * from "./平台/调试兼容.js"');
-    expect(debugFacadeSource).not.toContain("debugFactory");
+    expect(existsSync(resolve(process.cwd(), "调试兼容.ts"))).toBe(false);
     expect(debugOwnerSource).toContain("debugFactory");
     expect(buildSource).toContain("path.join(frontendRoot, '平台', '调试兼容.ts')");
     expect(buildSource).not.toContain("path.join(frontendRoot, '调试兼容.ts')");
   });
 
-  it("应用生命周期 owner 进入平台层，根目录只保留兼容门面，内核直接依赖平台 owner", () => {
-    const lifecycleFacadeSource = 读取前端源码("应用生命周期.ts");
+  it("应用生命周期 owner 进入平台层，旧根门面已经删除，内核直接依赖平台 owner", () => {
     const lifecycleOwnerSource = 读取前端源码("平台/应用生命周期.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
 
-    expect(lifecycleFacadeSource).toContain('export * from "./平台/应用生命周期.js"');
-    expect(lifecycleFacadeSource).not.toContain("createMachine(");
+    expect(existsSync(resolve(process.cwd(), "应用生命周期.ts"))).toBe(false);
     expect(lifecycleOwnerSource).toContain("createMachine(");
     expect(kernelSource).toContain('from "./平台/应用生命周期.js"');
     expect(kernelSource).not.toContain('from "./应用生命周期.js"');
   });
 
-  it("应用运行时 owner 进入平台层，根目录只保留兼容门面，总装直接依赖平台 owner", () => {
-    const runtimeFacadeSource = 读取前端源码("应用运行时.ts");
+  it("应用运行时 owner 进入平台层，旧根门面已经删除，总装直接依赖平台 owner", () => {
     const runtimeOwnerSource = 读取前端源码("平台/应用运行时.ts");
     const assemblySource = 读取前端源码("总装/应用装配.ts");
 
-    expect(runtimeFacadeSource).toContain('export * from "./平台/应用运行时.js"');
-    expect(runtimeFacadeSource).not.toContain("翻译平台事件为内核命令");
+    expect(existsSync(resolve(process.cwd(), "应用运行时.ts"))).toBe(false);
     expect(runtimeOwnerSource).toContain("翻译平台事件为内核命令");
     expect(assemblySource).toContain('from "../平台/应用运行时.js"');
     expect(assemblySource).not.toContain('from "../应用运行时.js"');
   });
 
-  it("聊天应用编排桥接 owner 进入总装层，根目录只保留兼容门面，聊天内核直接依赖总装 owner", () => {
-    const bridgeFacadeSource = 读取前端源码("聊天应用编排桥接.ts");
+  it("聊天应用编排桥接 owner 进入总装层，旧根门面已经删除，聊天内核直接依赖总装 owner", () => {
     const bridgeOwnerSource = 读取前端源码("总装/聊天应用编排桥接.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
 
-    expect(bridgeFacadeSource).toContain('export * from "./总装/聊天应用编排桥接.js"');
-    expect(bridgeFacadeSource).not.toContain("export interface 聊天内核平台端口");
+    expect(existsSync(resolve(process.cwd(), "聊天应用编排桥接.ts"))).toBe(false);
     expect(bridgeOwnerSource).toContain("export interface 聊天内核平台端口");
     expect(kernelSource).toContain('from "./总装/聊天应用编排桥接.js"');
     expect(kernelSource).not.toContain('from "./聊天应用编排桥接.js"');

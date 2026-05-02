@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { 创建应用生命周期Actor } from "../应用生命周期";
+import { 创建应用生命周期Actor } from "../平台/应用生命周期";
 
 describe("应用生命周期Actor", () => {
   it("hidden/background 会把重型工作意图降到 reduced", () => {

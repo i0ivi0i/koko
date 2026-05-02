@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { 创建前端传输 } from "../传输";
+import { 创建前端传输 } from "../平台/传输";
 
 const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
 
@@ -260,10 +260,11 @@ describe("媒体共享契约", () => {
   });
 
   it("前端共享契约与依赖清单不再保留第二链空壳", () => {
-    const contractSource = readFileSync(new URL("../契约.ts", import.meta.url), "utf-8");
+    const contractSource = readFileSync(new URL("../聊天共享/契约.ts", import.meta.url), "utf-8");
     const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf-8");
     const entrySource = readFileSync(new URL("../入口.ts", import.meta.url), "utf-8");
 
+    expect(existsSync(new URL("../契约.ts", import.meta.url))).toBe(false);
     expect(contractSource.includes("streaming_asset")).toBe(false);
     expect(contractSource.includes("streaming_video")).toBe(false);
     expect(contractSource.includes("hls_master_url")).toBe(false);

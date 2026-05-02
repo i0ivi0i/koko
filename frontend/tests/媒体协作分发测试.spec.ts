@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { 媒体定位结果 } from "../契约.js";
+import type { 媒体定位结果 } from "../聊天共享/契约.js";
 import {
   获取或创建协作分发浏览器运行时,
   读取可用协作分发片段,

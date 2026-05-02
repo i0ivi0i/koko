@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { 聊天状态 } from "../状态";
+import type { 聊天状态 } from "../总装/聊天状态";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
@@ -61,16 +61,14 @@ function 创建消息节点(eventPosition: number, top: number, bottom: number):
 }
 
 describe("房间滚动器", () => {
-  it("根文件退成时间线滚动 owner 门面，内部引用直连时间线 owner", () => {
-    const facadeSource = 读取前端源码("房间滚动器.ts");
+  it("时间线滚动 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/滚动器.ts");
     const timelineAppSource = 读取前端源码("时间线/应用.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const assembleSource = 读取前端源码("总装/应用装配.ts");
     const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
 
-    expect(facadeSource).toContain('export * from "./时间线/滚动器.js"');
-    expect(facadeSource).not.toContain("export class 房间滚动器");
+    expect(existsSync(resolve(process.cwd(), "房间滚动器.ts"))).toBe(false);
     expect(ownerSource).toContain("export class 房间滚动器");
     expect(ownerSource).toContain("export interface 房间滚动器依赖");
     expect(timelineAppSource).toContain('from "./滚动器.js"');
@@ -84,14 +82,14 @@ describe("房间滚动器", () => {
   });
 
   it("不再直接在滚动器里请求更早历史或提交候选已读", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间滚动器.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "时间线/滚动器.ts"), "utf8");
 
     expect(source).not.toContain("this.deps.请求更早历史");
     expect(source).not.toContain("this.deps.采样阅读锚点");
   });
 
   it("滚动器依赖表已经删掉旧测试迁移期兼容口", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间滚动器.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "时间线/滚动器.ts"), "utf8");
 
     expect(source).not.toContain("更新状态?(patch: Partial<房间滚动观察态>): void;");
     expect(source).not.toContain("请求更早历史?(): void;");
@@ -99,7 +97,7 @@ describe("房间滚动器", () => {
   });
 
   it("首屏恢复期间的程序滚动不会立刻采样成用户已读", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -144,7 +142,7 @@ describe("房间滚动器", () => {
   });
 
   it("首条未读节点本轮还没出现时，不会把首屏定位直接标记为完成", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -191,7 +189,7 @@ describe("房间滚动器", () => {
   });
 
   it("围绕首条未读稳定落位后，会显式上报首屏完成事件", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     vi.useFakeTimers();
     try {
@@ -261,7 +259,7 @@ describe("房间滚动器", () => {
   });
 
   it("无未读时落到底部后，会显式上报贴底跟随的首屏完成事件", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -309,7 +307,7 @@ describe("房间滚动器", () => {
   });
 
   it("跳到最新由视口 owner 落到底部，并吸收随后的程序性滚动尾波", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -359,7 +357,7 @@ describe("房间滚动器", () => {
   });
 
   it("长消息达到稳定可读阈值时，也会被采样成候选已读锚点", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -462,7 +460,7 @@ describe("房间滚动器", () => {
   });
 
   it("连续 scroll 落在同一帧时，只会合帧采样一次阅读锚点", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -548,7 +546,7 @@ describe("房间滚动器", () => {
   });
 
   it("历史补偿会优先守住最靠近顶部的稳定可读消息锚点", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -610,7 +608,7 @@ describe("房间滚动器", () => {
   });
 
   it("历史补偿在没有稳定可读消息时，会退回到最靠近顶部的重叠消息锚点", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -672,7 +670,7 @@ describe("房间滚动器", () => {
   });
 
   it("历史补偿在找不回旧锚点时，会退回到 scrollHeight 差值补偿", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -724,7 +722,7 @@ describe("房间滚动器", () => {
   });
 
   it("显式登记的程序滚动来源不会继续上报成用户视口滚动", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,
@@ -782,7 +780,7 @@ describe("房间滚动器", () => {
   });
 
   it("媒体查看器释放后的无意图滚动尾波不会误触发历史分页", async () => {
-    const { 房间滚动器 } = await import("../房间滚动器");
+    const { 房间滚动器 } = await import("../时间线/滚动器");
 
     const 状态: Pick<
       聊天状态,

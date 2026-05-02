@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 // @vitest-environment happy-dom
 
 import { describe, expect, it, vi } from "vitest";
-import { 创建应用运行时 } from "../应用运行时";
+import { 创建应用运行时 } from "../平台/应用运行时";
 import type { 浏览器应用平台事件 } from "../平台";
 import type { 媒体查看器打开请求 } from "../媒体";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
@@ -17,6 +19,10 @@ const 创建运行时依赖 = () => ({
 });
 
 describe("应用运行时", () => {
+  it("平台 owner 直接提供应用运行时，旧根门面已经删除", () => {
+    expect(existsSync(resolve(process.cwd(), "应用运行时.ts"))).toBe(false);
+  });
+
   it("媒体打开必须先进入应用事件入口，再翻成内核 command", () => {
     const deps = 创建运行时依赖();
     const runtime = 创建应用运行时(deps);

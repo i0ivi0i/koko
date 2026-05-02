@@ -37,168 +37,158 @@ const 前端运行时Owner注册表 = [
 ];
 
 /**
- * 根目录迁移门面当前仍保留兼容入口。
- * 这里强制它们只做薄门面，避免真实 owner 又偷偷回流到根目录。
+ * 根目录零业务门面已经开始落地。
+ * 这里仅保留尚未清零的兼容入口，并强制它们继续保持极薄，避免真实 owner 又偷偷回流到根目录。
  */
 const 前端迁移门面规则 = [
+];
+
+/**
+ * 已经完成清零的根业务门面必须继续不存在。
+ * 这样才能把门禁从“允许极薄门面”翻成“禁止根业务 owner 回流”。
+ */
+const 前端已清零根文件规则 = [
   {
-    path: "frontend/后台查询编排.ts",
-    ownerPath: "frontend/后台/查询编排.ts",
-    requiredSnippets: ['export * from "./后台/查询编排.js";'],
-    forbiddenSnippets: ["export function 创建后台查询编排("],
-  },
-  {
-    path: "frontend/后台会话编排.ts",
-    ownerPath: "frontend/后台/会话编排.ts",
-    requiredSnippets: ['export * from "./后台/会话编排.js";'],
-    forbiddenSnippets: ["export function 创建后台会话编排("],
-  },
-  {
-    path: "frontend/后台壳编排.ts",
-    ownerPath: "frontend/后台/壳编排.ts",
-    requiredSnippets: ['export * from "./后台/壳编排.js";'],
-    forbiddenSnippets: ["export function 创建后台壳编排("],
-  },
-  {
-    path: "frontend/后台应用内核.ts",
-    ownerPath: "frontend/后台/应用内核.ts",
-    requiredSnippets: ['export * from "./后台/应用内核.js";'],
-    forbiddenSnippets: ["class 后台应用内核", "export function 创建后台应用内核("],
-  },
-  {
-    path: "frontend/后台壳.ts",
-    ownerPath: "frontend/后台/壳.ts",
-    requiredSnippets: [
-      'export { 后台壳 } from "./后台/壳.js";',
-      'import "./后台/壳.js";',
-    ],
-    forbiddenSnippets: ["class 后台壳"],
+    path: "frontend/契约.ts",
+    ownerPath: "frontend/聊天共享/契约.ts",
+    requiredOwnerSnippets: ["export interface 消息事件 {", "export interface 房间快照 {"],
   },
   {
     path: "frontend/传输.ts",
     ownerPath: "frontend/平台/传输.ts",
-    requiredSnippets: ['export * from "./平台/传输.js";'],
-    forbiddenSnippets: ["export function 创建前端传输(", "const 实时连接 = new 实时连接适配(baseUrl);"],
+    requiredOwnerSnippets: ["export function 创建前端传输(", "const 实时连接 = new 实时连接适配(baseUrl);"],
   },
   {
     path: "frontend/存储.ts",
     ownerPath: "frontend/平台/存储.ts",
-    requiredSnippets: ['export * from "./平台/存储.js";'],
-    forbiddenSnippets: ["export function 创建浏览器存储(", "const 设备匿名凭证存储键 ="],
-  },
-  {
-    path: "frontend/调试兼容.ts",
-    ownerPath: "frontend/平台/调试兼容.ts",
-    requiredSnippets: [
-      'export * from "./平台/调试兼容.js";',
-      'export { default } from "./平台/调试兼容.js";',
-    ],
-    forbiddenSnippets: ['import debugFactory from "./node_modules/debug/src/browser.js";', "debugFactory"],
-  },
-  {
-    path: "frontend/应用生命周期.ts",
-    ownerPath: "frontend/平台/应用生命周期.ts",
-    requiredSnippets: ['export * from "./平台/应用生命周期.js";'],
-    forbiddenSnippets: ["createMachine(", "createActor(", "const 应用生命周期机 ="],
-  },
-  {
-    path: "frontend/应用运行时.ts",
-    ownerPath: "frontend/平台/应用运行时.ts",
-    requiredSnippets: ['export * from "./平台/应用运行时.js";'],
-    forbiddenSnippets: ["const 翻译平台事件为内核命令 =", "export function 创建应用运行时("],
-  },
-  {
-    path: "frontend/聊天应用编排桥接.ts",
-    ownerPath: "frontend/总装/聊天应用编排桥接.ts",
-    requiredSnippets: ['export * from "./总装/聊天应用编排桥接.js";'],
-    forbiddenSnippets: ["export interface 聊天内核平台端口", "export function 创建聊天内核平台桥接("],
-  },
-  {
-    path: "frontend/阅读推进编排.ts",
-    ownerPath: "frontend/房间/壳层/阅读推进.ts",
-    requiredSnippets: ['export * from "./房间/壳层/阅读推进.js";'],
-    forbiddenSnippets: ["const 阅读推进节流毫秒 = 400;", "export function 创建阅读推进编排("],
-  },
-  {
-    path: "frontend/房间恢复编排.ts",
-    ownerPath: "frontend/恢复/壳层/房间恢复编排.ts",
-    requiredSnippets: ['export * from "./恢复/壳层/房间恢复编排.js";'],
-    forbiddenSnippets: ["export function 创建房间恢复编排(", "const 房间快照恢复 = 创建恢复应用("],
-  },
-  {
-    path: "frontend/房间时间线.ts",
-    ownerPath: "frontend/时间线/领域.ts",
-    requiredSnippets: ['export * from "./时间线/领域.js";'],
-    forbiddenSnippets: ["function 合并房间时间线消息(", "export function 推进房间时间线("],
-  },
-  {
-    path: "frontend/实时会话运行时.ts",
-    ownerPath: "frontend/实时/会话运行时.ts",
-    requiredSnippets: ['export * from "./实时/会话运行时.js";'],
-    forbiddenSnippets: ["const 实时会话机 = createMachine(", "export function 创建实时会话Actor()"],
-  },
-  {
-    path: "frontend/房间视口运行时.ts",
-    ownerPath: "frontend/时间线/视口运行时.ts",
-    requiredSnippets: ['export * from "./时间线/视口运行时.js";'],
-    forbiddenSnippets: ["const 房间视口机 = createMachine(", "export function 创建房间视口Actor()"],
-  },
-  {
-    path: "frontend/房间时间线运行时.ts",
-    ownerPath: "frontend/时间线/运行时.ts",
-    requiredSnippets: ['export * from "./时间线/运行时.js";'],
-    forbiddenSnippets: ["const 房间时间线机 = createMachine(", "export function 创建房间时间线Actor()"],
-  },
-  {
-    path: "frontend/房间内核.ts",
-    ownerPath: "frontend/房间/运行时.ts",
-    requiredSnippets: ['export * from "./房间/运行时.js";'],
-    forbiddenSnippets: ["const 房间编排机 = createMachine(", "export function 创建房间内核()"],
-  },
-  {
-    path: "frontend/房间滚动器.ts",
-    ownerPath: "frontend/时间线/滚动器.ts",
-    requiredSnippets: ['export * from "./时间线/滚动器.js";'],
-    forbiddenSnippets: ["export class 房间滚动器", "export interface 房间滚动器依赖"],
-  },
-  {
-    path: "frontend/媒体运行时.ts",
-    ownerPath: "frontend/媒体/运行时.ts",
-    requiredSnippets: ['export * from "./媒体/运行时.js";'],
-    forbiddenSnippets: ["const 媒体运行时机 = createMachine(", "export function 创建媒体运行时Actor()"],
-  },
-  {
-    path: "frontend/文本布局.ts",
-    ownerPath: "frontend/房间消息窗/文本布局.ts",
-    requiredSnippets: ['export * from "./房间消息窗/文本布局.js";'],
-    forbiddenSnippets: ["export function 创建文本布局器()", "export const 默认文本布局器 = 创建文本布局器()"],
-  },
-  {
-    path: "frontend/视图.ts",
-    ownerPath: "frontend/房间消息窗/视图.ts",
-    requiredSnippets: [
-      'export * from "./房间消息窗/视图.js";',
-      'export * from "./后台/视图.js";',
-    ],
-    forbiddenSnippets: ["export function 派生聊天列表展示项(", "export function 格式化后台概览("],
-  },
-  {
-    path: "frontend/房间消息窗.ts",
-    ownerPath: "frontend/房间消息窗/壳.ts",
-    requiredSnippets: ['export * from "./房间消息窗/壳.js";'],
-    forbiddenSnippets: ["export class 房间消息窗 extends LitElement"],
-  },
-  {
-    path: "frontend/契约.ts",
-    ownerPath: "frontend/聊天共享/契约.ts",
-    requiredSnippets: ['export * from "./聊天共享/契约.js";'],
-    forbiddenSnippets: ["export interface 消息事件 {", "export interface 房间快照 {"],
+    requiredOwnerSnippets: ["export function 创建浏览器存储(", "const 设备匿名凭证存储键 ="],
   },
   {
     path: "frontend/状态.ts",
     ownerPath: "frontend/总装/聊天状态.ts",
-    requiredSnippets: ['export * from "./总装/聊天状态.js";'],
-    forbiddenSnippets: ["export interface 聊天状态", "export const 初始聊天状态"],
+    requiredOwnerSnippets: ["export interface 聊天状态", "export const 初始聊天状态"],
+  },
+  {
+    path: "frontend/应用运行时.ts",
+    ownerPath: "frontend/平台/应用运行时.ts",
+    requiredOwnerSnippets: ["const 翻译平台事件为内核命令 =", "export function 创建应用运行时("],
+  },
+  {
+    path: "frontend/聊天应用编排桥接.ts",
+    ownerPath: "frontend/总装/聊天应用编排桥接.ts",
+    requiredOwnerSnippets: ["export interface 聊天内核平台端口", "export function 创建聊天内核平台桥接("],
+  },
+  {
+    path: "frontend/后台查询编排.ts",
+    ownerPath: "frontend/后台/查询编排.ts",
+    requiredOwnerSnippets: [
+      "export function 创建后台查询编排(",
+      'import type { 后台查询传输端口 } from "../平台/传输.js";',
+    ],
+  },
+  {
+    path: "frontend/后台会话编排.ts",
+    ownerPath: "frontend/后台/会话编排.ts",
+    requiredOwnerSnippets: [
+      "export function 创建后台会话编排(",
+      'import type { 后台会话传输端口 } from "../平台/传输.js";',
+    ],
+  },
+  {
+    path: "frontend/后台壳编排.ts",
+    ownerPath: "frontend/后台/壳编排.ts",
+    requiredOwnerSnippets: ["export function 创建后台壳编排(", "snapshot(): 后台壳快照"],
+  },
+  {
+    path: "frontend/后台应用内核.ts",
+    ownerPath: "frontend/后台/应用内核.ts",
+    requiredOwnerSnippets: ["class 后台应用内核", "export function 创建后台应用内核("],
+  },
+  {
+    path: "frontend/后台壳.ts",
+    ownerPath: "frontend/后台/壳.ts",
+    requiredOwnerSnippets: [
+      "export class 后台壳 extends LitElement",
+      'customElements.define("koko-admin-shell", 后台壳);',
+    ],
+  },
+  {
+    path: "frontend/房间时间线.ts",
+    ownerPath: "frontend/时间线/领域.ts",
+    requiredOwnerSnippets: ["function 合并房间时间线消息(", "export function 推进房间时间线("],
+  },
+  {
+    path: "frontend/房间恢复编排.ts",
+    ownerPath: "frontend/恢复/壳层/房间恢复编排.ts",
+    requiredOwnerSnippets: ["export function 创建房间恢复编排(", 'from "../应用.js"'],
+  },
+  {
+    path: "frontend/房间视口运行时.ts",
+    ownerPath: "frontend/时间线/视口运行时.ts",
+    requiredOwnerSnippets: ["const 房间视口机 = createMachine(", "export function 创建房间视口Actor()"],
+  },
+  {
+    path: "frontend/房间时间线运行时.ts",
+    ownerPath: "frontend/时间线/运行时.ts",
+    requiredOwnerSnippets: ["const 房间时间线机 = createMachine(", "export function 创建房间时间线Actor()"],
+  },
+  {
+    path: "frontend/实时会话运行时.ts",
+    ownerPath: "frontend/实时/会话运行时.ts",
+    requiredOwnerSnippets: ["const 实时会话机 = createMachine(", "export function 创建实时会话Actor()"],
+  },
+  {
+    path: "frontend/房间滚动器.ts",
+    ownerPath: "frontend/时间线/滚动器.ts",
+    requiredOwnerSnippets: ["export class 房间滚动器", "export interface 房间滚动器依赖"],
+  },
+  {
+    path: "frontend/房间消息窗.ts",
+    ownerPath: "frontend/房间消息窗/壳.ts",
+    requiredOwnerSnippets: ["export class 房间消息窗 extends LitElement", 'customElements.define("koko-room-message-pane", 房间消息窗);'],
+  },
+  {
+    path: "frontend/媒体运行时.ts",
+    ownerPath: "frontend/媒体/运行时.ts",
+    requiredOwnerSnippets: ["const 媒体运行时机 = createMachine(", "export function 创建媒体运行时Actor()"],
+  },
+  {
+    path: "frontend/文本布局.ts",
+    ownerPath: "frontend/房间消息窗/文本布局.ts",
+    requiredOwnerSnippets: ["export function 创建文本布局器()", "export const 默认文本布局器 = 创建文本布局器()"],
+  },
+  {
+    path: "frontend/视图.ts",
+    ownerPath: "frontend/房间消息窗/视图.ts",
+    requiredOwnerSnippets: ["export function 派生聊天列表展示项(", "export function 派生壳级操作台状态("],
+  },
+  {
+    path: "frontend/调试兼容.ts",
+    ownerPath: "frontend/平台/调试兼容.ts",
+    requiredOwnerSnippets: ["debugFactory", 'from "../node_modules/debug/src/browser.js"'],
+  },
+  {
+    path: "frontend/应用生命周期.ts",
+    ownerPath: "frontend/平台/应用生命周期.ts",
+    requiredOwnerSnippets: ["createMachine(", "const 应用生命周期机 ="],
+  },
+  {
+    path: "frontend/阅读推进编排.ts",
+    ownerPath: "frontend/房间/壳层/阅读推进.ts",
+    requiredOwnerSnippets: ["const 阅读推进节流毫秒 = 400;", "export function 创建阅读推进编排("],
+  },
+  {
+    path: "frontend/房间内核.ts",
+    ownerPath: "frontend/房间/运行时.ts",
+    requiredOwnerSnippets: ["const 房间编排机 = createMachine(", "export function 创建房间内核()"],
+  },
+  {
+    path: "frontend/房间实时编排.ts",
+    ownerPath: "frontend/实时/应用.ts",
+    requiredOwnerSnippets: [
+      "export const 创建房间实时编排 = 创建实时应用;",
+      "export type 房间实时编排依赖 = 实时应用依赖;",
+    ],
   },
 ];
 
@@ -268,46 +258,19 @@ const 禁止新增前端文件规则 = [
 
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
-  { path: "frontend/契约.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
-  { path: "frontend/状态.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
-  { path: "frontend/传输.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/存储.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/调试兼容.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/房间恢复编排.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/实时会话运行时.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/聊天应用编排桥接.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/应用生命周期.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/应用运行时.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/房间实时编排.ts", maxEffectiveLines: 16, maxPhysicalLines: 16 },
-  { path: "frontend/后台查询编排.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
-  { path: "frontend/后台会话编排.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
-  { path: "frontend/后台壳.ts", maxEffectiveLines: 12, maxPhysicalLines: 12 },
-  { path: "frontend/后台壳编排.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
-  { path: "frontend/后台应用内核.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/房间时间线.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/房间时间线运行时.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/房间视口运行时.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/房间内核.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
-  { path: "frontend/阅读推进编排.ts", maxEffectiveLines: 10, maxPhysicalLines: 10 },
   { path: "frontend/总装/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
-  { path: "frontend/房间消息窗.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1850, maxPhysicalLines: 2200 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 820, maxPhysicalLines: 930 },
   { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },
-  { path: "frontend/视图.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/房间消息窗/视图.ts", maxEffectiveLines: 780, maxPhysicalLines: 900 },
-  { path: "frontend/文本布局.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/房间消息窗/文本布局.ts", maxEffectiveLines: 240, maxPhysicalLines: 300 },
-  { path: "frontend/媒体运行时.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/媒体/运行时.ts", maxEffectiveLines: 700, maxPhysicalLines: 820 },
-  { path: "frontend/房间滚动器.ts", maxEffectiveLines: 8, maxPhysicalLines: 8 },
   { path: "frontend/时间线/滚动器.ts", maxEffectiveLines: 470, maxPhysicalLines: 540 },
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500, maxPhysicalLines: 1500 },
   { path: "frontend/聊天壳.ts", maxEffectiveLines: 1750, maxPhysicalLines: 1800 },
   { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
   { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
-  { path: "frontend/房间实时编排.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
   { path: "frontend/聊天恢复/壳层/房间快照恢复.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
 ];
 
@@ -485,6 +448,27 @@ const 平台内层Import违规 = (relativePath, source) => {
     /^\s*import\s+["']([^"']*平台\/[^"']+)["']/gm,
     /\bimport\s*\(\s*["']([^"']*平台\/[^"']+)["']\s*\)/g,
   ];
+  const 平台传输直连允许文件 = new Set([
+    "frontend/聊天壳.ts",
+    "frontend/聊天媒体编排.ts",
+    "frontend/聊天应用内核.ts",
+    "frontend/总装/应用装配.ts",
+    "frontend/总装/聊天应用编排桥接.ts",
+    "frontend/后台/壳.ts",
+    "frontend/后台/会话编排.ts",
+    "frontend/后台/应用内核.ts",
+    "frontend/后台/查询编排.ts",
+    "frontend/恢复/壳层/房间恢复编排.ts",
+    "frontend/聊天实时/壳层/实时控制面协作.ts",
+  ]);
+  const 平台存储直连允许文件 = new Set([
+    "frontend/聊天应用内核.ts",
+    "frontend/总装/聊天应用编排桥接.ts",
+    "frontend/总装/聊天状态.ts",
+    "frontend/恢复/应用.ts",
+    "frontend/房间消息窗/视图.ts",
+    "frontend/恢复/壳层/房间恢复编排.ts",
+  ]);
 
   for (const importRegex of importRegexes) {
     for (const match of source.matchAll(importRegex)) {
@@ -493,27 +477,21 @@ const 平台内层Import违规 = (relativePath, source) => {
         continue;
       }
       if (
-        relativePath === "frontend/传输.ts" &&
-        (importPath === "./平台/传输.js" || importPath.endsWith("/平台/传输.js"))
+        平台传输直连允许文件.has(relativePath) &&
+        (importPath.endsWith("/平台/传输.js") || importPath === "./平台/传输.js")
       ) {
         continue;
       }
       if (
-        relativePath === "frontend/存储.ts" &&
-        (importPath === "./平台/存储.js" || importPath.endsWith("/平台/存储.js"))
+        平台存储直连允许文件.has(relativePath) &&
+        (importPath.endsWith("/平台/存储.js") || importPath === "./平台/存储.js")
       ) {
         continue;
       }
       if (
-        relativePath === "frontend/调试兼容.ts" &&
-        (importPath === "./平台/调试兼容.js" || importPath.endsWith("/平台/调试兼容.js"))
-      ) {
-        continue;
-      }
-      if (
-        relativePath === "frontend/应用生命周期.ts" &&
-        (importPath === "./平台/应用生命周期.js" ||
-          importPath.endsWith("/平台/应用生命周期.js"))
+        relativePath === "frontend/聊天壳.ts" &&
+        (importPath === "./平台/应用运行时.js" ||
+          importPath.endsWith("/平台/应用运行时.js"))
       ) {
         continue;
       }
@@ -521,12 +499,6 @@ const 平台内层Import违规 = (relativePath, source) => {
         relativePath === "frontend/聊天应用内核.ts" &&
         (importPath === "./平台/应用生命周期.js" ||
           importPath.endsWith("/平台/应用生命周期.js"))
-      ) {
-        continue;
-      }
-      if (
-        relativePath === "frontend/应用运行时.ts" &&
-        (importPath === "./平台/应用运行时.js" || importPath.endsWith("/平台/应用运行时.js"))
       ) {
         continue;
       }
@@ -630,6 +602,47 @@ const 检查迁移门面规则 = () => {
         file: rule.ownerPath,
         label: "migration owner semantic drift",
         detail: "后台 owner 真实代码不应再引用操作台目录",
+      });
+    }
+  }
+
+  return violations;
+};
+
+const 检查已清零根文件规则 = () => {
+  const violations = [];
+
+  for (const rule of 前端已清零根文件规则) {
+    const absolutePath = join(仓库根目录, rule.path);
+    if (文件存在(absolutePath)) {
+      violations.push({
+        file: rule.path,
+        label: "deleted root business facade revived",
+        detail: "根业务门面已经清零，不允许重新出现在 frontend/ 根目录",
+      });
+      continue;
+    }
+
+    let ownerSource;
+    try {
+      ownerSource = 读取源码(rule.ownerPath);
+    } catch {
+      violations.push({
+        file: rule.ownerPath,
+        label: "deleted root owner missing",
+        detail: "已清零根门面的真实 owner 文件不存在",
+      });
+      continue;
+    }
+
+    for (const snippet of rule.requiredOwnerSnippets) {
+      if (ownerSource.includes(snippet)) {
+        continue;
+      }
+      violations.push({
+        file: rule.ownerPath,
+        label: "deleted root owner drift",
+        detail: `真实 owner 缺少关键实现片段: ${snippet}`,
       });
     }
   }
@@ -801,6 +814,7 @@ export const 收集架构适应度违规 = () => {
   const files = 收集文件(前端目录);
   const 违规记录 = [
     ...检查Owner注册表(),
+    ...检查已清零根文件规则(),
     ...检查迁移门面规则(),
     ...检查未登记XStateOwner(files),
     ...检查禁回流片段(files),

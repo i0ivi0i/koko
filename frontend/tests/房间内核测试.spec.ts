@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -8,8 +8,7 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("房间内核", () => {
-  it("根文件退成房间运行时 owner 门面，内部引用直连房间 owner", () => {
-    const facadeSource = 读取前端源码("房间内核.ts");
+  it("房间运行时 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("房间/运行时.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
@@ -17,8 +16,7 @@ describe("房间内核", () => {
     const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
 
-    expect(facadeSource).toContain('export * from "./房间/运行时.js"');
-    expect(facadeSource).not.toContain("const 房间编排机 = createMachine(");
+    expect(existsSync(resolve(process.cwd(), "房间内核.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间编排机 = createMachine(");
     expect(ownerSource).toContain("export function 创建房间内核()");
     expect(ownerSource).toContain("export function 派生房间壳外观(");
@@ -35,7 +33,7 @@ describe("房间内核", () => {
   });
 
   it("不再承载视口真相字段和事件", () => {
-    const source = readFileSync(resolve(process.cwd(), "房间内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "房间/运行时.ts"), "utf8");
 
     expect(source).not.toContain("viewportMode");
     expect(source).not.toContain("candidateReadAnchorPosition");
@@ -46,7 +44,7 @@ describe("房间内核", () => {
   });
 
   it("bootstrap 成功且没有待恢复房间时，会从引导中进入大厅中", async () => {
-    const { 创建房间内核 } = await import("../房间内核");
+    const { 创建房间内核 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -63,7 +61,7 @@ describe("房间内核", () => {
   });
 
   it("刷新恢复时会先进入恢复中，拿到快照后再进入房间就绪", async () => {
-    const { 创建房间内核 } = await import("../房间内核");
+    const { 创建房间内核 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -91,7 +89,7 @@ describe("房间内核", () => {
   });
 
   it("权威事件推进后会刷新最新事件位置，避免重连时从旧锚点续接", async () => {
-    const { 创建房间内核 } = await import("../房间内核");
+    const { 创建房间内核 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -117,7 +115,7 @@ describe("房间内核", () => {
   });
 
   it("恢复失败但要求保留房间可见时，会进入可重试失败且保留房间基线", async () => {
-    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -150,7 +148,7 @@ describe("房间内核", () => {
   });
 
   it("恢复硬失效且不再保留房间时，会退出房间并回到空闲首页", async () => {
-    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -185,7 +183,7 @@ describe("房间内核", () => {
   });
 
   it("恢复临时失败但没有可显示房间时，仍保留可重试失败语义", async () => {
-    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 
@@ -211,7 +209,7 @@ describe("房间内核", () => {
   });
 
   it("软离房后会清空当前房间，但保留当前会话身份", async () => {
-    const { 创建房间内核, 派生房间壳外观 } = await import("../房间内核");
+    const { 创建房间内核, 派生房间壳外观 } = await import("../房间/运行时");
 
     const 房间内核 = 创建房间内核();
 

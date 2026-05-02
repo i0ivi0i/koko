@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { 创建乐观房间消息, 推进房间时间线 } from "../房间时间线";
-import type { 消息事件 } from "../契约";
+import { 创建乐观房间消息, 推进房间时间线 } from "../时间线/领域";
+import type { 消息事件 } from "../聊天共享/契约";
 
 const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" | "event_position">): 消息事件 => ({
   type: "message_created",
@@ -20,13 +21,11 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
 
 describe("房间时间线", () => {
-  it("根文件退成时间线 owner 门面，运行时内部直连时间线 owner", () => {
-    const facadeSource = 读取前端源码("房间时间线.ts");
+  it("时间线领域 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/领域.ts");
     const runtimeSource = 读取前端源码("时间线/运行时.ts");
 
-    expect(facadeSource).toContain('export * from "./时间线/领域.js"');
-    expect(facadeSource).not.toContain("function 合并房间时间线消息(");
+    expect(existsSync(fileURLToPath(new URL("../房间时间线.ts", import.meta.url)))).toBe(false);
     expect(ownerSource).toContain("export function 推进房间时间线(");
     expect(ownerSource).toContain("export function 创建乐观房间消息(");
     expect(runtimeSource).toContain('from "./领域.js"');

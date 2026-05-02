@@ -3,7 +3,7 @@ import {
   创建后台应用内核,
   type 后台应用内核端口,
 } from "./应用内核.js";
-import type { 后台会话传输端口, 后台查询传输端口 } from "../传输.js";
+import type { 后台会话传输端口, 后台查询传输端口 } from "../平台/传输.js";
 import { 格式化后台房间详情, 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {

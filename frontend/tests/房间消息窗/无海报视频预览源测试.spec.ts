@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../../媒体/媒体查看器";
-import type { 房间消息窗 } from "../../房间消息窗";
+import type { 房间消息窗 } from "../../房间消息窗/壳";
 import { 创建VideoJs播放器壳 } from "../../媒体/videojs播放器壳.js";
 import {
   创建媒体消息窗,

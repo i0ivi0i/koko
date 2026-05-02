@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -8,12 +8,10 @@ import {
   读取阅读推进编排工厂,
 } from "./common/聊天测试支架";
 describe("阅读推进编排", () => {
-  it("根文件退成房间壳层门面，真实实现收进房间 owner", () => {
-    const facadeSource = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+  it("阅读推进 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
 
-    expect(facadeSource).toContain('export * from "./房间/壳层/阅读推进.js"');
-    expect(facadeSource).not.toContain("const 阅读推进节流毫秒 =");
+    expect(existsSync(resolve(process.cwd(), "阅读推进编排.ts"))).toBe(false);
     expect(ownerSource).toContain("export function 创建阅读推进编排(");
     expect(ownerSource).not.toContain('type: "VIEWPORT_OBSERVED"');
     expect(ownerSource).not.toContain('type: "USER_JUMPED_TO_LATEST"');

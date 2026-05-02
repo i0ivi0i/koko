@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../../媒体/媒体会话";
-import type { 房间消息窗 } from "../../房间消息窗";
+import type { 房间消息窗 } from "../../房间消息窗/壳";
 import {
   创建单视频消息项,
   创建媒体消息窗,
@@ -18,13 +18,11 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
-  it("根文件退成消息窗壳层门面，聊天壳内部直连房间消息窗 owner", () => {
-    const facadeSource = 读取前端源码("房间消息窗.ts");
+  it("房间消息窗 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("房间消息窗/壳.ts");
     const shellSource = 读取前端源码("聊天壳.ts");
 
-    expect(facadeSource).toContain('export * from "./房间消息窗/壳.js"');
-    expect(facadeSource).not.toContain("export class 房间消息窗 extends LitElement");
+    expect(existsSync(resolve(process.cwd(), "房间消息窗.ts"))).toBe(false);
     expect(ownerSource).toContain("export class 房间消息窗 extends LitElement");
     expect(shellSource).toContain('import "./房间消息窗/壳.js";');
     expect(shellSource).not.toContain('import "./房间消息窗.js";');

@@ -8,5 +8,5 @@ void 平台.启动();
 
 // 首页默认只加载聊天壳；后台壳按需懒加载，减少首屏无关脚本体积。
 if (document.querySelector("koko-admin-shell")) {
-  void import("./后台壳.js");
+  void import("./后台/壳.js");
 }
