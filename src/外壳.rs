@@ -40,7 +40,7 @@ use crate::{adapter::Pg仓储, contract, media::distribution::application as 协
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
 #[path = "媒体/上传/外壳/tus回调.rs"]
 mod tus_hook外壳;
-#[path = "后台外壳.rs"]
+#[path = "后台/外壳.rs"]
 mod 后台外壳;
 #[path = "媒体/上传/外壳/媒体上传.rs"]
 mod 媒体上传外壳;
@@ -48,9 +48,9 @@ mod 媒体上传外壳;
 mod 媒体内容解析;
 #[path = "媒体/资产/外壳.rs"]
 mod 媒体资产外壳;
-#[path = "实时外壳.rs"]
+#[path = "实时/外壳.rs"]
 mod 实时外壳;
-#[path = "房间外壳.rs"]
+#[path = "房间/外壳.rs"]
 mod 房间外壳;
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
@@ -1356,7 +1356,7 @@ async fn load_frontend_index() -> impl IntoResponse {
 
 /// 注册单节点 realtime 命名空间。
 /// 约束：连接级认证在 connect middleware 完成，消息 handler 不再相信 payload 身份。
-/// 这里故意只保留 wiring；控制面 payload 翻译和热路径失败分级都继续沉在 `实时外壳.rs`。
+/// 这里故意只保留 wiring；控制面 payload 翻译和热路径失败分级都继续沉在 `src/实时/外壳.rs`。
 fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
     let connect_state = state.clone();
     io.ns(

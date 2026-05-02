@@ -838,7 +838,8 @@ fn 契约门面必须开始转发到业务模块而不是继续堆大一统类�
 
 #[test]
 fn 房间外壳必须改走房间业务门面而不是继续直连统一用例细节() {
-    let source = std::fs::read_to_string("src/房间外壳.rs").expect("应能读取 src/房间外壳.rs");
+    let source =
+        std::fs::read_to_string("src/房间/外壳.rs").expect("应能读取 src/房间/外壳.rs");
     // 房间外壳是第一波最容易继续偷连统一用例的入口之一。
     // 这里先要求它开始显式依赖 room 门面，避免后面“模块建好了，外壳还在走旧总控”。
     assert!(

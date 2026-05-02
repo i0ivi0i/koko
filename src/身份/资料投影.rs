@@ -3,7 +3,9 @@ use serde::Deserialize;
 use std::{collections::HashSet, sync::OnceLock};
 use uuid::Uuid;
 
-const 花名词库_JSON: &str = include_str!("../assets/anonymous_alias_themes.json");
+// 资料投影 owner 已搬进 `src/身份/`，静态词库仍保持仓库统一资产位置。
+// 这里显式改成新的相对路径，避免“文件搬了但词库入口还指向旧位置”。
+const 花名词库_JSON: &str = include_str!("../../assets/anonymous_alias_themes.json");
 const 组合花名权重: u8 = 85;
 const 最小花名空间: usize = 20_000;
 const 最小组合主题数: usize = 23;
@@ -21,7 +23,7 @@ pub(crate) struct 当前资料投影 {
 }
 
 /// 外置 JSON 是花名业务数据真相；Rust 结构只描述加载后的最小形状。
-/// 这样扩花名时改业务数据，不把 `src/用户身份.rs` 继续写成段子仓。
+/// 这样扩花名时改业务数据，不把这份身份资料投影文件继续写成段子仓。
 #[derive(Debug, Deserialize)]
 struct 花名词库文件 {
     version: u32,

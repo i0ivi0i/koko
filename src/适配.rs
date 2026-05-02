@@ -11,9 +11,9 @@ use crate::{
 
 #[path = "媒体/适配.rs"]
 mod 媒体附件适配;
-#[path = "房间阅读适配.rs"]
+#[path = "房间/适配.rs"]
 mod 房间阅读适配;
-#[path = "消息事件适配.rs"]
+#[path = "消息/适配.rs"]
 mod 消息事件适配;
 
 /// PostgreSQL 适配层只做持久化翻译与事务提交，不承载业务规则。

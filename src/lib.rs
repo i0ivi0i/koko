@@ -33,5 +33,5 @@ pub mod recovery;
 pub mod room;
 #[path = "用例.rs"]
 pub mod usecase;
-#[path = "用户身份.rs"]
+#[path = "身份/资料投影.rs"]
 pub(crate) mod user_identity;

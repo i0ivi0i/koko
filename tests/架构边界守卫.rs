@@ -47,15 +47,20 @@ fn crate_总索引必须显式挂载_recovery_模块() {
 }
 
 #[test]
-fn 旧实时外壳必须退成显式门面并委托新_owner() {
-    let content = 读取("src/实时外壳.rs");
+fn 实时外壳根文件必须删除并直连实时_owner() {
+    let shell = 读取("src/外壳.rs");
+    let owner = 读取("src/实时/外壳.rs");
     assert!(
-        Path::new("src/实时/外壳.rs").exists(),
-        "src/实时/外壳.rs 缺失，说明 realtime 新外壳 owner 还没落位"
+        !Path::new("src/实时外壳.rs").exists(),
+        "src/实时外壳.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        content.contains("crate::realtime::shell"),
-        "旧 src/实时外壳.rs 还没退成门面，realtime 热路径 owner 仍卡在旧总文件里"
+        shell.contains("#[path = \"实时/外壳.rs\"]"),
+        "src/外壳.rs 应直接把 realtime 外壳路径指到 src/实时/外壳.rs"
+    );
+    assert!(
+        owner.contains("crate::realtime::application"),
+        "src/实时/外壳.rs 必须继续显式依赖 realtime 业务模块"
     );
 }
 
@@ -123,12 +128,6 @@ fn 后端根目录只允许合法入口_迁移门面或已登记散落_owner() {
         "用例.rs",
         "适配.rs",
         "外壳.rs",
-        "实时外壳.rs",
-        "房间外壳.rs",
-        "房间阅读适配.rs",
-        "消息事件适配.rs",
-        "用户身份.rs",
-        "后台外壳.rs",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -147,7 +146,6 @@ fn 后端迁移门面只能变薄不能变厚() {
         ("src/用例.rs", 1445usize),
         ("src/适配.rs", 861usize),
         ("src/外壳.rs", 1676usize),
-        ("src/实时外壳.rs", 7usize),
     ];
 
     for (path, budget) in budgets {
@@ -157,6 +155,97 @@ fn 后端迁移门面只能变薄不能变厚() {
             "{path} 当前 {lines} 行，超过迁移门面预算 {budget}；迁移门面只允许变薄，不允许继续长胖"
         );
     }
+}
+
+#[test]
+fn 房间外壳必须收进房间子域() {
+    let shell = 读取("src/外壳.rs");
+    let owner = 读取("src/房间/外壳.rs");
+    assert!(
+        !Path::new("src/房间外壳.rs").exists(),
+        "src/房间外壳.rs 应该已经删除，不能继续保留根目录旧入口"
+    );
+    assert!(
+        shell.contains("#[path = \"房间/外壳.rs\"]"),
+        "src/外壳.rs 应直接把房间外壳路径指到 src/房间/外壳.rs"
+    );
+    assert!(
+        owner.contains("crate::room::application"),
+        "src/房间/外壳.rs 必须继续显式依赖 room 业务模块"
+    );
+}
+
+#[test]
+fn 房间阅读适配必须收进房间子域() {
+    let adapter_root = 读取("src/适配.rs");
+    let owner = 读取("src/房间/适配.rs");
+    assert!(
+        !Path::new("src/房间阅读适配.rs").exists(),
+        "src/房间阅读适配.rs 应该已经删除，不能继续保留根目录旧入口"
+    );
+    assert!(
+        adapter_root.contains("#[path = \"房间/适配.rs\"]"),
+        "src/适配.rs 应直接把房间阅读适配路径指到 src/房间/适配.rs"
+    );
+    assert!(
+        owner.contains("async fn 按短码进房或建房_异步(")
+            && owner.contains("super::消息事件适配::查询消息页"),
+        "src/房间/适配.rs 必须继续承载房间阅读与恢复快照适配 owner"
+    );
+}
+
+#[test]
+fn 消息事件适配必须收进消息子域() {
+    let adapter_root = 读取("src/适配.rs");
+    let owner = 读取("src/消息/适配.rs");
+    assert!(
+        !Path::new("src/消息事件适配.rs").exists(),
+        "src/消息事件适配.rs 应该已经删除，不能继续保留根目录旧入口"
+    );
+    assert!(
+        adapter_root.contains("#[path = \"消息/适配.rs\"]"),
+        "src/适配.rs 应直接把消息事件适配路径指到 src/消息/适配.rs"
+    );
+    assert!(
+        owner.contains("fn 行转消息事件(") && owner.contains("async fn 查询消息页("),
+        "src/消息/适配.rs 必须继续承载消息事件投影与分页装配 owner"
+    );
+}
+
+#[test]
+fn 用户身份资料投影必须收进身份子域() {
+    let crate_index = 读取("src/lib.rs");
+    let owner = 读取("src/身份/资料投影.rs");
+    assert!(
+        !Path::new("src/用户身份.rs").exists(),
+        "src/用户身份.rs 应该已经删除，不能继续保留根目录旧入口"
+    );
+    assert!(
+        crate_index.contains("#[path = \"身份/资料投影.rs\"]"),
+        "src/lib.rs 应直接把 user_identity 路径指到 src/身份/资料投影.rs"
+    );
+    assert!(
+        owner.contains("fn 生成内部身份(") && owner.contains("fn 随机分配资料投影("),
+        "src/身份/资料投影.rs 必须继续承载身份资料投影 owner"
+    );
+}
+
+#[test]
+fn 后台外壳必须收进后台子域() {
+    let shell = 读取("src/外壳.rs");
+    let owner = 读取("src/后台/外壳.rs");
+    assert!(
+        !Path::new("src/后台外壳.rs").exists(),
+        "src/后台外壳.rs 应该已经删除，不能继续保留根目录旧入口"
+    );
+    assert!(
+        shell.contains("#[path = \"后台/外壳.rs\"]"),
+        "src/外壳.rs 应直接把后台外壳路径指到 src/后台/外壳.rs"
+    );
+    assert!(
+        owner.contains("async fn admin_login(") && owner.contains("async fn admin_overview("),
+        "src/后台/外壳.rs 必须继续承载后台冷路径外壳 owner"
+    );
 }
 
 #[test]
