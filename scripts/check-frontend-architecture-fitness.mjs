@@ -278,6 +278,21 @@ const 禁止新增前端文件规则 = [
   },
 ];
 
+const 禁止生产兜底命名片段 = [
+  {
+    pattern: /(^|\/)(helper|helpers|utils|misc)(\.|\/)/i,
+    detail: "生产代码文件名必须表达真实 owner，禁止把业务逻辑丢进 helper/utils/misc 兜底桶",
+  },
+  {
+    pattern: /(^|\/)[^/]*(facade|compat|legacy|fallback|wrapper|shim|temp|old)[^/]*(\.|\/)/i,
+    detail: "生产代码不得用 facade/compat/legacy/fallback/wrapper/shim/temp/old 命名留下过渡层",
+  },
+  {
+    pattern: /(^|\/)[^/]*(门面|兼容|兜底|临时|旧|包装)[^/]*(\.|\/)/,
+    detail: "生产代码不得用门面/兼容/兜底/临时/旧/包装命名留下历史胶水",
+  },
+];
+
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
   { path: "frontend/总装/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
@@ -746,6 +761,26 @@ const 检查禁用前端文件名 = (files) => {
         label: rule.label,
         detail: rule.detail ?? "命中禁用前端文件命名规则",
       });
+    }
+  }
+  violations.push(...检查生产文件兜底命名(files.map(转成仓库相对路径)));
+  return violations;
+};
+
+export const 检查生产文件兜底命名 = (relativePaths) => {
+  const violations = [];
+  for (const relativePath of relativePaths) {
+    for (const rule of 禁止生产兜底命名片段) {
+      rule.pattern.lastIndex = 0;
+      if (!rule.pattern.test(relativePath)) {
+        continue;
+      }
+      violations.push({
+        file: relativePath,
+        label: "fallback bucket filename",
+        detail: rule.detail,
+      });
+      break;
     }
   }
   return violations;

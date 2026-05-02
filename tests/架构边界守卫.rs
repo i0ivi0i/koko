@@ -23,6 +23,27 @@ fn 枚举后端根_rs文件() -> BTreeSet<String> {
         .collect()
 }
 
+fn 枚举后端生产_rs文件() -> BTreeSet<String> {
+    fn walk(dir: &Path, output: &mut BTreeSet<String>) {
+        for entry in fs::read_dir(dir).expect("应能读取后端源码目录") {
+            let entry = entry.expect("应能读取后端源码项");
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, output);
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+            output.insert(path.to_string_lossy().replace('\\', "/"));
+        }
+    }
+
+    let mut files = BTreeSet::new();
+    walk(Path::new("src"), &mut files);
+    files
+}
+
 #[test]
 fn 后端恢复_owner_文件必须显式存在() {
     for path in ["src/恢复/mod.rs", "src/恢复/应用.rs"] {
@@ -113,6 +134,67 @@ fn 根用例文件必须删除且应用入口不得回灌外层实现() {
             !content.contains(forbidden),
             "src/应用/mod.rs 不得继续用默认空实现掩盖缺能力: {forbidden}"
         );
+    }
+}
+
+#[test]
+fn 应用端口不得提供默认空实现() {
+    for path in [
+        "src/应用/mod.rs",
+        "src/身份/应用.rs",
+        "src/房间/应用.rs",
+        "src/消息/应用.rs",
+        "src/媒体/应用.rs",
+        "src/媒体/上传/应用.rs",
+        "src/媒体/协作分发/应用.rs",
+        "src/恢复/应用.rs",
+        "src/实时/应用.rs",
+    ] {
+        let content = 读取(path);
+        for forbidden in [
+            "Ok(None)",
+            "Ok(vec![])",
+            "Ok(Vec::new())",
+            "Ok(Default::default())",
+            "Err(contract::错误码::系统错误)",
+            ".map_err(|_| contract::错误码::系统错误)",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{path} 不得用默认空结果或系统错误兜底伪装业务能力: {forbidden}"
+            );
+        }
+    }
+}
+
+#[test]
+fn 适配器不得横向借另一个适配器拼业务结果() {
+    for (path, forbidden) in [
+        ("src/房间/适配.rs", "消息事件适配::"),
+        ("src/媒体/上传/外壳/媒体上传.rs", "crate::外壳::"),
+    ] {
+        let content = 读取(path);
+        assert!(
+            !content.contains(forbidden),
+            "{path} 不得横向调用另一个适配器拼业务结果；业务裁决必须先回到 application/domain owner: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 后端生产文件不得使用兜底桶命名() {
+    let forbidden_fragments = [
+        "utils", "helper", "helpers", "misc", "facade", "compat", "legacy", "fallback", "wrapper",
+        "shim", "temp", "old", "门面", "兼容", "兜底", "临时", "旧", "包装",
+    ];
+    for path in 枚举后端生产_rs文件() {
+        let normalized = path.to_lowercase();
+        for forbidden in forbidden_fragments {
+            assert!(
+                !normalized.contains(forbidden),
+                "{path} 命中兜底桶/兼容命名 {forbidden}；生产代码文件名必须表达真实 owner，而不是留下垃圾桶或兼容层"
+            );
+        }
     }
 }
 

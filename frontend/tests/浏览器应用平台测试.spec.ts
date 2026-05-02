@@ -551,6 +551,35 @@ const stillKeep = true;
     ]);
   });
 
+  it("架构适应度门禁会拦住生产文件使用兜底桶命名", async () => {
+    const modulePath = fileURLToPath(
+      new URL("../../scripts/check-frontend-architecture-fitness.mjs", import.meta.url)
+    );
+    const script = await import(modulePath);
+
+    expect(
+      script.检查生产文件兜底命名([
+        "frontend/媒体/helper.ts",
+        "frontend/房间消息窗/wrapper.ts",
+        "frontend/平台/兼容入口.ts",
+      ])
+    ).toEqual([
+      expect.objectContaining({
+        file: "frontend/媒体/helper.ts",
+        label: "fallback bucket filename",
+      }),
+      expect.objectContaining({
+        file: "frontend/房间消息窗/wrapper.ts",
+        label: "fallback bucket filename",
+      }),
+      expect.objectContaining({
+        file: "frontend/平台/兼容入口.ts",
+        label: "fallback bucket filename",
+      }),
+    ]);
+    expect(script.检查生产文件兜底命名(["frontend/媒体/协作分发/tracker代理.ts"])).toEqual([]);
+  });
+
   it("宪法守门会拦住协作分发全局 singleton 和新增浏览器全局旁路", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
 
