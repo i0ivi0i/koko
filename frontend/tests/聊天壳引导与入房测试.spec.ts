@@ -21,7 +21,7 @@ import {
   派生首页会话展示项,
 } from "../房间消息窗/视图";
 import type { 匿名身份引导结果 } from "../聊天共享/契约";
-import { 聊天壳 } from "../聊天壳";
+import { 聊天壳 } from "../总装/聊天壳";
 describe("聊天壳集成 / 引导与入房", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -603,4 +603,3 @@ describe("聊天壳集成 / 引导与入房", () => {
   });
 
 });
-

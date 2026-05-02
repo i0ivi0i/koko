@@ -1,20 +1,20 @@
 import { css, html, LitElement } from "lit";
-import type { 应用运行时端口 } from "./平台/应用运行时.js";
+import type { 应用运行时端口 } from "../平台/应用运行时.js";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
-import "./房间消息窗/壳.js";
-import type { 聊天运行时预算状态 } from "./总装/聊天状态.js";
+import "../房间消息窗/壳.js";
+import type { 聊天运行时预算状态 } from "./聊天状态.js";
 import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
-} from "./操作台/index.js";
+} from "../操作台/index.js";
 import {
   type 媒体会话信号,
   type 媒体播放位置,
   type 媒体查看器打开请求,
-} from "./媒体/index.js";
-import type { 前端传输端口 } from "./平台/传输.js";
-import { 默认文本布局器 } from "./房间消息窗/文本布局.js";
-import { 创建聊天壳应用装配 } from "./总装/应用装配.js";
+} from "../媒体/index.js";
+import type { 前端传输端口 } from "../平台/传输.js";
+import { 默认文本布局器 } from "../房间消息窗/文本布局.js";
+import { 创建聊天壳应用装配 } from "./应用装配.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -26,7 +26,7 @@ import {
   派生消息窗口提示文案,
   派生跳到最新入口文案,
   type 消息文本布局环境,
-} from "./房间消息窗/视图.js";
+} from "../房间消息窗/视图.js";
 
 function 派生媒体草稿失败文案(errorCode: string): string {
   switch (errorCode) {
@@ -1742,3 +1742,4 @@ export class 聊天壳 extends LitElement {
 }
 
 customElements.define("koko-chat-shell", 聊天壳);
+

@@ -64,7 +64,7 @@ describe("房间滚动器", () => {
   it("时间线滚动 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/滚动器.ts");
     const timelineAppSource = 读取前端源码("时间线/应用.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const assembleSource = 读取前端源码("总装/应用装配.ts");
     const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
 
@@ -73,7 +73,7 @@ describe("房间滚动器", () => {
     expect(ownerSource).toContain("export interface 房间滚动器依赖");
     expect(timelineAppSource).toContain('from "./滚动器.js"');
     expect(timelineAppSource).not.toContain('from "../房间滚动器.js"');
-    expect(kernelSource).toContain('from "./时间线/滚动器.js"');
+    expect(kernelSource).toContain('from "../时间线/滚动器.js"');
     expect(kernelSource).not.toContain('from "./房间滚动器.js"');
     expect(assembleSource).toContain('from "../时间线/滚动器.js"');
     expect(assembleSource).not.toContain('from "../房间滚动器.js"');

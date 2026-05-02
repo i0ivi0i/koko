@@ -3,52 +3,52 @@ import {
   派生房间壳外观,
   type 房间内核事件,
   type 房间壳外观,
-} from "./房间/运行时.js";
+} from "../房间/运行时.js";
 import {
   type 房间恢复编排依赖,
   type 房间恢复编排端口,
-} from "./恢复/壳层/房间恢复编排.js";
+} from "../恢复/壳层/房间恢复编排.js";
 import {
   type 房间实时编排依赖,
   type 房间实时编排端口,
-} from "./实时/应用.js";
+} from "../实时/应用.js";
 import {
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
-} from "./房间/壳层/阅读推进.js";
+} from "../房间/壳层/阅读推进.js";
 import {
   创建聊天内核平台桥接,
   创建内核恢复编排端口,
   创建内核实时编排端口,
   创建内核阅读推进编排端口,
   type 聊天内核平台端口,
-} from "./总装/聊天应用编排桥接.js";
+} from "./聊天应用编排桥接.js";
 import {
   type 房间滚动观测,
   type 房间滚动器依赖,
   type 房间滚动器宿主,
-} from "./时间线/滚动器.js";
+} from "../时间线/滚动器.js";
 import {
   处理历史房间进房请求,
   处理房间号输入变更,
   处理进房请求,
-} from "./房间/应用.js";
-import { 创建房间滚动应用 } from "./时间线/应用.js";
-import { 处理发送消息请求, 处理消息输入变更 } from "./输入框/应用.js";
+} from "../房间/应用.js";
+import { 创建房间滚动应用 } from "../时间线/应用.js";
+import { 处理发送消息请求, 处理消息输入变更 } from "../输入框/应用.js";
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
   type 缓存更新快照,
   type 生命周期快照,
-} from "./平台/index.js";
-import type { 消息事件 } from "./聊天共享/契约.js";
+} from "../平台/index.js";
+import type { 消息事件 } from "../聊天共享/契约.js";
 import {
   type 媒体传输端口,
   type 聊天实时连接端口,
   type 聊天房间传输端口,
   type 前端传输端口,
-} from "./平台/传输.js";
-import type { 前端存储端口 } from "./平台/存储.js";
+} from "../平台/传输.js";
+import type { 前端存储端口 } from "../平台/存储.js";
 import {
   初始聊天运行时状态,
   初始聊天运行时预算状态,
@@ -65,22 +65,22 @@ import {
   type 聊天状态,
   type 聊天视口状态,
   type 聊天输入状态,
-} from "./总装/聊天状态.js";
-import { 创建应用生命周期Actor } from "./平台/应用生命周期.js";
+} from "./聊天状态.js";
+import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
   创建房间视口Actor,
   投影视口快照到聊天视口状态,
-} from "./时间线/视口运行时.js";
+} from "../时间线/视口运行时.js";
 import {
   创建房间时间线Actor,
   投影时间线快照到聊天时间线状态,
   type 房间时间线事件,
-} from "./时间线/运行时.js";
+} from "../时间线/运行时.js";
 import {
   创建实时会话Actor,
   type 实时会话事件,
   type 实时会话快照,
-} from "./实时/会话运行时.js";
+} from "../实时/会话运行时.js";
 import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
@@ -88,12 +88,12 @@ import {
   type 媒体会话信号,
   type 媒体播放位置,
   type 媒体查看器打开请求,
-} from "./媒体/index.js";
+} from "../媒体/index.js";
 import {
   创建媒体播放会话应用,
   type 媒体播放会话快照 as 聊天媒体快照,
   type 媒体播放会话应用端口 as 聊天媒体编排端口,
-} from "./媒体/播放会话/应用.js";
+} from "../媒体/播放会话/应用.js";
 
 type 程序滚动来源 = "media_viewer_open";
 
@@ -1368,3 +1368,4 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 export function 创建聊天应用内核(deps: 聊天应用内核依赖): 聊天应用内核端口 {
   return new 聊天应用内核(deps);
 }
+

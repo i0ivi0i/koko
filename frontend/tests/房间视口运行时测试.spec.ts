@@ -9,12 +9,12 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("房间视口运行时", () => {
   it("时间线视口 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("时间线/视口运行时.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
 
     expect(existsSync(resolve(process.cwd(), "房间视口运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间视口机 = createMachine(");
     expect(ownerSource).toContain("export function 创建房间视口Actor()");
-    expect(kernelSource).toContain('from "./时间线/视口运行时.js"');
+    expect(kernelSource).toContain('from "../时间线/视口运行时.js"');
     expect(kernelSource).not.toContain('from "./房间视口运行时.js"');
   });
 

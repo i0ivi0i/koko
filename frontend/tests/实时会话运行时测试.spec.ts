@@ -10,14 +10,14 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("实时会话运行时", () => {
   it("实时会话 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("实时/会话运行时.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
     const controlSource = 读取前端源码("聊天实时/壳层/实时控制面协作.ts");
 
     expect(existsSync(resolve(process.cwd(), "实时会话运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 实时会话机 = createMachine(");
     expect(ownerSource).toContain("export function 创建实时会话Actor()");
-    expect(kernelSource).toContain('from "./实时/会话运行时.js"');
+    expect(kernelSource).toContain('from "../实时/会话运行时.js"');
     expect(kernelSource).not.toContain('from "./实时会话运行时.js"');
     expect(realtimeSource).toContain('from "./会话运行时.js"');
     expect(realtimeSource).not.toContain('from "../实时会话运行时.js"');

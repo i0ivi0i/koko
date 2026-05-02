@@ -8,8 +8,8 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("前端聊天状态 owner", () => {
   it("总装聊天状态已经成为唯一 owner，旧根门面已删除", () => {
     const ownerSource = 读取前端源码("总装/聊天状态.ts");
-    const shellSource = 读取前端源码("聊天壳.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const viewportSource = 读取前端源码("时间线/视口运行时.ts");
     const scrollSource = 读取前端源码("时间线/滚动器.ts");
     const presenterSource = 读取前端源码("房间消息窗/视图.ts");
@@ -21,9 +21,9 @@ describe("前端聊天状态 owner", () => {
     expect(ownerSource).toContain("export const 初始聊天状态");
     expect(ownerSource).toContain("export interface 聊天运行时预算状态");
 
-    expect(shellSource).toContain('from "./总装/聊天状态.js"');
+    expect(shellSource).toContain('from "./聊天状态.js"');
     expect(shellSource).not.toContain('from "./状态.js"');
-    expect(kernelSource).toContain('from "./总装/聊天状态.js"');
+    expect(kernelSource).toContain('from "./聊天状态.js"');
     expect(kernelSource).not.toContain('from "./状态.js"');
     expect(viewportSource).toContain('from "../总装/聊天状态.js"');
     expect(viewportSource).not.toContain('from "../状态.js"');

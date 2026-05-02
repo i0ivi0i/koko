@@ -66,7 +66,7 @@
 - 先收 owner，再做目录落位；禁止把“目录更像 DDD”误当成“业务 owner 已经收口”。
 - 新测试优先锁住三件事：旧总文件是否变薄、owner 是否不再回流、边界是否仍只在 canonical owner 决定。
 - Rust 侧新增架构测试时，优先用边界守卫锁 `domain / application` 不得倒灌 `axum / sqlx / socketioxide` 等外层实现。
-- 前端侧新增架构测试时，优先锁 `聊天应用内核.ts`、`聊天壳.ts` 与 `媒体/播放会话/应用.ts`；前两者不得重新长回根目录总控，后者不得把媒体 owner 再回流成根目录第二核心。
+- 前端侧新增架构测试时，优先锁 `frontend/总装/聊天应用内核.ts`、`frontend/总装/聊天壳.ts` 与 `媒体/播放会话/应用.ts`；前两者已经从根目录删除，不得以任何兼容理由重新长回 `frontend/` 根目录，后者不得把媒体 owner 再回流成根目录第二核心。
 - `tests/架构边界守卫.rs` 现在还负责兜住“完成矩阵是否提前宣称完成”和“根目录业务文件是否逐个登记到矩阵”。
 - 前端对应的根目录迁移门禁入口是 `scripts/check-frontend-architecture-fitness.mjs`；测试如果因为 owner 迁移而失败，优先把 import 和源码断言改向新 owner，而不是强行让旧根文件继续承载真实实现。
 - `frontend/` 的业务根门面默认删除；只要生产 import、测试 import 和门禁断言都已经改向真实 owner，就必须删掉根文件，不能再拿“兼容出口”当长期理由。

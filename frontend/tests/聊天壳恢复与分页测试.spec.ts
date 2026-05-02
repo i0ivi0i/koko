@@ -29,7 +29,7 @@ import {
   派生首页会话展示项,
 } from "../房间消息窗/视图";
 import type { 匿名身份引导结果, 房间历史页 } from "../聊天共享/契约";
-import { 聊天壳 } from "../聊天壳";
+import { 聊天壳 } from "../总装/聊天壳";
 describe("聊天壳集成 / 恢复失败与历史分页", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -40,7 +40,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
   });
 
   it("聊天壳恢复入口仍只通过内核 dispatch，不自己触发 bootstrap 或 snapshot 恢复", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天壳.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天壳.ts"), "utf8");
 
     expect(source).toContain('this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" })');
     expect(source).not.toContain("bootstrapAnonymousIdentity(");
@@ -1360,4 +1360,3 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
   });
 
 });
-

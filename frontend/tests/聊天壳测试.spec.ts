@@ -38,7 +38,7 @@ import {
 } from "../房间消息窗/视图";
 import type { 房间消息窗 } from "../房间消息窗/壳";
 import type { 匿名身份引导结果 } from "../聊天共享/契约";
-import { 聊天壳 } from "../聊天壳";
+import { 聊天壳 } from "../总装/聊天壳";
 
 const 查询查看器关闭按钮 = (): HTMLButtonElement | null => {
   const directButton = document.body.querySelector<HTMLButtonElement>(
@@ -204,7 +204,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
   it("媒体编排已经下沉到聊天内核，聊天壳不再自己持有媒体 runtime 真相", async () => {
-    const source = 读取前端源码("聊天壳.ts");
+    const source = 读取前端源码("总装/聊天壳.ts");
     const el = document.createElement("koko-chat-shell") as 聊天壳;
 
     expect(source).not.toContain("private readonly 媒体定位器");
@@ -223,9 +223,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
   it("聊天壳通过总装门面拿 kernel 和 runtime，不再自己 new 业务入口", () => {
-    const source = 读取前端源码("聊天壳.ts");
+    const source = 读取前端源码("总装/聊天壳.ts");
 
-    expect(source).toContain('from "./总装/应用装配.js"');
+    expect(source).toContain('from "./应用装配.js"');
     expect(source).toContain("创建聊天壳应用装配(");
     expect(source).not.toContain("private readonly kernel = 创建聊天应用内核(");
     expect(source).not.toContain("this._应用运行时 = 创建应用运行时(");

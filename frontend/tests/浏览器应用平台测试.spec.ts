@@ -55,9 +55,9 @@ const 创建假传输运行时 = (input: {
 
 describe("浏览器端应用平台化基线", () => {
   it("聊天壳会把业务入口收进总装门面，自身只保留 view + bridge", () => {
-    const source = 读取前端源码("聊天壳.ts");
+    const source = 读取前端源码("总装/聊天壳.ts");
 
-    expect(source).toContain('from "./总装/应用装配.js"');
+    expect(source).toContain('from "./应用装配.js"');
     expect(source).toContain("private readonly 装配 = 创建聊天壳应用装配(");
     expect(source).toContain("private get kernel()");
     expect(source).toContain("return this.装配.kernel;");
@@ -86,7 +86,7 @@ describe("浏览器端应用平台化基线", () => {
   });
 
   it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const recoverySource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
     const readSource = 读取前端源码("房间/壳层/阅读推进.ts");
@@ -111,7 +111,7 @@ describe("浏览器端应用平台化基线", () => {
   });
 
   it("聊天壳当前已把滚动和媒体信号先交给应用运行时，而不是在模板里直接裁决", () => {
-    const source = 读取前端源码("聊天壳.ts");
+    const source = 读取前端源码("总装/聊天壳.ts");
 
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_SCROLL_INTENT"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_SCROLL_OBSERVED"/);
@@ -131,8 +131,8 @@ describe("浏览器端应用平台化基线", () => {
   });
 
   it("聊天壳渲染路径只读快照，不再在模板里直接摸内核 helper 或转发媒体测试 setter", () => {
-    const shellSource = 读取前端源码("聊天壳.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const swarmSource = 读取前端源码("媒体/媒体协作分发.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
 
@@ -166,7 +166,7 @@ describe("浏览器端应用平台化基线", () => {
   });
 
   it("聊天应用内核不再自己直接订阅平台事件", () => {
-    const source = 读取前端源码("聊天应用内核.ts");
+    const source = 读取前端源码("总装/聊天应用内核.ts");
 
     expect(source).not.toContain("this.platform.订阅事件");
     expect(source).not.toContain("取消平台事件订阅");
@@ -228,7 +228,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/平台/应用生命周期.ts");
     expect(source).toContain("frontend/媒体/资产协作分发运行时.ts");
     expect(source).toContain('label: "platform internal import boundary"');
-    expect(source).toContain("frontend/聊天应用内核.ts");
+    expect(source).toContain("frontend/总装/聊天应用内核.ts");
     expect(source).toContain("frontend/媒体/播放会话/应用.ts");
   });
 
@@ -433,7 +433,7 @@ describe("浏览器端应用平台化基线", () => {
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
-    expect(source).toContain('path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500');
+    expect(source).toContain('path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 1500');
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
   });
@@ -495,18 +495,18 @@ const stillKeep = true;
   });
 
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
-    const chatSource = 读取前端源码("聊天壳.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const chatSource = 读取前端源码("总装/聊天壳.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const adminOwnerSource = 读取前端源码("后台/壳.ts");
     const adminKernelOwnerSource = 读取前端源码("后台/应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
-    expect(kernelSource).toContain('from "./总装/聊天应用编排桥接.js"');
+    expect(kernelSource).toContain('from "./聊天应用编排桥接.js"');
     expect(kernelSource).toContain("const rawPlatform = deps.platform ?? 获取默认浏览器应用平台()");
     expect(kernelSource).toContain("创建聊天内核平台桥接(rawPlatform)");
     expect(kernelSource).toContain("this.平台桥接.聊天房间传输()");
     expect(kernelSource).not.toContain("this.platform.transport.transport()");
-    expect(kernelSource).toContain('from "./平台/index.js"');
+    expect(kernelSource).toContain('from "../平台/index.js"');
 
     expect(adminOwnerSource).toContain('from "./应用内核.js"');
     expect(adminOwnerSource).not.toContain('from "../平台/index.js"');
@@ -553,11 +553,11 @@ const stillKeep = true;
 
   it("应用生命周期 owner 进入平台层，旧根门面已经删除，内核直接依赖平台 owner", () => {
     const lifecycleOwnerSource = 读取前端源码("平台/应用生命周期.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
 
     expect(existsSync(resolve(process.cwd(), "应用生命周期.ts"))).toBe(false);
     expect(lifecycleOwnerSource).toContain("createMachine(");
-    expect(kernelSource).toContain('from "./平台/应用生命周期.js"');
+    expect(kernelSource).toContain('from "../平台/应用生命周期.js"');
     expect(kernelSource).not.toContain('from "./应用生命周期.js"');
   });
 
@@ -573,12 +573,12 @@ const stillKeep = true;
 
   it("聊天应用编排桥接 owner 进入总装层，旧根门面已经删除，聊天内核直接依赖总装 owner", () => {
     const bridgeOwnerSource = 读取前端源码("总装/聊天应用编排桥接.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
 
     expect(existsSync(resolve(process.cwd(), "聊天应用编排桥接.ts"))).toBe(false);
     expect(bridgeOwnerSource).toContain("export interface 聊天内核平台端口");
-    expect(kernelSource).toContain('from "./总装/聊天应用编排桥接.js"');
-    expect(kernelSource).not.toContain('from "./聊天应用编排桥接.js"');
+    expect(kernelSource).toContain('from "./聊天应用编排桥接.js"');
+    expect(kernelSource).not.toContain('from "./总装/聊天应用编排桥接.js"');
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

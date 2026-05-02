@@ -3,18 +3,22 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
 import { createFakeStorage, 假传输 } from "../common/聊天测试支架";
-import { 创建聊天应用内核 } from "../../聊天应用内核";
+import { 创建聊天应用内核 } from "../../总装/聊天应用内核";
 import { 创建内核依赖, 读取媒体编排供测试 } from "../common/聊天应用内核支架";
 
 describe("聊天应用内核 - 架构边界与公开入口", () => {
   it("时间线合流不再在聊天应用内核里直接揉 messages 数组", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
+    expect(existsSync(resolve(process.cwd(), "聊天应用内核.ts"))).toBe(false);
+    expect(existsSync(resolve(process.cwd(), "聊天壳.ts"))).toBe(false);
+    expect(existsSync(resolve(process.cwd(), "总装/聊天应用内核.ts"))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), "总装/聊天壳.ts"))).toBe(true);
     expect(source).not.toContain("推进房间时间线(this.时间线状态.messages");
   });
 
   it("实时编排接线仍只注入端口，不在聊天应用内核里解释控制面失败", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
     expect(source).toContain("创建内核实时编排端口({");
     expect(source).not.toContain("control_result");
@@ -23,7 +27,7 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("聊天应用内核不再直接依赖完整浏览器应用平台全表面，而是只消费窄平台桥接", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
     expect(source).toContain("创建聊天内核平台桥接(");
     expect(source).toContain("private readonly 平台桥接: 聊天内核平台端口;");
@@ -47,12 +51,12 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
     const bridgeSource = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
 
-    expect(source).toContain('from "./总装/聊天应用编排桥接.js"');
-    expect(source).toContain('from "./恢复/壳层/房间恢复编排.js"');
-    expect(source).toContain('from "./房间/壳层/阅读推进.js"');
+    expect(source).toContain('from "./聊天应用编排桥接.js"');
+    expect(source).toContain('from "../恢复/壳层/房间恢复编排.js"');
+    expect(source).toContain('from "../房间/壳层/阅读推进.js"');
     expect(source).toContain("创建内核恢复编排端口({");
     expect(source).toContain("创建内核实时编排端口({");
     expect(source).toContain("创建内核阅读推进编排端口({");
@@ -64,17 +68,17 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("聊天应用内核通过媒体播放会话门面接入媒体 owner，而不是继续直连旧媒体编排入口", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
-    expect(source).toContain('from "./媒体/播放会话/应用.js"');
+    expect(source).toContain('from "../媒体/播放会话/应用.js"');
     expect(source).toContain("创建媒体播放会话应用(");
     expect(source).not.toContain('from "./聊天媒体编排.js"');
   });
 
   it("滚动观察命令不再把 DOM 容器穿过运行时和聊天内核", () => {
-    const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const kernelSource = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
     const runtimeSource = readFileSync(resolve(process.cwd(), "平台/应用运行时.ts"), "utf8");
-    const shellSource = readFileSync(resolve(process.cwd(), "聊天壳.ts"), "utf8");
+    const shellSource = readFileSync(resolve(process.cwd(), "总装/聊天壳.ts"), "utf8");
 
     expect(existsSync(resolve(process.cwd(), "应用运行时.ts"))).toBe(false);
     expect(kernelSource).not.toContain('type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement');
@@ -84,10 +88,10 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("进房与输入框命令不再在聊天应用内核里内联裁剪和草稿清理逻辑", () => {
-    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
 
-    expect(source).toContain('from "./房间/应用.js"');
-    expect(source).toContain('from "./输入框/应用.js"');
+    expect(source).toContain('from "../房间/应用.js"');
+    expect(source).toContain('from "../输入框/应用.js"');
     expect(source).toContain("处理房间号输入变更(");
     expect(source).toContain("处理进房请求(");
     expect(source).toContain("处理历史房间进房请求(");
@@ -113,7 +117,7 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
   });
 
   it("恢复编排撤销阅读节流时会区分补锚 flush 与跟随采样，不再都降成 dispose", () => {
-    const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const kernelSource = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
     const bridgeSource = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
 
     expect(kernelSource).toContain("取消待刷新已读锚点: () => this.阅读推进编排端口.取消待刷新已读锚点()");

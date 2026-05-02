@@ -1,7 +1,7 @@
 import "@uppy/core/css/style.min.css";
 import "photoswipe/style.css";
 import { 获取默认浏览器应用平台 } from "./平台/index.js";
-import "./聊天壳.js";
+import "./总装/聊天壳.js";
 
 const 平台 = 获取默认浏览器应用平台();
 void 平台.启动();

@@ -20,7 +20,7 @@ const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
  * 这里不是重新造架构描述，而是把“谁能拥有长生命周期真相”变成可执行门禁。
  */
 const 前端运行时Owner注册表 = [
-  { path: "frontend/聊天应用内核.ts", symbol: "创建聊天应用内核" },
+  { path: "frontend/总装/聊天应用内核.ts", symbol: "创建聊天应用内核" },
   { path: "frontend/后台/应用内核.ts", symbol: "创建后台应用内核" },
   { path: "frontend/恢复/应用.ts", symbol: "创建恢复应用" },
   { path: "frontend/实时/应用.ts", symbol: "创建实时应用" },
@@ -266,8 +266,8 @@ const 热点文件行数上限 = [
   { path: "frontend/房间消息窗/文本布局.ts", maxEffectiveLines: 240, maxPhysicalLines: 300 },
   { path: "frontend/媒体/运行时.ts", maxEffectiveLines: 700, maxPhysicalLines: 820 },
   { path: "frontend/时间线/滚动器.ts", maxEffectiveLines: 470, maxPhysicalLines: 540 },
-  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1500, maxPhysicalLines: 1500 },
-  { path: "frontend/聊天壳.ts", maxEffectiveLines: 1750, maxPhysicalLines: 1800 },
+  { path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 1500, maxPhysicalLines: 1500 },
+  { path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 1750, maxPhysicalLines: 1800 },
   { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
   { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
@@ -449,9 +449,9 @@ const 平台内层Import违规 = (relativePath, source) => {
     /\bimport\s*\(\s*["']([^"']*平台\/[^"']+)["']\s*\)/g,
   ];
   const 平台传输直连允许文件 = new Set([
-    "frontend/聊天壳.ts",
+    "frontend/总装/聊天壳.ts",
     "frontend/媒体/播放会话/应用.ts",
-    "frontend/聊天应用内核.ts",
+    "frontend/总装/聊天应用内核.ts",
     "frontend/总装/应用装配.ts",
     "frontend/总装/聊天应用编排桥接.ts",
     "frontend/后台/壳.ts",
@@ -462,7 +462,7 @@ const 平台内层Import违规 = (relativePath, source) => {
     "frontend/聊天实时/壳层/实时控制面协作.ts",
   ]);
   const 平台存储直连允许文件 = new Set([
-    "frontend/聊天应用内核.ts",
+    "frontend/总装/聊天应用内核.ts",
     "frontend/总装/聊天应用编排桥接.ts",
     "frontend/总装/聊天状态.ts",
     "frontend/恢复/应用.ts",
@@ -489,14 +489,14 @@ const 平台内层Import违规 = (relativePath, source) => {
         continue;
       }
       if (
-        relativePath === "frontend/聊天壳.ts" &&
+        relativePath === "frontend/总装/聊天壳.ts" &&
         (importPath === "./平台/应用运行时.js" ||
           importPath.endsWith("/平台/应用运行时.js"))
       ) {
         continue;
       }
       if (
-        relativePath === "frontend/聊天应用内核.ts" &&
+        relativePath === "frontend/总装/聊天应用内核.ts" &&
         (importPath === "./平台/应用生命周期.js" ||
           importPath.endsWith("/平台/应用生命周期.js"))
       ) {

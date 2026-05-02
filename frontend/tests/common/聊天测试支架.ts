@@ -1,5 +1,5 @@
 import { expect, vi } from "vitest";
-import "../../聊天壳";
+import "../../总装/聊天壳";
 import { 创建浏览器存储 } from "../../平台/存储";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
@@ -32,7 +32,7 @@ import type {
   媒体附件转发请求,
   媒体附件转发结果,
 } from "../../聊天共享/契约";
-import { 聊天壳 } from "../../聊天壳";
+import { 聊天壳 } from "../../总装/聊天壳";
 import type { Socket } from "socket.io-client";
 
 type 假媒体上传准备结果 = {
@@ -1272,5 +1272,3 @@ export function 创建阅读推进测试场景(input: {
     deps,
   };
 }
-
-

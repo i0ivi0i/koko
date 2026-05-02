@@ -10,7 +10,7 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("房间内核", () => {
   it("房间运行时 owner 直连生效，旧根门面已经删除", () => {
     const ownerSource = 读取前端源码("房间/运行时.ts");
-    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
     const recoverySource = 读取前端源码("恢复/应用.ts");
     const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
@@ -20,7 +20,7 @@ describe("房间内核", () => {
     expect(ownerSource).toContain("const 房间编排机 = createMachine(");
     expect(ownerSource).toContain("export function 创建房间内核()");
     expect(ownerSource).toContain("export function 派生房间壳外观(");
-    expect(kernelSource).toContain('from "./房间/运行时.js"');
+    expect(kernelSource).toContain('from "../房间/运行时.js"');
     expect(kernelSource).not.toContain('from "./房间内核.js"');
     expect(realtimeSource).toContain('from "../房间/运行时.js"');
     expect(realtimeSource).not.toContain('from "../房间内核.js"');
