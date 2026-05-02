@@ -82,18 +82,22 @@ fn 旧房间快照实现必须只留在_recovery_owner() {
 }
 
 #[test]
-fn 根用例文件只能指向业务_owner且不得回灌外层实现() {
-    let content = 读取("src/用例.rs");
+fn 根用例文件必须删除且应用入口不得回灌外层实现() {
+    assert!(
+        !Path::new("src/用例.rs").exists(),
+        "src/用例.rs 必须删除；应用层共享端口与仍未下沉的应用服务只能进 src/应用/mod.rs"
+    );
+    let content = 读取("src/应用/mod.rs");
     assert!(
         content.contains("crate::identity")
             && content.contains("crate::room")
             && content.contains("crate::recovery"),
-        "src/用例.rs 删除前必须显式指向业务 owner，不能把恢复 owner 漏回旧总文件"
+        "src/应用/mod.rs 必须显式指向业务 owner，不能把恢复 owner 漏回旧总文件"
     );
     for forbidden in ["axum", "sqlx", "socketioxide", "SocketRef", "StatusCode", "Router"] {
         assert!(
             !content.contains(forbidden),
-            "src/用例.rs 不应回灌外层实现或协议类型: {forbidden}"
+            "src/应用/mod.rs 不应回灌外层实现或协议类型: {forbidden}"
         );
     }
 }
@@ -131,7 +135,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    let temporary_old_roots = ["用例.rs", "适配.rs", "外壳.rs"]
+    let temporary_old_roots = ["适配.rs", "外壳.rs"]
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
@@ -156,7 +160,6 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
 #[test]
 fn 后端旧根文件删除前只能变薄不能变厚() {
     let budgets = [
-        ("src/用例.rs", 960usize),
         ("src/适配.rs", 790usize),
         ("src/外壳.rs", 1585usize),
     ];
@@ -316,7 +319,7 @@ fn 后台外壳必须收进后台子域() {
 fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = [
-        ("src/用例.rs", 200usize),
+        ("src/应用/mod.rs", 200usize),
         ("src/外壳.rs", 200usize),
         ("src/适配.rs", 120usize),
         ("frontend/总装/聊天应用内核.ts", 200usize),

@@ -1,4 +1,4 @@
-use crate::{shared::contract, room::application as 房间应用, usecase};
+use crate::{shared::contract, room::application as 房间应用, application};
 
 /// 加载房间恢复快照：
 /// 1. 先确认会话有效，禁止拿伪造 session 读取恢复真相。
@@ -9,11 +9,11 @@ use crate::{shared::contract, room::application as 房间应用, usecase};
 /// 是为了把“恢复成立性”从普通房间查询里分离出来，
 /// 避免后面又把体验恢复、本地缓存恢复和房间真相恢复揉成一团。
 pub fn 加载房间快照(
-    仓储: &dyn usecase::仓储端口,
+    仓储: &dyn application::仓储端口,
     房间标识: &str,
     会话标识: &str,
 ) -> Result<contract::快照, contract::错误码> {
-    usecase::校验实时连接会话(仓储, 会话标识)?;
+    application::校验实时连接会话(仓储, 会话标识)?;
     房间应用::校验房间存在(仓储, 房间标识)?;
     房间应用::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
 

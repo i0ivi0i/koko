@@ -71,7 +71,7 @@ fn 校验后台请求(
 
     match room_id {
         Some(room_id) => tracing::warn!(
-            usecase = usecase_name,
+            application = usecase_name,
             adapter = "http",
             outcome = "rejected",
             request_kind = request_kind,
@@ -80,7 +80,7 @@ fn 校验后台请求(
             "{rejected_message}"
         ),
         None => tracing::warn!(
-            usecase = usecase_name,
+            application = usecase_name,
             adapter = "http",
             outcome = "rejected",
             request_kind = request_kind,
@@ -100,7 +100,7 @@ pub(super) async fn admin_login(
     Json(body): Json<AdminLoginBody>,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "管理员登录",
+        application = "管理员登录",
         adapter = "http",
         outcome = "accepted",
         request_kind = "后台登录",
@@ -108,7 +108,7 @@ pub(super) async fn admin_login(
     );
     if body.username != "admin" || body.password != state.admin_password {
         tracing::warn!(
-            usecase = "管理员登录",
+            application = "管理员登录",
             adapter = "http",
             outcome = "rejected",
             request_kind = "后台登录",
@@ -122,7 +122,7 @@ pub(super) async fn admin_login(
         );
     }
     tracing::info!(
-        usecase = "管理员登录",
+        application = "管理员登录",
         adapter = "http",
         outcome = "succeeded",
         request_kind = "后台登录",
@@ -143,7 +143,7 @@ pub(super) async fn admin_overview(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "后台概览查询",
+        application = "后台概览查询",
         adapter = "http",
         outcome = "accepted",
         request_kind = "后台总览查询",
@@ -168,7 +168,7 @@ pub(super) async fn admin_overview(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "后台概览查询",
+                application = "后台概览查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台总览查询",
@@ -188,7 +188,7 @@ pub(super) async fn admin_overview(
             房间总数, 消息总数
         }) => {
             tracing::info!(
-                usecase = "后台概览查询",
+                application = "后台概览查询",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "后台总览查询",
@@ -204,7 +204,7 @@ pub(super) async fn admin_overview(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "后台概览查询",
+                application = "后台概览查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台总览查询",
@@ -219,7 +219,7 @@ pub(super) async fn admin_overview(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "后台概览查询",
+                application = "后台概览查询",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "后台总览查询",
@@ -237,7 +237,7 @@ pub(super) async fn admin_rooms(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "后台房间列表查询",
+        application = "后台房间列表查询",
         adapter = "http",
         outcome = "accepted",
         request_kind = "后台房间列表查询",
@@ -262,7 +262,7 @@ pub(super) async fn admin_rooms(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "后台房间列表查询",
+                application = "后台房间列表查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台房间列表查询",
@@ -281,7 +281,7 @@ pub(super) async fn admin_rooms(
         Ok(contract::快照::后台房间列表 { 房间标识列表 }) => {
             let room_count = 房间标识列表.len();
             tracing::info!(
-                usecase = "后台房间列表查询",
+                application = "后台房间列表查询",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "后台房间列表查询",
@@ -296,7 +296,7 @@ pub(super) async fn admin_rooms(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "后台房间列表查询",
+                application = "后台房间列表查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台房间列表查询",
@@ -311,7 +311,7 @@ pub(super) async fn admin_rooms(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "后台房间列表查询",
+                application = "后台房间列表查询",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "后台房间列表查询",
@@ -330,7 +330,7 @@ pub(super) async fn admin_room_detail(
     Path(room_id): Path<String>,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "后台房间详情查询",
+        application = "后台房间详情查询",
         adapter = "http",
         outcome = "accepted",
         request_kind = "后台房间详情查询",
@@ -358,7 +358,7 @@ pub(super) async fn admin_room_detail(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "后台房间详情查询",
+                application = "后台房间详情查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台房间详情查询",
@@ -381,7 +381,7 @@ pub(super) async fn admin_room_detail(
             消息总数,
         }) => {
             tracing::info!(
-                usecase = "后台房间详情查询",
+                application = "后台房间详情查询",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "后台房间详情查询",
@@ -402,7 +402,7 @@ pub(super) async fn admin_room_detail(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "后台房间详情查询",
+                application = "后台房间详情查询",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "后台房间详情查询",
@@ -418,7 +418,7 @@ pub(super) async fn admin_room_detail(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "后台房间详情查询",
+                application = "后台房间详情查询",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "后台房间详情查询",

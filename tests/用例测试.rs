@@ -24,8 +24,8 @@ fn 结构化日志字段存在且包含outcome() {
 
     let output = 读取缓冲日志(&buffer);
     assert!(
-        output.contains("usecase") && output.contains("测试用例"),
-        "日志缺少 usecase 字段: {output}"
+        output.contains("application") && output.contains("测试用例"),
+        "日志缺少 application 字段: {output}"
     );
     assert!(
         output.contains("adapter") && output.contains("test_adapter"),
@@ -85,7 +85,7 @@ fn http日志固定字段顺序里能看到usecase_adapter_outcome与中文请�
 
     tracing::subscriber::with_default(subscriber, || {
         tracing::info!(
-            usecase = "引导匿名身份",
+            application = "引导匿名身份",
             adapter = "http",
             outcome = "accepted",
             request_kind = "匿名身份引导",
@@ -94,12 +94,12 @@ fn http日志固定字段顺序里能看到usecase_adapter_outcome与中文请�
     });
 
     let output = 读取缓冲日志(&buffer);
-    let usecase_pos = output.find("usecase").expect("应存在 usecase 字段");
+    let usecase_pos = output.find("application").expect("应存在 application 字段");
     let adapter_pos = output.find("adapter").expect("应存在 adapter 字段");
     let outcome_pos = output.find("outcome").expect("应存在 outcome 字段");
     assert!(
         usecase_pos < adapter_pos && adapter_pos < outcome_pos,
-        "日志字段顺序应便于先读 usecase / adapter / outcome: {output}"
+        "日志字段顺序应便于先读 application / adapter / outcome: {output}"
     );
     assert!(
         output.contains("request_kind") && output.contains("匿名身份引导"),
@@ -150,7 +150,7 @@ struct 假仓储 {
     设备匿名身份: HashMap<String, 测试匿名身份记录>,
     房间阅读位置: HashMap<(String, String), i64>,
     历史页读取参数: RefCell<Vec<(String, i64, i64)>>,
-    附件: HashMap<String, koko::usecase::附件读取结果>,
+    附件: HashMap<String, koko::application::附件读取结果>,
 }
 
 #[derive(Clone)]
@@ -165,12 +165,12 @@ impl 假仓储 {
         &mut self,
         附件标识: &str,
         所属匿名身份标识: &str,
-        种类: koko::usecase::附件种类读取结果,
-        状态: koko::usecase::附件状态读取结果,
+        种类: koko::application::附件种类读取结果,
+        状态: koko::application::附件状态读取结果,
     ) {
         self.附件.insert(
             附件标识.to_string(),
-            koko::usecase::附件读取结果 {
+            koko::application::附件读取结果 {
                 附件标识: 附件标识.to_string(),
                 所属匿名身份标识: 所属匿名身份标识.to_string(),
                 种类,
@@ -188,7 +188,7 @@ impl 假仓储 {
     }
 }
 
-impl koko::usecase::仓储端口 for 假仓储 {
+impl koko::application::仓储端口 for 假仓储 {
     /// 假实现：同一设备凭证恢复同一个匿名身份与稳定会话。
     fn 引导匿名身份(
         &mut self,
@@ -413,22 +413,22 @@ impl koko::usecase::仓储端口 for 假仓储 {
     fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<koko::usecase::附件读取结果>, koko::shared::contract::错误码> {
+    ) -> Result<Option<koko::application::附件读取结果>, koko::shared::contract::错误码> {
         Ok(self.附件.get(附件标识).cloned())
     }
 }
 
-impl koko::usecase::Realtime仓储端口 for 假仓储 {
+impl koko::application::Realtime仓储端口 for 假仓储 {
     async fn 检查会话存在(
         &self, 会话标识: &str
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::检查会话存在(self, 会话标识)
+        <Self as koko::application::仓储端口>::检查会话存在(self, 会话标识)
     }
 
     async fn 检查房间存在(
         &self, 房间标识: &str
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::检查房间存在(self, 房间标识)
+        <Self as koko::application::仓储端口>::检查房间存在(self, 房间标识)
     }
 
     async fn 检查成员资格(
@@ -436,7 +436,7 @@ impl koko::usecase::Realtime仓储端口 for 假仓储 {
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::检查成员资格(self, 房间标识, 会话标识)
+        <Self as koko::application::仓储端口>::检查成员资格(self, 房间标识, 会话标识)
     }
 
     async fn 拉取房间增量事件(
@@ -444,21 +444,21 @@ impl koko::usecase::Realtime仓储端口 for 假仓储 {
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<koko::shared::contract::快照, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::拉取房间增量事件(self, 房间标识, 从位置开始)
+        <Self as koko::application::仓储端口>::拉取房间增量事件(self, 房间标识, 从位置开始)
     }
 
     async fn 查询会话所属匿名身份(
         &self,
         会话标识: &str,
     ) -> Result<Option<String>, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::查询会话所属匿名身份(self, 会话标识)
+        <Self as koko::application::仓储端口>::查询会话所属匿名身份(self, 会话标识)
     }
 
     async fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<koko::usecase::附件读取结果>, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::查询附件快照(self, 附件标识)
+    ) -> Result<Option<koko::application::附件读取结果>, koko::shared::contract::错误码> {
+        <Self as koko::application::仓储端口>::查询附件快照(self, 附件标识)
     }
 
     async fn 创建统一消息事件(
@@ -469,7 +469,7 @@ impl koko::usecase::Realtime仓储端口 for 假仓储 {
         文本: &str,
         附件: &[koko::domain::message::已校验附件引用],
     ) -> Result<koko::shared::contract::领域事件, koko::shared::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::创建统一消息事件(self, 房间标识, 客户端消息标识, 会话标识, 文本, 附件)
+        <Self as koko::application::仓储端口>::创建统一消息事件(self, 房间标识, 客户端消息标识, 会话标识, 文本, 附件)
     }
 }
 
@@ -530,9 +530,9 @@ fn 同一设备匿名凭证重复bootstrap会恢复同一个内部身份与花�
     let mut repo = 假仓储::default();
 
     let first =
-        koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("首次 bootstrap 应成功");
+        koko::application::引导匿名身份(&mut repo, "device-token-1").expect("首次 bootstrap 应成功");
     let second =
-        koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("重复 bootstrap 应成功");
+        koko::application::引导匿名身份(&mut repo, "device-token-1").expect("重复 bootstrap 应成功");
 
     assert_eq!(
         first.展示花名, second.展示花名,
@@ -554,8 +554,8 @@ fn 不同设备匿名凭证会拿到不同内部身份() {
     let mut repo = 假仓储::default();
 
     let first =
-        koko::usecase::引导匿名身份(&mut repo, "device-token-a").expect("首次 bootstrap 应成功");
-    let second = koko::usecase::引导匿名身份(&mut repo, "device-token-b")
+        koko::application::引导匿名身份(&mut repo, "device-token-a").expect("首次 bootstrap 应成功");
+    let second = koko::application::引导匿名身份(&mut repo, "device-token-b")
         .expect("第二个设备 bootstrap 应成功");
 
     assert_ne!(first.会话标识, second.会话标识);
@@ -569,7 +569,7 @@ fn 不同设备匿名凭证会拿到不同内部身份() {
 #[test]
 fn 按短码进房或建房会返回房间快照() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ABCD1234").expect("应成功");
+    let room = koko::application::按短码进房或建房(&mut repo, "s-1", "ABCD1234").expect("应成功");
     match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => {
             assert!(房间标识.starts_with("r-"));
@@ -581,37 +581,37 @@ fn 按短码进房或建房会返回房间快照() {
 #[test]
 fn 加载房间快照要求成员资格() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ROOM0001").expect("应成功");
+    let room = koko::application::按短码进房或建房(&mut repo, "s-1", "ROOM0001").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
-    let snap = koko::usecase::加载房间快照(&repo, &room_id, "s-1").expect("成员应能加载快照");
+    let snap = koko::application::加载房间快照(&repo, &room_id, "s-1").expect("成员应能加载快照");
     assert!(matches!(snap, koko::shared::contract::快照::房间 { .. }));
 }
 
 #[test]
 fn 校验房间订阅资格会拒绝非成员() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ROOM0009").expect("应成功");
+    let room = koko::application::按短码进房或建房(&mut repo, "s-1", "ROOM0009").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
 
-    let result = koko::usecase::校验房间订阅资格(&repo, &room_id, "s-2");
+    let result = koko::application::校验房间订阅资格(&repo, &room_id, "s-2");
     assert!(matches!(result, Err(koko::shared::contract::错误码::成员资格不足)));
 }
 
 #[test]
 fn 发送文本消息返回权威事件() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ROOM0002").expect("应成功");
+    let room = koko::application::按短码进房或建房(&mut repo, "s-1", "ROOM0002").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
-    let event = koko::usecase::发送文本消息(&mut repo, &room_id, "s-1", "c-1", "hello")
+    let event = koko::application::发送文本消息(&mut repo, &room_id, "s-1", "c-1", "hello")
         .expect("应成功创建消息");
     assert!(matches!(
         event,
@@ -638,10 +638,10 @@ fn 发送文本消息返回权威事件() {
 #[test]
 fn 非ready附件不能创建消息() {
     let mut repo = 假仓储::default();
-    let identity = koko::usecase::引导匿名身份(&mut repo, "device-attachment-processing")
+    let identity = koko::application::引导匿名身份(&mut repo, "device-attachment-processing")
         .expect("应能引导匿名身份");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, "ROOM0010").expect("应成功");
+        koko::application::按短码进房或建房(&mut repo, &identity.会话标识, "ROOM0010").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
@@ -654,11 +654,11 @@ fn 非ready附件不能创建消息() {
     repo.放入附件(
         "att-1",
         &sender_identity,
-        koko::usecase::附件种类读取结果::图片,
-        koko::usecase::附件状态读取结果::处理中,
+        koko::application::附件种类读取结果::图片,
+        koko::application::附件状态读取结果::处理中,
     );
 
-    let result = koko::usecase::创建消息(
+    let result = koko::application::创建消息(
         &mut repo,
         &room_id,
         &identity.会话标识,
@@ -673,10 +673,10 @@ fn 非ready附件不能创建消息() {
 #[test]
 fn 附件owner不匹配时拒绝创建消息() {
     let mut repo = 假仓储::default();
-    let sender = koko::usecase::引导匿名身份(&mut repo, "device-attachment-owner")
+    let sender = koko::application::引导匿名身份(&mut repo, "device-attachment-owner")
         .expect("应能引导匿名身份");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOM0011").expect("应成功");
+        koko::application::按短码进房或建房(&mut repo, &sender.会话标识, "ROOM0011").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
@@ -684,11 +684,11 @@ fn 附件owner不匹配时拒绝创建消息() {
     repo.放入附件(
         "att-owner-mismatch",
         "a-other",
-        koko::usecase::附件种类读取结果::图片,
-        koko::usecase::附件状态读取结果::就绪,
+        koko::application::附件种类读取结果::图片,
+        koko::application::附件状态读取结果::就绪,
     );
 
-    let result = koko::usecase::创建消息(
+    let result = koko::application::创建消息(
         &mut repo,
         &room_id,
         &sender.会话标识,
@@ -707,7 +707,7 @@ fn 附件owner不匹配时拒绝创建消息() {
 async fn realtime连接认证异步用例会放行有效会话() {
     let repo = 假仓储::default();
 
-    let result = koko::usecase::校验实时连接会话_异步(&repo, "s-async-ok").await;
+    let result = koko::application::校验实时连接会话_异步(&repo, "s-async-ok").await;
 
     assert_eq!(result, Ok(()));
 }
@@ -715,13 +715,13 @@ async fn realtime连接认证异步用例会放行有效会话() {
 #[tokio::test]
 async fn 房间增量事件异步用例会拒绝非成员() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-member", "ROOMA001").expect("应成功");
+    let room = koko::application::按短码进房或建房(&mut repo, "s-member", "ROOMA001").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
 
-    let result = koko::usecase::加载房间增量事件_异步(&repo, &room_id, "s-stranger", 0).await;
+    let result = koko::application::加载房间增量事件_异步(&repo, &room_id, "s-stranger", 0).await;
 
     assert_eq!(result, Err(koko::shared::contract::错误码::成员资格不足));
 }
@@ -729,15 +729,15 @@ async fn 房间增量事件异步用例会拒绝非成员() {
 #[tokio::test]
 async fn 统一消息异步用例仍返回权威消息事件() {
     let mut repo = 假仓储::default();
-    let sender = koko::usecase::引导匿名身份(&mut repo, "device-async-msg").expect("应成功");
+    let sender = koko::application::引导匿名身份(&mut repo, "device-async-msg").expect("应成功");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA002").expect("应成功");
+        koko::application::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA002").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
 
-    let event = koko::usecase::创建消息_异步(
+    let event = koko::application::创建消息_异步(
         &mut repo,
         &room_id,
         &sender.会话标识,
@@ -767,15 +767,15 @@ async fn 统一消息异步用例仍返回权威消息事件() {
 async fn 异步消息成立只提交一次权威事件且不读取订阅历史() {
     let mut repo = 假仓储::default();
     let sender =
-        koko::usecase::引导匿名身份(&mut repo, "device-async-hot-path").expect("应成功");
+        koko::application::引导匿名身份(&mut repo, "device-async-hot-path").expect("应成功");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA003").expect("应成功");
+        koko::application::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA003").expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
 
-    let _ = koko::usecase::创建消息_异步(
+    let _ = koko::application::创建消息_异步(
         &mut repo,
         &room_id,
         &sender.会话标识,
@@ -797,14 +797,14 @@ async fn 异步消息成立只提交一次权威事件且不读取订阅历史()
 #[test]
 fn 历史读取使用事件位置游标并限制批量大小() {
     let mut repo = 假仓储::default();
-    let room = koko::usecase::按短码进房或建房(&mut repo, "s-history", "ROOMH001")
+    let room = koko::application::按短码进房或建房(&mut repo, "s-history", "ROOMH001")
         .expect("应成功");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
 
-    let _ = koko::usecase::加载房间历史页(&repo, &room_id, "s-history", 120, 1000)
+    let _ = koko::application::加载房间历史页(&repo, &room_id, "s-history", 120, 1000)
         .expect("成员应能读取历史页");
 
     assert_eq!(
@@ -815,13 +815,19 @@ fn 历史读取使用事件位置游标并限制批量大小() {
 }
 
 #[test]
-fn 根用例文件必须开始指向业务模块而不是继续独吞所有能力() {
-    let source = std::fs::read_to_string("src/用例.rs").expect("应能读取 src/用例.rs");
-    // 这里锁的是“总文件开始变薄”这个执行信号，不是要求一夜之间把所有实现搬空。
-    // 只要还完全看不到新业务模块入口，后续重构就很容易继续往统一用例里堆逻辑。
+fn 根用例文件必须删除且共享应用入口只能作为未下沉能力的临时owner() {
     assert!(
-        source.contains("crate::identity") || source.contains("crate::room"),
-        "统一用例文件尚未开始指向业务模块 owner，继续收 owner 时容易回流到 src/用例.rs"
+        !std::path::Path::new("src/用例.rs").exists(),
+        "src/用例.rs 不能继续作为根目录超级用例文件存在"
+    );
+    let source = std::fs::read_to_string("src/应用/mod.rs").expect("应能读取 src/应用/mod.rs");
+    // 这里锁的是“根用例文件已删除，仍未下沉的应用端口有明确应用 owner”。
+    // 后续再按身份、房间、消息、媒体继续把能力拆到各业务应用文件。
+    assert!(
+        source.contains("crate::identity")
+            && source.contains("crate::room")
+            && source.contains("crate::recovery"),
+        "共享应用入口必须显式指向业务模块 owner，不能继续追加成新的超级应用文件"
     );
 }
 

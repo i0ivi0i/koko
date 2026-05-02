@@ -177,17 +177,17 @@ async fn 后台房间详情仍返回最新事件位置和消息总数() {
     let room_id = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &owner_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &owner_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..3 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -256,8 +256,8 @@ async fn http冷路径成功会输出accepted与succeeded日志() {
 
     let output = 读取日志缓冲(&buffer);
     assert!(
-        output.contains("usecase") && output.contains("引导匿名身份"),
-        "成功主链日志缺少 usecase: {output}"
+        output.contains("application") && output.contains("引导匿名身份"),
+        "成功主链日志缺少 application: {output}"
     );
     assert!(
         output.contains("adapter") && output.contains("http"),
@@ -297,8 +297,8 @@ async fn http冷路径拒绝会输出rejected日志与error_code() {
 
     let output = 读取日志缓冲(&buffer);
     assert!(
-        output.contains("usecase") && output.contains("管理员登录"),
-        "拒绝日志缺少 usecase: {output}"
+        output.contains("application") && output.contains("管理员登录"),
+        "拒绝日志缺少 application: {output}"
     );
     assert!(
         output.contains("outcome") && output.contains("rejected"),
@@ -548,7 +548,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
     let attachment_id_for_message = attachment_id.clone();
     tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &owner_session_id_owned,

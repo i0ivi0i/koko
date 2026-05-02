@@ -306,7 +306,7 @@ fn 记录panic日志(panic_info: &panic::PanicHookInfo<'_>) {
         .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
 
     tracing::error!(
-        usecase = "未恢复崩溃",
+        application = "未恢复崩溃",
         adapter = "panic_hook",
         outcome = "failed",
         error_code = "panic",

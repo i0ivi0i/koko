@@ -1,8 +1,9 @@
 use crate::{shared::contract, domain};
 
-/// 第一波真 DDD 收口先让统一用例文件变成待删除旧根文件：
-/// 身份、房间、消息三条主业务能力开始显式指向对应业务模块。
-/// 这样后续继续收 owner 时，新逻辑就不该再回流到这份总文件里。
+/// 跨业务仍共同消费的应用层入口。
+///
+/// 这里不是旧根用例的兼容入口：业务主链已经优先指向身份、房间、消息、
+/// 媒体、实时和恢复 owner；这里暂存尚未继续下沉的端口与少量共享应用服务。
 pub use crate::identity::application::引导匿名身份;
 pub use crate::media::distribution::application::{
     列出待做种协作分发项, 写入协作分发swarm存活, 写入协作分发torrent元信息,
@@ -19,7 +20,7 @@ pub use crate::room::application::{
 };
 pub use crate::media::模型::*;
 
-/// 用例层只编排业务动作，持久化细节通过端口下沉到适配层实现。
+/// 应用层只编排业务动作，持久化细节通过端口下沉到适配层实现。
 ///
 /// 维护者说明：
 /// - 这个 trait 是“应用层对持久化的最小依赖面”。

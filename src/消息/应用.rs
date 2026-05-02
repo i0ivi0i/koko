@@ -1,10 +1,10 @@
-use crate::{shared::contract, domain, usecase};
-use crate::usecase::{附件状态读取结果, 附件种类读取结果};
+use crate::{shared::contract, domain, application};
+use crate::application::{附件状态读取结果, 附件种类读取结果};
 
 /// 发送文本消息主链：
 /// 这里只是“纯文本消息”的语义别名，真正消息成立仍统一走 `创建消息`。
 pub fn 发送文本消息(
-    仓储: &mut dyn usecase::仓储端口,
+    仓储: &mut dyn application::仓储端口,
     房间标识: &str,
     会话标识: &str,
     客户端消息标识: &str,
@@ -19,7 +19,7 @@ pub fn 发送文本消息(
 /// 3. 每个附件都要先过 owner / status / kind 校验。
 /// 4. 最终由领域决定“文本 + 附件”这条消息能否成立。
 pub fn 创建消息(
-    仓储: &mut dyn usecase::仓储端口,
+    仓储: &mut dyn application::仓储端口,
     房间标识: &str,
     会话标识: &str,
     客户端消息标识: &str,
@@ -29,7 +29,7 @@ pub fn 创建消息(
     if 客户端消息标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    usecase::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    application::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
 
     let mut attachments = Vec::with_capacity(附件标识列表.len());
     if !附件标识列表.is_empty() {
@@ -74,14 +74,14 @@ pub fn 创建消息(
         }
     }
 
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(usecase::映射领域错误)?;
+    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
     仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
 }
 
 /// realtime 创建消息的异步版。
 /// 这里只负责把 command 落成同一条权威消息成立主链；
 /// 成功后返回的仍然只能是领域事件，由 handler 决定如何广播成 `room_event`。
-pub async fn 创建消息_异步<R: usecase::Realtime仓储端口 + ?Sized>(
+pub async fn 创建消息_异步<R: application::Realtime仓储端口 + ?Sized>(
     仓储: &mut R,
     房间标识: &str,
     会话标识: &str,
@@ -92,7 +92,7 @@ pub async fn 创建消息_异步<R: usecase::Realtime仓储端口 + ?Sized>(
     if 客户端消息标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    usecase::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
+    application::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
 
     let mut attachments = Vec::with_capacity(附件标识列表.len());
     if !附件标识列表.is_empty() {
@@ -137,7 +137,7 @@ pub async fn 创建消息_异步<R: usecase::Realtime仓储端口 + ?Sized>(
         }
     }
 
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(usecase::映射领域错误)?;
+    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
     仓储
         .创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
         .await

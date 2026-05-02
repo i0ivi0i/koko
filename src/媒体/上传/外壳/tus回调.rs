@@ -4,7 +4,7 @@ use super::{
 use crate::{
     adapter::{媒体上传运输回执写入参数, 媒体上传运输角色},
     shell::协议响应::{err_resp, map_domain_err_tuple},
-    usecase::{self, 仓储端口},
+    application::{self, 仓储端口},
 };
 use axum::{
     extract::State,
@@ -282,7 +282,7 @@ async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> R
                 "附件不再处于待上传状态".to_string(),
             ));
         };
-        if !matches!(prepared.状态, usecase::附件状态读取结果::已准备) {
+        if !matches!(prepared.状态, application::附件状态读取结果::已准备) {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
@@ -458,7 +458,7 @@ async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> 
                 "附件不再处于待上传状态".to_string(),
             ));
         };
-        if !matches!(prepared.状态, usecase::附件状态读取结果::已准备) {
+        if !matches!(prepared.状态, application::附件状态读取结果::已准备) {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
@@ -590,7 +590,7 @@ fn 读取可选请求标识(http_request: &TusHttpRequestBody) -> Option<String>
 }
 
 /// 协议字段 `IsPartial/IsFinal` 只允许在 Tus hook adapter 停留。
-/// 这里统一把它们翻译成我们自己的 transport role，避免 shell / usecase 直接吃协议布尔位。
+/// 这里统一把它们翻译成我们自己的 transport role，避免 shell / application 直接吃协议布尔位。
 fn 判定tus运输角色(
     upload: &TusUploadBody,
 ) -> Result<媒体上传运输角色, (StatusCode, &'static str, String)> {

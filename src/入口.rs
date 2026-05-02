@@ -27,12 +27,12 @@ where
     // main 会尽量在 Tokio runtime 之前先装日志；这里仍保留幂等调用，给测试和其它入口兜底。
     crate::assembly::初始化日志()?;
 
-    // 启动 span 统一携带 usecase/adapter，方便从日志里串联整条启动链路。
-    let span = tracing::info_span!("startup", usecase = "服务启动", adapter = "entry");
+    // 启动 span 统一携带 application/adapter，方便从日志里串联整条启动链路。
+    let span = tracing::info_span!("startup", application = "服务启动", adapter = "entry");
     let _entered = span.enter();
     // accepted 表示“入口已接住这次启动动作”，但此时配置、迁移、端口绑定都还没证明成功。
     tracing::info!(
-        usecase = "服务启动",
+        application = "服务启动",
         adapter = "entry",
         outcome = "accepted",
         "服务启动请求已受理"
@@ -71,7 +71,7 @@ where
     };
     // 只有监听端口与路由总装都完成后，才允许宣告启动 succeeded。
     tracing::info!(
-        usecase = "服务启动",
+        application = "服务启动",
         adapter = "entry",
         outcome = "succeeded",
         app_port = config.app_port,
@@ -89,7 +89,7 @@ where
             if let Err(err) = crate::shell::执行一次媒体冷源清理(cleanup_state.clone()).await
             {
                 tracing::error!(
-                    usecase = "媒体冷源清理",
+                    application = "媒体冷源清理",
                     adapter = "entry",
                     outcome = "failed",
                     error = %err,
@@ -100,7 +100,7 @@ where
                 crate::shell::执行一次媒体上传残留清理(cleanup_state.clone()).await
             {
                 tracing::error!(
-                    usecase = "上传残留清理",
+                    application = "上传残留清理",
                     adapter = "entry",
                     outcome = "failed",
                     error = %err,
@@ -125,7 +125,7 @@ where
                 crate::shell::执行一次协作分发做种对账(seed_reconcile_state.clone()).await
             {
                 tracing::error!(
-                    usecase = "协作分发做种对账",
+                    application = "协作分发做种对账",
                     adapter = "entry",
                     outcome = "failed",
                     error = %err,
@@ -138,7 +138,7 @@ where
         .with_graceful_shutdown(async move {
             shutdown_signal.await;
             tracing::info!(
-                usecase = "服务停止",
+                application = "服务停止",
                 adapter = "entry",
                 outcome = "accepted",
                 "接收到退出信号，开始优雅停机"
@@ -152,7 +152,7 @@ where
         return Err(io::Error::other(format!("服务运行失败: {err}")));
     }
     tracing::info!(
-        usecase = "服务停止",
+        application = "服务停止",
         adapter = "entry",
         outcome = "succeeded",
         "HTTP 冷路径服务已优雅停止"
@@ -163,9 +163,9 @@ where
 /// 启动与入口链路的统一错误日志出口。
 ///
 /// 约束：只记录“入口层失败语义”，不在这里做业务重试或错误吞掉。
-pub fn 记录命令失败(usecase: &str, adapter: &str, error_code: &str, message: &str) {
+pub fn 记录命令失败(application: &str, adapter: &str, error_code: &str, message: &str) {
     tracing::error!(
-        usecase = usecase,
+        application = application,
         adapter = adapter,
         outcome = "failed",
         error_code = error_code,

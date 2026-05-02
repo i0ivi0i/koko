@@ -21,20 +21,20 @@ async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
     let (identity_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let identity_id =
-            koko::usecase::仓储端口::查询会话所属匿名身份(&repo, &identity.会话标识)
+            koko::application::仓储端口::查询会话所属匿名身份(&repo, &identity.会话标识)
                 .expect("应能通过会话回查内部身份")
                 .expect("bootstrap 后会话必须能解析到内部身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
-        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 0)
+        koko::application::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 0)
             .expect("应能写入初始阅读锚点");
         (identity_id, room_id)
     })
@@ -85,9 +85,9 @@ async fn 阅读锚点只会单调前进不会被回退覆盖() {
     let room_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -95,7 +95,7 @@ async fn 阅读锚点只会单调前进不会被回退覆盖() {
         };
 
         for index in 0..5 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &identity.会话标识,
@@ -105,9 +105,9 @@ async fn 阅读锚点只会单调前进不会被回退覆盖() {
             .expect("应能先制造已成立消息");
         }
 
-        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 5)
+        koko::application::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 5)
             .expect("应能先写入更靠后的位置");
-        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 2)
+        koko::application::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 2)
             .expect("较早位置不应破坏已有锚点");
         room_id
     })
@@ -153,17 +153,17 @@ async fn 阅读推进成功后下一次进房会按新锚点恢复() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..6 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -224,17 +224,17 @@ async fn 阅读推进不能回退到更早位置() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..6 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -418,17 +418,17 @@ async fn 阅读推进失败不会影响房间快照和历史查询可用性() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..3 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,

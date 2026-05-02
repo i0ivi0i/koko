@@ -151,7 +151,7 @@ async fn 删除对象前缀下所有文件(
 ///
 /// 分层约束：
 /// 1. 这里做协议接线，不做业务裁决。
-/// 2. 命令是否成立必须交给 usecase + domain + repository 主链。
+/// 2. 命令是否成立必须交给 application + domain + repository 主链。
 /// 3. 前端静态资源同源托管，减少开发期跨域噪音和双端口复杂度。
 pub async fn 构建应用状态(
     database_url: String,
@@ -226,7 +226,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理冷源 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待清理媒体冷源(&repo, 当前时间戳秒, 128)
+        crate::application::列出待清理媒体冷源(&repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理媒体冷源失败: {err:?}")))
     })
     .await
@@ -238,7 +238,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
             Err(err) => {
                 tracing::error!(
-                    usecase = "媒体冷源清理",
+                    application = "媒体冷源清理",
                     adapter = "shell",
                     outcome = "failed",
                     attachment_id = 冷源.附件标识.as_str(),
@@ -254,7 +254,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let attachment_id = 冷源.附件标识.clone();
         tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_mark);
-            crate::usecase::标记媒体冷源已删除(&mut repo, &attachment_id, 当前时间戳秒)
+            crate::application::标记媒体冷源已删除(&mut repo, &attachment_id, 当前时间戳秒)
                 .map_err(|err| io::Error::other(format!("标记媒体冷源已删除失败: {err:?}")))
         })
         .await
@@ -264,7 +264,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理canonical资产 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待清理canonical媒体资产(&repo, 当前时间戳秒, 128)
+        crate::application::列出待清理canonical媒体资产(&repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理 canonical 媒体资产失败: {err:?}")))
     })
     .await
@@ -276,7 +276,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
             Err(err) => {
                 tracing::error!(
-                    usecase = "媒体冷源清理",
+                    application = "媒体冷源清理",
                     adapter = "shell",
                     outcome = "failed",
                     content_hash = 资产.content_hash.as_str(),
@@ -292,7 +292,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let content_hash = 资产.content_hash.clone();
         tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_mark);
-            crate::usecase::标记canonical媒体资产已删除(
+            crate::application::标记canonical媒体资产已删除(
                 &mut repo,
                 &content_hash,
                 当前时间戳秒,
@@ -306,7 +306,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理回退母本 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待清理媒体回退母本(&repo, 当前时间戳秒, 128)
+        crate::application::列出待清理媒体回退母本(&repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理媒体回退母本失败: {err:?}")))
     })
     .await
@@ -318,7 +318,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
             Err(err) => {
                 tracing::error!(
-                    usecase = "媒体冷源清理",
+                    application = "媒体冷源清理",
                     adapter = "shell",
                     outcome = "failed",
                     attachment_id = 回退母本.附件标识.as_str(),
@@ -334,7 +334,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let attachment_id = 回退母本.附件标识.clone();
         tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_mark);
-            crate::usecase::标记媒体回退母本已删除(
+            crate::application::标记媒体回退母本已删除(
                 &mut repo,
                 &attachment_id,
                 当前时间戳秒,
@@ -348,7 +348,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理流媒体清单 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待清理流媒体清单(&repo, 当前时间戳秒, 128)
+        crate::application::列出待清理流媒体清单(&repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理流媒体清单失败: {err:?}")))
     })
     .await
@@ -357,7 +357,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     for 清单 in 待清理流媒体清单 {
         let Some(hls前缀) = 推导对象父前缀(清单.hls主清单存储键.as_str()) else {
             tracing::error!(
-                usecase = "媒体冷源清理",
+                application = "媒体冷源清理",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 清单.附件标识.as_str(),
@@ -368,7 +368,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         };
         let Some(dash前缀) = 推导对象父前缀(清单.dash主清单存储键.as_str()) else {
             tracing::error!(
-                usecase = "媒体冷源清理",
+                application = "媒体冷源清理",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 清单.附件标识.as_str(),
@@ -381,7 +381,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &hls前缀).await
         {
             tracing::error!(
-                usecase = "媒体冷源清理",
+                application = "媒体冷源清理",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 清单.附件标识.as_str(),
@@ -394,7 +394,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &dash前缀).await
         {
             tracing::error!(
-                usecase = "媒体冷源清理",
+                application = "媒体冷源清理",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 清单.附件标识.as_str(),
@@ -409,7 +409,7 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let attachment_id = 清单.附件标识.clone();
         tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_mark);
-            crate::usecase::标记流媒体清单已删除(&mut repo, &attachment_id, 当前时间戳秒)
+            crate::application::标记流媒体清单已删除(&mut repo, &attachment_id, 当前时间戳秒)
                 .map_err(|err| io::Error::other(format!("标记流媒体清单已删除失败: {err:?}")))
         })
         .await
@@ -420,14 +420,14 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
 }
 
 fn 上传残留清理原因标签(
-    原因: crate::usecase::上传残留清理原因
+    原因: crate::application::上传残留清理原因
 ) -> &'static str {
     match 原因 {
-        crate::usecase::上传残留清理原因::已放弃会话 => "abandoned_session",
-        crate::usecase::上传残留清理原因::最终合并后的分片残留 => {
+        crate::application::上传残留清理原因::已放弃会话 => "abandoned_session",
+        crate::application::上传残留清理原因::最终合并后的分片残留 => {
             "finalized_partial"
         }
-        crate::usecase::上传残留清理原因::已过期未完成上传 => "expired_unfinished",
+        crate::application::上传残留清理原因::已过期未完成上传 => "expired_unfinished",
     }
 }
 
@@ -443,15 +443,15 @@ async fn 执行一次媒体上传残留清理_按会话(
     let state_for_query = state.clone();
     let 待清理残留 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::usecase::列出待清理上传残留(&repo, 当前时间戳秒, 256)
+        crate::application::列出待清理上传残留(&repo, 当前时间戳秒, 256)
             .map_err(|err| io::Error::other(format!("查询待清理上传残留失败: {err:?}")))
     })
     .await
     .map_err(|err| io::Error::other(format!("上传残留清理查询任务失败: {err}")))??;
 
     let mut 分组结果: HashMap<
-        (String, crate::usecase::上传残留清理原因),
-        Vec<crate::usecase::待清理上传残留>,
+        (String, crate::application::上传残留清理原因),
+        Vec<crate::application::待清理上传残留>,
     > = HashMap::new();
     for 残留 in 待清理残留 {
         if 限定上传会话
@@ -479,7 +479,7 @@ async fn 执行一次媒体上传残留清理_按会话(
                 Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) =>
                 {
                     tracing::info!(
-                        usecase = "上传残留清理",
+                        application = "上传残留清理",
                         adapter = "shell",
                         outcome = "skipped_missing_file",
                         attachment_id = 残留.附件标识.as_str(),
@@ -495,7 +495,7 @@ async fn 执行一次媒体上传残留清理_按会话(
                     // 它们已经不属于当前 tus upload dir，继续报错只会在每次启动时制造噪音；
                     // 但 cleanup 也绝不能越权删当前 upload dir 之外的文件，所以这里只收口数据库真相。
                     tracing::info!(
-                        usecase = "上传残留清理",
+                        application = "上传残留清理",
                         adapter = "shell",
                         outcome = "skipped_legacy_external_locator",
                         attachment_id = 残留.附件标识.as_str(),
@@ -508,7 +508,7 @@ async fn 执行一次媒体上传残留清理_按会话(
                 }
                 Err(message) => {
                     tracing::error!(
-                        usecase = "上传残留清理",
+                        application = "上传残留清理",
                         adapter = "shell",
                         outcome = "failed",
                         attachment_id = 残留.附件标识.as_str(),
@@ -527,7 +527,7 @@ async fn 执行一次媒体上传残留清理_按会话(
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {}
                 Err(err) => {
                     tracing::error!(
-                        usecase = "上传残留清理",
+                        application = "上传残留清理",
                         adapter = "shell",
                         outcome = "failed",
                         attachment_id = 残留.附件标识.as_str(),
@@ -549,7 +549,7 @@ async fn 执行一次媒体上传残留清理_按会话(
         let 上传会话标识 = 上传会话标识.clone();
         tokio::task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state_for_mark);
-            crate::usecase::标记上传残留已清理(
+            crate::application::标记上传残留已清理(
                 &mut repo,
                 &上传会话标识,
                 清理原因,
@@ -712,7 +712,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
 
     let mut active_info_hashes = HashSet::new();
     for 待做种 in 待做种项 {
-        let distribution_snapshot = crate::usecase::协作分发元数据快照 {
+        let distribution_snapshot = crate::application::协作分发元数据快照 {
             附件标识: 待做种.附件标识.clone(),
             content_id: 待做种.content_id.clone(),
             content_hash: 待做种.content_hash.clone(),
@@ -747,7 +747,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         active_info_hashes.insert(启动命令.info_hash.clone());
         if let Err(err) = 尝试启动协作分发做种(&state, &启动命令).await {
             tracing::warn!(
-                usecase = "协作分发做种对账",
+                application = "协作分发做种对账",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 待做种.附件标识.as_str(),
@@ -764,11 +764,11 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
             let mut repo = 构建共享仓储(&state_for_presence);
             协作分发应用::写入协作分发swarm存活(
                 &mut repo,
-                &crate::usecase::协作分发swarm存活写入请求 {
+                &crate::application::协作分发swarm存活写入请求 {
                     swarm_id,
                     附件标识: attachment_id,
                     会话标识: 后端强种子系统会话标识.to_string(),
-                    存活类型: crate::usecase::协作分发存活类型后端强种子.to_string(),
+                    存活类型: crate::application::协作分发存活类型后端强种子.to_string(),
                     最近peer存活时间戳秒: 当前时间戳秒,
                 },
             )
@@ -778,7 +778,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         match upsert_presence {
             Ok(Ok(())) => {}
             Ok(Err(err)) => tracing::warn!(
-                usecase = "协作分发做种对账",
+                application = "协作分发做种对账",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 待做种.附件标识.as_str(),
@@ -787,7 +787,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 "做种 start 成功但写入 backend strong seed 存活失败，等待下一轮重试"
             ),
             Err(err) => tracing::warn!(
-                usecase = "协作分发做种对账",
+                application = "协作分发做种对账",
                 adapter = "shell",
                 outcome = "failed",
                 attachment_id = 待做种.附件标识.as_str(),
@@ -914,7 +914,7 @@ async fn proxy_swarm_tracker_announce(
         if let Err(error) = relay_swarm_tracker_socket(socket, upstream_url, ticket_secret).await {
             if error.应该写启动器warn() {
                 tracing::warn!(
-                    usecase = "协作分发tracker代理",
+                    application = "协作分发tracker代理",
                     adapter = "http",
                     outcome = "failed",
                     error_code = "swarm_tracker_proxy_failed",
@@ -923,7 +923,7 @@ async fn proxy_swarm_tracker_announce(
                 );
             } else {
                 tracing::debug!(
-                    usecase = "协作分发tracker验票",
+                    application = "协作分发tracker验票",
                     adapter = "http",
                     outcome = "rejected",
                     error_code = "swarm_tracker_join_ticket_rejected",

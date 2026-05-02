@@ -24,9 +24,9 @@ async fn 历史带thumbnail_storage_key的视频locator与房间快照仍共享�
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -60,7 +60,7 @@ async fn 历史带thumbnail_storage_key的视频locator与房间快照仍共享�
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -149,9 +149,9 @@ async fn 新单文件视频locator与房间快照默认不会投影preview_asset
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -174,7 +174,7 @@ async fn 新单文件视频locator与房间快照默认不会投影preview_asset
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -427,7 +427,7 @@ async fn 查询附件快照会带出图片真实资产与冷源生命周期字�
         tokio::task::spawn_blocking(move || {
             let mut repo =
                 koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-            koko::usecase::引导匿名身份(&mut repo, &device_token)
+            koko::application::引导匿名身份(&mut repo, &device_token)
                 .expect("应能引导匿名身份")
                 .会话标识
         })
@@ -482,13 +482,13 @@ async fn 查询附件快照会带出图片真实资产与冷源生命周期字�
     .expect("应能插入带真实图片资产字段的附件记录");
     pool.close().await;
 
-    // 这个测试直接锁 repo -> usecase 快照边界，避免以后又把 full/original/origin 生命周期
+    // 这个测试直接锁 repo -> application 快照边界，避免以后又把 full/original/origin 生命周期
     // 只留在 adapter 私货或 HTTP 壳层里。
     let database_url = cfg.database_url.clone();
     let attachment_id_for_query = attachment_id.clone();
     let snapshot = tokio::task::spawn_blocking(move || {
         let repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::usecase::仓储端口::查询附件快照(&repo, &attachment_id_for_query)
+        koko::application::仓储端口::查询附件快照(&repo, &attachment_id_for_query)
             .expect("query ok")
             .expect("attachment exists")
     })

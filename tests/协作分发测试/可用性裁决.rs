@@ -157,9 +157,9 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -194,7 +194,7 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -302,9 +302,9 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -354,7 +354,7 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -412,9 +412,9 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -465,7 +465,7 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -538,9 +538,9 @@ async fn partial_peer不能冒充available_ready来源() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -590,7 +590,7 @@ async fn partial_peer不能冒充available_ready来源() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -654,9 +654,9 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -707,7 +707,7 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -716,7 +716,7 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
             &[attachment_id_target_for_worker],
         )
         .expect("应能创建目标附件消息");
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -786,9 +786,9 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -821,7 +821,7 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -884,9 +884,9 @@ async fn web_seed刚过期且最近没有peer存活时locator会先进入连接�
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -920,7 +920,7 @@ async fn web_seed刚过期且最近没有peer存活时locator会先进入连接�
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -983,9 +983,9 @@ async fn web_seed已过期较久且最近没有peer存活时首次访问仍会�
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -1019,7 +1019,7 @@ async fn web_seed已过期较久且最近没有peer存活时首次访问仍会�
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -1082,9 +1082,9 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -1128,7 +1128,7 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -1243,9 +1243,9 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
     let session_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -1269,7 +1269,7 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,

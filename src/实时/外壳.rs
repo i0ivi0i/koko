@@ -197,7 +197,7 @@ fn 记录订阅单连接发送失败(
 ) {
     match 分类单连接发送失败(err) {
         实时发送失败级别::正常断开 => tracing::info!(
-            usecase = "订阅房间事件流",
+            application = "订阅房间事件流",
             adapter = "socketioxide",
             outcome = "dropped",
             room_id = room_id,
@@ -209,7 +209,7 @@ fn 记录订阅单连接发送失败(
             "订阅单连接消息在连接关闭后被丢弃"
         ),
         实时发送失败级别::背压 => tracing::error!(
-            usecase = "订阅房间事件流",
+            application = "订阅房间事件流",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -221,7 +221,7 @@ fn 记录订阅单连接发送失败(
             "订阅单连接消息发送失败：socket 内部通道已满"
         ),
         实时发送失败级别::序列化 => tracing::error!(
-            usecase = "订阅房间事件流",
+            application = "订阅房间事件流",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -248,7 +248,7 @@ fn 记录创建消息广播失败(
 ) {
     match 分类广播发送失败(err) {
         实时发送失败级别::正常断开 => tracing::info!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "dropped",
             room_id = room_id,
@@ -262,7 +262,7 @@ fn 记录创建消息广播失败(
             "房间权威事件在连接关闭后被丢弃"
         ),
         实时发送失败级别::背压 => tracing::error!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -277,7 +277,7 @@ fn 记录创建消息广播失败(
             "房间权威事件广播失败：存在 socket 内部通道已满"
         ),
         实时发送失败级别::序列化 => tracing::error!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -291,7 +291,7 @@ fn 记录创建消息广播失败(
             "房间权威事件广播失败：事件序列化失败"
         ),
         实时发送失败级别::适配器 => tracing::error!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -316,7 +316,7 @@ fn 记录创建消息单连接发送失败(
 ) {
     match 分类单连接发送失败(err) {
         实时发送失败级别::正常断开 => tracing::info!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "dropped",
             room_id = room_id,
@@ -328,7 +328,7 @@ fn 记录创建消息单连接发送失败(
             "创建消息控制面在连接关闭后被丢弃"
         ),
         实时发送失败级别::背压 => tracing::error!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -340,7 +340,7 @@ fn 记录创建消息单连接发送失败(
             "创建消息控制面发送失败：socket 内部通道已满"
         ),
         实时发送失败级别::序列化 => tracing::error!(
-            usecase = "创建消息",
+            application = "创建消息",
             adapter = "socketioxide",
             outcome = "failed",
             room_id = room_id,
@@ -368,7 +368,7 @@ pub(crate) fn 记录realtime断开(socket: SocketRef, reason: DisconnectReason) 
         .unwrap_or_else(|| "unknown".to_string());
     match 分类断开原因(reason) {
         实时发送失败级别::正常断开 => tracing::info!(
-            usecase = "实时连接断开",
+            application = "实时连接断开",
             adapter = "socketioxide",
             outcome = "dropped",
             session_id = session_id,
@@ -376,7 +376,7 @@ pub(crate) fn 记录realtime断开(socket: SocketRef, reason: DisconnectReason) 
             "realtime 连接已正常断开"
         ),
         实时发送失败级别::适配器 => tracing::warn!(
-            usecase = "实时连接断开",
+            application = "实时连接断开",
             adapter = "socketioxide",
             outcome = "failed",
             session_id = session_id,
@@ -402,7 +402,7 @@ pub(crate) async fn 认证realtime连接(
         Ok(auth) => auth.session_id,
         Err(_) => {
             tracing::info!(
-                usecase = "实时连接认证",
+                application = "实时连接认证",
                 adapter = "socketioxide",
                 outcome = "rejected",
                 error_code = "invalid_session",
@@ -412,7 +412,7 @@ pub(crate) async fn 认证realtime连接(
         }
     };
     tracing::info!(
-        usecase = "实时连接认证",
+        application = "实时连接认证",
         adapter = "socketioxide",
         outcome = "accepted",
         session_id = session_id,
@@ -422,7 +422,7 @@ pub(crate) async fn 认证realtime连接(
     match 实时应用::校验实时连接会话_异步(&repo, &session_id).await {
         Ok(()) => {
             tracing::info!(
-                usecase = "实时连接认证",
+                application = "实时连接认证",
                 adapter = "socketioxide",
                 outcome = "succeeded",
                 session_id = session_id,
@@ -433,7 +433,7 @@ pub(crate) async fn 认证realtime连接(
         }
         Err(contract::错误码::会话无效) => {
             tracing::info!(
-                usecase = "实时连接认证",
+                application = "实时连接认证",
                 adapter = "socketioxide",
                 outcome = "rejected",
                 session_id = session_id,
@@ -444,7 +444,7 @@ pub(crate) async fn 认证realtime连接(
         }
         Err(_) => {
             tracing::error!(
-                usecase = "实时连接认证",
+                application = "实时连接认证",
                 adapter = "socketioxide",
                 outcome = "failed",
                 session_id = session_id,
@@ -468,7 +468,7 @@ pub(crate) async fn handle_realtime_subscribe(
     state: 应用状态,
 ) {
     tracing::info!(
-        usecase = "订阅房间事件流",
+        application = "订阅房间事件流",
         adapter = "socketioxide",
         outcome = "accepted",
         room_id = payload.room_id.as_str(),
@@ -491,7 +491,7 @@ pub(crate) async fn handle_realtime_subscribe(
         }) => {
             if from > 最新事件位置 {
                 tracing::info!(
-                    usecase = "订阅房间事件流",
+                    application = "订阅房间事件流",
                     adapter = "socketioxide",
                     outcome = "recovered",
                     room_id = 房间标识,
@@ -540,7 +540,7 @@ pub(crate) async fn handle_realtime_subscribe(
                 return;
             }
             tracing::info!(
-                usecase = "订阅房间事件流",
+                application = "订阅房间事件流",
                 adapter = "socketioxide",
                 outcome = "succeeded",
                 room_id = 房间标识,
@@ -552,7 +552,7 @@ pub(crate) async fn handle_realtime_subscribe(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "订阅房间事件流",
+                application = "订阅房间事件流",
                 adapter = "socketioxide",
                 outcome = "failed",
                 room_id = payload.room_id,
@@ -574,7 +574,7 @@ pub(crate) async fn handle_realtime_subscribe(
         }
         Err((_, code, message)) => {
             tracing::info!(
-                usecase = "订阅房间事件流",
+                application = "订阅房间事件流",
                 adapter = "socketioxide",
                 outcome = "rejected",
                 room_id = payload.room_id,
@@ -609,7 +609,7 @@ pub(crate) async fn handle_realtime_create_message(
     state: 应用状态,
 ) {
     tracing::info!(
-        usecase = "创建消息",
+        application = "创建消息",
         adapter = "socketioxide",
         outcome = "accepted",
         room_id = payload.room_id.as_str(),
@@ -662,7 +662,7 @@ pub(crate) async fn handle_realtime_create_message(
                 );
             } else {
                 tracing::info!(
-                    usecase = "创建消息",
+                    application = "创建消息",
                     adapter = "socketioxide",
                     outcome = "succeeded",
                     room_id = room_id,
@@ -678,7 +678,7 @@ pub(crate) async fn handle_realtime_create_message(
         }
         Err((_, code, message)) => {
             tracing::info!(
-                usecase = "创建消息",
+                application = "创建消息",
                 adapter = "socketioxide",
                 outcome = "rejected",
                 room_id = room_id_for_log,

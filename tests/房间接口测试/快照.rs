@@ -22,17 +22,17 @@ async fn 有阅读锚点时房间快照围绕第一条未读返回首屏() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..100 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -41,7 +41,7 @@ async fn 有阅读锚点时房间快照围绕第一条未读返回首屏() {
             )
             .expect("应能连续发送消息");
         }
-        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &session_id, 80)
+        koko::application::推进房间阅读位置(&mut repo, &room_id, &session_id, 80)
             .expect("应能先建立阅读锚点");
         (session_id, room_id)
     })
@@ -103,17 +103,17 @@ async fn 房间快照会返回首条未读事件位置和是否仍有更早历�
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..100 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -122,7 +122,7 @@ async fn 房间快照会返回首条未读事件位置和是否仍有更早历�
             )
             .expect("应能连续发送消息");
         }
-        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &session_id, 90)
+        koko::application::推进房间阅读位置(&mut repo, &room_id, &session_id, 90)
             .expect("应能先推进阅读位置");
         (session_id, room_id)
     })
@@ -174,17 +174,17 @@ async fn 无阅读锚点时房间快照回退到最近一屏消息() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..60 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -251,9 +251,9 @@ async fn 晚进群历史视频消息快照仍会带legacy_preview_asset() {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -288,7 +288,7 @@ async fn 晚进群历史视频消息快照仍会带legacy_preview_asset() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,
@@ -365,9 +365,9 @@ async fn 晚进群新单文件视频消息快照默认不带preview_asset() {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            koko::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -394,7 +394,7 @@ async fn 晚进群新单文件视频消息快照默认不带preview_asset() {
             pool.close().await;
         });
 
-        koko::usecase::创建消息(
+        koko::application::创建消息(
             &mut repo,
             &room_id,
             &identity.会话标识,

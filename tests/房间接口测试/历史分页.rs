@@ -23,17 +23,17 @@ async fn 房间历史分页会返回before_event_position之前的消息() {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
         let identity =
-            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+            koko::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let session_id = identity.会话标识;
         let initial_alias = identity.展示花名;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..6 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -166,17 +166,17 @@ async fn 房间历史分页仍按事件位置升序返回() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..4 {
-            koko::usecase::发送文本消息(
+            koko::application::发送文本消息(
                 &mut repo,
                 &room_id,
                 &session_id,
@@ -230,16 +230,16 @@ async fn 房间历史分页无更早消息时返回空数组() {
     let (session_id, room_id) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        let session_id = koko::application::引导匿名身份(&mut repo, &device_token)
             .expect("应能引导匿名身份")
             .会话标识;
         let room =
-            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+            koko::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        koko::usecase::发送文本消息(
+        koko::application::发送文本消息(
             &mut repo,
             &room_id,
             &session_id,

@@ -1,7 +1,7 @@
 use koko::shared::contract::{
     媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体分发生存模式, 媒体资产种类
 };
-use koko::usecase::构造媒体冷源描述;
+use koko::application::构造媒体冷源描述;
 
 #[test]
 fn 正式视频共享表面只保留单文件分发与冷源语义() {

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     domain,
     shared::contract,
-    usecase::{self, 仓储端口},
+    application::{self, 仓储端口},
     user_identity,
 };
 
@@ -392,7 +392,7 @@ impl 仓储端口 for Pg仓储 {
     fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+    ) -> Result<Option<application::附件读取结果>, contract::错误码> {
         媒体附件适配::查询附件快照(self, 附件标识)
     }
 
@@ -400,7 +400,7 @@ impl 仓储端口 for Pg仓储 {
     fn 查询待完成媒体附件(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::待完成媒体附件读取结果>, contract::错误码> {
+    ) -> Result<Option<application::待完成媒体附件读取结果>, contract::错误码> {
         媒体附件适配::查询待完成媒体附件(self, 附件标识)
     }
 
@@ -408,8 +408,8 @@ impl 仓储端口 for Pg仓储 {
     fn 创建预备媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &usecase::媒体附件准备请求,
-    ) -> Result<usecase::媒体附件准备快照, contract::错误码> {
+        附件: &application::媒体附件准备请求,
+    ) -> Result<application::媒体附件准备快照, contract::错误码> {
         媒体附件适配::创建预备媒体附件记录(self, 所属匿名身份标识, 附件)
     }
 
@@ -424,8 +424,8 @@ impl 仓储端口 for Pg仓储 {
     fn 创建媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &usecase::媒体附件写入请求,
-    ) -> Result<usecase::媒体附件快照, contract::错误码> {
+        附件: &application::媒体附件写入请求,
+    ) -> Result<application::媒体附件快照, contract::错误码> {
         媒体附件适配::创建媒体附件记录(self, 所属匿名身份标识, 附件)
     }
 
@@ -452,8 +452,8 @@ impl 仓储端口 for Pg仓储 {
         当前匿名身份标识: &str,
         source_hash: &str,
         source_byte_size: i64,
-        种类: usecase::媒体附件类型,
-    ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+        种类: application::媒体附件类型,
+    ) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
         媒体附件适配::查询可复用source_hash媒体资产(
             self,
             会话标识,
@@ -469,14 +469,14 @@ impl 仓储端口 for Pg仓储 {
         &self,
         会话标识: &str,
         源附件标识: &str,
-        种类: usecase::媒体附件类型,
-    ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+        种类: application::媒体附件类型,
+    ) -> Result<Option<application::可复用媒体资产>, contract::错误码> {
         媒体附件适配::查询可转发媒体资产(self, 会话标识, 源附件标识, 种类)
     }
 
     fn 写入canonical媒体资产(
         &mut self,
-        请求: &usecase::Canonical媒体资产写入请求,
+        请求: &application::Canonical媒体资产写入请求,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::写入canonical媒体资产(self, 请求)
     }
@@ -492,15 +492,15 @@ impl 仓储端口 for Pg仓储 {
     /// 用例层只通过这个端口写入 Phase 1 分发元数据，不绕过应用层去拼 SQL。
     fn 写入协作分发元数据(
         &mut self,
-        请求: &usecase::协作分发元数据写入请求,
-    ) -> Result<usecase::协作分发元数据快照, contract::错误码> {
+        请求: &application::协作分发元数据写入请求,
+    ) -> Result<application::协作分发元数据快照, contract::错误码> {
         媒体附件适配::写入协作分发元数据(self, 请求)
     }
 
     fn 查询协作分发元数据(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
+    ) -> Result<Option<application::协作分发元数据快照>, contract::错误码> {
         媒体附件适配::查询协作分发元数据(self, 附件标识)
     }
 
@@ -508,13 +508,13 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待做种协作分发项>, contract::错误码> {
+    ) -> Result<Vec<application::待做种协作分发项>, contract::错误码> {
         媒体附件适配::列出待做种协作分发项(self, 当前时间戳秒, 限制条数)
     }
 
     fn 写入协作分发swarm存活(
         &mut self,
-        请求: &usecase::协作分发swarm存活写入请求,
+        请求: &application::协作分发swarm存活写入请求,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::写入协作分发swarm存活(self, 请求)
     }
@@ -522,28 +522,28 @@ impl 仓储端口 for Pg仓储 {
     fn 查询协作分发torrent元信息(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::协作分发torrent元信息快照>, contract::错误码> {
+    ) -> Result<Option<application::协作分发torrent元信息快照>, contract::错误码> {
         媒体附件适配::查询协作分发torrent元信息(self, 附件标识)
     }
 
     fn 写入协作分发torrent元信息(
         &mut self,
-        请求: &usecase::协作分发torrent元信息写入请求,
-    ) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
+        请求: &application::协作分发torrent元信息写入请求,
+    ) -> Result<application::协作分发torrent元信息快照, contract::错误码> {
         媒体附件适配::写入协作分发torrent元信息(self, 请求)
     }
 
     fn 写入流媒体清单元数据(
         &mut self,
-        请求: &usecase::流媒体清单写入请求,
-    ) -> Result<usecase::流媒体清单快照, contract::错误码> {
+        请求: &application::流媒体清单写入请求,
+    ) -> Result<application::流媒体清单快照, contract::错误码> {
         媒体附件适配::写入流媒体清单元数据(self, 请求)
     }
 
     fn 查询流媒体清单元数据(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::流媒体清单快照>, contract::错误码> {
+    ) -> Result<Option<application::流媒体清单快照>, contract::错误码> {
         媒体附件适配::查询流媒体清单元数据(self, 附件标识)
     }
 
@@ -551,7 +551,7 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待清理流媒体清单>, contract::错误码> {
+    ) -> Result<Vec<application::待清理流媒体清单>, contract::错误码> {
         媒体附件适配::列出待清理流媒体清单(self, 当前时间戳秒, 限制条数)
     }
 
@@ -568,8 +568,8 @@ impl 仓储端口 for Pg仓储 {
         &self,
         附件标识: &str,
         会话标识: &str,
-        变体: usecase::附件内容变体,
-    ) -> Result<Option<usecase::附件内容读取结果>, contract::错误码> {
+        变体: application::附件内容变体,
+    ) -> Result<Option<application::附件内容读取结果>, contract::错误码> {
         媒体附件适配::查询附件可读内容(self, 附件标识, 会话标识, 变体)
     }
 
@@ -577,7 +577,7 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待清理媒体冷源>, contract::错误码> {
+    ) -> Result<Vec<application::待清理媒体冷源>, contract::错误码> {
         媒体附件适配::列出待清理媒体冷源(self, 当前时间戳秒, 限制条数)
     }
 
@@ -593,7 +593,7 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待清理Canonical媒体资产>, contract::错误码> {
+    ) -> Result<Vec<application::待清理Canonical媒体资产>, contract::错误码> {
         媒体附件适配::列出待清理canonical媒体资产(self, 当前时间戳秒, 限制条数)
     }
 
@@ -609,7 +609,7 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待清理媒体回退母本>, contract::错误码> {
+    ) -> Result<Vec<application::待清理媒体回退母本>, contract::错误码> {
         媒体附件适配::列出待清理媒体回退母本(self, 当前时间戳秒, 限制条数)
     }
 
@@ -633,14 +633,14 @@ impl 仓储端口 for Pg仓储 {
         &self,
         当前时间戳秒: i64,
         限制条数: i64,
-    ) -> Result<Vec<usecase::待清理上传残留>, contract::错误码> {
+    ) -> Result<Vec<application::待清理上传残留>, contract::错误码> {
         媒体附件适配::列出待清理上传残留(self, 当前时间戳秒, 限制条数)
     }
 
     fn 标记上传残留已清理(
         &mut self,
         上传会话标识: &str,
-        清理原因: usecase::上传残留清理原因,
+        清理原因: application::上传残留清理原因,
         清理时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::标记上传残留已清理(self, 上传会话标识, 清理原因, 清理时间戳秒)
@@ -721,7 +721,7 @@ impl 仓储端口 for Pg仓储 {
     }
 }
 
-impl usecase::Realtime仓储端口 for Pg仓储 {
+impl application::Realtime仓储端口 for Pg仓储 {
     async fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
         房间阅读适配::检查会话存在_异步(&self.pool, 会话标识).await
     }
@@ -756,7 +756,7 @@ impl usecase::Realtime仓储端口 for Pg仓储 {
     async fn 查询附件快照(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+    ) -> Result<Option<application::附件读取结果>, contract::错误码> {
         媒体附件适配::查询附件快照_异步(&self.pool, 附件标识).await
     }
 

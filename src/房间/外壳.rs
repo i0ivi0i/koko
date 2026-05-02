@@ -163,14 +163,14 @@ pub(super) fn parse_history_query(
 
 /// 冷路径：引导匿名身份。
 ///
-/// 这里只做协议解码和结果转码；业务规则仍在 usecase 层。
+/// 这里只做协议解码和结果转码；业务规则仍在 application 层。
 pub(super) async fn bootstrap_session(
     State(state): State<应用状态>,
     Json(body): Json<BootstrapBody>,
 ) -> impl IntoResponse {
     let Some(device_anonymous_token) = body.device_anonymous_token else {
         tracing::warn!(
-            usecase = "引导匿名身份",
+            application = "引导匿名身份",
             adapter = "http",
             outcome = "rejected",
             request_kind = "匿名身份引导",
@@ -184,7 +184,7 @@ pub(super) async fn bootstrap_session(
         );
     };
     tracing::info!(
-        usecase = "引导匿名身份",
+        application = "引导匿名身份",
         adapter = "http",
         outcome = "accepted",
         request_kind = "匿名身份引导",
@@ -200,7 +200,7 @@ pub(super) async fn bootstrap_session(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "引导匿名身份",
+                application = "引导匿名身份",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "匿名身份引导",
@@ -218,7 +218,7 @@ pub(super) async fn bootstrap_session(
     match result {
         Ok(out) => {
             tracing::info!(
-                usecase = "引导匿名身份",
+                application = "引导匿名身份",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "匿名身份引导",
@@ -236,7 +236,7 @@ pub(super) async fn bootstrap_session(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "引导匿名身份",
+                application = "引导匿名身份",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "匿名身份引导",
@@ -254,7 +254,7 @@ pub(super) async fn join_or_create_room(
     Json(body): Json<JoinBody>,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "按短码进房或建房",
+        application = "按短码进房或建房",
         adapter = "http",
         outcome = "accepted",
         request_kind = "短码进房或建房",
@@ -275,7 +275,7 @@ pub(super) async fn join_or_create_room(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "按短码进房或建房",
+                application = "按短码进房或建房",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "短码进房或建房",
@@ -301,7 +301,7 @@ pub(super) async fn join_or_create_room(
             首屏前仍有更早历史,
         }) => {
             tracing::info!(
-                usecase = "按短码进房或建房",
+                application = "按短码进房或建房",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "短码进房或建房",
@@ -325,7 +325,7 @@ pub(super) async fn join_or_create_room(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "按短码进房或建房",
+                application = "按短码进房或建房",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "短码进房或建房",
@@ -341,7 +341,7 @@ pub(super) async fn join_or_create_room(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "按短码进房或建房",
+                application = "按短码进房或建房",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "短码进房或建房",
@@ -361,7 +361,7 @@ pub(super) async fn load_room_snapshot(
     Query(query): Query<SnapshotQuery>,
 ) -> impl IntoResponse {
     tracing::info!(
-        usecase = "加载房间快照",
+        application = "加载房间快照",
         adapter = "http",
         outcome = "accepted",
         request_kind = "房间快照查询",
@@ -383,7 +383,7 @@ pub(super) async fn load_room_snapshot(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "加载房间快照",
+                application = "加载房间快照",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间快照查询",
@@ -410,7 +410,7 @@ pub(super) async fn load_room_snapshot(
             首屏前仍有更早历史,
         }) => {
             tracing::info!(
-                usecase = "加载房间快照",
+                application = "加载房间快照",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "房间快照查询",
@@ -434,7 +434,7 @@ pub(super) async fn load_room_snapshot(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "加载房间快照",
+                application = "加载房间快照",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间快照查询",
@@ -452,7 +452,7 @@ pub(super) async fn load_room_snapshot(
         Err((status, code, message)) => {
             if 房间快照拒绝应记为警告(code) {
                 tracing::warn!(
-                    usecase = "加载房间快照",
+                    application = "加载房间快照",
                     adapter = "http",
                     outcome = "rejected",
                     request_kind = "房间快照查询",
@@ -463,7 +463,7 @@ pub(super) async fn load_room_snapshot(
                 );
             } else {
                 tracing::info!(
-                    usecase = "加载房间快照",
+                    application = "加载房间快照",
                     adapter = "http",
                     outcome = "rejected",
                     request_kind = "房间快照查询",
@@ -492,7 +492,7 @@ pub(super) async fn update_room_read_anchor(
         .map(str::to_string)
     else {
         tracing::warn!(
-            usecase = "推进房间阅读位置",
+            application = "推进房间阅读位置",
             adapter = "http",
             outcome = "rejected",
             request_kind = "房间阅读位置推进",
@@ -508,7 +508,7 @@ pub(super) async fn update_room_read_anchor(
     };
     let Some(last_read_event_position) = body.last_read_event_position else {
         tracing::warn!(
-            usecase = "推进房间阅读位置",
+            application = "推进房间阅读位置",
             adapter = "http",
             outcome = "rejected",
             request_kind = "房间阅读位置推进",
@@ -524,7 +524,7 @@ pub(super) async fn update_room_read_anchor(
         );
     };
     tracing::info!(
-        usecase = "推进房间阅读位置",
+        application = "推进房间阅读位置",
         adapter = "http",
         outcome = "accepted",
         request_kind = "房间阅读位置推进",
@@ -551,7 +551,7 @@ pub(super) async fn update_room_read_anchor(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "推进房间阅读位置",
+                application = "推进房间阅读位置",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间阅读位置推进",
@@ -572,7 +572,7 @@ pub(super) async fn update_room_read_anchor(
     match result {
         Ok(contract::命令结果::成功) => {
             tracing::info!(
-                usecase = "推进房间阅读位置",
+                application = "推进房间阅读位置",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "房间阅读位置推进",
@@ -585,7 +585,7 @@ pub(super) async fn update_room_read_anchor(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "推进房间阅读位置",
+                application = "推进房间阅读位置",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间阅读位置推进",
@@ -603,7 +603,7 @@ pub(super) async fn update_room_read_anchor(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "推进房间阅读位置",
+                application = "推进房间阅读位置",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "房间阅读位置推进",
@@ -628,7 +628,7 @@ pub(super) async fn load_room_events(
         Ok(query) => query,
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "加载房间增量事件",
+                application = "加载房间增量事件",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "房间增量事件查询",
@@ -640,7 +640,7 @@ pub(super) async fn load_room_events(
         }
     };
     tracing::info!(
-        usecase = "加载房间增量事件",
+        application = "加载房间增量事件",
         adapter = "http",
         outcome = "accepted",
         request_kind = "房间增量事件查询",
@@ -664,7 +664,7 @@ pub(super) async fn load_room_events(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "加载房间增量事件",
+                application = "加载房间增量事件",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间增量事件查询",
@@ -690,7 +690,7 @@ pub(super) async fn load_room_events(
         }) => {
             let event_count = 事件.len();
             tracing::info!(
-                usecase = "加载房间增量事件",
+                application = "加载房间增量事件",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "房间增量事件查询",
@@ -713,7 +713,7 @@ pub(super) async fn load_room_events(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "加载房间增量事件",
+                application = "加载房间增量事件",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间增量事件查询",
@@ -731,7 +731,7 @@ pub(super) async fn load_room_events(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "加载房间增量事件",
+                application = "加载房间增量事件",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "房间增量事件查询",
@@ -756,7 +756,7 @@ pub(super) async fn load_room_history(
         Ok(query) => query,
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "加载房间历史页",
+                application = "加载房间历史页",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "房间历史分页查询",
@@ -768,7 +768,7 @@ pub(super) async fn load_room_history(
         }
     };
     tracing::info!(
-        usecase = "加载房间历史页",
+        application = "加载房间历史页",
         adapter = "http",
         outcome = "accepted",
         request_kind = "房间历史分页查询",
@@ -800,7 +800,7 @@ pub(super) async fn load_room_history(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "加载房间历史页",
+                application = "加载房间历史页",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间历史分页查询",
@@ -824,7 +824,7 @@ pub(super) async fn load_room_history(
             房间标识, 消息
         }) => {
             tracing::info!(
-                usecase = "加载房间历史页",
+                application = "加载房间历史页",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "房间历史分页查询",
@@ -845,7 +845,7 @@ pub(super) async fn load_room_history(
         }
         Ok(_) => {
             tracing::error!(
-                usecase = "加载房间历史页",
+                application = "加载房间历史页",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "房间历史分页查询",
@@ -862,7 +862,7 @@ pub(super) async fn load_room_history(
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "加载房间历史页",
+                application = "加载房间历史页",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "房间历史分页查询",

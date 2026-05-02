@@ -541,7 +541,7 @@ async fn 读取旧匿名身份不应再偷偷写库回填影子字段() {
     let bootstrap = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::从连接池构建(pool_for_bootstrap, runtime_handle);
-        koko::usecase::引导匿名身份(&mut repo, "migration-read-guard-device")
+        koko::application::引导匿名身份(&mut repo, "migration-read-guard-device")
     })
     .await
     .expect("阻塞引导任务应完成")
@@ -658,7 +658,7 @@ async fn 最终收口迁移会把旧匿名身份与媒体冷源补齐到最终�
     let bootstrap = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::从连接池构建(pool_for_bootstrap, runtime_handle);
-        koko::usecase::引导匿名身份(&mut repo, "migration-0018-device")
+        koko::application::引导匿名身份(&mut repo, "migration-0018-device")
     })
     .await
     .expect("阻塞引导任务应完成")

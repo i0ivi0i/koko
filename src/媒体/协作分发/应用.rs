@@ -1,11 +1,11 @@
-use crate::{shared::contract, usecase};
+use crate::{shared::contract, application};
 
 /// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在媒体分发语义里。
 /// handler 只负责调度，不直接越层操纵仓储。
 pub fn 写入协作分发元数据(
-    仓储: &mut dyn usecase::仓储端口,
-    请求: &usecase::协作分发元数据写入请求,
-) -> Result<usecase::协作分发元数据快照, contract::错误码> {
+    仓储: &mut dyn application::仓储端口,
+    请求: &application::协作分发元数据写入请求,
+) -> Result<application::协作分发元数据快照, contract::错误码> {
     if 请求.附件标识.trim().is_empty()
         || 请求.content_id.trim().is_empty()
         || 请求.content_hash.trim().is_empty()
@@ -21,8 +21,8 @@ pub fn 写入协作分发元数据(
 /// 2. 仍然强校验 peer_kind 与基础参数，避免 adapter 被脏数据污染；
 /// 3. 只写运行态表，不改 attachment 稳定分发表面。
 pub fn 写入协作分发swarm存活(
-    仓储: &mut dyn usecase::仓储端口,
-    请求: &usecase::协作分发swarm存活写入请求,
+    仓储: &mut dyn application::仓储端口,
+    请求: &application::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
     if 请求.swarm_id.trim().is_empty()
         || 请求.附件标识.trim().is_empty()
@@ -32,16 +32,16 @@ pub fn 写入协作分发swarm存活(
     {
         return Err(contract::错误码::参数非法);
     }
-    if !usecase::是有效协作分发存活类型(请求.存活类型.as_str()) {
+    if !application::是有效协作分发存活类型(请求.存活类型.as_str()) {
         return Err(contract::错误码::参数非法);
     }
     仓储.写入协作分发swarm存活(请求)
 }
 
 pub fn 写入协作分发torrent元信息(
-    仓储: &mut dyn usecase::仓储端口,
-    请求: &usecase::协作分发torrent元信息写入请求,
-) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
+    仓储: &mut dyn application::仓储端口,
+    请求: &application::协作分发torrent元信息写入请求,
+) -> Result<application::协作分发torrent元信息快照, contract::错误码> {
     if 请求.附件标识.trim().is_empty()
         || 请求.torrent_info_hash.trim().is_empty()
         || 请求.torrent_bytes.is_empty()
@@ -57,27 +57,27 @@ pub fn 写入协作分发torrent元信息(
 /// 2. 附件必须存在且 ready；
 /// 3. 实际可见性仍按“当前会话是否能看到引用该附件的消息”裁决。
 pub fn 读取附件内容(
-    仓储: &dyn usecase::仓储端口,
+    仓储: &dyn application::仓储端口,
     附件标识: &str,
     会话标识: &str,
-    变体: usecase::附件内容变体,
-) -> Result<usecase::附件内容读取结果, contract::错误码> {
+    变体: application::附件内容变体,
+) -> Result<application::附件内容读取结果, contract::错误码> {
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    usecase::校验实时连接会话(仓储, 会话标识)?;
+    application::校验实时连接会话(仓储, 会话标识)?;
     let snapshot = 仓储
         .查询附件快照(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
-    if snapshot.状态 != usecase::附件状态读取结果::就绪 {
+    if snapshot.状态 != application::附件状态读取结果::就绪 {
         return Err(contract::错误码::附件未就绪);
     }
-    if matches!(变体, usecase::附件内容变体::原图) {
+    if matches!(变体, application::附件内容变体::原图) {
         let 当前时间戳秒 = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_secs() as i64)
             .unwrap_or_default();
-        if !usecase::冷源生命周期当前可用(
+        if !application::冷源生命周期当前可用(
             snapshot.原始冷源到期时间戳秒,
             snapshot.原始冷源删除时间戳秒,
             当前时间戳秒,
@@ -94,14 +94,14 @@ pub fn 读取附件内容(
 /// - 业务层只回答“当前附件是什么、是否 ready、当前会话是否允许拿到 transport 线索”；
 /// - 不把存储键、房间 id、owner 等实现细节交给壳层。
 pub fn 查询媒体定位(
-    仓储: &dyn usecase::仓储端口,
+    仓储: &dyn application::仓储端口,
     附件标识: &str,
     会话标识: &str,
-) -> Result<usecase::媒体定位结果, contract::错误码> {
+) -> Result<application::媒体定位结果, contract::错误码> {
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    usecase::校验实时连接会话(仓储, 会话标识)?;
+    application::校验实时连接会话(仓储, 会话标识)?;
     let snapshot = 仓储
         .查询附件快照(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
@@ -109,24 +109,24 @@ pub fn 查询媒体定位(
     // 这样后端才能给前端返回稳定的 MEDIA_DELETED，而不是模糊的 not_ready 错误。
     if !matches!(
         snapshot.状态,
-        usecase::附件状态读取结果::就绪 | usecase::附件状态读取结果::已过期
+        application::附件状态读取结果::就绪 | application::附件状态读取结果::已过期
     ) {
         return Err(contract::错误码::附件未就绪);
     }
     仓储
-        .查询附件可读内容(附件标识, 会话标识, usecase::附件内容变体::原图)?
+        .查询附件可读内容(附件标识, 会话标识, application::附件内容变体::原图)?
         .ok_or(contract::错误码::成员资格不足)?;
     let kind = match snapshot.种类 {
-        usecase::附件种类读取结果::图片 => usecase::媒体附件类型::图片,
-        usecase::附件种类读取结果::视频 => usecase::媒体附件类型::视频,
+        application::附件种类读取结果::图片 => application::媒体附件类型::图片,
+        application::附件种类读取结果::视频 => application::媒体附件类型::视频,
         _ => return Err(contract::错误码::附件类型不支持),
     };
     let distribution = 仓储.查询协作分发元数据(附件标识)?;
     let streaming_manifest = match kind {
-        usecase::媒体附件类型::视频 => 仓储.查询流媒体清单元数据(附件标识)?,
-        usecase::媒体附件类型::图片 => None,
+        application::媒体附件类型::视频 => 仓储.查询流媒体清单元数据(附件标识)?,
+        application::媒体附件类型::图片 => None,
     };
-    Ok(usecase::媒体定位结果 {
+    Ok(application::媒体定位结果 {
         附件标识: snapshot.附件标识,
         种类: kind.clone(),
         mime_type: snapshot.mime_type,
@@ -146,10 +146,10 @@ pub fn 查询媒体定位(
 /// 1. 时间与限制参数必须合法；
 /// 2. 具体筛选条件由仓储实现保持与权威表一致。
 pub fn 列出待做种协作分发项(
-    仓储: &dyn usecase::仓储端口,
+    仓储: &dyn application::仓储端口,
     当前时间戳秒: i64,
     限制条数: i64,
-) -> Result<Vec<usecase::待做种协作分发项>, contract::错误码> {
+) -> Result<Vec<application::待做种协作分发项>, contract::错误码> {
     if 当前时间戳秒 < 0 || 限制条数 <= 0 {
         return Err(contract::错误码::参数非法);
     }
