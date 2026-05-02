@@ -28,7 +28,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio_tungstenite::tungstenite;
-use crate::{adapter::Pg仓储, media::distribution::application as 协作分发应用, media_distribution};
+use crate::{
+    adapter::Pg仓储, media::distribution::application as 协作分发应用, media_distribution,
+    realtime::shell as 实时外壳,
+};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
@@ -42,8 +45,6 @@ mod 媒体上传外壳;
 mod 媒体内容解析;
 #[path = "媒体/资产/外壳.rs"]
 mod 媒体资产外壳;
-#[path = "实时/外壳.rs"]
-mod 实时外壳;
 #[path = "房间/外壳.rs"]
 mod 房间外壳;
 #[path = "外壳/前端静态入口.rs"]

@@ -55,8 +55,12 @@ fn 实时外壳根文件必须删除并直连实时_owner() {
         "src/实时外壳.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        shell.contains("#[path = \"实时/外壳.rs\"]"),
-        "src/外壳.rs 应直接把 realtime 外壳路径指到 src/实时/外壳.rs"
+        !shell.contains("#[path = \"实时/外壳.rs\"]"),
+        "src/外壳.rs 不能再用 #[path] 二次引入 src/实时/外壳.rs；同一源码只能通过 crate::realtime::shell 一个模块身份进入编译"
+    );
+    assert!(
+        shell.contains("realtime::shell") && shell.contains("as 实时外壳"),
+        "src/外壳.rs 应复用 crate::realtime::shell，避免实时外壳被编译成第二份模块身份"
     );
     assert!(
         owner.contains("crate::realtime::application"),
