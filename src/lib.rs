@@ -21,7 +21,7 @@ pub mod identity;
 pub mod message;
 #[path = "媒体/mod.rs"]
 pub mod media;
-#[path = "外壳.rs"]
+#[path = "外壳/mod.rs"]
 pub mod shell;
 #[path = "媒体/协作分发/共享语义.rs"]
 pub mod media_distribution;

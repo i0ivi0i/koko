@@ -48,7 +48,11 @@ fn crate_总索引必须显式挂载_recovery_模块() {
 
 #[test]
 fn 实时外壳根文件必须删除并直连实时_owner() {
-    let shell = 读取("src/外壳.rs");
+    assert!(
+        !Path::new("src/外壳.rs").exists(),
+        "src/外壳.rs 必须删除；HTTP/socket 总壳 owner 只能进 src/外壳/mod.rs"
+    );
+    let shell = 读取("src/外壳/mod.rs");
     let owner = 读取("src/实时/外壳.rs");
     assert!(
         !Path::new("src/实时外壳.rs").exists(),
@@ -56,11 +60,11 @@ fn 实时外壳根文件必须删除并直连实时_owner() {
     );
     assert!(
         !shell.contains("#[path = \"实时/外壳.rs\"]"),
-        "src/外壳.rs 不能再用 #[path] 二次引入 src/实时/外壳.rs；同一源码只能通过 crate::realtime::shell 一个模块身份进入编译"
+        "src/外壳/mod.rs 不能再用 #[path] 二次引入 src/实时/外壳.rs；同一源码只能通过 crate::realtime::shell 一个模块身份进入编译"
     );
     assert!(
         shell.contains("realtime::shell") && shell.contains("as 实时外壳"),
-        "src/外壳.rs 应复用 crate::realtime::shell，避免实时外壳被编译成第二份模块身份"
+        "src/外壳/mod.rs 应复用 crate::realtime::shell，避免实时外壳被编译成第二份模块身份"
     );
     assert!(
         owner.contains("crate::realtime::application"),
@@ -135,10 +139,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    let temporary_old_roots = ["外壳.rs"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect::<BTreeSet<_>>();
+    let temporary_old_roots = BTreeSet::<String>::new();
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
 
     for file in actual {
@@ -159,9 +160,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
 
 #[test]
 fn 后端旧根文件删除前只能变薄不能变厚() {
-    let budgets = [
-        ("src/外壳.rs", 1585usize),
-    ];
+    let budgets: [(&str, usize); 0] = [];
 
     for (path, budget) in budgets {
         let lines = 统计物理行数(path);
@@ -174,14 +173,14 @@ fn 后端旧根文件删除前只能变薄不能变厚() {
 
 #[test]
 fn 外壳层前端静态入口必须下沉到中文子模块() {
-    let shell = 读取("src/外壳.rs");
+    let shell = 读取("src/外壳/mod.rs");
     assert!(
         Path::new("src/外壳/前端静态入口.rs").exists(),
         "src/外壳/前端静态入口.rs 缺失，说明前端静态入口 owner 还没有从根外壳文件下沉"
     );
     assert!(
-        shell.contains("#[path = \"外壳/前端静态入口.rs\"]"),
-        "src/外壳.rs 应显式挂载 src/外壳/前端静态入口.rs"
+        shell.contains("#[path = \"前端静态入口.rs\"]"),
+        "src/外壳/mod.rs 应显式挂载 src/外壳/前端静态入口.rs"
     );
     for forbidden in [
         "fn 构建前端静态资源路由()",
@@ -192,21 +191,21 @@ fn 外壳层前端静态入口必须下沉到中文子模块() {
     ] {
         assert!(
             !shell.contains(forbidden),
-            "src/外壳.rs 不应继续内嵌前端静态入口实现: {forbidden}"
+            "src/外壳/mod.rs 不应继续内嵌前端静态入口实现: {forbidden}"
         );
     }
 }
 
 #[test]
 fn 外壳层协议响应必须下沉到中文子模块() {
-    let shell = 读取("src/外壳.rs");
+    let shell = 读取("src/外壳/mod.rs");
     assert!(
         Path::new("src/外壳/协议响应.rs").exists(),
         "src/外壳/协议响应.rs 缺失，说明协议响应 owner 还没有从根外壳文件下沉"
     );
     assert!(
-        shell.contains("#[path = \"外壳/协议响应.rs\"]"),
-        "src/外壳.rs 应显式挂载 src/外壳/协议响应.rs"
+        shell.contains("#[path = \"协议响应.rs\"]"),
+        "src/外壳/mod.rs 应显式挂载 src/外壳/协议响应.rs"
     );
     for forbidden in [
         "struct ApiError",
@@ -218,22 +217,22 @@ fn 外壳层协议响应必须下沉到中文子模块() {
     ] {
         assert!(
             !shell.contains(forbidden),
-            "src/外壳.rs 不应继续内嵌协议响应实现: {forbidden}"
+            "src/外壳/mod.rs 不应继续内嵌协议响应实现: {forbidden}"
         );
     }
 }
 
 #[test]
 fn 房间外壳必须收进房间子域() {
-    let shell = 读取("src/外壳.rs");
+    let shell = 读取("src/外壳/mod.rs");
     let owner = 读取("src/房间/外壳.rs");
     assert!(
         !Path::new("src/房间外壳.rs").exists(),
         "src/房间外壳.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        shell.contains("#[path = \"房间/外壳.rs\"]"),
-        "src/外壳.rs 应直接把房间外壳路径指到 src/房间/外壳.rs"
+        shell.contains("#[path = \"../房间/外壳.rs\"]"),
+        "src/外壳/mod.rs 应直接把房间外壳路径指到 src/房间/外壳.rs"
     );
     assert!(
         owner.contains("crate::room::application"),
@@ -306,15 +305,15 @@ fn 用户身份资料投影必须收进身份子域() {
 
 #[test]
 fn 后台外壳必须收进后台子域() {
-    let shell = 读取("src/外壳.rs");
+    let shell = 读取("src/外壳/mod.rs");
     let owner = 读取("src/后台/外壳.rs");
     assert!(
         !Path::new("src/后台外壳.rs").exists(),
         "src/后台外壳.rs 应该已经删除，不能继续保留根目录旧入口"
     );
     assert!(
-        shell.contains("#[path = \"后台/外壳.rs\"]"),
-        "src/外壳.rs 应直接把后台外壳路径指到 src/后台/外壳.rs"
+        shell.contains("#[path = \"../后台/外壳.rs\"]"),
+        "src/外壳/mod.rs 应直接把后台外壳路径指到 src/后台/外壳.rs"
     );
     assert!(
         owner.contains("async fn admin_login(") && owner.contains("async fn admin_overview("),
@@ -327,7 +326,7 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = [
         ("src/应用/mod.rs", 200usize),
-        ("src/外壳.rs", 200usize),
+        ("src/外壳/mod.rs", 200usize),
         ("src/适配/mod.rs", 120usize),
         ("frontend/总装/聊天应用内核.ts", 200usize),
         ("frontend/总装/聊天壳.ts", 200usize),
