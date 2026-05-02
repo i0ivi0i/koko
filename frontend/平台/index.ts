@@ -6,7 +6,7 @@ import {
 let 默认浏览器应用平台: 浏览器应用平台 | null = null;
 
 /**
- * 入口和壳层只拿平台门面，不分散 import 内部 runtime。
+ * 入口和壳层只拿平台入口，不分散 import 内部 runtime。
  * 这样后面继续扩平台能力时，外层调用面还能保持稳定。
  */
 export function 获取默认浏览器应用平台(): 浏览器应用平台 {

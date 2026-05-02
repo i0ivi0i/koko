@@ -69,11 +69,11 @@ fn 实时外壳根文件必须删除并直连实时_owner() {
 }
 
 #[test]
-fn 旧房间快照入口必须退成_recovery_owner_门面() {
+fn 旧房间快照实现必须只留在_recovery_owner() {
     let content = 读取("src/房间/应用.rs");
     assert!(
         content.contains("pub use crate::recovery::application::加载房间快照;"),
-        "src/房间/应用.rs 还没把快照恢复入口退成 recovery owner 门面"
+        "src/房间/应用.rs 只能暴露 recovery owner 的加载房间快照能力，不能重建房间侧实现"
     );
     assert!(
         !content.contains("async fn 加载房间快照"),
@@ -82,13 +82,13 @@ fn 旧房间快照入口必须退成_recovery_owner_门面() {
 }
 
 #[test]
-fn 统一用例门面必须继续转发到业务模块且不得回灌外层实现() {
+fn 根用例文件只能指向业务_owner且不得回灌外层实现() {
     let content = 读取("src/用例.rs");
     assert!(
         content.contains("crate::identity")
             && content.contains("crate::room")
             && content.contains("crate::recovery"),
-        "统一用例门面必须继续显式转发到业务模块，不能把恢复 owner 漏回旧总文件"
+        "src/用例.rs 删除前必须显式指向业务 owner，不能把恢复 owner 漏回旧总文件"
     );
     for forbidden in ["axum", "sqlx", "socketioxide", "SocketRef", "StatusCode", "Router"] {
         assert!(
@@ -99,7 +99,7 @@ fn 统一用例门面必须继续转发到业务模块且不得回灌外层实�
 }
 
 #[test]
-fn 统一契约门面不得混入页面文案布局词或框架类型() {
+fn 根契约文件不得混入页面文案布局词或框架类型() {
     let content = 读取("src/契约.rs");
     for forbidden in [
         "HTMLElement",
@@ -121,30 +121,36 @@ fn 统一契约门面不得混入页面文案布局词或框架类型() {
 }
 
 #[test]
-fn 后端根目录只允许合法入口_迁移门面或已登记散落_owner() {
+fn 后端根目录旧根文件必须登记为待删除债务() {
     let actual = 枚举后端根_rs文件();
-    let expected = [
-        "lib.rs",
-        "main.rs",
-        "入口.rs",
-        "总装.rs",
-        "契约.rs",
-        "用例.rs",
-        "适配.rs",
-        "外壳.rs",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect::<BTreeSet<_>>();
+    let permanent = ["lib.rs", "main.rs", "入口.rs", "总装.rs"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let temporary_old_roots = ["契约.rs", "用例.rs", "适配.rs", "外壳.rs"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
 
-    assert_eq!(
-        actual, expected,
-        "src 根目录 .rs 文件集合发生变化；新增或删除根文件前必须先更新完成矩阵、门禁和迁移裁决"
-    );
+    for file in actual {
+        if permanent.contains(&file) {
+            continue;
+        }
+        assert!(
+            temporary_old_roots.contains(&file),
+            "src 根目录出现未登记业务文件 {file}；根目录只允许真实入口/总装，旧根文件必须单独登记为待删除债务"
+        );
+        let row_prefix = format!("| `src/{file}` | 待删除旧根文件");
+        assert!(
+            matrix.contains(&row_prefix),
+            "{file} 仍在 src 根目录时，完成矩阵必须把它登记为“待删除旧根文件”，不能再写成合法长期入口"
+        );
+    }
 }
 
 #[test]
-fn 后端迁移门面只能变薄不能变厚() {
+fn 后端旧根文件删除前只能变薄不能变厚() {
     let budgets = [
         ("src/契约.rs", 328usize),
         ("src/用例.rs", 960usize),
@@ -156,7 +162,7 @@ fn 后端迁移门面只能变薄不能变厚() {
         let lines = 统计物理行数(path);
         assert!(
             lines <= budget,
-            "{path} 当前 {lines} 行，超过迁移门面预算 {budget}；迁移门面只允许变薄，不允许继续长胖"
+            "{path} 当前 {lines} 行，超过待删除旧根文件预算 {budget}；旧根文件删除前只允许变薄，不允许继续长胖"
         );
     }
 }

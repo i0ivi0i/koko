@@ -24,7 +24,7 @@ describe("传输", () => {
     vi.restoreAllMocks();
   });
 
-  it("平台传输 owner 已经成为唯一入口，旧根门面已删除", () => {
+  it("平台传输 owner 已经成为唯一入口，旧根入口已删除", () => {
     const ownerSource = 读取平台传输Owner源码();
 
     expect(existsSync(resolve(process.cwd(), "传输.ts"))).toBe(false);

@@ -8,7 +8,7 @@ import {
   读取阅读推进编排工厂,
 } from "./common/聊天测试支架";
 describe("阅读推进编排", () => {
-  it("阅读推进 owner 直连生效，旧根门面已经删除", () => {
+  it("阅读推进 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = readFileSync(resolve(process.cwd(), "房间/壳层/阅读推进.ts"), "utf8");
 
     expect(existsSync(resolve(process.cwd(), "阅读推进编排.ts"))).toBe(false);

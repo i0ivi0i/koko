@@ -61,7 +61,7 @@ function 创建消息节点(eventPosition: number, top: number, bottom: number):
 }
 
 describe("房间滚动器", () => {
-  it("时间线滚动 owner 直连生效，旧根门面已经删除", () => {
+  it("时间线滚动 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("时间线/滚动器.ts");
     const timelineAppSource = 读取前端源码("时间线/应用.ts");
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");

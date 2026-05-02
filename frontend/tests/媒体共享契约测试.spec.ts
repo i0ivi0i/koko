@@ -251,9 +251,9 @@ describe("媒体共享契约", () => {
     expect("original" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
   });
 
-  it("共享契约实现不应继续出现迁移期兼容表面叙事", () => {
+  it("共享契约实现不应继续出现迁移期旧表面叙事", () => {
     const source = readFileSync(new URL("../../src/契约.rs", import.meta.url), "utf-8");
-    expect(source.includes("迁移期兼容表面")).toBe(false);
+    expect(source).not.toMatch(/迁移期.*表面/);
     expect(source.includes("流媒体视频")).toBe(false);
     expect(source.includes("流媒体音频")).toBe(false);
     expect(source.includes("媒体清单描述")).toBe(false);
@@ -279,7 +279,8 @@ describe("媒体共享契约", () => {
   });
 
   it("仓库清理后不再保留死模块、跟踪日志和未完成计划态", () => {
-    const shellSource = readFileSync(new URL("../../src/房间外壳.rs", import.meta.url), "utf-8");
+    expect(existsSync(new URL("../../src/房间外壳.rs", import.meta.url))).toBe(false);
+    const shellSource = readFileSync(new URL("../../src/房间/外壳.rs", import.meta.url), "utf-8");
     const planSource = readFileSync(
       new URL("../../docs/superpowers/plans/2026-04-28-唯一WebTorrent万人群聊零崩溃零闪烁执行计划.md", import.meta.url),
       "utf-8"

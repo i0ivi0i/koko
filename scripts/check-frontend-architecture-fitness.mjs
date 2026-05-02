@@ -174,7 +174,7 @@ const 前端已清零根文件规则 = [
   },
   {
     path: "frontend/调试兼容.ts",
-    ownerPath: "frontend/平台/调试兼容.ts",
+    ownerPath: "frontend/平台/调试浏览器适配.ts",
     requiredOwnerSnippets: ["debugFactory", 'from "../node_modules/debug/src/browser.js"'],
   },
   {
@@ -246,13 +246,13 @@ const 前端禁回流片段规则 = [
       /创建资产协作分发运行时|const 启动查看器起始附件会话\s*=|const 补启动查看器正式会话Consumer\s*=|const 当前请求命中热自动播会话\s*=/g,
   },
   {
-    label: "legacy room realtime facade fallback",
+    label: "legacy room realtime owner reflux",
     path: "frontend/房间实时编排.ts",
     pattern:
       /let realtimeSocket|function ensureRealtimeSocket|处理实时控制面结果\(|登记待补发创建消息\(/g,
   },
   {
-    label: "legacy recovery facade fallback",
+    label: "legacy recovery owner reflux",
     path: "frontend/聊天恢复/壳层/房间快照恢复.ts",
     pattern:
       /function 同步首页房间历史|function 进入房间快照|function 处理恢复失败|function resolveFallbackRoomCode/g,
@@ -714,7 +714,7 @@ const 检查禁回流片段 = (files) => {
       violations.push({
         file: relativePath,
         label: rule.label,
-        detail: "命中已禁回流的前端兼容片段",
+        detail: "命中已禁回流的前端旧架构片段",
       });
     }
   }

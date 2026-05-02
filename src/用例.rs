@@ -1,7 +1,7 @@
 use crate::{contract, domain};
 
-/// 第一波真 DDD 收口先让统一用例文件退成门面：
-/// 身份、房间、消息三条主业务能力开始显式转发到对应业务模块。
+/// 第一波真 DDD 收口先让统一用例文件变成待删除旧根文件：
+/// 身份、房间、消息三条主业务能力开始显式指向对应业务模块。
 /// 这样后续继续收 owner 时，新逻辑就不该再回流到这份总文件里。
 pub use crate::identity::application::引导匿名身份;
 pub use crate::media::distribution::application::{

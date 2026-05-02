@@ -19,7 +19,7 @@ const 创建运行时依赖 = () => ({
 });
 
 describe("应用运行时", () => {
-  it("平台 owner 直接提供应用运行时，旧根门面已经删除", () => {
+  it("平台 owner 直接提供应用运行时，旧根入口已经删除", () => {
     expect(existsSync(resolve(process.cwd(), "应用运行时.ts"))).toBe(false);
   });
 

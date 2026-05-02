@@ -6,7 +6,7 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 describe("前端聊天状态 owner", () => {
-  it("总装聊天状态已经成为唯一 owner，旧根门面已删除", () => {
+  it("总装聊天状态已经成为唯一 owner，旧根入口已删除", () => {
     const ownerSource = 读取前端源码("总装/聊天状态.ts");
     const shellSource = 读取前端源码("总装/聊天壳.ts");
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");

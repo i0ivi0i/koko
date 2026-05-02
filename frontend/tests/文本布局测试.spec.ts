@@ -12,7 +12,7 @@ describe("文本布局器", () => {
     安装测试文本测量画布();
   });
 
-  it("文本布局 owner 直连生效，旧根门面已经删除", () => {
+  it("文本布局 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("房间消息窗/文本布局.ts");
     const shellSource = 读取前端源码("总装/聊天壳.ts");
     const viewSource = 读取前端源码("房间消息窗/视图.ts");

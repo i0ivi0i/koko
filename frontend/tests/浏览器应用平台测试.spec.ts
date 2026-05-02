@@ -54,7 +54,7 @@ const 创建假传输运行时 = (input: {
 };
 
 describe("浏览器端应用平台化基线", () => {
-  it("聊天壳会把业务入口收进总装门面，自身只保留 view + bridge", () => {
+  it("聊天壳会把业务入口收进总装入口，自身只保留 view + bridge", () => {
     const source = 读取前端源码("总装/聊天壳.ts");
 
     expect(source).toContain('from "./应用装配.js"');
@@ -276,11 +276,11 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/平台/存储.ts"');
   });
 
-  it("架构适应度门禁会把调试兼容根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
+  it("架构适应度门禁会把调试旧根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('path: "frontend/调试兼容.ts"');
-    expect(source).toContain('ownerPath: "frontend/平台/调试兼容.ts"');
+    expect(source).toContain('ownerPath: "frontend/平台/调试浏览器适配.ts"');
   });
 
   it("架构适应度门禁会把应用生命周期根文件锁成已清零目标，避免平台 owner 又散回根目录", () => {
@@ -404,12 +404,12 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('ownerPath: "frontend/总装/聊天状态.ts"');
   });
 
-  it("架构适应度门禁会拦住旧恢复/实时门面和聊天媒体 owner 回流", () => {
+  it("架构适应度门禁会拦住旧恢复/实时入口和聊天媒体 owner 回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
     expect(source).toContain('label: "chat media owner fallback"');
-    expect(source).toContain('label: "legacy room realtime facade fallback"');
-    expect(source).toContain('label: "legacy recovery facade fallback"');
+    expect(source).toContain('label: "legacy room realtime owner reflux"');
+    expect(source).toContain('label: "legacy recovery owner reflux"');
   });
 
   it("架构适应度门禁会拦住视频预览 owner 重新引入 canonical/original 冷源旁路", () => {
@@ -539,7 +539,7 @@ const stillKeep = true;
     expect(adminKernelOwnerSource).not.toContain("detailText:");
   });
 
-  it("平台传输运行时直接依赖平台 owner，旧根门面已经删除", () => {
+  it("平台传输运行时直接依赖平台 owner，旧根入口已经删除", () => {
     const transportOwnerSource = 读取前端源码("平台/传输.ts");
     const transportRuntimeSource = 读取前端源码("平台/传输运行时.ts");
 
@@ -549,7 +549,7 @@ const stillKeep = true;
     expect(transportRuntimeSource).not.toContain('from "../传输.js"');
   });
 
-  it("平台存储运行时直接依赖平台 owner，旧根门面已经删除", () => {
+  it("平台存储运行时直接依赖平台 owner，旧根入口已经删除", () => {
     const storageOwnerSource = 读取前端源码("平台/存储.ts");
     const storageRuntimeSource = 读取前端源码("平台/存储运行时.ts");
 
@@ -559,17 +559,17 @@ const stillKeep = true;
     expect(storageRuntimeSource).not.toContain('from "../存储.js"');
   });
 
-  it("构建 alias 直指平台调试兼容 owner，旧根门面已经删除", () => {
-    const debugOwnerSource = 读取前端源码("平台/调试兼容.ts");
+  it("构建 alias 直指平台调试浏览器适配 owner，旧根入口已经删除", () => {
+    const debugOwnerSource = 读取前端源码("平台/调试浏览器适配.ts");
     const buildSource = 读取前端源码("build.mjs");
 
     expect(existsSync(resolve(process.cwd(), "调试兼容.ts"))).toBe(false);
     expect(debugOwnerSource).toContain("debugFactory");
-    expect(buildSource).toContain("path.join(frontendRoot, '平台', '调试兼容.ts')");
+    expect(buildSource).toContain("path.join(frontendRoot, '平台', '调试浏览器适配.ts')");
     expect(buildSource).not.toContain("path.join(frontendRoot, '调试兼容.ts')");
   });
 
-  it("应用生命周期 owner 进入平台层，旧根门面已经删除，内核直接依赖平台 owner", () => {
+  it("应用生命周期 owner 进入平台层，旧根入口已经删除，内核直接依赖平台 owner", () => {
     const lifecycleOwnerSource = 读取前端源码("平台/应用生命周期.ts");
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
 
@@ -579,7 +579,7 @@ const stillKeep = true;
     expect(kernelSource).not.toContain('from "./应用生命周期.js"');
   });
 
-  it("应用运行时 owner 进入平台层，旧根门面已经删除，总装直接依赖平台 owner", () => {
+  it("应用运行时 owner 进入平台层，旧根入口已经删除，总装直接依赖平台 owner", () => {
     const runtimeOwnerSource = 读取前端源码("平台/应用运行时.ts");
     const assemblySource = 读取前端源码("总装/应用装配.ts");
 
@@ -589,7 +589,7 @@ const stillKeep = true;
     expect(assemblySource).not.toContain('from "../应用运行时.js"');
   });
 
-  it("聊天应用编排桥接 owner 进入总装层，旧根门面已经删除，聊天内核直接依赖总装 owner", () => {
+  it("聊天应用编排桥接 owner 进入总装层，旧根入口已经删除，聊天内核直接依赖总装 owner", () => {
     const bridgeOwnerSource = 读取前端源码("总装/聊天应用编排桥接.ts");
     const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
 

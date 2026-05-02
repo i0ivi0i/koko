@@ -222,7 +222,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect("媒体发布器" in (el as object)).toBe(false);
   });
 
-  it("聊天壳通过总装门面拿 kernel 和 runtime，不再自己 new 业务入口", () => {
+  it("聊天壳通过总装入口拿 kernel 和 runtime，不再自己 new 业务入口", () => {
     const source = 读取前端源码("总装/聊天壳.ts");
 
     expect(source).toContain('from "./应用装配.js"');

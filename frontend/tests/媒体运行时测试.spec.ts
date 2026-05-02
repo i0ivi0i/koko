@@ -22,7 +22,7 @@ const 创建视频查看器请求 = (attachmentId: string) => ({
 });
 
 describe("媒体运行时", () => {
-  it("媒体运行时 owner 直连生效，旧根门面已经删除", () => {
+  it("媒体运行时 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("媒体/运行时.ts");
     const mediaOrchestratorSource = 读取前端源码("媒体/播放会话/应用.ts");
     const autoplayShellSource = 读取前端源码("媒体/壳层/自动播协作.ts");

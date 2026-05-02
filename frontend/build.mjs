@@ -206,7 +206,7 @@ const appBuildOptions = {
   chunkNames: 'chunks/[name]-[hash]',
   assetNames: 'assets/[name]-[hash]',
   alias: {
-    debug: path.join(frontendRoot, '平台', '调试兼容.ts'),
+    debug: path.join(frontendRoot, '平台', '调试浏览器适配.ts'),
   },
   plugins: [生成静态资源清单插件()],
 }

@@ -58,7 +58,7 @@ function 创建消息事件(
 }
 
 describe("视图 / 消息展示项派生", () => {
-  it("展示 owner 直连生效，旧根门面已经删除", () => {
+  it("展示 owner 直连生效，旧根入口已经删除", () => {
     const messagePaneViewSource = 读取前端源码("房间消息窗/视图.ts");
     const adminViewSource = 读取前端源码("后台/视图.ts");
     const shellSource = 读取前端源码("总装/聊天壳.ts");

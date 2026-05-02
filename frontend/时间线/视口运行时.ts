@@ -58,7 +58,7 @@ const 根据首屏未读派生视口模式 = (firstUnreadEventPosition: number |
 /**
  * 视口运行时 owner 归时间线模块：
  * 1. 这里只维护视口交互真相，不碰 DOM 和网络；
- * 2. 房间根文件只保留兼容门面，避免视口状态机继续散落在 frontend 根目录；
+ * 2. 房间根文件已删除，避免视口状态机继续散落在 frontend 根目录；
  * 3. 真正依赖它的聊天内核应直接指向 `frontend/时间线/视口运行时.ts`。
  */
 const 房间视口机 = createMachine(

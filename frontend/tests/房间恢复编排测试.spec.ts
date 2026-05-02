@@ -10,7 +10,7 @@ import {
   读取房间恢复编排工厂,
 } from "./common/聊天测试支架";
 describe("房间恢复编排", () => {
-  it("恢复编排 owner 直连生效，旧根门面已经删除", () => {
+  it("恢复编排 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = readFileSync(
       resolve(process.cwd(), "恢复/壳层/房间恢复编排.ts"),
       "utf8"
@@ -21,7 +21,7 @@ describe("房间恢复编排", () => {
     expect(ownerSource).toContain('from "../应用.js"');
   });
 
-  it("旧房间快照恢复壳层文件必须退成恢复应用门面", () => {
+  it("旧房间快照恢复壳层文件必须退成恢复应用入口", () => {
     const source = readFileSync(
       resolve(process.cwd(), "聊天恢复/壳层/房间快照恢复.ts"),
       "utf8"

@@ -1,6 +1,6 @@
 /**
  * 真正的前端稳定共享契约 owner 收进本文件：
- * 1. 根级 `frontend/契约.ts` 只保留兼容门面；
+ * 1. 根级 `frontend/契约.ts` 已删除；
  * 2. 这里统一承接前后端共享的稳定 command/query/event/snapshot/error 表面；
  * 3. 业务展示、平台流程和壳层文案禁止继续回流到根目录共享契约。
  */

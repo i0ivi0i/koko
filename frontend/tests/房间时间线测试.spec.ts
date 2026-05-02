@@ -20,7 +20,7 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
 
 describe("房间时间线", () => {
-  it("时间线领域 owner 直连生效，旧根门面已经删除", () => {
+  it("时间线领域 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("时间线/领域.ts");
     const runtimeSource = 读取前端源码("时间线/运行时.ts");
 

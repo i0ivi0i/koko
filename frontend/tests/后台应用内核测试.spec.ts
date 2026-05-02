@@ -39,7 +39,7 @@ class 假后台内核传输 implements 后台查询传输端口, 后台会话传
 }
 
 describe("后台应用内核", () => {
-  it("后台 owner 应该收进 frontend/后台 模块，旧根门面已经删除", () => {
+  it("后台 owner 应该收进 frontend/后台 模块，旧根入口已经删除", () => {
     const ownerDir = resolve(process.cwd(), "后台");
 
     const queryOwnerPath = resolve(ownerDir, "查询编排.ts");

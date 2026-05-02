@@ -9,7 +9,7 @@ import {
   读取房间实时编排工厂,
 } from "./common/聊天测试支架";
 describe("房间实时编排", () => {
-  it("实时应用 owner 直接提供房间实时编排兼容导出，旧根门面已删除", () => {
+  it("实时应用 owner 直接提供房间实时编排旧命名收口，旧根入口已删除", () => {
     const source = readFileSync(resolve(process.cwd(), "实时/应用.ts"), "utf8");
 
     expect(existsSync(resolve(process.cwd(), "房间实时编排.ts"))).toBe(false);

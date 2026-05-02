@@ -8,7 +8,7 @@ import {
 import { Http接口错误 } from "../平台/传输";
 
 describe("媒体播放器", () => {
-  it("媒体播放模块不应继续保留第二链兼容叙事", () => {
+  it("媒体播放模块不应继续保留第二链旧叙事", () => {
     const source = readFileSync(new URL("../媒体/媒体播放.ts", import.meta.url), "utf-8");
     expect(source.includes("streaming_asset")).toBe(false);
   });

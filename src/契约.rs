@@ -1,6 +1,6 @@
-/// 第一波业务模块契约转发信号：
+/// 第一波业务模块契约 owner 指向信号：
 /// 旧总契约文件继续保留稳定名字，但新的业务 owner 已开始显式暴露自己的契约面。
-/// 后续新增契约应优先进入对应业务模块，再决定是否需要挂回这个总门面。
+/// 后续新增契约应优先进入对应业务模块，禁止继续回流到这个待删除旧根文件。
 pub use crate::identity::contract as 身份契约;
 pub use crate::message::contract as 消息契约;
 pub use crate::room::contract as 房间契约;
