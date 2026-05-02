@@ -206,8 +206,8 @@ export class 房间消息窗 extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.取消自动播候选调度();
-    this.清理自动播候选观察();
+    this.自动播候选观察Owner.取消自动播候选调度();
+    this.自动播候选观察Owner.清理自动播候选观察();
     读取默认全局唯一播放器().同步时间线自动播(null);
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
@@ -250,7 +250,7 @@ export class 房间消息窗 extends LitElement {
     const scrollContainer = event.currentTarget as HTMLElement;
     this.清理即将退场时间线视频表面(this.读取当前虚拟消息项());
     this.dispatchEvent(new CustomEvent("room-scroll", { bubbles: true, composed: true }));
-    this.调度自动播候选(scrollContainer);
+    this.自动播候选观察Owner.调度自动播候选(scrollContainer);
   }
 
   protected override willUpdate(changedProperties: PropertyValues<this>): void {
@@ -335,13 +335,13 @@ export class 房间消息窗 extends LitElement {
     }
     const virtualItems = this.读取当前虚拟消息项();
     this.dispatch媒体窗口观察(virtualItems);
-    this.同步自动播候选观察(scrollContainer);
+    this.自动播候选观察Owner.同步自动播候选观察(scrollContainer);
     if (this.自动播候选观察Owner.自动播候选观察器) {
       return;
     }
     // 只有旧环境缺少 IntersectionObserver 时，才在低频更新点同步量测兜底。
-    this.取消自动播候选调度();
-    this.dispatch自动播候选(scrollContainer);
+    this.自动播候选观察Owner.取消自动播候选调度();
+    this.自动播候选观察Owner.dispatch自动播候选(scrollContainer);
   }
 
   private 同步时间线视频首帧就绪缓存(): void {
@@ -1230,42 +1230,6 @@ export class 房间消息窗 extends LitElement {
         video.pause();
       }
     }
-  }
-
-  private dispatch自动播候选(scrollContainer: HTMLElement): void {
-    this.自动播候选观察Owner.dispatch自动播候选(scrollContainer);
-  }
-
-  private 调度自动播候选(scrollContainer: HTMLElement): void {
-    this.自动播候选观察Owner.调度自动播候选(scrollContainer);
-  }
-
-  private 取消自动播候选调度(): void {
-    this.自动播候选观察Owner.取消自动播候选调度();
-  }
-
-  private 清理自动播候选观察(): void {
-    this.自动播候选观察Owner.清理自动播候选观察();
-  }
-
-  private 根据矩形计算自动播候选(
-    attachmentId: string,
-    rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
-    viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
-  ): 消息视频自动播候选 | null {
-    return this.自动播候选观察Owner.根据矩形计算自动播候选(
-      attachmentId,
-      rect,
-      viewportRect
-    );
-  }
-
-  private 同步自动播候选观察(scrollContainer: HTMLElement): void {
-    this.自动播候选观察Owner.同步自动播候选观察(scrollContainer);
-  }
-
-  private 读取自动播候选(scrollContainer: HTMLElement): 消息视频自动播候选[] {
-    return this.自动播候选观察Owner.读取自动播候选(scrollContainer);
   }
 
   private dispatchJumpToLatest(): void {

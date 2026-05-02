@@ -108,20 +108,16 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
         .spyOn(videoButton!, "getBoundingClientRect")
         .mockReturnValue(new DOMRect(0, 270, 320, 180));
       observedEvents.length = 0;
-      (
+      const 自动播候选观察Owner = (
         pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
+          自动播候选观察Owner: {
+            清理自动播候选观察(): void;
+            同步自动播候选观察(scrollContainer: HTMLElement): void;
+          };
         }
-      ).清理自动播候选观察();
-      (
-        pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
-        }
-      ).同步自动播候选观察(scrollContainer!);
+      ).自动播候选观察Owner;
+      自动播候选观察Owner.清理自动播候选观察();
+      自动播候选观察Owner.同步自动播候选观察(scrollContainer!);
 
       expect(videoRectSpy).not.toHaveBeenCalled();
       expect(observedEvents).toHaveLength(0);

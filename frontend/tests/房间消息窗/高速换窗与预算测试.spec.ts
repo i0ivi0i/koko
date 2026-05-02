@@ -589,10 +589,9 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
   it("房间首轮更新时，自动播候选也会先做视频预算裁剪，再回抛给外层编排", async () => {
     const pane = 创建媒体消息窗();
     const 内部面板 = pane as unknown as {
-      自动播候选观察Owner: 自动播候选观察Owner测试接口;
-      读取自动播候选(
-        scrollContainer: HTMLElement
-      ): Array<自动播候选测试项>;
+      自动播候选观察Owner: 自动播候选观察Owner测试接口 & {
+        读取自动播候选(scrollContainer: HTMLElement): Array<自动播候选测试项>;
+      };
     };
     内部面板.自动播候选观察Owner.自动播候选观察器 = {} as IntersectionObserver;
     内部面板.自动播候选观察Owner.自动播候选可见条目 = new Map(
@@ -606,7 +605,9 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
       ])
     );
 
-    const candidates = 内部面板.读取自动播候选(document.createElement("div"));
+    const candidates = 内部面板.自动播候选观察Owner.读取自动播候选(
+      document.createElement("div")
+    );
 
     expect(candidates).toHaveLength(12);
     expect(candidates.map((candidate) => candidate.attachmentId)).toEqual(

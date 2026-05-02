@@ -468,6 +468,16 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("聊天恢复/壳层/房间快照恢复.ts");
   });
 
+  it("架构适应度门禁会拦住房间消息窗自动播观察 owner 的一跳转发包装函数回流", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "room message pane autoplay observer wrapper"');
+    expect(source).toContain("private\\s+dispatch自动播候选\\s*\\(");
+    expect(source).toContain("private\\s+调度自动播候选\\s*\\(");
+    expect(source).toContain("private\\s+取消自动播候选调度\\s*\\(");
+    expect(source).toContain("private\\s+清理自动播候选观察\\s*\\(");
+  });
+
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
@@ -476,11 +486,23 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain('path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450');
     expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
     expect(source).toContain(
-      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 2000'
+      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 1890'
     );
     expect(source).toContain(
       'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929'
     );
+  });
+
+  it("房间消息窗不应再保留自动播观察 owner 的一跳转发包装函数", () => {
+    const source = 读取前端源码("房间消息窗/壳.ts");
+
+    expect(source).not.toContain("private dispatch自动播候选(");
+    expect(source).not.toContain("private 调度自动播候选(");
+    expect(source).not.toContain("private 取消自动播候选调度(");
+    expect(source).not.toContain("private 清理自动播候选观察(");
+    expect(source).not.toContain("private 根据矩形计算自动播候选(");
+    expect(source).not.toContain("private 同步自动播候选观察(");
+    expect(source).not.toContain("private 读取自动播候选(");
   });
 
   it("realtime真实链路的构建预热不应被120秒 beforeAll hook 超时误杀", () => {

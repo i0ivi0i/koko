@@ -203,16 +203,20 @@ describe("房间消息窗媒体查看器 - 查看器意图与观察调度", () =
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const 同步自动播候选观察 = vi.spyOn(
+    const 自动播候选观察Owner = (
       pane as unknown as {
-        同步自动播候选观察(scrollContainer: HTMLElement): void;
-      },
+        自动播候选观察Owner: {
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        };
+      }
+    ).自动播候选观察Owner;
+    const 同步自动播候选观察 = vi.spyOn(
+      自动播候选观察Owner,
       "同步自动播候选观察"
     );
     const 调度自动播候选 = vi.spyOn(
-      pane as unknown as {
-        调度自动播候选(scrollContainer: HTMLElement): void;
-      },
+      自动播候选观察Owner,
       "调度自动播候选"
     );
 
@@ -378,15 +382,22 @@ describe("房间消息窗媒体查看器 - 查看器意图与观察调度", () =
 
   it("竖屏视频高度超过聊天视口时，自动播可见比例按可用视口归一化", () => {
     const pane = 创建媒体消息窗();
-    const candidate = (
+    const 自动播候选观察Owner = (
       pane as unknown as {
-        根据矩形计算自动播候选(
-          attachmentId: string,
-          rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
-          viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
-        ): { attachmentId: string; visibilityRatio: number; distanceToViewportCenter: number } | null;
+        自动播候选观察Owner: {
+          根据矩形计算自动播候选(
+            attachmentId: string,
+            rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
+            viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
+          ): {
+            attachmentId: string;
+            visibilityRatio: number;
+            distanceToViewportCenter: number;
+          } | null;
+        };
       }
-    ).根据矩形计算自动播候选(
+    ).自动播候选观察Owner;
+    const candidate = 自动播候选观察Owner.根据矩形计算自动播候选(
       "att-vertical-video",
       { top: -184, bottom: 385, height: 569 },
       { top: 54, bottom: 385, height: 331 }
@@ -598,20 +609,16 @@ describe("房间消息窗媒体查看器 - 查看器意图与观察调度", () =
         new DOMRect(0, 980, 320, 180)
       );
       observedEvents.length = 0;
-      (
+      const 自动播候选观察Owner = (
         pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
+          自动播候选观察Owner: {
+            清理自动播候选观察(): void;
+            同步自动播候选观察(scrollContainer: HTMLElement): void;
+          };
         }
-      ).清理自动播候选观察();
-      (
-        pane as unknown as {
-          清理自动播候选观察(): void;
-          同步自动播候选观察(scrollContainer: HTMLElement): void;
-          调度自动播候选(scrollContainer: HTMLElement): void;
-        }
-      ).同步自动播候选观察(scrollContainer!);
+      ).自动播候选观察Owner;
+      自动播候选观察Owner.清理自动播候选观察();
+      自动播候选观察Owner.同步自动播候选观察(scrollContainer!);
       expect(observerCallback).not.toBeNull();
       expect(observerInstance).not.toBeNull();
       if (!observerCallback || !observerInstance) {

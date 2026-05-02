@@ -235,6 +235,12 @@ const 前端禁回流片段规则 = [
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b/g,
   },
   {
+    label: "room message pane autoplay observer wrapper",
+    path: "frontend/房间消息窗/壳.ts",
+    pattern:
+      /private\s+dispatch自动播候选\s*\(|private\s+调度自动播候选\s*\(|private\s+取消自动播候选调度\s*\(|private\s+清理自动播候选观察\s*\(|private\s+根据矩形计算自动播候选\s*\(|private\s+同步自动播候选观察\s*\(|private\s+读取自动播候选\s*\(/g,
+  },
+  {
     label: "global smooth autoplay must not own player or bytes",
     path: "frontend/媒体/全局丝滑自动播.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b|\bvideojs\b|\bdocument\.createElement\b/g,
@@ -275,7 +281,7 @@ const 禁止新增前端文件规则 = [
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
   { path: "frontend/总装/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
-  { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 2000 },
+  { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1700, maxPhysicalLines: 1890 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 808, maxPhysicalLines: 929 },
   { path: "frontend/房间消息窗/消息虚拟列表.ts", maxEffectiveLines: 180, maxPhysicalLines: 160 },
   { path: "frontend/房间消息窗/视图.ts", maxEffectiveLines: 780, maxPhysicalLines: 900 },
