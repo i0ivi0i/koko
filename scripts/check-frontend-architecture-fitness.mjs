@@ -241,6 +241,12 @@ const 前端禁回流片段规则 = [
       /private\s+dispatch自动播候选\s*\(|private\s+调度自动播候选\s*\(|private\s+取消自动播候选调度\s*\(|private\s+清理自动播候选观察\s*\(|private\s+根据矩形计算自动播候选\s*\(|private\s+同步自动播候选观察\s*\(|private\s+读取自动播候选\s*\(/g,
   },
   {
+    label: "chat shell private kernel/test setter barrier",
+    path: "frontend/总装/聊天壳.ts",
+    pattern:
+      /this\.kernel\.(?!(snapshot|dispatch)\s*\()|setMedia(Player|Viewer|Publisher)ForTest|构建附件内容地址|注入快照补丁供测试/g,
+  },
+  {
     label: "global smooth autoplay must not own player or bytes",
     path: "frontend/媒体/全局丝滑自动播.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b|\bvideojs\b|\bdocument\.createElement\b/g,

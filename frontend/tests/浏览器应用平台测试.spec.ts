@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
+import { 创建存储运行时 } from "../平台/存储运行时";
 import type { 浏览器应用平台事件 } from "../平台/浏览器应用平台";
 import type { 生命周期快照 } from "../平台/生命周期运行时";
 import type { 服务工作线程运行时事件 } from "../平台/服务工作线程运行时";
@@ -221,6 +222,29 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("navigator?.storage");
     expect(source).not.toContain("window.localStorage");
     expect(source).not.toContain("globalThis.localStorage");
+  });
+
+  it("平台存储运行时在 Node 环境不得读取全局 localStorage 伪浏览器入口", () => {
+    const 原始描述 = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("不应读取 Node 全局 localStorage");
+      },
+    });
+
+    try {
+      const runtime = 创建存储运行时();
+      expect(runtime.壳层记忆().读取当前房间标识()).toBe("");
+      expect(runtime.媒体资产仓库?.()).toBeDefined();
+      expect(runtime.协作分发缓存仓库?.()).toBeDefined();
+    } finally {
+      if (原始描述) {
+        Object.defineProperty(globalThis, "localStorage", 原始描述);
+      } else {
+        delete (globalThis as { localStorage?: unknown }).localStorage;
+      }
+    }
   });
 
   it("资产协作分发运行时不再通过模块级 singleton 持有全局真相", () => {
@@ -476,6 +500,15 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("private\\s+调度自动播候选\\s*\\(");
     expect(source).toContain("private\\s+取消自动播候选调度\\s*\\(");
     expect(source).toContain("private\\s+清理自动播候选观察\\s*\\(");
+  });
+
+  it("架构适应度门禁会拦住聊天壳重新调用内核私有 helper 或媒体测试 setter", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "chat shell private kernel/test setter barrier"');
+    expect(source).toContain("frontend/总装/聊天壳.ts");
+    expect(source).toContain("this\\.kernel\\.");
+    expect(source).toContain("setMedia(Player|Viewer|Publisher)ForTest");
   });
 
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {

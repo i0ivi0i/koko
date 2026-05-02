@@ -1758,7 +1758,13 @@ describe("媒体协作分发", () => {
         state: "activated",
       },
     };
-    vi.stubGlobal("localStorage", 创建假Storage());
+    vi.stubGlobal("window", {
+      // 协作分发缓存必须走浏览器窗口存储；Node 的 global localStorage
+      // 会制造测试专属第二入口，并触发 `--localstorage-file` warning。
+      localStorage: 创建假Storage(),
+      location: { origin: "http://test.local" },
+      addEventListener: vi.fn(),
+    });
     let 在线可拉取Torrent = true;
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input);

@@ -82,11 +82,16 @@ export function 创建存储运行时(
     if (deps.storage) {
       return deps.storage;
     }
-    const candidate =
-      typeof window !== "undefined" && window.localStorage
-        ? (window.localStorage as Partial<Storage>)
-        : ((globalThis as { localStorage?: Partial<Storage> }).localStorage ?? undefined);
-    return candidate;
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    try {
+      // 存储运行时只接浏览器窗口的 localStorage；Node 的 globalThis.localStorage
+      // 不是产品运行入口，读取它会制造第二存储面并触发测试环境 warning。
+      return window.localStorage as Partial<Storage>;
+    } catch {
+      return undefined;
+    }
   };
   const 发布事件 = (event: 存储运行时事件): void => {
     for (const listener of 事件监听器) {
