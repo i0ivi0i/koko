@@ -6,6 +6,10 @@ fn 读取(path: &str) -> String {
     fs::read_to_string(Path::new(path)).expect("应能读取边界守卫目标文件")
 }
 
+fn 统计物理行数(path: &str) -> usize {
+    读取(path).lines().count()
+}
+
 #[test]
 fn 媒体上传与后台测试顶层必须保持薄_manifest() {
     for path in ["tests/媒体上传测试.rs", "tests/媒体后台测试.rs"] {
@@ -90,8 +94,7 @@ fn 协作分发共享语义必须收进_协作分发_子域() {
         "src/lib.rs 应直接把 media_distribution 模块路径指到 src/媒体/协作分发/共享语义.rs"
     );
     assert!(
-        owner.contains("fn 协作分发快照转响应值(")
-            && owner.contains("fn 诊断协作分发join_ticket("),
+        owner.contains("fn 协作分发快照转响应值(") && owner.contains("fn 诊断协作分发join_ticket("),
         "协作分发稳定语义 owner 应落在 src/媒体/协作分发/共享语义.rs"
     );
 }
@@ -155,6 +158,8 @@ fn 媒体附件适配必须收进_媒体_子域() {
     );
     let adapter_root = 读取("src/适配/mod.rs");
     let owner = 读取("src/媒体/适配.rs");
+    let upload_owner = 读取("src/媒体/上传/适配.rs");
+    let distribution_owner = 读取("src/媒体/协作分发/适配.rs");
     assert!(
         !Path::new("src/媒体附件适配.rs").exists(),
         "src/媒体附件适配.rs 应该已经删除，不能继续保留根目录旧入口"
@@ -164,10 +169,56 @@ fn 媒体附件适配必须收进_媒体_子域() {
         "src/适配/mod.rs 应直接把媒体附件适配模块路径指到 src/媒体/适配.rs"
     );
     assert!(
-        owner.contains("fn 查询附件快照(")
-            && owner.contains("fn 写入协作分发元数据(")
-            && owner.contains("fn 写入媒体上传会话授权("),
-        "媒体适配真实 owner 应落在 src/媒体/适配.rs"
+        adapter_root.contains("#[path = \"../媒体/上传/适配.rs\"]")
+            && adapter_root.contains("#[path = \"../媒体/协作分发/适配.rs\"]"),
+        "src/适配/mod.rs 应显式挂载上传运输适配和协作分发适配 owner"
+    );
+    assert!(
+        owner.contains("fn 查询附件快照(") && owner.contains("fn 查询附件可读内容("),
+        "附件/内容读取适配真实 owner 应落在 src/媒体/适配.rs"
+    );
+    assert!(
+        upload_owner.contains("fn 写入媒体上传会话授权(")
+            && upload_owner.contains("fn 登记媒体上传运输回执("),
+        "上传运输适配真实 owner 应落在 src/媒体/上传/适配.rs"
+    );
+    assert!(
+        distribution_owner.contains("fn 写入协作分发元数据(")
+            && distribution_owner.contains("fn 列出待做种协作分发项("),
+        "协作分发适配真实 owner 应落在 src/媒体/协作分发/适配.rs"
+    );
+}
+
+#[test]
+fn 媒体附件适配不得继续混住上传运输和协作分发owner() {
+    let owner = 读取("src/媒体/适配.rs");
+    assert!(
+        Path::new("src/媒体/上传/适配.rs").exists(),
+        "上传运输仓储适配必须落到 src/媒体/上传/适配.rs，而不是继续堆在媒体附件总适配"
+    );
+    assert!(
+        Path::new("src/媒体/协作分发/适配.rs").exists(),
+        "协作分发仓储适配必须落到 src/媒体/协作分发/适配.rs，而不是继续堆在媒体附件总适配"
+    );
+    for forbidden in [
+        "写入媒体上传会话授权_异步",
+        "登记媒体上传运输回执_异步",
+        "写入协作分发元数据_异步",
+        "列出待做种协作分发项_异步",
+    ] {
+        assert!(
+            !owner.contains(forbidden),
+            "src/媒体/适配.rs 不应继续混住上传运输/协作分发 owner: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn 后端媒体适配热点必须持续变薄() {
+    let lines = 统计物理行数("src/媒体/适配.rs");
+    assert!(
+        lines <= 1200,
+        "src/媒体/适配.rs 当前 {lines} 行，媒体适配必须继续变薄"
     );
 }
 
@@ -184,8 +235,7 @@ fn 媒体内容解析必须收进_上传_子域() {
         "src/外壳/mod.rs 应直接把媒体内容解析模块路径指到 src/媒体/上传/内容解析.rs"
     );
     assert!(
-        owner.contains("fn 校验canonical图片内容(")
-            && owner.contains("fn 解析视频内容("),
+        owner.contains("fn 校验canonical图片内容(") && owner.contains("fn 解析视频内容("),
         "媒体内容解析真实 owner 应落在 src/媒体/上传/内容解析.rs"
     );
 }

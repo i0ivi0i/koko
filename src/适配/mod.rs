@@ -4,20 +4,23 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    domain,
-    media,
-    shared::contract,
     application::{self, 仓储端口},
+    domain, media,
+    shared::contract,
     user_identity,
 };
 
+#[path = "../媒体/上传/适配.rs"]
+mod 媒体上传适配;
+#[path = "../媒体/协作分发/适配.rs"]
+mod 媒体协作分发适配;
 #[path = "../媒体/适配.rs"]
 mod 媒体附件适配;
 #[path = "../房间/适配.rs"]
 mod 房间阅读适配;
 #[path = "../消息/适配.rs"]
 mod 消息事件适配;
-pub(crate) use 媒体附件适配::{
+pub(crate) use 媒体上传适配::{
     媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输回执写入参数, 媒体上传运输角色,
     媒体上传运输记录,
 };
@@ -122,7 +125,7 @@ impl Pg仓储 {
         &mut self,
         授权: &媒体上传会话授权写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::写入媒体上传会话授权(self, 授权)
+        媒体上传适配::写入媒体上传会话授权(self, 授权)
     }
 
     /// hook 只靠上传令牌做 sidecar 鉴权，但 token 现在只属于上传会话。
@@ -130,7 +133,7 @@ impl Pg仓储 {
         &self,
         上传令牌: &str,
     ) -> Result<Option<媒体上传会话记录>, contract::错误码> {
-        媒体附件适配::根据上传令牌查询媒体上传会话(self, 上传令牌)
+        媒体上传适配::根据上传令牌查询媒体上传会话(self, 上传令牌)
     }
 
     /// 查询当前活跃上传会话上 canonical 的 single/final transport 回执。
@@ -139,7 +142,7 @@ impl Pg仓储 {
         &self,
         附件标识: &str,
     ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-        媒体附件适配::查询附件当前最终运输记录(self, 附件标识)
+        媒体上传适配::查询附件当前最终运输记录(self, 附件标识)
     }
 
     /// business abandon 先裁决业务真相，再由 shell 协调 transport 删除；
@@ -149,7 +152,7 @@ impl Pg仓储 {
         &self,
         上传会话标识: &str,
     ) -> Result<Vec<String>, contract::错误码> {
-        媒体附件适配::列出上传会话运输上传标识(self, 上传会话标识)
+        媒体上传适配::列出上传会话运输上传标识(self, 上传会话标识)
     }
 
     /// transport finished 只登记某条 single/partial/final 上传事实；
@@ -158,7 +161,7 @@ impl Pg仓储 {
         &mut self,
         参数: &媒体上传运输回执写入参数,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::登记媒体上传运输回执(self, 参数)
+        媒体上传适配::登记媒体上传运输回执(self, 参数)
     }
 
     /// 连接数据库并追平迁移。
@@ -571,14 +574,14 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         &mut self,
         请求: &crate::media::模型::协作分发元数据写入请求,
     ) -> Result<crate::media::模型::协作分发元数据快照, contract::错误码> {
-        媒体附件适配::写入协作分发元数据(self, 请求)
+        媒体协作分发适配::写入协作分发元数据(self, 请求)
     }
 
     fn 查询协作分发元数据(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::协作分发元数据快照>, contract::错误码> {
-        媒体附件适配::查询协作分发元数据(self, 附件标识)
+        媒体协作分发适配::查询协作分发元数据(self, 附件标识)
     }
 
     fn 列出待做种协作分发项(
@@ -586,42 +589,42 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待做种协作分发项>, contract::错误码> {
-        媒体附件适配::列出待做种协作分发项(self, 当前时间戳秒, 限制条数)
+        媒体协作分发适配::列出待做种协作分发项(self, 当前时间戳秒, 限制条数)
     }
 
     fn 写入协作分发swarm存活(
         &mut self,
         请求: &crate::media::模型::协作分发swarm存活写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::写入协作分发swarm存活(self, 请求)
+        媒体协作分发适配::写入协作分发swarm存活(self, 请求)
     }
 
     fn 查询协作分发torrent元信息(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::协作分发torrent元信息快照>, contract::错误码> {
-        媒体附件适配::查询协作分发torrent元信息(self, 附件标识)
+        媒体协作分发适配::查询协作分发torrent元信息(self, 附件标识)
     }
 
     fn 写入协作分发torrent元信息(
         &mut self,
         请求: &crate::media::模型::协作分发torrent元信息写入请求,
     ) -> Result<crate::media::模型::协作分发torrent元信息快照, contract::错误码> {
-        媒体附件适配::写入协作分发torrent元信息(self, 请求)
+        媒体协作分发适配::写入协作分发torrent元信息(self, 请求)
     }
 
     fn 写入流媒体清单元数据(
         &mut self,
         请求: &crate::media::模型::流媒体清单写入请求,
     ) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
-        媒体附件适配::写入流媒体清单元数据(self, 请求)
+        媒体协作分发适配::写入流媒体清单元数据(self, 请求)
     }
 
     fn 查询流媒体清单元数据(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
-        媒体附件适配::查询流媒体清单元数据(self, 附件标识)
+        媒体协作分发适配::查询流媒体清单元数据(self, 附件标识)
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。
@@ -687,7 +690,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
-        媒体附件适配::列出待清理流媒体清单(self, 当前时间戳秒, 限制条数)
+        媒体协作分发适配::列出待清理流媒体清单(self, 当前时间戳秒, 限制条数)
     }
 
     fn 标记流媒体清单已删除(
@@ -695,7 +698,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记流媒体清单已删除(self, 附件标识, 删除时间戳秒)
+        媒体协作分发适配::标记流媒体清单已删除(self, 附件标识, 删除时间戳秒)
     }
 
     fn 标记媒体上传已放弃(
@@ -703,7 +706,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         放弃时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记媒体上传已放弃(self, 附件标识, 放弃时间戳秒)
+        媒体上传适配::标记媒体上传已放弃(self, 附件标识, 放弃时间戳秒)
     }
 
     fn 列出待清理上传残留(
@@ -711,7 +714,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理上传残留>, contract::错误码> {
-        媒体附件适配::列出待清理上传残留(self, 当前时间戳秒, 限制条数)
+        媒体上传适配::列出待清理上传残留(self, 当前时间戳秒, 限制条数)
     }
 
     fn 标记上传残留已清理(
@@ -720,7 +723,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         清理原因: crate::media::模型::上传残留清理原因,
         清理时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记上传残留已清理(self, 上传会话标识, 清理原因, 清理时间戳秒)
+        媒体上传适配::标记上传残留已清理(self, 上传会话标识, 清理原因, 清理时间戳秒)
     }
 }
 
