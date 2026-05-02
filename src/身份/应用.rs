@@ -1,4 +1,4 @@
-use crate::{contract, usecase};
+use crate::{shared::contract, usecase};
 
 /// 身份业务模块的第一条稳定能力：
 /// 把“设备入口凭证 -> 当前会话锚点”的裁决从统一用例文件里抽出来。

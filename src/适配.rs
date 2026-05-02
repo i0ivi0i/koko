@@ -4,7 +4,8 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    contract, domain,
+    domain,
+    shared::contract,
     usecase::{self, 仓储端口},
     user_identity,
 };

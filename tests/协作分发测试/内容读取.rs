@@ -49,7 +49,7 @@ async fn 原图内容接口支持标准range读取() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
         match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         }
     })
@@ -209,7 +209,7 @@ async fn 新主链附件在web_seed窗口结束后原图内容接口不再继续
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
         match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         }
     })
@@ -381,7 +381,7 @@ async fn legacy附件没有分发表时原图内容读取仍按origin窗口工�
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
         match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         }
     })

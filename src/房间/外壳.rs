@@ -1,4 +1,4 @@
-use crate::contract;
+use crate::shared::contract;
 use crate::identity::application as 身份应用;
 use crate::room::application as 房间应用;
 use crate::shell::协议响应::{err_resp, events_to_json, map_domain_err_tuple};

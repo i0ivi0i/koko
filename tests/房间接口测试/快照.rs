@@ -28,7 +28,7 @@ async fn 有阅读锚点时房间快照围绕第一条未读返回首屏() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..100 {
@@ -109,7 +109,7 @@ async fn 房间快照会返回首条未读事件位置和是否仍有更早历�
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..100 {
@@ -180,7 +180,7 @@ async fn 无阅读锚点时房间快照回退到最近一屏消息() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..60 {
@@ -256,7 +256,7 @@ async fn 晚进群历史视频消息快照仍会带legacy_preview_asset() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -370,7 +370,7 @@ async fn 晚进群新单文件视频消息快照默认不带preview_asset() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 

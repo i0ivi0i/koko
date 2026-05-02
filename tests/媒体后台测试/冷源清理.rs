@@ -474,7 +474,7 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -603,7 +603,7 @@ async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 

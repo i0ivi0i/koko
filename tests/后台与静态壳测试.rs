@@ -33,7 +33,7 @@ async fn 构建应用状态时持有共享数据库连接池() {
     .await
     .expect("阻塞任务应完成")
     .expect("共享连接池上的仓储应可用");
-    assert!(matches!(snapshot, koko::contract::快照::后台概览 { .. }));
+    assert!(matches!(snapshot, koko::shared::contract::快照::后台概览 { .. }));
 }
 
 #[tokio::test]
@@ -183,7 +183,7 @@ async fn 后台房间详情仍返回最新事件位置和消息总数() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         for index in 0..3 {

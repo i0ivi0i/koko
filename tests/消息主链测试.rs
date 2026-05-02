@@ -79,14 +79,14 @@ fn 发送消息事务性顺序成立() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
     let event = koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "hello")
         .expect("应能发送消息");
     match event {
-        koko::contract::领域事件::消息已创建 {
+        koko::shared::contract::领域事件::消息已创建 {
             房间标识,
             事件位置,
             文本,
@@ -131,7 +131,7 @@ async fn 图片消息会把附件引用和事件一起持久化() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -161,7 +161,7 @@ async fn 图片消息会把附件引用和事件一起持久化() {
         .expect("应能创建带图片附件的消息");
 
         match event {
-            koko::contract::领域事件::消息已创建 {
+            koko::shared::contract::领域事件::消息已创建 {
                 消息标识,
                 文本,
                 附件,
@@ -171,7 +171,7 @@ async fn 图片消息会把附件引用和事件一起持久化() {
                 assert_eq!(附件.len(), 1, "权威事件应直接带出图片附件快照");
                 assert!(matches!(
                     附件.first(),
-                    Some(koko::contract::附件快照::图片(图片))
+                    Some(koko::shared::contract::附件快照::图片(图片))
                         if 图片.附件标识 == attachment_id_for_worker && 图片.宽 == 1 && 图片.高 == 1
                 ));
                 (room_id, 消息标识)
@@ -253,7 +253,7 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -285,15 +285,15 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
         let snapshot = koko::usecase::加载房间快照(&repo, &room_id, &identity.会话标识)
             .expect("成员应能读回房间快照");
         match snapshot {
-            koko::contract::快照::房间 { 首屏消息, .. } => {
+            koko::shared::contract::快照::房间 { 首屏消息, .. } => {
                 assert_eq!(首屏消息.len(), 1, "当前只应读回一条消息");
                 match &首屏消息[0] {
-                    koko::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
+                    koko::shared::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
                         assert_eq!(文本, "", "纯图片消息允许文本为空");
                         assert_eq!(附件.len(), 1, "快照里的消息应保留图片附件列表");
                         assert!(matches!(
                             附件.first(),
-                            Some(koko::contract::附件快照::图片(图片))
+                            Some(koko::shared::contract::附件快照::图片(图片))
                                 if 图片.附件标识 == attachment_id_for_worker
                         ));
                     }
@@ -326,7 +326,7 @@ fn prepared附件在complete之前不能进入消息发送主链() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
@@ -370,7 +370,7 @@ fn prepared附件在complete之前不能进入消息发送主链() {
         &[attachment_id],
     );
     let err = result.expect_err("prepared 附件在 complete 前不允许进入发送主链");
-    assert_eq!(err, koko::contract::错误码::附件未就绪);
+    assert_eq!(err, koko::shared::contract::错误码::附件未就绪);
 }
 
 #[test]
@@ -390,7 +390,7 @@ fn ready视频附件可以进入create_message主链() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
@@ -417,12 +417,12 @@ fn ready视频附件可以进入create_message主链() {
     .expect("ready 视频附件应能进入统一消息主链");
 
     match event {
-        koko::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
+        koko::shared::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
             assert_eq!(文本, "", "纯视频消息允许文本为空");
             assert_eq!(附件.len(), 1);
             assert!(matches!(
                 附件.first(),
-                Some(koko::contract::附件快照::视频(视频))
+                Some(koko::shared::contract::附件快照::视频(视频))
                     if 视频.附件标识 == attachment_id
             ));
         }
@@ -450,7 +450,7 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
     let client_message_id = format!("async-message-{uniq}");
@@ -471,7 +471,7 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
         .expect("异步主链应能创建消息");
 
     match event {
-        koko::contract::领域事件::消息已创建 {
+        koko::shared::contract::领域事件::消息已创建 {
             房间标识,
             文本,
             发送者会话标识,

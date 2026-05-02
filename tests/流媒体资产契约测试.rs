@@ -1,4 +1,4 @@
-use koko::contract::{
+use koko::shared::contract::{
     媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体分发生存模式, 媒体资产种类
 };
 use koko::usecase::构造媒体冷源描述;

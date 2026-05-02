@@ -1,4 +1,4 @@
-use crate::{contract, usecase};
+use crate::{shared::contract, usecase};
 
 /// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
 /// 上传业务模块只承认“占位申请”和“prepared -> ready”两段真相，

@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::contract;
+use crate::shared::contract;
 
 use super::媒体资产外壳;
 

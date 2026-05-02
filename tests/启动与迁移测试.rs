@@ -435,14 +435,14 @@ fn 流媒体清单生命周期迁移已包含streaming过期与删除字段() {
 
 #[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
-    let command = koko::contract::命令::推进房间阅读位置 {
+    let command = koko::shared::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),
         已读到事件位置: 3,
     };
 
     assert!(matches!(
         command,
-        koko::contract::命令::推进房间阅读位置 {
+        koko::shared::contract::命令::推进房间阅读位置 {
             已读到事件位置: 3,
             ..
         }

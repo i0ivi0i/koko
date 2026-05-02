@@ -110,7 +110,7 @@ async fn 成员通过events接口只会拿到from之后的事件() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "first")

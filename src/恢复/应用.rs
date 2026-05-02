@@ -1,4 +1,4 @@
-use crate::{contract, room::application as 房间应用, usecase};
+use crate::{shared::contract, room::application as 房间应用, usecase};
 
 /// 加载房间恢复快照：
 /// 1. 先确认会话有效，禁止拿伪造 session 读取恢复真相。

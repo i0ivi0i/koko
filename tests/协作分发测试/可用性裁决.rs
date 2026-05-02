@@ -162,7 +162,7 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -307,7 +307,7 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -417,7 +417,7 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -543,7 +543,7 @@ async fn partial_peer不能冒充available_ready来源() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -659,7 +659,7 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -791,7 +791,7 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -889,7 +889,7 @@ async fn web_seed刚过期且最近没有peer存活时locator会先进入连接�
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -988,7 +988,7 @@ async fn web_seed已过期较久且最近没有peer存活时首次访问仍会�
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -1087,7 +1087,7 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -1248,7 +1248,7 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 

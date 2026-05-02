@@ -1,4 +1,4 @@
-use crate::{contract, domain};
+use crate::{shared::contract, domain};
 
 /// 第一波真 DDD 收口先让统一用例文件变成待删除旧根文件：
 /// 身份、房间、消息三条主业务能力开始显式指向对应业务模块。

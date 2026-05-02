@@ -1,3 +1,3 @@
 /// 身份业务模块当前对外承认的稳定契约面。
 /// 先复用旧总契约中的既有类型，避免第一刀重构就复制出第二份身份事实。
-pub use crate::contract::匿名身份引导结果;
+pub use crate::shared::contract::匿名身份引导结果;

@@ -25,17 +25,17 @@ fn realtime主链闭环() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
-    let control = koko::contract::控制面结果::订阅已建立 {
+    let control = koko::shared::contract::控制面结果::订阅已建立 {
         房间标识: room_id.clone(),
         起始位置: 0,
     };
     assert!(matches!(
         control,
-        koko::contract::控制面结果::订阅已建立 {
+        koko::shared::contract::控制面结果::订阅已建立 {
             起始位置: 0, ..
         }
     ));
@@ -45,7 +45,7 @@ fn realtime主链闭环() {
             .expect("发送消息应成功");
     assert!(matches!(
         event,
-        koko::contract::领域事件::消息已创建 {
+        koko::shared::contract::领域事件::消息已创建 {
             事件位置: 1, ..
         }
     ));
@@ -54,7 +54,7 @@ fn realtime主链闭环() {
         .拉取房间增量事件(&room_id, 0)
         .expect("应能拉取增量事件");
     match delta {
-        koko::contract::快照::房间增量事件 {
+        koko::shared::contract::快照::房间增量事件 {
             房间标识,
             最新事件位置,
             事件,
@@ -88,7 +88,7 @@ fn 异步订阅主链遇到无效会话时仍返回会话无效() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
@@ -96,7 +96,7 @@ fn 异步订阅主链遇到无效会话时仍返回会话无效() {
     // 先挡掉无效会话，不能因为后续还会查成员资格就把错误语义漂成别的 code。
     let result =
         runtime.block_on(koko::usecase::加载房间增量事件_异步(&repo, &room_id, "s-missing", 0));
-    assert_eq!(result, Err(koko::contract::错误码::会话无效));
+    assert_eq!(result, Err(koko::shared::contract::错误码::会话无效));
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn 异步订阅主链遇到非成员时仍返回成员资格不足() {
     )
     .expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
@@ -139,7 +139,7 @@ fn 异步订阅主链遇到非成员时仍返回成员资格不足() {
         &stranger_session,
         0,
     ));
-    assert_eq!(result, Err(koko::contract::错误码::成员资格不足));
+    assert_eq!(result, Err(koko::shared::contract::错误码::成员资格不足));
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn 重复客户端消息标识应返回同一条已成立消息事件() {
         .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
-        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
@@ -248,7 +248,7 @@ fn 同房并发发送时事件位置仍然连续单调() {
         let room = koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &code)
             .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
         (room_id, identity.会话标识)
@@ -279,7 +279,7 @@ fn 同房并发发送时事件位置仍然连续单调() {
     for task in tasks {
         let event = task.join().expect("发送线程应完成");
         match event {
-            koko::contract::领域事件::消息已创建 { 事件位置, .. } => {
+            koko::shared::contract::领域事件::消息已创建 { 事件位置, .. } => {
                 positions.push(事件位置)
             }
         }
@@ -339,11 +339,11 @@ fn 不同房间并发发送时互不串号互不污染() {
         )
         .expect("B 房间应能进房");
         let room_a = match room_a {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("A 房间应返回房间快照"),
         };
         let room_b = match room_b {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("B 房间应返回房间快照"),
         };
         (room_a, room_b, identity_a.会话标识, identity_b.会话标识)
@@ -392,15 +392,15 @@ fn 不同房间并发发送时互不串号互不污染() {
     for task in tasks {
         let event = task.join().expect("发送线程应完成");
         match event {
-            koko::contract::领域事件::消息已创建 {
+            koko::shared::contract::领域事件::消息已创建 {
                 房间标识, 事件位置,
             ..
             } if 房间标识 == room_a => room_a_positions.push(事件位置),
-            koko::contract::领域事件::消息已创建 {
+            koko::shared::contract::领域事件::消息已创建 {
                 房间标识, 事件位置,
             ..
             } if 房间标识 == room_b => room_b_positions.push(事件位置),
-            koko::contract::领域事件::消息已创建 { 房间标识, .. } => {
+            koko::shared::contract::领域事件::消息已创建 { 房间标识, .. } => {
                 panic!("出现了不属于测试房间的事件: {房间标识}")
             }
         }

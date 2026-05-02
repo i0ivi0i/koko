@@ -100,7 +100,11 @@ fn 根用例文件只能指向业务_owner且不得回灌外层实现() {
 
 #[test]
 fn 根契约文件不得混入页面文案布局词或框架类型() {
-    let content = 读取("src/契约.rs");
+    assert!(
+        !Path::new("src/契约.rs").exists(),
+        "src/契约.rs 必须删除；共享稳定契约只能进 src/共享/契约基础.rs，业务契约进各业务 owner"
+    );
+    let content = 读取("src/共享/契约基础.rs");
     for forbidden in [
         "HTMLElement",
         "window",
@@ -115,7 +119,7 @@ fn 根契约文件不得混入页面文案布局词或框架类型() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "src/契约.rs 不应混入壳层/框架类型: {forbidden}"
+            "src/共享/契约基础.rs 不应混入壳层/框架类型: {forbidden}"
         );
     }
 }
@@ -127,7 +131,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    let temporary_old_roots = ["契约.rs", "用例.rs", "适配.rs", "外壳.rs"]
+    let temporary_old_roots = ["用例.rs", "适配.rs", "外壳.rs"]
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
@@ -152,7 +156,6 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
 #[test]
 fn 后端旧根文件删除前只能变薄不能变厚() {
     let budgets = [
-        ("src/契约.rs", 328usize),
         ("src/用例.rs", 960usize),
         ("src/适配.rs", 790usize),
         ("src/外壳.rs", 1585usize),

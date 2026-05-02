@@ -185,7 +185,7 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -329,7 +329,7 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
         koko::usecase::按短码进房或建房(&mut repo, &peer.会话标识, &room_code)
             .expect("群友也应能进同一个房间");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -476,7 +476,7 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 
@@ -614,7 +614,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
         match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         }
     })
@@ -804,7 +804,7 @@ async fn locator会返回announce_web_seed与短时join_ticket() {
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
         match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         }
     })
@@ -984,7 +984,7 @@ async fn 未显式配置tracker公网地址时locator会优先返回同源相对
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
         let room_id = match room {
-            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
 

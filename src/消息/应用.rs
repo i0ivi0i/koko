@@ -1,4 +1,4 @@
-use crate::{contract, domain, usecase};
+use crate::{shared::contract, domain, usecase};
 use crate::usecase::{附件状态读取结果, 附件种类读取结果};
 
 /// 发送文本消息主链：

@@ -1,6 +1,6 @@
 use sqlx::{PgPool, Row, postgres::PgRow};
 
-use crate::{contract, media_distribution, usecase};
+use crate::{shared::contract, media_distribution, usecase};
 
 use super::Pg仓储;
 

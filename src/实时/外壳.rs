@@ -1,5 +1,5 @@
 use crate::shell::{协议响应::{event_to_json, events_to_json, map_domain_err_tuple}, 应用状态, 构建共享仓储};
-use crate::contract;
+use crate::shared::contract;
 use crate::message::application as 消息应用;
 use crate::realtime::application as 实时应用;
 use serde::Deserialize;
@@ -707,7 +707,7 @@ mod 实时外壳测试 {
         分类单连接发送失败, 分类广播发送失败, 分类断开原因, 归纳房间广播运行观测,
         实时发送失败级别
     };
-    use crate::contract;
+    use crate::shared::contract;
     use socketioxide::{socket::DisconnectReason, BroadcastError, SendError, SocketError};
 
     #[test]

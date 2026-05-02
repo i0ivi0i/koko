@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use sqlx::{postgres::PgRow, PgPool, Row};
 
-use crate::{contract, domain};
+use crate::{shared::contract, domain};
 
 use super::Pg仓储;
 

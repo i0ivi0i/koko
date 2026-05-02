@@ -1,4 +1,4 @@
-use crate::{contract, usecase};
+use crate::{shared::contract, usecase};
 
 /// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在媒体分发语义里。
 /// handler 只负责调度，不直接越层操纵仓储。

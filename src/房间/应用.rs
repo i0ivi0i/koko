@@ -1,4 +1,4 @@
-use crate::{contract, domain, usecase};
+use crate::{shared::contract, domain, usecase};
 
 /// 进房/建房主链：
 /// 1. 先在领域层校验短码语义。

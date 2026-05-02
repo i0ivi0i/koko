@@ -1,4 +1,4 @@
-use crate::contract;
+use crate::shared::contract;
 
 /// 用例层读取到的附件种类快照。
 /// 这是应用层对仓储的最小依赖面，不把数据库字段名直接泄漏进领域。

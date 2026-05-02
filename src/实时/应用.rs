@@ -1,4 +1,4 @@
-use crate::{contract, usecase};
+use crate::{shared::contract, usecase};
 
 /// realtime 连接会话校验的异步版：
 /// 热路径直接 await 仓储查询，不再经过 blocking 线程池桥接。

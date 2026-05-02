@@ -1,5 +1,5 @@
 use super::应用状态;
-use crate::contract;
+use crate::shared::contract;
 use crate::shell::协议响应::{err_resp, map_domain_err_tuple};
 use axum::{
     extract::{Path, State},
