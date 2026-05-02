@@ -8,10 +8,10 @@ use super::Pg仓储;
 
 // 消息事件适配 owner 统一持有：
 // 1. 消息行到共享事件的翻译；
-// 2. 消息页与附件引用批量组装；
-// 3. 幂等回查与统一消息事务提交。
-// 房间 owner 现在只借用这里的“消息页/增量事件组装 seam”，
-// 下一轮如果还需要继续瘦身，就只在这一个 owner 上演进消息事实。
+// 2. 消息提交后的幂等回查；
+// 3. 统一消息事务提交。
+// 房间冷路径自己的分页、恢复、增量窗口已经回到房间适配 owner，
+// 这里不再承担跨 owner 的读模型 seam。
 
 /// 把数据库消息行翻成跨入口稳定共享的领域事件。
 /// 这里不做业务校验，只负责把已经成立的事实完整表达出来。
@@ -149,83 +149,6 @@ pub(super) async fn 组装消息事件列表_异步(
             行转消息事件(row, 房间标识, attachments)
         })
         .collect())
-}
-
-/// 冷路径分页也属于消息 owner，因为它决定“哪些消息事件如何投影成共享事件”。
-pub(super) async fn 查询消息页(
-    pool: &PgPool,
-    房间数据库标识: i64,
-    房间标识: &str,
-    截止位置之前: Option<i64>,
-    limit: i64,
-) -> Result<Vec<contract::领域事件>, contract::错误码> {
-    let rows = if let Some(before) = 截止位置之前 {
-        sqlx::query(
-            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
-             FROM room_events re \
-             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
-             LEFT JOIN sessions s ON s.id = m.sender_session_id \
-             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
-             WHERE re.room_id = $1 AND re.event_position < $2 \
-             ORDER BY re.event_position DESC \
-             LIMIT $3",
-        )
-        .bind(房间数据库标识)
-        .bind(before)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?
-    } else {
-        sqlx::query(
-            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
-             FROM room_events re \
-             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
-             LEFT JOIN sessions s ON s.id = m.sender_session_id \
-             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
-             WHERE re.room_id = $1 \
-             ORDER BY re.event_position DESC \
-             LIMIT $2",
-        )
-        .bind(房间数据库标识)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?
-    };
-
-    let mut events = 组装消息事件列表_异步(pool, 房间标识, rows).await?;
-    events.reverse();
-    Ok(events)
-}
-
-/// 这条 helper 专门服务“围绕第一条未读恢复首屏”，
-/// 避免房间 owner 再重新定义消息窗口语义。
-pub(super) async fn 查询从位置开始的消息页(
-    pool: &PgPool,
-    房间数据库标识: i64,
-    房间标识: &str,
-    起始位置: i64,
-    limit: i64,
-) -> Result<Vec<contract::领域事件>, contract::错误码> {
-    let rows = sqlx::query(
-        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
-         FROM room_events re \
-         LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
-         LEFT JOIN sessions s ON s.id = m.sender_session_id \
-         LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
-         WHERE re.room_id = $1 AND re.event_position >= $2 \
-         ORDER BY re.event_position ASC \
-         LIMIT $3",
-    )
-    .bind(房间数据库标识)
-    .bind(起始位置)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(|_| contract::错误码::系统错误)?;
-
-    组装消息事件列表_异步(pool, 房间标识, rows).await
 }
 
 async fn 查询发送者投影_异步(

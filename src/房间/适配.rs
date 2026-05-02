@@ -1,4 +1,6 @@
-use sqlx::{PgPool, Row};
+use std::collections::HashMap;
+
+use sqlx::{postgres::PgRow, PgPool, Row};
 
 use crate::shared::contract;
 
@@ -9,6 +11,10 @@ use super::Pg仓储;
 // 2. 房间恢复快照、历史页、增量页、阅读锚点推进；
 // 3. 后台房间冷读接口。
 // 这层只做 PostgreSQL 事实翻译，不替用例层做成员裁决，也不自己定义消息语义。
+// 额外约束：
+// 1. 房间首屏、历史页、增量页都属于房间 owner 的冷路径读模型；
+// 2. 因此这里必须自有消息窗口查询和事件投影，不能跨到消息适配借道；
+// 3. 消息 owner 继续只负责“消息如何成立与提交”，房间 owner 负责“房间如何读取这些已成立事件”。
 
 pub(super) async fn 查询会话所属匿名身份_异步(
     pool: &PgPool,
@@ -112,9 +118,195 @@ pub(super) fn 查询房间最新事件位置(
     repo.在运行时执行(查询房间最新事件位置_异步(&repo.pool, 房间标识))
 }
 
+/// 把数据库房间事件行翻成房间快照、历史页、增量页统一消费的共享事件。
+/// 这里故意留在房间适配层，因为“房间冷读窗口如何看到消息”属于房间 owner，
+/// 不是消息写入 owner 的职责。
+fn 房间事件行转消息事件(
+    row: PgRow,
+    房间标识: &str,
+    附件: Vec<contract::附件快照>,
+) -> contract::领域事件 {
+    let msg_id: Option<String> = row.get("message_id");
+    let client_id: Option<String> = row.get("client_message_id");
+    let sender_session_id: Option<String> = row.get("session_id");
+    let sender_display_alias: Option<String> = row.get("display_alias");
+    let body: Option<String> = row.get("body");
+    contract::领域事件::消息已创建 {
+        房间标识: 房间标识.to_string(),
+        消息标识: msg_id.unwrap_or_default(),
+        客户端消息标识: client_id.unwrap_or_default(),
+        发送者会话标识: sender_session_id.unwrap_or_default(),
+        发送者花名: sender_display_alias.unwrap_or_default(),
+        文本: body.unwrap_or_default(),
+        附件,
+        事件位置: row.get("event_position"),
+    }
+}
+
+/// 房间快照、历史页、增量页都要把附件引用一并读全。
+/// 这里按消息批量聚合，避免三个冷路径入口各自长出 N+1 查询。
+async fn 查询房间消息附件映射_异步(
+    pool: &PgPool,
+    消息标识列表: &[String],
+) -> Result<HashMap<String, Vec<contract::附件快照>>, contract::错误码> {
+    if 消息标识列表.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let rows = sqlx::query(
+        "SELECT mar.message_id,
+                mar.sort_order,
+                a.attachment_id,
+                a.kind,
+                a.width,
+                a.height,
+                a.thumbnail_storage_key IS NOT NULL AS has_preview_asset \
+         FROM message_attachment_refs mar \
+         JOIN attachments a ON a.id = mar.attachment_id \
+         WHERE mar.message_id = ANY($1) \
+         ORDER BY mar.message_id ASC, mar.sort_order ASC",
+    )
+    .bind(消息标识列表.to_vec())
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    let mut grouped = HashMap::<String, Vec<contract::附件快照>>::new();
+    for row in rows {
+        let message_id: String = row.get("message_id");
+        let kind: String = row.get("kind");
+        let attachment = match kind.as_str() {
+            "image" => contract::附件快照::图片(contract::图片附件快照 {
+                附件标识: row.get("attachment_id"),
+                宽: row
+                    .get::<Option<i32>, _>("width")
+                    .ok_or(contract::错误码::系统错误)?,
+                高: row
+                    .get::<Option<i32>, _>("height")
+                    .ok_or(contract::错误码::系统错误)?,
+                有预览图: false,
+            }),
+            "video" => contract::附件快照::视频(contract::视频附件快照 {
+                附件标识: row.get("attachment_id"),
+                宽: row
+                    .get::<Option<i32>, _>("width")
+                    .ok_or(contract::错误码::系统错误)?,
+                高: row
+                    .get::<Option<i32>, _>("height")
+                    .ok_or(contract::错误码::系统错误)?,
+                有预览图: row.get("has_preview_asset"),
+            }),
+            _ => return Err(contract::错误码::系统错误),
+        };
+        grouped.entry(message_id).or_default().push(attachment);
+    }
+    Ok(grouped)
+}
+
+/// 把冷路径查询回来的事件行组装成房间 owner 直接消费的共享事件列表。
+async fn 组装房间消息事件列表_异步(
+    pool: &PgPool,
+    房间标识: &str,
+    rows: Vec<PgRow>,
+) -> Result<Vec<contract::领域事件>, contract::错误码> {
+    let message_ids = rows
+        .iter()
+        .filter_map(|row| row.get::<Option<String>, _>("message_id"))
+        .collect::<Vec<_>>();
+    let mut attachment_map = 查询房间消息附件映射_异步(pool, &message_ids).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let message_id = row
+                .get::<Option<String>, _>("message_id")
+                .unwrap_or_default();
+            let attachments = attachment_map.remove(&message_id).unwrap_or_default();
+            房间事件行转消息事件(row, 房间标识, attachments)
+        })
+        .collect())
+}
+
+/// 读取“某个顺序锚点之前”的房间消息窗口。
+/// 房间快照和历史分页都直接依赖这条稳定冷路径，不再跨到消息适配借道。
+async fn 查询房间消息页_异步(
+    pool: &PgPool,
+    房间数据库标识: i64,
+    房间标识: &str,
+    截止位置之前: Option<i64>,
+    limit: i64,
+) -> Result<Vec<contract::领域事件>, contract::错误码> {
+    let rows = if let Some(before) = 截止位置之前 {
+        sqlx::query(
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
+             FROM room_events re \
+             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+             LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+             WHERE re.room_id = $1 AND re.event_position < $2 \
+             ORDER BY re.event_position DESC \
+             LIMIT $3",
+        )
+        .bind(房间数据库标识)
+        .bind(before)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+    } else {
+        sqlx::query(
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
+             FROM room_events re \
+             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+             LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+             WHERE re.room_id = $1 \
+             ORDER BY re.event_position DESC \
+             LIMIT $2",
+        )
+        .bind(房间数据库标识)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+    };
+
+    let mut events = 组装房间消息事件列表_异步(pool, 房间标识, rows).await?;
+    events.reverse();
+    Ok(events)
+}
+
+/// 围绕第一条未读消息读取首屏窗口。
+/// 这条规则属于房间恢复语义，所以也必须留在房间适配层。
+async fn 查询从位置开始的房间消息页_异步(
+    pool: &PgPool,
+    房间数据库标识: i64,
+    房间标识: &str,
+    起始位置: i64,
+    limit: i64,
+) -> Result<Vec<contract::领域事件>, contract::错误码> {
+    let rows = sqlx::query(
+        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
+         FROM room_events re \
+         LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+         LEFT JOIN sessions s ON s.id = m.sender_session_id \
+         LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+         WHERE re.room_id = $1 AND re.event_position >= $2 \
+         ORDER BY re.event_position ASC \
+         LIMIT $3",
+    )
+    .bind(房间数据库标识)
+    .bind(起始位置)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    组装房间消息事件列表_异步(pool, 房间标识, rows).await
+}
+
 /// 房间恢复快照是房间 owner 的职责。
-/// 但当前消息页拼装 helper 仍在 `适配.rs`，这一轮先通过受控 seam 复用，
-/// 下一轮消息 owner 抽离时再把这条 seam 删除。
+/// 这里直接用房间自有消息窗口查询来拼首屏，避免再从消息适配借道。
 async fn 构建房间恢复快照(
     pool: &PgPool,
     房间数据库标识: i64,
@@ -126,7 +318,7 @@ async fn 构建房间恢复快照(
     let (snapshot_messages, has_more_before) = if let Some(first_unread_event_position) =
         首条未读事件位置
     {
-        let before_messages = super::消息事件适配::查询消息页(
+        let before_messages = 查询房间消息页_异步(
             pool,
             房间数据库标识,
             房间标识,
@@ -134,7 +326,7 @@ async fn 构建房间恢复快照(
             8,
         )
         .await?;
-        let unread_messages = super::消息事件适配::查询从位置开始的消息页(
+        let unread_messages = 查询从位置开始的房间消息页_异步(
             pool,
             房间数据库标识,
             房间标识,
@@ -154,7 +346,7 @@ async fn 构建房间恢复快照(
         ([before_messages, unread_messages].concat(), has_more_before)
     } else {
         let snapshot_messages =
-            super::消息事件适配::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
+            查询房间消息页_异步(pool, 房间数据库标识, 房间标识, None, 55).await?;
         let has_more_before = snapshot_messages
             .first()
             .map(|message| {
@@ -361,7 +553,7 @@ async fn 拉取房间历史页_异步(
         return Err(contract::错误码::房间不存在);
     };
     let room_db_id: i64 = row.get("id");
-    let messages = super::消息事件适配::查询消息页(
+    let messages = 查询房间消息页_异步(
         pool,
         room_db_id,
         房间标识,
@@ -390,7 +582,7 @@ pub(super) fn 拉取房间历史页(
 }
 
 /// 增量页属于房间 owner，因为它表达的是“某房间从哪个位置开始补洞”。
-/// 事件如何从数据库行翻成消息契约，暂时仍复用消息 owner 的 helper。
+/// 事件如何从数据库行翻成共享事件，也必须留在房间 owner 的冷路径里。
 pub(super) async fn 拉取房间增量事件_异步(
     pool: &PgPool,
     房间标识: &str,
@@ -425,7 +617,7 @@ pub(super) async fn 拉取房间增量事件_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    let events = super::消息事件适配::组装消息事件列表_异步(pool, 房间标识, rows).await?;
+    let events = 组装房间消息事件列表_异步(pool, 房间标识, rows).await?;
 
     Ok(contract::快照::房间增量事件 {
         房间标识: 房间标识.to_string(),

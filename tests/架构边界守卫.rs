@@ -76,8 +76,8 @@ fn 实时外壳根文件必须删除并直连实时_owner() {
 fn 旧房间快照实现必须只留在_recovery_owner() {
     let content = 读取("src/房间/应用.rs");
     assert!(
-        content.contains("pub use crate::recovery::application::加载房间快照;"),
-        "src/房间/应用.rs 只能暴露 recovery owner 的加载房间快照能力，不能重建房间侧实现"
+        !content.contains("pub use crate::recovery::application::加载房间快照;"),
+        "src/房间/应用.rs 不得继续保留恢复用例的临时转发出口；调用方必须直连 recovery owner"
     );
     assert!(
         !content.contains("async fn 加载房间快照"),
@@ -257,10 +257,19 @@ fn 房间阅读适配必须收进房间子域() {
         "src/适配/mod.rs 应直接把房间阅读适配路径指到 src/房间/适配.rs"
     );
     assert!(
-        owner.contains("async fn 按短码进房或建房_异步(")
-            && owner.contains("super::消息事件适配::查询消息页"),
+        owner.contains("async fn 按短码进房或建房_异步("),
         "src/房间/适配.rs 必须继续承载房间阅读与恢复快照适配 owner"
     );
+    for forbidden in [
+        "super::消息事件适配::查询消息页",
+        "super::消息事件适配::查询从位置开始的消息页",
+        "super::消息事件适配::组装消息事件列表_异步",
+    ] {
+        assert!(
+            !owner.contains(forbidden),
+            "src/房间/适配.rs 不能继续跨到消息适配借道：{forbidden}"
+        );
+    }
 }
 
 #[test]
@@ -280,8 +289,10 @@ fn 消息事件适配必须收进消息子域() {
         "src/适配/mod.rs 应直接把消息事件适配路径指到 src/消息/适配.rs"
     );
     assert!(
-        owner.contains("fn 行转消息事件(") && owner.contains("async fn 查询消息页("),
-        "src/消息/适配.rs 必须继续承载消息事件投影与分页装配 owner"
+        owner.contains("fn 行转消息事件(")
+            && owner.contains("async fn 查询既有消息事件_异步(")
+            && owner.contains("async fn 提交统一消息事件_异步("),
+        "src/消息/适配.rs 必须继续承载消息事件投影、幂等回查与统一消息提交 owner"
     );
 }
 
