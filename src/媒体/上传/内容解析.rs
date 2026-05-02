@@ -209,9 +209,16 @@ mod tests {
     use super::{解析视频内容, 解析视频文件内容};
     use std::path::Path;
 
+    fn 最小mp4_fixture字节() -> Vec<u8> {
+        // 这组单元测试会随着模块 owner 迁移而移动文件位置；
+        // fixture 必须锚定 crate 根目录，不能再依赖当前源码文件的相对路径。
+        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimal.mp4"))
+            .expect("minimal mp4 fixture must exist under tests/fixtures")
+    }
+
     #[test]
     fn 文件级视频解析会保持与字节级解析相同的展示尺寸() {
-        let 字节级结果 = 解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
+        let 字节级结果 = 解析视频内容(&最小mp4_fixture字节())
             .expect("最小 mp4 应该能被字节级解析");
         let 文件级结果 = 解析视频文件内容(Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -226,7 +233,7 @@ mod tests {
 
     #[test]
     fn iso5_brand_mp4仍应被解析为合法视频元数据() {
-        let mut iso5字节 = include_bytes!("../tests/fixtures/minimal.mp4").to_vec();
+        let mut iso5字节 = 最小mp4_fixture字节();
         iso5字节[8..12].copy_from_slice(b"iso5");
 
         let 结果 = 解析视频内容(&iso5字节);

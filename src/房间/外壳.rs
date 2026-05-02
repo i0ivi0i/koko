@@ -929,9 +929,13 @@ mod 媒体内容解析迁移测试 {
 
     #[test]
     fn 新模块会给最小_mp4_返回展示尺寸() {
-        let parsed =
-            媒体内容解析::解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
-                .expect("最小 mp4 应该能被新模块解析");
+        // 这条测试跨房间外壳和媒体内容解析 owner，fixture 只能锚定 crate 根目录；
+        // 否则后续文件继续下沉时，源码相对路径会再次把全目标编译打断。
+        let bytes = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimal.mp4"),
+        )
+        .expect("minimal mp4 fixture must exist under tests/fixtures");
+        let parsed = 媒体内容解析::解析视频内容(&bytes).expect("最小 mp4 应该能被新模块解析");
         assert!(parsed.宽 > 0);
         assert!(parsed.高 > 0);
     }
