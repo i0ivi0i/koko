@@ -263,6 +263,12 @@ const 禁止新增前端文件规则 = [
   {
     label: "duplicate global WebTorrent owner file",
     pattern: /全局唯一WebTorrent|WebTorrent状态机|WebTorrent生命周期机/i,
+    detail: "WebTorrent 生命周期 owner 只能落在资产协作分发运行时，禁止新增第二 owner 文件",
+  },
+  {
+    label: "legacy recovery facade file",
+    pattern: /frontend\/聊天恢复\/壳层\/房间快照恢复\.ts$/,
+    detail: "旧房间快照恢复过渡门面必须彻底删除，不得以兼容入口形式回流",
   },
 ];
 
@@ -281,7 +287,6 @@ const 热点文件行数上限 = [
   { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 1450, maxPhysicalLines: 1500 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
   { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
-  { path: "frontend/聊天恢复/壳层/房间快照恢复.ts", maxEffectiveLines: 20, maxPhysicalLines: 20 },
 ];
 
 const 前端测试热点边界 = [
@@ -733,7 +738,7 @@ const 检查禁用前端文件名 = (files) => {
       violations.push({
         file: relativePath,
         label: rule.label,
-        detail: "WebTorrent 生命周期 owner 只能落在资产协作分发运行时，禁止新增第二 owner 文件",
+        detail: rule.detail ?? "命中禁用前端文件命名规则",
       });
     }
   }

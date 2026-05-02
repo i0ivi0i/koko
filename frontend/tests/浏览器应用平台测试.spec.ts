@@ -461,6 +461,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("WebTorrent状态机");
   });
 
+  it("架构适应度门禁会拦住旧房间快照恢复兼容门面文件重新出现", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "legacy recovery facade file"');
+    expect(source).toContain("聊天恢复/壳层/房间快照恢复.ts");
+  });
+
   it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 

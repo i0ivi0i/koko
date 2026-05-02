@@ -21,16 +21,8 @@ describe("房间恢复编排", () => {
     expect(ownerSource).toContain('from "../应用.js"');
   });
 
-  it("旧房间快照恢复壳层文件必须退成恢复应用入口", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "聊天恢复/壳层/房间快照恢复.ts"),
-      "utf8"
-    );
-
-    expect(source).toContain('from "../../恢复/应用.js"');
-    expect(source).toContain("创建恢复应用 as 创建房间快照恢复协作");
-    expect(source).not.toContain("function 同步首页房间历史()");
-    expect(source).not.toContain("function 进入房间快照(");
+  it("旧房间快照恢复过渡入口必须彻底删除，不再保留兼容门面", () => {
+    expect(existsSync(resolve(process.cwd(), "聊天恢复/壳层/房间快照恢复.ts"))).toBe(false);
   });
 
   it("会把 invalid_session 恢复委托给 会话失效恢复 协作", () => {
