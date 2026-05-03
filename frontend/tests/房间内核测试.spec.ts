@@ -15,6 +15,7 @@ describe("房间内核", () => {
     const recoverySource = 读取前端源码("恢复/应用.ts");
     const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
+    const roomScenarioSupportSource = 读取前端源码("tests/common/房间场景支撑.ts");
 
     expect(existsSync(resolve(process.cwd(), "房间内核.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间编排机 = createMachine(");
@@ -28,7 +29,8 @@ describe("房间内核", () => {
     expect(recoverySource).not.toContain('from "../房间内核.js"');
     expect(recoveryShellSource).toContain('from "../../房间/运行时.js"');
     expect(recoveryShellSource).not.toContain('from "../../房间内核.js"');
-    expect(testHarnessSource).toContain('from "../../房间/运行时"');
+    expect(roomScenarioSupportSource).toContain('from "../../房间/运行时"');
+    expect(roomScenarioSupportSource).not.toContain('from "../../房间内核"');
     expect(testHarnessSource).not.toContain('from "../../房间内核"');
   });
 

@@ -16,6 +16,7 @@ describe("房间时间线运行时", () => {
     const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");
     const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
+    const roomScenarioSupportSource = 读取前端源码("tests/common/房间场景支撑.ts");
 
     expect(existsSync(resolve(process.cwd(), "房间时间线运行时.ts"))).toBe(false);
     expect(ownerSource).toContain("const 房间时间线机 = createMachine(");
@@ -30,7 +31,8 @@ describe("房间时间线运行时", () => {
     expect(recoveryShellSource).not.toContain('from "../../房间时间线运行时.js"');
     expect(readProgressSource).toContain('from "../../时间线/运行时.js"');
     expect(readProgressSource).not.toContain('from "../../房间时间线运行时.js"');
-    expect(testHarnessSource).toContain('from "../../时间线/运行时"');
+    expect(roomScenarioSupportSource).toContain('from "../../时间线/运行时"');
+    expect(roomScenarioSupportSource).not.toContain('from "../../房间时间线运行时"');
     expect(testHarnessSource).not.toContain('from "../../房间时间线运行时"');
   });
 
