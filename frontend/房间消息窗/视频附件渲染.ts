@@ -417,7 +417,7 @@ export const 渲染视频附件 = (
             class="message-video-canonical-host"
             data-attachment-id=${attachment.attachmentId}
             data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
-              ? "legacy_stream"
+              ? "archived_stream"
               : "file"}
             data-video-src=${ownerCanonicalVideoSrc ?? ""}
             data-video-poster=${previewVideoPoster ?? ""}
@@ -455,7 +455,7 @@ export const 渲染视频附件 = (
             data-stage-host="true"
             data-attachment-id=${attachment.attachmentId}
             data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
-              ? "legacy_stream"
+              ? "archived_stream"
               : "file"}
             data-video-src=${ownerCanonicalVideoSrc ?? ""}
             data-video-poster=${previewVideoPoster ?? ""}

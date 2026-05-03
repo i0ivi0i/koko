@@ -186,7 +186,7 @@ fn 读取媒体_tus内部上传入口(state: &应用状态) -> String {
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.tus_server_port));
-    // `MEDIA_TUS_INTERNAL_BASE_URL` 既兼容“只给 sidecar origin”，也兼容“直接给到 /files endpoint”。
+    // `MEDIA_TUS_INTERNAL_BASE_URL` 同时支持“只给 sidecar origin”和“直接给到 /files endpoint”。
     // 这里统一归一成真正的上传资源前缀，避免测试、脚本和部署配置各猜各的。
     if raw_internal_base_url
         .trim_end_matches('/')

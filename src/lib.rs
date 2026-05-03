@@ -4,7 +4,7 @@
 /// 1. 这里是“目录总索引”，用于声明模块边界，不承载业务实现。
 /// 2. 新增模块前先判断是否真的需要新文件，优先收口职责而不是碎片化。
 /// 3. 模块名对应 DDD 分层语义：adapter/assembly/contract/domain/entry/shell/application。
-/// 4. 旧根门面文件已经删除；这里只允许保留当前仍有明确 owner 的业务模块与装配模块。
+/// 4. 旧根过渡文件已经删除；这里只允许保留当前仍有明确 owner 的业务模块与装配模块。
 #[path = "适配/mod.rs"]
 pub mod adapter;
 #[path = "应用/mod.rs"]

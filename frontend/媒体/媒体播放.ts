@@ -267,7 +267,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   /**
    * 播放锚点只认 nested asset 自己声明的冷源 / canonical：
    * 1. file_video 优先 canonical，再退到 origin；
-   * 2. blob_image 只读 canonical，不再回到顶层 original_url 兼容别名；
+   * 2. blob_image 只读 canonical，不再回到顶层 original_url 旧别名；
    * 3. 正式读取面只允许来自当前共享契约明示的 asset 字段。
    */
   const 读取锚点地址 = (locator: 媒体定位结果): string | null =>
@@ -664,7 +664,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    *
    * 当前 Web 阶段里，blob_asset.distribution 负责宣告“这张图应该进入分发平面”，
    * 顶层 distribution 继续承载 torrent_url / info_hash / presence_url 这类浏览器运行时所需字段。
-   * 等后端把两层契约进一步收口后，这里只需要缩短兼容读取，不用反向污染调用方。
+   * 等后端把两层契约进一步收口后，这里只需要缩短旧字段读取，不用反向污染调用方。
    */
   const 激活协作补齐 = async (input: 媒体播放输入): Promise<void> => {
     let locator: 媒体定位结果;

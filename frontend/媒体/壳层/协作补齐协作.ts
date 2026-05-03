@@ -107,7 +107,7 @@ export function 创建协作补齐协作(
     }
     已进入帮助链附件.add(attachmentId);
     // 编排层只负责把“当前这张图值得后台补齐”的业务信号转交给播放器；
-    // 真正 locate、读取 locator 兼容字段、接入 WebTorrent runtime 的细节仍留在播放器 owner。
+    // 真正 locate、读取 locator 旧字段、接入 WebTorrent runtime 的细节仍留在播放器 owner。
     void deps
       .激活协作补齐({
         attachmentId,

@@ -37,9 +37,9 @@ pub struct Pg仓储 {
     pool: PgPool,
 }
 
-/// 生成迁移窗口内仍需保留的兼容匿名身份短标识。
+/// 生成迁移窗口内仍需保留的旧匿名身份短标识。
 /// 约束：
-/// 1. 它只是旧链路兼容缝，不再冒充内部真实主键；
+/// 1. 它只是旧链路接缝，不再冒充内部真实主键；
 /// 2. 真正的内部身份已经升级到 `anonymous_identities.identity_uuid`。
 fn 生成匿名身份标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();

@@ -419,7 +419,7 @@ pub fn 列出待清理媒体冷源(
 }
 
 /// 原始对象一旦删掉，就必须把删除时间回写到附件真相。
-/// 这样 locator、legacy original 路由和分发 runtime 才能共享同一条冷源退场事实。
+/// 这样 locator、旧 original 路由和分发 runtime 才能共享同一条冷源退场事实。
 pub fn 标记媒体冷源已删除(
     仓储: &mut impl 媒体仓储端口,
     附件标识: &str,

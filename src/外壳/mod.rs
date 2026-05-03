@@ -222,7 +222,7 @@ pub async fn 构建应用状态(
 
 /// 统一装配附件对象存储：
 /// - local 继续服务测试与回滚窗；
-/// - s3 兼容模式只负责 canonical 附件对象读写，不再承担浏览器直传签名。
+/// - S3 对象存储模式只负责 canonical 附件对象读写，不再承担浏览器直传签名。
 fn 构建附件对象存储(
     media_storage: &crate::assembly::媒体存储配置,
     attachment_storage_dir: &str,
@@ -235,7 +235,7 @@ fn 构建附件对象存储(
                 .map_err(|err| std::io::Error::other(format!("初始化附件存储失败: {err}")))?;
             Ok(Arc::new(attachment_store))
         }
-        crate::assembly::媒体存储驱动::S3兼容 => {
+        crate::assembly::媒体存储驱动::S3对象存储 => {
             let bucket = media_storage.bucket.as_deref().ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
@@ -291,7 +291,7 @@ fn 构建_s3客户端(
     }
     builder
         .build()
-        .map_err(|err| std::io::Error::other(format!("初始化 S3 兼容对象存储失败: {err}")))
+        .map_err(|err| std::io::Error::other(format!("初始化 S3 对象存储失败: {err}")))
 }
 
 pub fn 构建路由(state: 应用状态) -> Router {

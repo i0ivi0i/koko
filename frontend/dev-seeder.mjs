@@ -59,7 +59,7 @@ const 读取请求体JSON = async (request) => {
 };
 
 /**
- * 兼容控制面里可能出现的 ticket 命名：
+ * 控制面里可能出现多种 ticket 命名：
  * - 新字段优先 `joinTicket`（JS 风格）；
  * - 同时接受 `join_ticket` / `ticket`，避免灰度阶段不同 caller 命名导致 seeder 漏票；
  * - 统一只把非空字符串透传给 tracker announce。

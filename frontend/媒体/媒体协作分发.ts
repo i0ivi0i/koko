@@ -143,7 +143,7 @@ export interface 协作分发媒体源 {
    * 可播放 src 与“必须给用户展示协作提示”不是同一回事：
    * 1. 轻会话/普通 session consumer 可以拿到可播放 src，但不必强挂提示；
    * 2. 只靠 webSeed 冷源补齐完成时，也不能伪造“正在协作分发”；
-   * 3. 因此 `null` 是正式真相的一部分，不是过渡兼容字段。
+   * 3. 因此 `null` 是正式真相的一部分，不是过渡旧字段。
    */
   hint: "正在协作分发" | "正在补块" | null;
   locallyComplete: boolean;
@@ -642,7 +642,7 @@ export function 读取可用协作分发片段(
    * 协作分发当前是否可进入同一 swarm，只认稳定 `media_state.code`：
    * 1. READY / CONNECTING 允许继续复用同一会话；
    * 2. NO_ONLINE_SEED / DELETED 直接视为当前不可用；
-   * 3. 不再回退旧 availability 兼容字段，避免第二套可用性真相继续活着。
+   * 3. 不再回退旧 availability 字段，避免第二套可用性真相继续活着。
    */
   const mediaStateCode = distribution?.media_state.code ?? null;
   const distribution可用 =
@@ -698,7 +698,7 @@ const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位�
 const 规范化协作分发Store名称 = (torrentInfoHash: string): string =>
   `koko-webtorrent-${torrentInfoHash.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
-const 确保IndexedDBChunkStoreBuffer兼容 = (): void => {
+const 补齐IndexedDBChunkStoreBuffer全局 = (): void => {
   const target = globalThis as 可挂Buffer的全局对象;
   target.Buffer ??= Buffer;
 };
@@ -733,7 +733,7 @@ const 读取协作分发持久ChunkStore选项 = (
    * - 刷新、重新进房后同一 torrent 能按同一 store owner 复用 piece；
    * - 浏览器默认 OPFS/FSA 能力仍是有价值事实，但不能让项目失去可测试的持久化 owner。
    */
-  确保IndexedDBChunkStoreBuffer兼容();
+  补齐IndexedDBChunkStoreBuffer全局();
   return {
     store: 创建协作分发IndexedDBChunkStore(distribution.torrent_info_hash!),
   };

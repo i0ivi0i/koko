@@ -292,7 +292,7 @@ pub(super) async fn 执行一次媒体上传残留清理_按会话(
                     tracing::info!(
                         application = "上传残留清理",
                         adapter = "shell",
-                        outcome = "skipped_legacy_external_locator",
+                        outcome = "skipped_external_locator",
                         attachment_id = 残留.附件标识.as_str(),
                         upload_session_id = 上传会话标识.as_str(),
                         cleanup_reason = 上传残留清理原因标签(清理原因),

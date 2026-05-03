@@ -21,15 +21,15 @@ type 可原生全屏视频元素 = HTMLVideoElement & {
   webkitDisplayingFullscreen?: boolean;
 };
 export type VideoJs全屏进入结果 = "standard" | "native" | "unsupported";
-const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
+const 远端播放Promise契约补齐标记 = Symbol("koko-videojs-remote-playback-promise-patched");
 const VideoJs播放器Provider标签 = "video-player";
 const KokoVideoSkinTagName = "koko-video-skin";
 const 等待态时间推进判定阈值秒 = 0.05;
 
-type 可兼容远端播放对象 = {
+type 可补齐远端播放对象 = {
   watchAvailability?: (...args: unknown[]) => unknown;
   cancelWatchAvailability?: (...args: unknown[]) => unknown;
-  [远端播放Promise兼容标记]?: true;
+  [远端播放Promise契约补齐标记]?: true;
 };
 
 type VideoJs播放器根节点 = {
@@ -153,9 +153,9 @@ const 看起来像Promise = (value: unknown): value is PromiseLike<unknown> =>
   "then" in value &&
   typeof value.then === "function";
 
-const 兼容RemotePlayback异步契约 = (video: 可原生全屏视频元素): void => {
-  const remote = (video as 可原生全屏视频元素 & { remote?: 可兼容远端播放对象 }).remote;
-  if (!remote || remote[远端播放Promise兼容标记]) {
+const 补齐RemotePlayback异步契约 = (video: 可原生全屏视频元素): void => {
+  const remote = (video as 可原生全屏视频元素 & { remote?: 可补齐远端播放对象 }).remote;
+  if (!remote || remote[远端播放Promise契约补齐标记]) {
     return;
   }
 
@@ -188,7 +188,7 @@ const 兼容RemotePlayback异步契约 = (video: 可原生全屏视频元素): v
    * 浏览器标准也是 Promise，但 `happy-dom` 20.8.9 的 cancel 仍返回 void。
    * 这里把宿主差异收口在壳适配层，避免销毁阶段因为测试/非标运行时而炸掉整个播放会话。
    */
-  remote[远端播放Promise兼容标记] = true;
+  remote[远端播放Promise契约补齐标记] = true;
 };
 
 const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
@@ -1000,7 +1000,7 @@ const 创建VideoJs播放器壳核心 = (
   const root =
     deps.createPlayer?.(initialSource) ??
     创建默认播放器根(initialSource, deps.mountTarget);
-  兼容RemotePlayback异步契约(root.video);
+  补齐RemotePlayback异步契约(root.video);
 
   let 当前源 = initialSource;
   let 已销毁 = false;

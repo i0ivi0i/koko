@@ -24,7 +24,7 @@ export interface 附件能力注册表 {
 
 function 构造统一媒体文件Accept(): string {
   /**
-   * 移动端系统 picker 对长 `accept` 列表的兼容性并不稳定，
+   * 移动端系统 picker 对长 `accept` 列表的表现并不稳定，
    * 这里统一收口成最宽但最稳的媒体类型提示：
    * - 图片交给 `image/*`
    * - 视频交给 `video/*`

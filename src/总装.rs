@@ -120,12 +120,12 @@ impl 数据库连接池配置 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 媒体存储驱动 {
     本地目录,
-    S3兼容,
+    S3对象存储,
 }
 
 /// 媒体存储配置是启动期真相：
 /// - local 只需要本地目录；
-/// - s3 兼容直传则需要 endpoint / bucket / credentials 等信息。
+/// - S3 对象存储直传则需要 endpoint / bucket / credentials 等信息。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体存储配置 {
     pub 驱动: 媒体存储驱动,
@@ -487,7 +487,7 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
         .unwrap_or_else(|| "local".to_string());
     let 驱动 = match raw_driver.as_str() {
         "local" => 媒体存储驱动::本地目录,
-        "s3" => 媒体存储驱动::S3兼容,
+        "s3" => 媒体存储驱动::S3对象存储,
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -507,7 +507,7 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
         .unwrap_or_else(|| "us-east-1".to_string());
     let path_style = 读取布尔环境变量("MEDIA_STORAGE_PATH_STYLE", false)?;
 
-    if matches!(驱动, 媒体存储驱动::S3兼容) {
+    if matches!(驱动, 媒体存储驱动::S3对象存储) {
         if bucket.is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

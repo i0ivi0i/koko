@@ -171,13 +171,13 @@ export class 媒体HTTP接口 {
       {},
       signal
     );
-    const { original_url: _legacyOriginalUrl, ...locatorWithoutLegacyOriginalUrl } = locator as {
+    const { original_url: _discardedOriginalUrl, ...locatorWithoutTopLevelOriginalUrl } = locator as {
       original_url?: string;
     } & 媒体定位结果;
     const file_asset = locator.file_asset ? this.解析单文件视频资产(locator.file_asset) : null;
     const blob_asset = locator.blob_asset ? this.解析Blob媒体资产(locator.blob_asset) : null;
     return {
-      ...locatorWithoutLegacyOriginalUrl,
+      ...locatorWithoutTopLevelOriginalUrl,
       preview_asset: this.deps.解析预览资源(locator.preview_asset),
       thumbnail_url: locator.thumbnail_url
         ? this.deps.解析绝对地址(locator.thumbnail_url)

@@ -39,7 +39,7 @@ struct 标准字节范围 {
 }
 
 /// “附件 ready 快照 -> 媒体资产响应体” 需要的协议投影上下文。
-/// 这里集中表达所有非业务真相输入，避免 helper 把一长串位置参数越传越胖。
+/// 这里集中表达所有非业务真相输入，避免位置参数越传越胖。
 pub(super) struct 媒体资产响应上下文<'a> {
     pub 运行态分发: Option<&'a serde_json::Value>,
     pub 分发快照: Option<&'a crate::media::模型::协作分发元数据快照>,
@@ -276,7 +276,7 @@ fn 构造content_range值(range: &标准字节范围, 总字节数: u64) -> Stri
     )
 }
 
-/// 下面这组 helper 的 owner 已经跟着“媒体资产外壳”一起迁移。
+/// 下面这组资产投影函数的 owner 已经跟着“媒体资产外壳”一起迁移。
 /// 原因是它们表达的是媒体资产 HTTP 协议面，而不是房间查询协议面；
 /// 继续留在房间壳只会让兄弟模块反向依赖一个并不拥有该真相的文件。
 pub(super) fn 媒体类型转标签(kind: &crate::media::模型::媒体附件类型) -> &'static str {
@@ -805,7 +805,7 @@ pub(super) async fn load_media_locator(
         定位媒体资产响应上下文 {
             运行态分发: runtime_distribution.as_ref(),
             // 顶层 locator 已不再重复暴露 original_url；
-            // 资产投影继续直接复用这份受控冷源地址，避免再从响应 JSON 倒读一遍兼容别名。
+            // 资产投影继续直接复用这份受控冷源地址，避免再从响应 JSON 倒读一遍旧顶层别名。
             原始地址: original_url.clone(),
             会话标识: query.session_id.as_str(),
             当前时间戳秒: now_epoch秒,

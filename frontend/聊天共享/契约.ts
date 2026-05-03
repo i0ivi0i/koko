@@ -297,7 +297,7 @@ export interface 媒体定位结果 {
    * 顶层 locator 不再重复暴露 original_url：
    * 1. 冷源锚点已经收口到 nested asset 的 origin；
    * 2. 运行态 transport 继续留在顶层 distribution；
-   * 3. 这样播放链不会再被顶层兼容别名绑出第二份冷源真相。
+   * 3. 这样播放链不会再被顶层旧别名绑出第二份冷源真相。
    */
   preview_asset?: 预览资源描述 | null;
   thumbnail_url: string | null;

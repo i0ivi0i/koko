@@ -28,7 +28,7 @@ pub enum 附件状态读取结果 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 附件读取结果 {
     pub 附件标识: String,
-    /// 这里只允许承载内部身份真相：优先 `identity_uuid`，不再把兼容旧串往应用层带。
+    /// 这里只允许承载内部身份真相：优先 `identity_uuid`，不再把旧匿名短串往应用层带。
     pub 所属匿名身份标识: String,
     pub 种类: 附件种类读取结果,
     pub mime_type: String,
@@ -339,7 +339,7 @@ pub struct 流媒体清单快照 {
     pub 附件标识: String,
     pub hls主清单存储键: String,
     pub dash主清单存储键: String,
-    /// 读侧允许为 `None`，是为了兼容旧数据刚迁移但还没被 complete 重写的过渡窗口；
+    /// 读侧允许为 `None`，是为了覆盖旧数据刚迁移但还没被 complete 重写的过渡窗口；
     /// 真正的新主链写入请求则必须始终给出明确 TTL。
     pub streaming到期时间戳秒: Option<i64>,
     pub streaming删除时间戳秒: Option<i64>,

@@ -676,6 +676,25 @@ const stillKeep = true;
     expect(script.检查生产文件兜底命名(["frontend/媒体/协作分发/tracker代理.ts"])).toEqual([]);
   });
 
+  it("生产播放链命名不得把平台补齐或旧数据投影写成兼容层", () => {
+    const videoJsShellSource = 读取前端源码("媒体/videojs播放器壳.ts");
+    const swarmSource = 读取前端源码("媒体/媒体协作分发.ts");
+    const buildSource = 读取前端源码("build.mjs");
+    const attachmentSource = 读取前端源码("房间消息窗/附件渲染.ts");
+    const videoAttachmentSource = 读取前端源码("房间消息窗/视频附件渲染.ts");
+    const mediaHttpSource = 读取前端源码("媒体/适配/媒体HTTP接口.ts");
+
+    expect(videoJsShellSource).not.toContain("兼容RemotePlayback异步契约");
+    expect(videoJsShellSource).not.toContain("可兼容远端播放对象");
+    expect(videoJsShellSource).not.toContain("远端播放Promise兼容标记");
+    expect(swarmSource).not.toContain("确保IndexedDBChunkStoreBuffer兼容");
+    expect(buildSource).not.toContain("浏览器兼容构建目标");
+    expect(buildSource).not.toContain("浏览器兼容构建能力覆盖");
+    expect(attachmentSource).not.toContain("legacy-grid");
+    expect(videoAttachmentSource).not.toContain("legacy_stream");
+    expect(mediaHttpSource).not.toContain("_legacyOriginalUrl");
+  });
+
   it("宪法守门会拦住协作分发全局 singleton 和新增浏览器全局旁路", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
 

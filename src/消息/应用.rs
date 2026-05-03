@@ -45,7 +45,7 @@ pub fn 创建消息(
             let snapshot = 仓储
                 .查询附件快照(attachment_id)?
                 .ok_or(contract::错误码::附件不存在)?;
-            // 附件 owner 比对只认内部身份真相，这样兼容旧串就不会再渗回消息主链。
+            // 附件 owner 比对只认内部身份真相，这样旧匿名短串就不会再渗回消息主链。
             if snapshot.所属匿名身份标识 != 发送者身份 {
                 return Err(contract::错误码::附件不属于当前发送者);
             }

@@ -257,7 +257,7 @@ export const 渲染消息附件 = (
     <div
       class="message-attachment-grid"
       data-attachment-count=${item.attachments.length}
-      data-attachment-template=${attachmentLayout?.template ?? "legacy-grid"}
+      data-attachment-template=${attachmentLayout?.template ?? "grid"}
       style=${gridStyle}
     >
       ${item.attachments.map((attachment) => {

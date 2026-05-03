@@ -62,7 +62,7 @@ pub fn 读取待完成媒体附件(
     let prepared = 仓储
         .查询待完成媒体附件(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
-    // complete 链路不能再吃兼容旧串，否则一旦会话解析切到 identity_uuid，owner 判定就会撕裂。
+    // complete 链路不能再吃旧匿名短串，否则一旦会话解析切到 identity_uuid，owner 判定就会撕裂。
     if prepared.所属匿名身份标识 != 所属匿名身份标识 {
         return Err(contract::错误码::附件不属于当前发送者);
     }

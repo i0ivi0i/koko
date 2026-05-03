@@ -55,10 +55,10 @@ describe("应用壳缓存边界", () => {
   it("build 脚本会统一降到 iPhone Safari 可解析的语法目标，避免旧 WebKit 在启动前黑屏", () => {
     const source = 读取前端文件("build.mjs");
 
-    expect(source).toMatch(/const 浏览器兼容构建目标 = \[\s*'safari14'\s*\]/);
-    expect(source).toMatch(/const 浏览器兼容构建能力覆盖 = \{\s*destructuring: true\s*\}/);
-    expect(source.match(/target: 浏览器兼容构建目标/g)?.length ?? 0).toBe(4);
-    expect(source.match(/supported: 浏览器兼容构建能力覆盖/g)?.length ?? 0).toBe(4);
+    expect(source).toMatch(/const 浏览器构建目标 = \[\s*'safari14'\s*\]/);
+    expect(source).toMatch(/const 浏览器构建能力覆盖 = \{\s*destructuring: true\s*\}/);
+    expect(source.match(/target: 浏览器构建目标/g)?.length ?? 0).toBe(4);
+    expect(source.match(/supported: 浏览器构建能力覆盖/g)?.length ?? 0).toBe(4);
     expect(source).not.toContain("target: 'es2022'");
     expect(source).not.toContain('target: "es2022"');
   });

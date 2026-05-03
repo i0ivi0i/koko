@@ -43,7 +43,7 @@ const 命中或回填图片资产缓存 = async (request: Request): Promise<Resp
 //
 // 这里显式不再接管 `/stream/*`：
 // 1. manifest、segment、Range/206 命中一旦留在自定义 SW 里，就会长成第二正式读取真相；
-// 2. 新版裁决要求正式视频字节只认 WebTorrent whole-file 主链，HLS/DASH 只能退到 legacy/benchmark；
+// 2. 新版裁决要求正式视频字节只认 WebTorrent whole-file 主链，HLS/DASH 只能退到退役基准；
 // 3. 因此前端 worker 现在只缓存图片 canonical blob，不再替流媒体做任何“帮忙成功”。
 媒体Worker全局.addEventListener("fetch", (event) => {
   if (是图片Blob资产请求(event.request)) {
