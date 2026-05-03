@@ -44,6 +44,9 @@ pub(crate) async fn 登记最终上传回执(
     .await
 }
 
+// 这里保留显式参数表，是为了让测试输入和协议字段一一对齐，
+// 避免再引入只服务测试的中间包装结构，把场景语义藏进 tuple / 匿名 map。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn 登记最终上传回执_使用声明字节数(
     app: axum::Router,
     tus_upload_dir: &str,

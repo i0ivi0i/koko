@@ -1,5 +1,60 @@
 use super::*;
 
+// 这组后台测试只关心“残留如何被清理”，
+// 所以把拼接上传回执的协议装配收回本文件 owner，避免测试 body 再散落底层 helper。
+#[allow(clippy::too_many_arguments)]
+async fn 登记残留拼接上传回执(
+    app: axum::Router,
+    tus_upload_dir: &str,
+    prepare_body: &serde_json::Value,
+    upload_id_prefix: &str,
+    stored_file_name: &str,
+    hook_file_name: &str,
+    mime_type: &str,
+    bytes: &[u8],
+    declared_byte_size: i64,
+    is_partial: bool,
+    is_final: bool,
+    partial_upload_urls: Option<Vec<&str>>,
+) -> String {
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("prepare 响应必须返回 attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("prepare 响应必须返回 upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(prepare_body);
+    let temp_file = 写入tus测试文件(tus_upload_dir, &attachment_id, stored_file_name, bytes)
+        .expect("应能写入后台清理测试临时文件");
+
+    let (hook_status, hook_body) = send_json(
+        app,
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
+            &format!("{upload_id_prefix}{attachment_id}"),
+            &attachment_id,
+            &upload_session_id,
+            hook_file_name,
+            mime_type,
+            declared_byte_size,
+            declared_byte_size,
+            Some(temp_file.as_str()),
+            is_partial,
+            is_final,
+            partial_upload_urls,
+        )),
+        &[],
+    )
+    .await;
+    断言TusHook已接受(hook_status, &hook_body);
+    temp_file
+}
+
 /// 上传残留清理 owner：
 /// 这里只验证后台维护逻辑如何处理已结束 / 已过期 / 历史异常 locator 的上传残留。
 /// 它不负责上传 prepare/complete 主链，也不负责协作分发读侧契约。
@@ -45,81 +100,43 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
     )
     .await;
     assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
+    let _attachment_id = prepare_body["attachment_id"]
         .as_str()
         .expect("attachment_id")
         .to_string();
-    let upload_session_id = prepare_body["upload_session_id"]
-        .as_str()
-        .expect("upload_session_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-
-    let partial_file = 写入tus测试文件(
+    let partial_file = 登记残留拼接上传回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "cleanup-partial-",
         "cleanup-finalized.part",
-        &[1, 2, 3, 4],
-    )
-    .expect("应能写入 partial 文件");
-    let final_file = 写入tus测试文件(
-        &tus_upload_dir,
-        &attachment_id,
         "cleanup-finalized.png",
+        "image/png",
+        &[1, 2, 3, 4],
+        34,
+        true,
+        false,
+        None,
+    )
+    .await;
+    let final_file = 登记残留拼接上传回执(
+        app.clone(),
+        &tus_upload_dir,
+        &prepare_body,
+        "cleanup-final-",
+        "cleanup-finalized.png",
+        "cleanup-finalized.png",
+        "image/png",
         &最小png字节(),
-    )
-    .expect("应能写入 final 文件");
-
-    let (partial_status, partial_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_concatenation_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("cleanup-partial-{attachment_id}"),
-            &attachment_id,
-            &upload_session_id,
-            "cleanup-finalized.png",
-            "image/png",
-            34,
-            34,
-            Some(partial_file.as_str()),
-            true,
-            false,
-            None,
-        )),
-        &[],
+        68,
+        false,
+        true,
+        Some(vec![
+            "http://127.0.0.1:7070/files/part-1",
+            "http://127.0.0.1:7070/files/part-2",
+        ]),
     )
     .await;
-    断言TusHook已接受(partial_status, &partial_body);
-
-    let (final_status, final_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_concatenation_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("cleanup-final-{attachment_id}"),
-            &attachment_id,
-            &upload_session_id,
-            "cleanup-finalized.png",
-            "image/png",
-            68,
-            68,
-            Some(final_file.as_str()),
-            false,
-            true,
-            Some(vec![
-                "http://127.0.0.1:7070/files/part-1",
-                "http://127.0.0.1:7070/files/part-2",
-            ]),
-        )),
-        &[],
-    )
-    .await;
-    断言TusHook已接受(final_status, &final_body);
 
     koko::shell::媒体清理::执行一次媒体上传残留清理(state.clone())
         .await
@@ -188,38 +205,21 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
         .as_str()
         .expect("upload_session_id")
         .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let partial_file = 写入tus测试文件(
-        &tus_upload_dir,
-        &attachment_id,
-        "cleanup-expired.part",
-        &source_bytes[..(source_bytes.len() / 2)],
-    )
-    .expect("应能写入 expired partial 文件");
-
-    let (partial_status, partial_body) = send_json(
+    let partial_file = 登记残留拼接上传回执(
         app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_concatenation_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("expired-partial-{attachment_id}"),
-            &attachment_id,
-            &upload_session_id,
-            "cleanup-expired.mp4",
-            "video/mp4",
-            (source_bytes.len() / 2) as i64,
-            (source_bytes.len() / 2) as i64,
-            Some(partial_file.as_str()),
-            true,
-            false,
-            None,
-        )),
-        &[],
+        &tus_upload_dir,
+        &prepare_body,
+        "expired-partial-",
+        "cleanup-expired.part",
+        "cleanup-expired.mp4",
+        "video/mp4",
+        &source_bytes[..(source_bytes.len() / 2)],
+        (source_bytes.len() / 2) as i64,
+        true,
+        false,
+        None,
     )
     .await;
-    断言TusHook已接受(partial_status, &partial_body);
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -315,38 +315,21 @@ async fn 后台会收口历史rustus残留locator而不再让清理卡住() {
         .as_str()
         .expect("upload_session_id")
         .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let partial_file = 写入tus测试文件(
-        &tus_upload_dir,
-        &attachment_id,
-        "cleanup-legacy-rustus.part",
-        &source_bytes[..(source_bytes.len() / 2)],
-    )
-    .expect("应能写入当前 tus upload dir 内的 partial 文件");
-
-    let (partial_status, partial_body) = send_json(
+    let _partial_file = 登记残留拼接上传回执(
         app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_concatenation_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("legacy-rustus-partial-{attachment_id}"),
-            &attachment_id,
-            &upload_session_id,
-            "cleanup-legacy-rustus.mp4",
-            "video/mp4",
-            (source_bytes.len() / 2) as i64,
-            (source_bytes.len() / 2) as i64,
-            Some(partial_file.as_str()),
-            true,
-            false,
-            None,
-        )),
-        &[],
+        &tus_upload_dir,
+        &prepare_body,
+        "legacy-rustus-partial-",
+        "cleanup-legacy-rustus.part",
+        "cleanup-legacy-rustus.mp4",
+        "video/mp4",
+        &source_bytes[..(source_bytes.len() / 2)],
+        (source_bytes.len() / 2) as i64,
+        true,
+        false,
+        None,
     )
     .await;
-    断言TusHook已接受(partial_status, &partial_body);
 
     let legacy_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("data")

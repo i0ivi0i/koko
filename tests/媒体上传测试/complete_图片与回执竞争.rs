@@ -1,5 +1,54 @@
 use super::*;
 
+// 这组测试真正关心的是 complete 阶段如何消费回执竞争；
+// 标准 post-finish 装配细节统一收回本文件 owner，避免每个测试 body 继续直接碰底层协议 helper。
+#[allow(clippy::too_many_arguments)]
+async fn 登记图片post_finish回执(
+    app: axum::Router,
+    tus_upload_dir: &str,
+    prepare_body: &serde_json::Value,
+    upload_id_prefix: &str,
+    hook_file_name: &str,
+    stored_file_name: &str,
+    bytes: &[u8],
+    declared_byte_size: i64,
+) -> upload_slice_support::已登记Tus最终上传 {
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("prepare 响应必须返回 attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(prepare_body);
+    let temp_file = 写入tus测试文件(tus_upload_dir, &attachment_id, stored_file_name, bytes)
+        .expect("应能写入图片 complete 测试临时文件");
+    let upload_id = format!("{upload_id_prefix}{attachment_id}");
+
+    let (hook_status, hook_body) = send_json(
+        app,
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
+            &upload_id,
+            &attachment_id,
+            hook_file_name,
+            "image/webp",
+            declared_byte_size,
+            declared_byte_size,
+            Some(temp_file.as_str()),
+        )),
+        &[],
+    )
+    .await;
+    断言TusHook已接受(hook_status, &hook_body);
+
+    upload_slice_support::已登记Tus最终上传 {
+        attachment_id,
+        upload_id,
+        temp_file,
+    }
+}
+
 #[tokio::test]
 #[serial]
 async fn complete图片上传会把prepared附件升级成ready并写入canonical资产() {
@@ -58,34 +107,18 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
         .connect(&cfg.database_url)
         .await
         .expect("应能连接数据库");
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-complete-image-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let 已登记回执 = 登记图片post_finish回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "upload-complete-image-",
+        "canonical.webp",
         "canonical.webp",
         &image_bytes,
-    )
-    .expect("应能写入 tus 原图文件");
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "canonical.webp",
-            "image/webp",
-            image_byte_size,
-            image_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
+        image_byte_size,
     )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
+    let temp_file = 已登记回执.temp_file;
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -436,14 +469,18 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
         .as_str()
         .expect("upload_session_id")
         .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let wrong_single_file = 写入tus测试文件(
+    let 单文件回执 = 登记图片post_finish回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "single-",
+        "canonical.webp",
         "final-preferred-single.bin",
         b"not-an-image",
+        image_byte_size,
     )
-    .expect("应能写入 single 假文件");
+    .await;
+    let authorization = 提取媒体上传授权头(&prepare_body);
     let final_webp_file = 写入tus测试文件(
         &tus_upload_dir,
         &attachment_id,
@@ -452,25 +489,7 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
     )
     .expect("应能写入 final webp 文件");
 
-    let (single_hook_status, single_hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("single-{attachment_id}"),
-            &attachment_id,
-            "canonical.webp",
-            "image/webp",
-            image_byte_size,
-            image_byte_size,
-            Some(wrong_single_file.as_str()),
-        )),
-        &[],
-    )
-    .await;
-    断言TusHook已接受(single_hook_status, &single_hook_body);
+    assert_eq!(单文件回执.attachment_id, attachment_id);
 
     let (final_hook_status, final_hook_body) = send_json(
         app.clone(),
@@ -615,7 +634,6 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
     )
     .await;
     let (hook_status, hook_body) = hook_task.await.expect("hook task 应该完成");
-
     断言TusHook已接受(hook_status, &hook_body);
     assert_eq!(
         complete_status,

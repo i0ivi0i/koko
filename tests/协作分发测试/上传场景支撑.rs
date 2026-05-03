@@ -8,6 +8,9 @@ pub(crate) struct 已完成媒体上传场景 {
     pub(crate) complete_body: serde_json::Value,
 }
 
+// 这条 helper 负责把协作分发读侧依赖的上传主链一次走完；
+// 显式参数表能直接映射 prepare/hook/complete 的真实字段，不再制造额外测试 DSL。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn 完成媒体上传到ready(
     app: axum::Router,
     tus_upload_dir: &str,

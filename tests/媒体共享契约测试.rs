@@ -8,6 +8,73 @@ mod test_support;
 
 use test_support::{env_support::*, http::*, media::*};
 
+// 共享契约测试要显式保留 prepare 与 hook 的协议输入，
+// 否则很容易把“共享契约”和“测试装配细节”再混成新的万能 builder。
+#[allow(clippy::too_many_arguments)]
+async fn 完成共享媒体上传(
+    app: axum::Router,
+    tus_upload_dir: &str,
+    session_id: &str,
+    prepare_endpoint: &str,
+    upload_id_prefix: &str,
+    file_name: &str,
+    mime_type: &str,
+    bytes: &[u8],
+) -> (String, serde_json::Value) {
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        prepare_endpoint,
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": file_name,
+            "mime_type": mime_type,
+            "byte_size": bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入tus测试文件(tus_upload_dir, &attachment_id, file_name, bytes)
+        .expect("应能写入共享契约测试临时文件");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
+            &format!("{upload_id_prefix}{attachment_id}"),
+            &attachment_id,
+            file_name,
+            mime_type,
+            bytes.len() as i64,
+            bytes.len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[],
+    )
+    .await;
+    断言TusHook已接受(hook_status, &hook_body);
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({ "session_id": session_id })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    (attachment_id, complete_body)
+}
+
 fn 断言对象不包含壳层私货(
     object: &serde_json::Map<String, serde_json::Value>,
     上下文: &str,
@@ -62,64 +129,17 @@ async fn 视频complete共享契约不包含_web_页面流程和展示文案字�
         .expect("session_id")
         .to_string();
 
-    let (prepare_status, prepare_body) = send_json(
+    let (_attachment_id, complete_body) = 完成共享媒体上传(
         app.clone(),
-        Method::POST,
-        "/api/media/video/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "shared-contract-video.mp4",
-            "mime_type": "video/mp4",
-            "byte_size": 最小mp4字节().len()
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入tus测试文件(
         &tus_upload_dir,
-        &attachment_id,
+        session_id.as_str(),
+        "/api/media/video/prepare",
+        "upload-shared-contract-video-",
         "shared-contract-video.mp4",
+        "video/mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 tus 临时视频文件");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("upload-shared-contract-video-{attachment_id}"),
-            &attachment_id,
-            "shared-contract-video.mp4",
-            "video/mp4",
-            最小mp4字节().len() as i64,
-            最小mp4字节().len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
-        app.clone(),
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id")
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
 
     let media_asset = complete_body["media_asset"]
         .as_object()
@@ -195,67 +215,19 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         .expect("session_id")
         .to_string();
     let image_bytes = 最小webp字节();
-    let image_byte_size = image_bytes.len() as i64;
 
-    let (prepare_status, prepare_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "canonical.webp",
-            "mime_type": "image/webp",
-            "byte_size": image_byte_size
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入tus测试文件(
-        &tus_upload_dir,
-        &attachment_id,
-        "canonical.webp",
-        &image_bytes,
-    )
-    .expect("应能写入 tus canonical 图片文件");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &format!("upload-shared-contract-image-{attachment_id}"),
-            &attachment_id,
-            "canonical.webp",
-            "image/webp",
-            image_byte_size,
-            image_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
-    .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
+    let (attachment_id, complete_body) = 完成共享媒体上传(
         app,
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id")
-        })),
-        &[],
+        &tus_upload_dir,
+        session_id.as_str(),
+        "/api/media/image/prepare",
+        "upload-shared-contract-image-",
+        "canonical.webp",
+        "image/webp",
+        &image_bytes,
     )
     .await;
     恢复环境变量(backup);
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
 
     let media_asset = complete_body["media_asset"]
         .as_object()
