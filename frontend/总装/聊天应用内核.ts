@@ -97,8 +97,6 @@ import {
 } from "../实时/会话运行时.js";
 import {
   type 消息视频自动播候选,
-  type 媒体附件草稿,
-  type 媒体草稿状态补丁,
   type 媒体会话信号,
   type 媒体播放位置,
   type 媒体查看器打开请求,

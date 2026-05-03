@@ -86,10 +86,6 @@ export class 聊天壳 extends LitElement {
     },
   });
 
-  private get 平台() {
-    return this.装配.平台;
-  }
-
   private get kernel() {
     return this.装配.kernel;
   }
@@ -284,10 +280,6 @@ export class 聊天壳 extends LitElement {
     }
     this.操作台输入组宽度缓存 = nextWidth;
     this.requestUpdate();
-  }
-
-  private 同步消息文本布局环境(): void {
-    this.布局观测器.同步消息文本布局环境(this.shadowRoot);
   }
 
   private 读取消息文本布局环境(): 消息文本布局环境 {

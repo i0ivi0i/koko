@@ -100,6 +100,17 @@ fn 协作分发共享语义必须收进_协作分发_子域() {
 }
 
 #[test]
+fn 协作分发共享语义不得泄漏外层协议类型() {
+    let owner = 读取("src/媒体/协作分发/共享语义.rs");
+    for forbidden in ["axum::http", "HeaderMap", "Uri"] {
+        assert!(
+            !owner.contains(forbidden),
+            "src/媒体/协作分发/共享语义.rs 是跨壳稳定语义入口，不能泄漏 shell/adapter 协议类型：{forbidden}"
+        );
+    }
+}
+
+#[test]
 fn 媒体定位正式表面守卫_禁止顶层original_url回流并锁定资产外壳新路径() {
     let shell = 读取("src/外壳/mod.rs");
     let content = 读取("src/媒体/资产/外壳.rs");

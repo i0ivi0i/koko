@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { 创建媒体查看器 } from "../../媒体/媒体查看器";
 import {

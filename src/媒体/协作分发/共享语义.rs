@@ -1,8 +1,7 @@
-use axum::http::{HeaderMap, Uri};
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use sha2::{Digest, Sha256};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 /// 第一版保底窗口固定 24 小时。
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
@@ -146,24 +145,37 @@ fn 标准化协作分发同源announce路径(raw_path: &str) -> String {
     format!("/{}", trimmed.trim_matches('/'))
 }
 
+/// 这里不做完整 URL 解析，只提取 `scheme://authority` 里的 host：
+/// `media_distribution` 是跨壳稳定语义入口，不能为了判断回环地址反向依赖 Axum/http 类型。
+/// 外层如果要读取 Header、Host 或代理协议，必须先在 shell/adapter 翻译成显式字符串再传进来。
+fn 提取tracker公开地址主机(raw_url: &str) -> Option<&str> {
+    let authority_start = raw_url.split_once("://")?.1;
+    let authority = authority_start
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    let host_port = authority
+        .rsplit_once('@')
+        .map(|(_, value)| value)
+        .unwrap_or(authority);
+    if let Some(ipv6_tail) = host_port.strip_prefix('[') {
+        return ipv6_tail.split_once(']').map(|(host, _)| host);
+    }
+    Some(host_port.split(':').next().unwrap_or_default())
+}
+
 fn 是回环tracker公开地址(url: &str) -> bool {
-    let Ok(uri) = url.parse::<Uri>() else {
-        return false;
-    };
-    let Some(authority) = uri.authority() else {
-        return false;
-    };
-    matches!(authority.host(), "127.0.0.1" | "localhost" | "::1")
+    matches!(
+        提取tracker公开地址主机(url),
+        Some("127.0.0.1" | "localhost" | "::1")
+    )
 }
 
 /// 浏览器 contract 优先只认同源 announce 路径：
 /// 1. 默认值直接收口成 `/api/swarm/announce`，不再把 `ws://127.0.0.1:7072` 之类的内部地址塞给浏览器；
 /// 2. 显式配置如果仍是回环绝对地址，也必须降级回同源路径，禁止内部 tracker upstream 泄漏；
 /// 3. 只有显式给出非回环绝对公网地址时，才允许继续沿用该公开地址。
-pub(crate) fn 读取协作分发tracker对外地址(
-    configured_tracker_public_url: &str,
-    _headers: &HeaderMap,
-) -> String {
+pub(crate) fn 读取协作分发tracker对外地址(configured_tracker_public_url: &str) -> String {
     let trimmed = configured_tracker_public_url.trim();
     if trimmed.is_empty() || trimmed.starts_with('/') {
         return 标准化协作分发同源announce路径(trimmed);
@@ -189,7 +201,9 @@ pub(crate) fn 裁决协作分发媒体可用性(
     协作分发媒体可用性::NoOnlineSeed
 }
 
-fn 协作分发媒体可用性转状态码(availability: 协作分发媒体可用性) -> &'static str {
+fn 协作分发媒体可用性转状态码(
+    availability: 协作分发媒体可用性
+) -> &'static str {
     match availability {
         协作分发媒体可用性::Ready => 媒体状态已就绪,
         协作分发媒体可用性::ConnectingToPeers => 媒体状态连接群友中,
@@ -473,6 +487,38 @@ mod tests {
     }
 
     #[test]
+    fn tracker对外地址默认收口到同源announce路径() {
+        assert_eq!(读取协作分发tracker对外地址(""), 同源协作分发ANNOUNCE路径);
+        assert_eq!(
+            读取协作分发tracker对外地址("/custom/announce"),
+            "/custom/announce"
+        );
+    }
+
+    #[test]
+    fn tracker对外地址会拒绝泄漏回环绝对地址() {
+        for raw_url in [
+            "ws://127.0.0.1:7072/announce",
+            "ws://localhost:7072/announce",
+            "ws://[::1]:7072/announce",
+        ] {
+            assert_eq!(
+                读取协作分发tracker对外地址(raw_url),
+                同源协作分发ANNOUNCE路径,
+                "浏览器 contract 不能拿到内部 tracker 回环地址：{raw_url}"
+            );
+        }
+    }
+
+    #[test]
+    fn tracker对外地址允许显式公网announce地址() {
+        assert_eq!(
+            读取协作分发tracker对外地址("wss://tracker.example.com/announce/"),
+            "wss://tracker.example.com/announce"
+        );
+    }
+
+    #[test]
     fn 诊断协作分发join_ticket会区分票据解码失败() {
         let 结果 = 诊断协作分发join_ticket("secret", "expected-info-hash", "not-a-jwt");
         assert_eq!(结果, 协作分发入群票据校验诊断::票据解码失败);
@@ -592,13 +638,7 @@ mod tests {
             最近后端强种子存活时间戳秒: None,
         };
 
-        let status = 裁决协作分发媒体状态码(
-            &snapshot,
-            false,
-            false,
-            9_000,
-            30,
-        );
+        let status = 裁决协作分发媒体状态码(&snapshot, false, false, 9_000, 30);
 
         assert_eq!(
             status,

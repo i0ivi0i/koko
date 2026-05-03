@@ -3,7 +3,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../平台/存储";
 import {
   createFakeStorage,
   假传输,
@@ -13,22 +12,14 @@ import {
   等待组件稳定,
   读取操作台主输入,
   读取操作台主动作,
-  读取操作台表单,
   读取房间滚动器供测试,
   读取聊天快照供测试,
   输入房间短码到操作台,
-  输入消息到操作台,
   设置测试滚动阶段,
   模拟用户滚动意图,
   模拟消息滚动视口,
 } from "./common/聊天测试支架";
-import {
-  派生壳主舞台模式,
-  派生控制台模式,
-  派生壳级操作台状态,
-  派生首页会话展示项,
-} from "../房间消息窗/视图";
-import type { 匿名身份引导结果, 房间历史页 } from "../聊天共享/契约";
+import type { 房间历史页 } from "../聊天共享/契约";
 import { 聊天壳 } from "../总装/聊天壳";
 describe("聊天壳集成 / 恢复失败与历史分页", () => {
   beforeEach(() => {

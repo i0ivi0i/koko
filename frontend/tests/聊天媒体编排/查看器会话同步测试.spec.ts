@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 生成视频消息, 生成图片消息, 生成锚点视频播放结果, 刷新异步队列, 创建延后Promise } from "../common/聊天媒体编排支架";

@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { 创建媒体查看器 } from "../../媒体/媒体查看器";
 import {
@@ -8,7 +7,6 @@ import {
   安装可回退全屏堆栈模拟,
   安装ShadowHost全屏DOM模拟,
   读取VideoJs媒体容器,
-  查询查看器关闭按钮,
   等待查询查看器关闭按钮,
   创建测试VideoJs进入全屏,
   创建测试VideoJs播放器壳,

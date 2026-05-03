@@ -2,7 +2,6 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../../媒体/媒体播放";
-import type { 房间消息窗 } from "../../房间消息窗/壳";
 import {
   创建单视频消息项,
   创建媒体消息窗,

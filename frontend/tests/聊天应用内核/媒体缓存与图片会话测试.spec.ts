@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
 import { createFakeStorage, 假传输, 创建房间快照 } from "../common/聊天测试支架";

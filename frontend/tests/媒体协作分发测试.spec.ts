@@ -422,8 +422,12 @@ describe("媒体协作分发", () => {
   });
 
   it("资产协作分发运行时只管理 swarm/session owner，不向壳层回声第二会话表", () => {
-    const source = readFileSync(
+    const runtimeSource = readFileSync(
       resolve(process.cwd(), "媒体/资产协作分发运行时.ts"),
+      "utf8"
+    );
+    const stateMachineSource = readFileSync(
+      resolve(process.cwd(), "媒体/资产协作分发状态机.ts"),
       "utf8"
     );
     const runtime = 创建资产协作分发运行时();
@@ -433,9 +437,9 @@ describe("媒体协作分发", () => {
       expect(runtime.读取会话状态("swarm-none")).toBeNull();
       expect("底层会话表" in (runtime as object)).toBe(false);
       expect("browserRuntime" in (runtime as object)).toBe(false);
-      expect(source).toContain("AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整");
-      expect(source).not.toContain("createServer(");
-      expect(source).not.toContain("new WebTorrent");
+      expect(stateMachineSource).toContain("AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整");
+      expect(runtimeSource).not.toContain("createServer(");
+      expect(runtimeSource).not.toContain("new WebTorrent");
     } finally {
       runtime.销毁();
     }

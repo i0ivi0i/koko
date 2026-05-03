@@ -1,9 +1,6 @@
 import { html } from "lit";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
-import {
-  创建操作台附件入口编排,
-  默认统一媒体文件选择配置,
-} from "../操作台/index.js";
+import { 创建操作台附件入口编排 } from "../操作台/index.js";
 import { 默认文本布局器 } from "../房间消息窗/文本布局.js";
 import {
   默认消息文本布局环境,

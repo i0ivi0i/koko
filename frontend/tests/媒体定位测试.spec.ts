@@ -314,7 +314,7 @@ describe("媒体定位器", () => {
       >()
       .mockImplementationOnce(
         async (_sessionId: string, _attachmentId: string, signal?: AbortSignal) =>
-          await new Promise<typeof 首轮定位>((resolve, reject) => {
+          await new Promise<typeof 首轮定位>((_resolve, reject) => {
             signal?.addEventListener(
               "abort",
               () => {

@@ -1,12 +1,10 @@
 // @vitest-environment happy-dom
-import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { 媒体播放位置 } from "../../媒体/媒体播放";
 import { 创建媒体查看器 } from "../../媒体/媒体查看器";
 import { 创建全局唯一播放器 } from "../../媒体/全局唯一播放器";
 import {
   安装全屏DOM模拟,
-  查询查看器关闭按钮,
   等待查询查看器关闭按钮,
   创建测试VideoJs播放器壳,
   等待查看器任务完成,

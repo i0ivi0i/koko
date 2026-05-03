@@ -1238,10 +1238,6 @@ export function 创建阅读推进测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
-  const 同步房间壳补丁 = (): void => {
-    updateState(创建房间壳补丁(roomKernel));
-  };
-  const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
   const roomTimelinePort = 创建会同步时间线补丁的时间线端口(updateState, {
     messages: input.messages ?? [],
     latestEventPosition: input.latestEventPosition ?? 0,

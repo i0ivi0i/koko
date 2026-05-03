@@ -3,7 +3,7 @@ use super::{应用状态, 构建共享仓储};
 use crate::shell::协议响应::{err_resp, map_domain_err_tuple};
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     Json,
 };
@@ -21,7 +21,6 @@ pub(super) struct SourceHashReuseBody {
 pub(super) async fn reuse_media_by_source_hash(
     Path(raw_kind): Path<String>,
     State(state): State<应用状态>,
-    headers: HeaderMap,
     Json(body): Json<SourceHashReuseBody>,
 ) -> impl IntoResponse {
     let media_kind = match 解析媒体类型(raw_kind.as_str()) {
@@ -101,7 +100,6 @@ pub(super) async fn reuse_media_by_source_hash(
     let attachment =
         super::媒体附件上传响应外壳::构造ready媒体附件响应并触发做种(
             &state,
-            &headers,
             session_id.as_str(),
             &命中.附件,
             &命中.协作分发,

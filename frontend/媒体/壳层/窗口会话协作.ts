@@ -1,4 +1,3 @@
-import type { 媒体种类 } from "../../聊天共享/契约.js";
 import type { 媒体会话端口, 媒体播放结果 } from "../index.js";
 import type { 媒体附件条目 } from "./窗口附件协作.js";
 

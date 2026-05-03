@@ -228,7 +228,7 @@ describe("realtime真实链路", () => {
         text: "first message",
         attachment_ids: [],
       });
-      const [eventA1, eventB1] = await Promise.all([firstA, firstB]);
+      const [, eventB1] = await Promise.all([firstA, firstB]);
       await expectNoEvent(socketC, "room_event");
 
       socketB.disconnect();

@@ -1,4 +1,3 @@
-import type { 消息事件 } from "../../聊天共享/契约.js";
 import type { 聊天运行时预算状态 } from "../../总装/聊天状态.js";
 import type { 信息流视频预算投影 } from "../信息流视频预算.js";
 import {

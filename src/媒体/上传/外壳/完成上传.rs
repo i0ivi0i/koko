@@ -7,7 +7,7 @@ use crate::media_distribution;
 use crate::shell::协议响应::{err_resp, map_domain_err_tuple};
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -36,7 +36,6 @@ pub(super) struct CompleteMediaUploadBody {
 pub(super) async fn complete_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
-    headers: HeaderMap,
     Json(body): Json<CompleteMediaUploadBody>,
 ) -> impl IntoResponse {
     let session_id = match super::读取非空会话标识(body.session_id) {
@@ -45,7 +44,6 @@ pub(super) async fn complete_media_upload(
     };
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
         state.swarm_tracker_public_url.as_str(),
-        &headers,
     );
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();

@@ -1,35 +1,52 @@
 import Uppy from "@uppy/core";
 import Tus from "@uppy/tus";
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
   媒体附件上传结果,
-  媒体SourceHash复用请求,
   媒体SourceHash复用结果,
   媒体SourceHash信息,
-  媒体上传准备结果,
   媒体种类,
 } from "../聊天共享/契约.js";
-import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
+import type { 媒体附件草稿 } from "./媒体草稿.js";
 import {
   创建本地图片预览地址 as 创建本地媒体预览地址,
   准备待上传图片文件,
   可选择图片文件类型,
-  图片附件上传上限字节数,
-  推导图片Mime类型,
 } from "./图片预处理.js";
 import {
   可选择视频文件类型,
   读取视频文件元数据,
   视频附件上传上限字节数,
 } from "./视频元数据.js";
-import { 预处理待上传视频文件, type 视频预处理结果 } from "./视频预处理.js";
+import { 预处理待上传视频文件 } from "./视频预处理.js";
 import {
   记录媒体上传失败诊断,
   解析媒体上传失败代码,
   解析传输错误代码,
   type 媒体上传失败响应,
 } from "./媒体诊断.js";
-import { 计算源文件SHA256经Worker } from "./源文件哈希.js";
+import {
+  创建媒体Tus断点UrlStorage,
+  type 媒体Tus断点UrlStorage,
+} from "./媒体Tus断点存储.js";
+import {
+  创建失败草稿标识,
+  默认文件名,
+  默认计算源文件SourceHash,
+  构造SourceHash复用请求,
+  构造媒体上传Meta,
+  构造媒体上传器键,
+  读取媒体Tus请求头,
+  读取媒体上传上限,
+  读取媒体上传档位,
+  读取媒体种类,
+  读取本地预览地址,
+  读取预览宽高,
+  识别待上传媒体种类,
+  提取媒体附件标识,
+  type 媒体发布器依赖,
+} from "./媒体发布基础语义.js";
+
+export { 大视频高吞吐阈值字节数 } from "./媒体发布基础语义.js";
 
 export type 媒体上传Meta = {
   session_id?: string;
@@ -107,15 +124,6 @@ export const 媒体Tus文件并发上限 = 8;
 export const 媒体单条消息附件上限 = 9;
 
 /**
- * 32 MiB 以下的视频继续走默认档；从这个阈值往上，就切到独立的 large-video uploader profile。
- * 当前 profile 的价值主要是：
- * 1. 把大视频和图片/小视频拆到不同上传器队列里，避免它们共用同一个本地并发池；
- * 2. 给未来真正支持 Tus partial upload / concatenation 时保留稳定切入点；
- * 3. 在后端 hook 仍以“单附件 = 单运输回执”为真相时，不再伪装成已经支持单文件并行分片。
- */
-export const 大视频高吞吐阈值字节数 = 32 * 1024 * 1024;
-
-/**
  * `parallelUploads` 只针对单个大视频生效。
  * 这里先保守固定为 4：
  * 1. 与官方文档建议一致，避免把浏览器公共连接池一把打满；
@@ -145,9 +153,9 @@ export const 媒体Tus单请求体分块字节数 = 32 * 1024 * 1024;
  */
 const 视频预制草稿显示延迟毫秒 = 180;
 
-type 媒体Tus上传档位 = "default" | "large-video";
+export type 媒体Tus上传档位 = "default" | "large-video";
 
-type 媒体上传器创建参数 = {
+export type 媒体上传器创建参数 = {
   tusEndpoint: string;
   profile: 媒体Tus上传档位;
   attachmentId?: string;
@@ -165,353 +173,6 @@ type 媒体Tus传输选项 = {
   urlStorage: 媒体Tus断点UrlStorage;
   parallelUploads?: number;
   metadataForPartialUploads?: Record<string, string>;
-};
-
-type 媒体Tus历史上传 = {
-  size: number | null;
-  metadata: Record<string, string>;
-  creationTime: string;
-  urlStorageKey: string;
-  uploadUrl: string | null;
-  parallelUploadUrls: string[] | null;
-};
-
-type 媒体Tus断点记录 = 媒体Tus历史上传 & {
-  fingerprint: string;
-};
-
-type 待保存媒体Tus历史上传 = Partial<媒体Tus历史上传> & {
-  metadata?: Record<string, string>;
-};
-
-type 媒体Tus断点UrlStorage = {
-  findAllUploads(): Promise<媒体Tus历史上传[]>;
-  findUploadsByFingerprint(fingerprint: string): Promise<媒体Tus历史上传[]>;
-  removeUpload(urlStorageKey: string): Promise<void>;
-  addUpload(fingerprint: string, upload: 待保存媒体Tus历史上传): Promise<string>;
-};
-
-interface 媒体Tus断点数据库定义 extends DBSchema {
-  uploads: {
-    key: string;
-    value: 媒体Tus断点记录;
-    indexes: {
-      byFingerprint: string;
-    };
-  };
-}
-
-const 媒体Tus断点数据库名称 = "koko-tus-resume";
-const 媒体Tus断点数据库版本 = 1;
-const 媒体Tus断点存储名 = "uploads";
-const 媒体Tus断点Fingerprint索引名 = "byFingerprint";
-
-type 媒体发布器依赖 = {
-  getSessionId(): string;
-  getCurrentRoomId?(): string | null;
-  calculateSourceHash?(file: File): Promise<媒体SourceHash信息>;
-  reuseMediaBySourceHash?(
-    kind: 媒体种类,
-    input: 媒体SourceHash复用请求
-  ): Promise<媒体SourceHash复用结果>;
-  prepareMediaUpload(
-    kind: 媒体种类,
-    sessionId: string,
-    file: File,
-    sourceHash?: 媒体SourceHash信息
-  ): Promise<媒体上传准备结果>;
-  abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
-  completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
-  readDrafts(): 媒体附件草稿[];
-  writeDraft(draft: 媒体附件草稿): void;
-  updateDraft(localId: string, patch: 媒体草稿状态补丁): void;
-  removeDraft(localId: string): void;
-  clearDrafts(): void;
-  createUploader?(input: 媒体上传器创建参数): 媒体上传器;
-  readVideoMetadata?(file: File): Promise<{
-    width: number;
-    height: number;
-    previewUrl?: string | null;
-  }>;
-  preprocessVideo?(file: File): Promise<
-    视频预处理结果 & {
-      width?: number;
-      height?: number;
-      previewUrl?: string | null;
-    }
-  >;
-  createPreviewUrl?(file: Blob | null): string;
-  yieldToMainThread?(): Promise<void>;
-};
-
-function 读取媒体Tus请求头(meta: 媒体上传Meta): Record<string, string> {
-  if (!meta.tus_headers_json?.trim()) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(meta.tus_headers_json) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    const output: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string" && value.trim()) {
-        output[key] = value;
-      }
-    }
-    return output;
-  } catch {
-    return {};
-  }
-}
-
-function 提取媒体附件标识(file: 媒体上传文件 | undefined): string {
-  const meta = (file?.meta ?? {}) as 媒体上传Meta;
-  return typeof meta.attachment_id === "string" ? meta.attachment_id : "";
-}
-
-function 读取媒体种类(file: 媒体上传文件 | undefined): 媒体种类 {
-  const meta = (file?.meta ?? {}) as 媒体上传Meta;
-  return meta.attachment_kind === "video" ? "video" : "image";
-}
-
-function 读取预览宽高(file: 媒体上传文件 | undefined): { width: number; height: number } {
-  const meta = (file?.meta ?? {}) as 媒体上传Meta;
-  return {
-    width: typeof meta.preview_width === "number" ? meta.preview_width : 0,
-    height: typeof meta.preview_height === "number" ? meta.preview_height : 0,
-  };
-}
-
-function 读取本地预览地址(
-  file: 媒体上传文件 | undefined,
-  createPreviewUrl: (file: Blob | null) => string
-): string {
-  const meta = (file?.meta ?? {}) as 媒体上传Meta;
-  if (typeof meta.local_preview_url === "string" && meta.local_preview_url.trim()) {
-    return meta.local_preview_url;
-  }
-  return file?.data instanceof Blob ? createPreviewUrl(file.data) : "";
-}
-
-function 读取媒体上传上限(kind: 媒体种类): number {
-  return kind === "video" ? 视频附件上传上限字节数 : 图片附件上传上限字节数;
-}
-
-/**
- * 统一附件入口先判断“这是不是我们认识的媒体”，再决定走哪条最小预处理分支。
- * 这里故意保持克制：
- * 1. 图片复用既有 MIME 推导，继续兜住空 MIME 与 HEIC/HEIF；
- * 2. 视频先继续信任浏览器给出的 `video/*`，不额外手搓第二套大而全的扩展名表；
- * 3. 识别不出来就明确拒绝，不伪造 kind，不让未知文件偷偷滑进上传主链。
- */
-function 识别待上传媒体种类(file: File): 媒体种类 | null {
-  const normalizedType = file.type.trim().toLowerCase();
-  if (normalizedType.startsWith("image/")) {
-    return "image";
-  }
-  if (normalizedType.startsWith("video/")) {
-    return "video";
-  }
-  return 推导图片Mime类型(file).startsWith("image/") ? "image" : null;
-}
-
-function 默认文件名(kind: 媒体种类): string {
-  return kind === "video" ? "未命名视频" : "未命名图片";
-}
-
-function 读取媒体上传档位(kind: 媒体种类, file: File): 媒体Tus上传档位 {
-  return kind === "video" && file.size >= 大视频高吞吐阈值字节数
-    ? "large-video"
-    : "default";
-}
-
-function 构造媒体上传器键(input: 媒体上传器创建参数): string {
-  /**
-   * default 档位仍然可以按 endpoint 复用上传器；
-   * 但 large-video 的 partial metadata 绑定在某一个 attachment/session 上，
-   * 不能再让多个大视频共用同一个 uploader，否则后创建的视频会把前一个视频的 partial metadata 覆盖掉。
-   */
-  if (input.profile === "large-video") {
-    return `${input.profile}@${input.tusEndpoint}@${input.uploadSessionId ?? "missing-session"}`;
-  }
-  return `${input.profile}@${input.tusEndpoint}`;
-}
-
-const 生成媒体Tus断点键 = (fingerprint: string): string => {
-  const randomPart =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.round(Math.random() * 1e12)}`;
-  return `koko-tus::${fingerprint}::${randomPart}`;
-};
-
-const 复制媒体Tus历史上传 = (record: 媒体Tus断点记录): 媒体Tus历史上传 => ({
-  size: record.size,
-  metadata: { ...record.metadata },
-  creationTime: record.creationTime,
-  urlStorageKey: record.urlStorageKey,
-  uploadUrl: record.uploadUrl,
-  parallelUploadUrls: record.parallelUploadUrls ? [...record.parallelUploadUrls] : null,
-});
-
-const 规范化媒体Tus断点记录 = (
-  fingerprint: string,
-  urlStorageKey: string,
-  upload: 待保存媒体Tus历史上传
-): 媒体Tus断点记录 => ({
-  fingerprint,
-  urlStorageKey,
-  size: typeof upload.size === "number" && Number.isFinite(upload.size) ? upload.size : null,
-  metadata: upload.metadata ? { ...upload.metadata } : {},
-  creationTime: typeof upload.creationTime === "string" ? upload.creationTime : new Date().toString(),
-  uploadUrl: typeof upload.uploadUrl === "string" ? upload.uploadUrl : null,
-  parallelUploadUrls: Array.isArray(upload.parallelUploadUrls)
-    ? upload.parallelUploadUrls.filter((url): url is string => typeof url === "string")
-    : null,
-});
-
-const 创建内存媒体Tus断点存储 = (): 媒体Tus断点UrlStorage => {
-  const records = new Map<string, 媒体Tus断点记录>();
-  return {
-    async findAllUploads(): Promise<媒体Tus历史上传[]> {
-      return Array.from(records.values()).map(复制媒体Tus历史上传);
-    },
-
-    async findUploadsByFingerprint(fingerprint: string): Promise<媒体Tus历史上传[]> {
-      return Array.from(records.values())
-        .filter((record) => record.fingerprint === fingerprint)
-        .map(复制媒体Tus历史上传);
-    },
-
-    async removeUpload(urlStorageKey: string): Promise<void> {
-      records.delete(urlStorageKey);
-    },
-
-    async addUpload(
-      fingerprint: string,
-      upload: 待保存媒体Tus历史上传
-    ): Promise<string> {
-      const urlStorageKey = 生成媒体Tus断点键(fingerprint);
-      records.set(urlStorageKey, 规范化媒体Tus断点记录(fingerprint, urlStorageKey, upload));
-      return urlStorageKey;
-    },
-  };
-};
-
-const 创建IndexedDB媒体Tus断点存储 = (): 媒体Tus断点UrlStorage | null => {
-  if (typeof indexedDB === "undefined") {
-    return null;
-  }
-  let 数据库Promise: Promise<IDBPDatabase<媒体Tus断点数据库定义>> | null = null;
-  const 读取数据库 = (): Promise<IDBPDatabase<媒体Tus断点数据库定义>> => {
-    if (!数据库Promise) {
-      数据库Promise = openDB<媒体Tus断点数据库定义>(
-        媒体Tus断点数据库名称,
-        媒体Tus断点数据库版本,
-        {
-          upgrade(db) {
-            if (!db.objectStoreNames.contains(媒体Tus断点存储名)) {
-              const store = db.createObjectStore(媒体Tus断点存储名, {
-                keyPath: "urlStorageKey",
-              });
-              store.createIndex(媒体Tus断点Fingerprint索引名, "fingerprint", {
-                unique: false,
-              });
-            }
-          },
-        }
-      );
-    }
-    return 数据库Promise;
-  };
-
-  return {
-    async findAllUploads(): Promise<媒体Tus历史上传[]> {
-      const db = await 读取数据库();
-      const records = await db.getAll(媒体Tus断点存储名);
-      return records.map(复制媒体Tus历史上传);
-    },
-
-    async findUploadsByFingerprint(fingerprint: string): Promise<媒体Tus历史上传[]> {
-      const db = await 读取数据库();
-      const records = await db.getAllFromIndex(
-        媒体Tus断点存储名,
-        媒体Tus断点Fingerprint索引名,
-        fingerprint
-      );
-      return records.map(复制媒体Tus历史上传);
-    },
-
-    async removeUpload(urlStorageKey: string): Promise<void> {
-      const db = await 读取数据库();
-      await db.delete(媒体Tus断点存储名, urlStorageKey);
-    },
-
-    async addUpload(
-      fingerprint: string,
-      upload: 待保存媒体Tus历史上传
-    ): Promise<string> {
-      const urlStorageKey = 生成媒体Tus断点键(fingerprint);
-      const db = await 读取数据库();
-      await db.put(
-        媒体Tus断点存储名,
-        规范化媒体Tus断点记录(fingerprint, urlStorageKey, upload)
-      );
-      return urlStorageKey;
-    },
-  };
-};
-
-const 创建媒体Tus断点UrlStorage = (): 媒体Tus断点UrlStorage => {
-  const memory = 创建内存媒体Tus断点存储();
-  const indexedDb = 创建IndexedDB媒体Tus断点存储();
-  if (!indexedDb) {
-    return memory;
-  }
-  /**
-   * Tus 官方默认 WebStorageUrlStorage 直接写 localStorage；localStorage 满了会把上传主链打断。
-   * 这里把持久断点交给 IndexedDB，并用内存存储兜住 IDB 异常，保证“断点恢复失败”不会升级成“上传失败”。
-   */
-  return {
-    async findAllUploads(): Promise<媒体Tus历史上传[]> {
-      const memoryUploads = await memory.findAllUploads();
-      try {
-        return [...(await indexedDb.findAllUploads()), ...memoryUploads];
-      } catch {
-        return memoryUploads;
-      }
-    },
-
-    async findUploadsByFingerprint(fingerprint: string): Promise<媒体Tus历史上传[]> {
-      const memoryUploads = await memory.findUploadsByFingerprint(fingerprint);
-      try {
-        return [...(await indexedDb.findUploadsByFingerprint(fingerprint)), ...memoryUploads];
-      } catch {
-        return memoryUploads;
-      }
-    },
-
-    async removeUpload(urlStorageKey: string): Promise<void> {
-      try {
-        await indexedDb.removeUpload(urlStorageKey);
-      } catch {
-        // 持久层删除失败不应阻断内存兜底清理。
-      }
-      await memory.removeUpload(urlStorageKey);
-    },
-
-    async addUpload(
-      fingerprint: string,
-      upload: 待保存媒体Tus历史上传
-    ): Promise<string> {
-      try {
-        return await indexedDb.addUpload(fingerprint, upload);
-      } catch {
-        return memory.addUpload(fingerprint, upload);
-      }
-    },
-  };
 };
 
 /**
@@ -544,10 +205,6 @@ export function 构造媒体Tus传输选项(
     };
   }
   return transportOptions;
-}
-
-function 创建失败草稿标识(kind: 媒体种类, prefix: string, file: File): string {
-  return `${prefix}-${kind}-${file.name}-${file.size}-${file.lastModified}`;
 }
 
 /**
@@ -597,82 +254,6 @@ async function 默认让出主线程(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
-}
-
-async function 默认计算源文件SourceHash(file: File): Promise<媒体SourceHash信息> {
-  const result = await 计算源文件SHA256经Worker(file);
-  const info: 媒体SourceHash信息 = {
-    source_hash: result.sourceHash,
-    source_byte_size: result.sourceByteSize,
-  };
-  if (result.sourceFileName.trim()) {
-    info.source_file_name = result.sourceFileName;
-  }
-  return info;
-}
-
-function 构造SourceHash复用请求(input: {
-  sessionId: string;
-  roomId: string;
-  sourceHash: 媒体SourceHash信息;
-}): 媒体SourceHash复用请求 {
-  const request: 媒体SourceHash复用请求 = {
-    session_id: input.sessionId,
-    room_id: input.roomId,
-    source_hash: input.sourceHash.source_hash,
-    source_byte_size: input.sourceHash.source_byte_size,
-  };
-  if (input.sourceHash.source_file_name?.trim()) {
-    request.source_file_name = input.sourceHash.source_file_name;
-  }
-  return request;
-}
-
-function 构造媒体上传Meta(input: {
-  sessionId: string;
-  kind: 媒体种类;
-  prepared: 媒体上传准备结果;
-  previewWidth: number;
-  previewHeight: number;
-  localPreviewUrl?: string;
-}): 媒体上传Meta {
-  const {
-    sessionId,
-    kind,
-    prepared,
-    previewWidth,
-    previewHeight,
-    localPreviewUrl,
-  } = input;
-  const meta: 媒体上传Meta = {
-    session_id: sessionId,
-    attachment_id: prepared.attachment_id,
-    upload_session_id: prepared.upload_session_id,
-    attachment_kind: kind,
-    relativePath: prepared.attachment_id,
-    upload_method: prepared.upload_method,
-    tus_endpoint: prepared.tus_endpoint,
-    tus_headers_json: JSON.stringify(prepared.tus_headers),
-    preview_width: previewWidth,
-    preview_height: previewHeight,
-  };
-  if (typeof localPreviewUrl === "string" && localPreviewUrl.trim()) {
-    meta.local_preview_url = localPreviewUrl;
-  }
-  /**
-   * exactOptionalPropertyTypes 打开后，可选字段不能显式写成 `undefined`。
-   * 这里按后端实际给到的 metadata 逐项落值，既满足类型约束，也避免把空值误当成有效 Tus metadata。
-   */
-  if (typeof prepared.tus_metadata.file_name === "string") {
-    meta.file_name = prepared.tus_metadata.file_name;
-  }
-  if (typeof prepared.tus_metadata.mime_type === "string") {
-    meta.mime_type = prepared.tus_metadata.mime_type;
-  }
-  if (typeof prepared.tus_metadata.byte_size === "string") {
-    meta.byte_size = prepared.tus_metadata.byte_size;
-  }
-  return meta;
 }
 
 export function 创建媒体发布器(deps: 媒体发布器依赖) {

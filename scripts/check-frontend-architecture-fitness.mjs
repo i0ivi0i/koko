@@ -14,6 +14,7 @@ const 媒体查看器测试目录 = join(前端测试目录, "媒体查看器");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
+const 前端生产文件完成态物理行上限 = 987;
 const 前端根目录允许文件 = new Set([
   ".tsbuildinfo",
   "入口.ts",
@@ -50,6 +51,7 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/媒体/运行时.ts", symbol: "创建媒体运行时Actor" },
   { path: "frontend/媒体/全局丝滑自动播.ts", symbol: "判定播放连续性表面" },
   { path: "frontend/媒体/资产协作分发运行时.ts", symbol: "创建资产协作分发运行时" },
+  { path: "frontend/媒体/资产协作分发状态机.ts", symbol: "资产协作分发机" },
   { path: "frontend/平台/缓存更新运行时.ts", symbol: "创建缓存更新运行时" },
 ];
 
@@ -155,7 +157,7 @@ const 前端已清零根文件规则 = [
   {
     path: "frontend/房间消息窗.ts",
     ownerPath: "frontend/房间消息窗/壳.ts",
-    requiredOwnerSnippets: ["export class 房间消息窗 extends LitElement", 'customElements.define("koko-room-message-pane", 房间消息窗);'],
+    requiredOwnerSnippets: ["export class 房间消息窗 extends 房间消息窗时间线媒体基类", 'customElements.define("koko-room-message-pane", 房间消息窗);'],
   },
   {
     path: "frontend/媒体运行时.ts",
@@ -836,6 +838,26 @@ export const 检查热点文件增长 = (
   return violations;
 };
 
+const 检查前端生产文件完成态物理行 = (files) => {
+  const violations = [];
+  for (const absolutePath of files) {
+    const relativePath = 转成仓库相对路径(absolutePath);
+    if (relativePath.endsWith(".d.ts")) {
+      continue;
+    }
+    const physicalLineCount = 统计物理源码行数(readFileSync(absolutePath, "utf8"));
+    if (physicalLineCount <= 前端生产文件完成态物理行上限) {
+      continue;
+    }
+    violations.push({
+      file: relativePath,
+      label: "frontend production file completion-state budget",
+      detail: `${physicalLineCount} 行超过完成态上限 ${前端生产文件完成态物理行上限} 行`,
+    });
+  }
+  return violations;
+};
+
 const 检查前端测试热点边界 = () => {
   const violations = [];
 
@@ -915,6 +937,7 @@ export const 收集架构适应度违规 = () => {
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
     ...检查热点文件增长(),
+    ...检查前端生产文件完成态物理行(files),
     ...检查前端测试热点边界(),
   ];
 

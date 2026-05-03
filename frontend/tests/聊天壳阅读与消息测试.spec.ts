@@ -1,31 +1,22 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { 创建浏览器存储 } from "../平台/存储";
 import {
   createFakeStorage,
   假传输,
   创建房间快照,
   创建传输错误,
   等待组件稳定,
-  读取操作台主输入,
   读取操作台主动作,
-  读取操作台表单,
   输入房间短码到操作台,
   输入消息到操作台,
-  设置测试滚动阶段,
   模拟用户滚动意图,
   模拟消息滚动视口,
 } from "./common/聊天测试支架";
 import {
   默认消息文本布局环境,
   派生聊天列表展示项,
-  派生壳主舞台模式,
-  派生控制台模式,
-  派生壳级操作台状态,
-  派生首页会话展示项,
 } from "../房间消息窗/视图";
-import type { 匿名身份引导结果 } from "../聊天共享/契约";
 import { 聊天壳 } from "../总装/聊天壳";
 describe("聊天壳集成 / 阅读推进与消息并流", () => {
   beforeEach(() => {

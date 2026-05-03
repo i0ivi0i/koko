@@ -1,13 +1,11 @@
 use super::应用状态;
 use crate::media_distribution;
-use axum::http::HeaderMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // 复用/转发命中 ready 附件时，只在这里做 HTTP 响应投影和 sidecar 做种触发。
 // 附件是否可复用、是否可转发，已经由 application owner 裁决。
 pub(super) async fn 构造ready媒体附件响应并触发做种(
     state: &应用状态,
-    headers: &HeaderMap,
     session_id: &str,
     附件: &crate::media::模型::媒体附件快照,
     协作分发: &crate::media::模型::协作分发元数据快照,
@@ -15,7 +13,6 @@ pub(super) async fn 构造ready媒体附件响应并触发做种(
 ) -> serde_json::Value {
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
         state.swarm_tracker_public_url.as_str(),
-        headers,
     );
     let now_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
