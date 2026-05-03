@@ -33,67 +33,18 @@ async fn ready附件会落协作分发元数据() {
         .expect("session_id")
         .to_string();
     let image_bytes = 最小webp字节();
-    let image_byte_size = image_bytes.len() as i64;
-
-    let (prepare_status, prepare_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "canonical.webp",
-            "mime_type": "image/webp",
-            "byte_size": image_byte_size
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入tus测试文件(
+    let upload = super::upload_scene_support::完成媒体上传到ready(
+        app,
         &state.tus_upload_dir,
-        &attachment_id,
+        session_id.as_str(),
+        "/api/media/image/prepare",
+        "upload-distribution-ready-",
         "canonical.webp",
+        "image/webp",
         &image_bytes,
     )
-    .expect("应能写入 tus 临时图片文件");
-    let upload_id = format!("upload-distribution-ready-{attachment_id}");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "canonical.webp",
-            "image/webp",
-            image_byte_size,
-            image_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
-        app,
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({
-            "session_id": session_id
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    let attachment_id = upload.attachment_id;
 
     let pool = PgPoolOptions::new()
         .max_connections(1)

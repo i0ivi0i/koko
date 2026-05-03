@@ -61,7 +61,6 @@ async fn 上传带source_hash的最小图片(
     uniq: u128,
 ) -> String {
     let image_bytes = 最小webp字节();
-    let image_byte_size = image_bytes.len() as i64;
     let (prepare_status, prepare_body) = send_json(
         app.clone(),
         Method::POST,
@@ -70,9 +69,9 @@ async fn 上传带source_hash的最小图片(
             "session_id": session_id,
             "file_name": "canonical.webp",
             "mime_type": "image/webp",
-            "byte_size": image_byte_size,
+            "byte_size": image_bytes.len(),
             "source_hash": source_hash,
-            "source_byte_size": image_byte_size,
+            "source_byte_size": image_bytes.len(),
             "source_file_name": source_file_name,
         })),
         &[],
@@ -87,35 +86,17 @@ async fn 上传带source_hash的最小图片(
         .as_str()
         .expect("attachment_id")
         .to_string();
-
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-source-hash-{uniq}-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let upload_id_prefix = format!("upload-source-hash-{uniq}-");
+    let _upload = super::upload_slice_support::登记最终上传回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        upload_id_prefix.as_str(),
         "canonical.webp",
+        "image/webp",
         &image_bytes,
     )
-    .expect("应能写入 source_hash 图片上传临时文件");
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "canonical.webp",
-            "image/webp",
-            image_byte_size,
-            image_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app,

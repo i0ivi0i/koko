@@ -12,6 +12,8 @@ mod test_support;
 mod abandon_tests;
 #[path = "媒体上传测试/complete.rs"]
 mod complete_tests;
+#[path = "媒体上传测试/切片支撑.rs"]
+mod upload_slice_support;
 #[path = "媒体上传测试/prepare.rs"]
 mod prepare_tests;
 #[path = "媒体上传测试/公网地址推导.rs"]

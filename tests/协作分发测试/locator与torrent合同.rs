@@ -462,65 +462,18 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
     .await
     .expect("阻塞建房任务应完成");
 
-    let (prepare_status, prepare_body) = send_json(
+    let upload = super::upload_scene_support::完成媒体上传到ready(
         app.clone(),
-        Method::POST,
-        "/api/media/video/prepare",
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id"),
-            "file_name": "torrent-route.mp4",
-            "mime_type": "video/mp4",
-            "byte_size": 最小mp4字节().len()
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入tus测试文件(
         &tus_upload_dir,
-        &attachment_id,
+        bootstrap["session_id"].as_str().expect("session_id"),
+        "/api/media/video/prepare",
+        "upload-torrent-route-",
         "torrent-route.mp4",
+        "video/mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 tus 临时视频文件");
-    let upload_id = format!("upload-torrent-route-{attachment_id}");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "torrent-route.mp4",
-            "video/mp4",
-            最小mp4字节().len() as i64,
-            最小mp4字节().len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
-        app.clone(),
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id")
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    let attachment_id = upload.attachment_id;
 
     let session_id_for_message = bootstrap["session_id"]
         .as_str()
@@ -652,65 +605,18 @@ async fn locator会返回announce_web_seed与短时join_ticket() {
     .await
     .expect("阻塞建房任务应完成");
 
-    let (prepare_status, prepare_body) = send_json(
+    let upload = super::upload_scene_support::完成媒体上传到ready(
         app.clone(),
-        Method::POST,
-        "/api/media/video/prepare",
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id"),
-            "file_name": "locator-runtime.mp4",
-            "mime_type": "video/mp4",
-            "byte_size": 最小mp4字节().len()
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入tus测试文件(
         &tus_upload_dir,
-        &attachment_id,
+        bootstrap["session_id"].as_str().expect("session_id"),
+        "/api/media/video/prepare",
+        "upload-locator-runtime-",
         "locator-runtime.mp4",
+        "video/mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 tus 临时视频文件");
-    let upload_id = format!("upload-locator-runtime-{attachment_id}");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "locator-runtime.mp4",
-            "video/mp4",
-            最小mp4字节().len() as i64,
-            最小mp4字节().len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
-        app.clone(),
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({
-            "session_id": bootstrap["session_id"].as_str().expect("session_id")
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    let attachment_id = upload.attachment_id;
 
     let session_id_for_message = bootstrap["session_id"]
         .as_str()

@@ -106,35 +106,17 @@ async fn 放弃媒体上传会同时标记附件与transport为abandoned并清�
         .as_str()
         .expect("attachment_id")
         .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-abandon-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let upload = super::upload_slice_support::登记最终上传回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "upload-abandon-",
         "abandon.png",
+        "image/png",
         &source_bytes,
     )
-    .expect("应能写入 tus 临时图片文件");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "abandon.png",
-            "image/png",
-            source_bytes.len() as i64,
-            source_bytes.len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
+    let temp_file = upload.temp_file;
 
     let (abandon_status, abandon_body) = send_json(
         app.clone(),
@@ -261,35 +243,17 @@ async fn abandon会先写业务abandoned再协调官方termination() {
         .as_str()
         .expect("attachment_id")
         .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-abandon-termination-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let upload = super::upload_slice_support::登记最终上传回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "upload-abandon-termination-",
         "abandon-termination.png",
+        "image/png",
         &source_bytes,
     )
-    .expect("应能写入 tus 临时图片文件");
-
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "abandon-termination.png",
-            "image/png",
-            source_bytes.len() as i64,
-            source_bytes.len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
+    let upload_id = upload.upload_id;
 
     let (abandon_status, abandon_body) = send_json(
         app,
@@ -369,20 +333,18 @@ async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
 
-    let partial_one = 写入tus测试文件(
+    let partial_one = super::upload_slice_support::写入上传临时文件(
         &tus_upload_dir,
         &attachment_id,
         "abandon-partials-1.part",
         &source_bytes[..(source_bytes.len() / 2)],
-    )
-    .expect("应能写入 partial-1 测试文件");
-    let partial_two = 写入tus测试文件(
+    );
+    let partial_two = super::upload_slice_support::写入上传临时文件(
         &tus_upload_dir,
         &attachment_id,
         "abandon-partials-2.part",
         &source_bytes[(source_bytes.len() / 2)..],
-    )
-    .expect("应能写入 partial-2 测试文件");
+    );
 
     for (upload_id, path) in [
         (

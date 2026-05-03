@@ -22,6 +22,8 @@ mod locator_and_torrent_contract_tests;
 mod tracker_proxy_tests;
 #[path = "协作分发测试/切片支撑.rs"]
 mod distribution_slice_support;
+#[path = "协作分发测试/上传场景支撑.rs"]
+mod upload_scene_support;
 #[path = "测试支撑/mod.rs"]
 mod test_support;
 

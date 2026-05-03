@@ -122,35 +122,20 @@ async fn 准备并登记上传回执(
     )
     .await;
     assert_eq!(prepare_status, StatusCode::OK, "{prepare_body:?}");
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-single-file-{attachment_id}");
-    let temp_file = 写入tus测试文件(&env.tus_upload_dir, &attachment_id, file_name, bytes)
-        .expect("应能写入 tus 临时文件");
-    let (hook_status, hook_body) = send_json(
+    let upload = super::upload_slice_support::登记最终上传回执(
         env.app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            file_name,
-            mime_type,
-            bytes.len() as i64,
-            bytes.len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
+        &env.tus_upload_dir,
+        &prepare_body,
+        "upload-single-file-",
+        file_name,
+        mime_type,
+        bytes,
     )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
 
-    已登记上传回执 { attachment_id }
+    已登记上传回执 {
+        attachment_id: upload.attachment_id,
+    }
 }
 
 async fn 完成媒体上传(

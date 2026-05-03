@@ -29,7 +29,6 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
     let video_bytes = 最小mp4字节();
-    let video_byte_size = video_bytes.len() as i64;
     let (prepare_status, prepare_body) = send_json(
         app.clone(),
         Method::POST,
@@ -54,34 +53,17 @@ async fn complete视频上传会写入canonical并返回file_asset() {
         .connect(&cfg.database_url)
         .await
         .expect("应能连接数据库");
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-complete-video-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let upload = super::upload_slice_support::登记最终上传回执(
+        app.clone(),
         &tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "upload-complete-video-",
         "complete.mp4",
+        "video/mp4",
         &video_bytes,
     )
-    .expect("应能写入 tus 临时视频文件");
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "complete.mp4",
-            "video/mp4",
-            video_byte_size,
-            video_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
+    let temp_file = upload.temp_file;
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -354,34 +336,16 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
         .expect("attachment_id")
         .to_string();
 
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-invalid-image-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let _upload = super::upload_slice_support::登记最终上传回执(
+        app.clone(),
         &state.tus_upload_dir,
-        &attachment_id,
+        &prepare_body,
+        "upload-invalid-image-",
         "broken.png",
+        "image/png",
         invalid_bytes,
     )
-    .expect("应能写入 tus 非法图片文件");
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "broken.png",
-            "image/png",
-            invalid_bytes.len() as i64,
-            invalid_bytes.len() as i64,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
 
     // complete 必须以真实字节内容为准，不能信 prepare 阶段宣称的图片 MIME。
     let (complete_status, complete_body) = send_json(

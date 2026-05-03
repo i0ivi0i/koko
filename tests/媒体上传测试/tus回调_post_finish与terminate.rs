@@ -42,37 +42,25 @@ async fn tus_post_finish会登记上传回执() {
     )
     .await;
     assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
+    let _attachment_id = prepare_body["attachment_id"]
         .as_str()
         .expect("attachment_id");
     let upload_session_id = prepare_body["upload_session_id"]
         .as_str()
         .expect("upload_session_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let expected_upload_id = format!("upload-post-finish-{attachment_id}");
-    let temp_file =
-        写入tus测试文件(&tus_upload_dir, attachment_id, "hook.png", &最小png字节())
-            .expect("应能写入 tus 测试文件");
-
-    let (status, body) = send_json(
+    let upload = super::upload_slice_support::登记最终上传回执_使用声明字节数(
         app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &expected_upload_id,
-            attachment_id,
-            "hook.png",
-            "image/png",
-            68,
-            68,
-            Some(temp_file.as_str()),
-        )),
-        &[],
+        &tus_upload_dir,
+        &prepare_body,
+        "upload-post-finish-",
+        "hook.png",
+        "image/png",
+        &最小png字节(),
+        68,
     )
     .await;
-    断言TusHook已接受(status, &body);
+    let expected_upload_id = upload.upload_id;
+    let temp_file = upload.temp_file;
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -255,13 +243,12 @@ async fn tus_post_finish不会复活已废弃的旧上传() {
         .expect("upload_session_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-abandoned-{attachment_id}");
-    let temp_file = 写入tus测试文件(
+    let temp_file = super::upload_slice_support::写入上传临时文件(
         &tus_upload_dir,
         attachment_id,
         "abandoned.png",
         &最小png字节(),
-    )
-    .expect("应能写入 tus 测试文件");
+    );
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -275,7 +262,6 @@ async fn tus_post_finish不会复活已废弃的旧上传() {
     .execute(&pool)
     .await
     .expect("测试需要先把旧 upload session 标成 abandoned");
-
     let (status, body) = send_json(
         app,
         Method::POST,

@@ -272,62 +272,19 @@ async fn 视频complete与locator会共享同一套file_asset与peer_only生存�
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
     let video_bytes = 最小mp4字节();
-    let video_byte_size = video_bytes.len() as i64;
-    let (prepare_status, prepare_body) = send_json(
+    let upload = super::upload_scene_support::完成媒体上传到ready(
         app.clone(),
-        Method::POST,
-        "/api/media/video/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "projection.mp4",
-            "mime_type": "video/mp4",
-            "byte_size": video_bytes.len()
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id")
-        .to_string();
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let upload_id = format!("upload-projection-video-{attachment_id}");
-    let temp_file = 写入tus测试文件(
         &tus_upload_dir,
-        &attachment_id,
+        session_id,
+        "/api/media/video/prepare",
+        "upload-projection-video-",
         "projection.mp4",
+        "video/mp4",
         &video_bytes,
     )
-    .expect("应能写入 tus 临时视频文件");
-    let (hook_status, hook_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "post-finish",
-            Some(authorization.as_str()),
-            &upload_id,
-            &attachment_id,
-            "projection.mp4",
-            "video/mp4",
-            video_byte_size,
-            video_byte_size,
-            Some(temp_file.as_str()),
-        )),
-        &[],
-    )
     .await;
-    断言TusHook已接受(hook_status, &hook_body);
-
-    let (complete_status, complete_body) = send_json(
-        app.clone(),
-        Method::POST,
-        &format!("/api/media/{attachment_id}/complete"),
-        Some(serde_json::json!({ "session_id": session_id })),
-        &[],
-    )
-    .await;
+    let attachment_id = upload.attachment_id;
+    let complete_body = upload.complete_body;
     let (locator_status, locator_body) = send_json(
         app,
         Method::GET,
@@ -338,7 +295,6 @@ async fn 视频complete与locator会共享同一套file_asset与peer_only生存�
     .await;
     恢复环境变量(backup);
 
-    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
     assert_eq!(locator_status, StatusCode::OK, "{locator_body:?}");
     assert_eq!(
         complete_body["media_asset"]["kind"].as_str(),
