@@ -140,7 +140,8 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
     let state_for_query = state.clone();
     let 待做种项 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        协作分发应用::列出待做种协作分发项(&repo, 当前时间戳秒, 256)
+        let media_repo = repo.媒体仓储();
+        协作分发应用::列出待做种协作分发项(&media_repo, 当前时间戳秒, 256)
             .map_err(|err| io::Error::other(format!("查询待做种协作分发项失败: {err:?}")))
     })
     .await
@@ -197,9 +198,10 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         let swarm_id = 待做种.swarm_id.clone();
         let attachment_id = 待做种.附件标识.clone();
         let upsert_presence = tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_presence);
+            let repo = 构建共享仓储(&state_for_presence);
+            let mut media_repo = repo.媒体仓储();
             协作分发应用::写入协作分发swarm存活(
-                &mut repo,
+                &mut media_repo,
                 &crate::media::模型::协作分发swarm存活写入请求 {
                     swarm_id,
                     附件标识: attachment_id,

@@ -50,8 +50,9 @@ pub(super) async fn complete_media_upload(
     let session_id_for_usecase = session_id.clone();
     let prepared_and_transport = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
+        let media_repo = repo.媒体仓储();
         let prepared = 上传应用::读取待完成媒体附件(
-            &repo,
+            &media_repo,
             &session_id_for_usecase,
             &attachment_id_for_usecase,
         )
@@ -514,9 +515,10 @@ pub(super) async fn complete_media_upload(
     let streaming_manifest_request_for_write = streaming_manifest_request.clone();
     let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state_for_usecase);
+        let repo = 构建共享仓储(&state_for_usecase);
+        let mut media_repo = repo.媒体仓储();
         let snapshot = 上传应用::完成媒体附件上传(
-            &mut repo,
+            &mut media_repo,
             &session_id_for_usecase,
             &ready_request,
         )
@@ -524,25 +526,28 @@ pub(super) async fn complete_media_upload(
         // canonical 资产是内容身份层事实，先写资产再绑定附件引用；
         // 后续 source_hash 命中才能复用同一资产，而不是复制旧附件或旧消息。
         crate::media::application::媒体仓储端口::写入canonical媒体资产(
-            &mut repo,
+            &mut media_repo,
             &canonical_asset_request_for_write,
         )
         .map_err(map_domain_err_tuple)?;
         crate::media::application::媒体仓储端口::绑定附件canonical媒体资产(
-            &mut repo,
+            &mut media_repo,
             &snapshot.附件标识,
             canonical_asset_request_for_write.content_hash.as_str(),
         )
         .map_err(map_domain_err_tuple)?;
-        协作分发应用::写入协作分发元数据(&mut repo, &distribution_request_for_write)
-            .map_err(map_domain_err_tuple)?;
+        协作分发应用::写入协作分发元数据(
+            &mut media_repo,
+            &distribution_request_for_write,
+        )
+        .map_err(map_domain_err_tuple)?;
         协作分发应用::写入协作分发torrent元信息(
-            &mut repo,
+            &mut media_repo,
             &torrent_request_for_write,
         )
         .map_err(map_domain_err_tuple)?;
         if let Some(request) = streaming_manifest_request_for_write.as_ref() {
-            crate::media::application::写入流媒体清单元数据(&mut repo, request)
+            crate::media::application::写入流媒体清单元数据(&mut media_repo, request)
                 .map_err(map_domain_err_tuple)?;
         }
         Ok::<_, (StatusCode, &'static str, String)>(snapshot)

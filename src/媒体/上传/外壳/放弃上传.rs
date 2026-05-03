@@ -40,8 +40,9 @@ pub(super) async fn abandon_media_upload(
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = session_id.clone();
     let abandon_result: (Option<String>, Vec<String>) = match task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state_for_usecase);
-        let current_upload_session_id = repo
+        let repo = 构建共享仓储(&state_for_usecase);
+        let mut media_repo = repo.媒体仓储();
+        let current_upload_session_id = media_repo
             .查询待完成媒体附件(&attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)?
             .and_then(|prepared| prepared.当前上传会话标识);
@@ -52,7 +53,7 @@ pub(super) async fn abandon_media_upload(
             None => Vec::new(),
         };
         crate::media::application::放弃媒体上传(
-            &mut repo,
+            &mut media_repo,
             &session_id_for_usecase,
             &attachment_id_for_usecase,
             abandoned_epoch秒,

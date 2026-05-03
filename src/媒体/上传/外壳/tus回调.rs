@@ -1,5 +1,5 @@
 use super::{
-    媒体上传运输方式_TUS, 应用状态, 构建共享仓储, TUS_INTERNAL_TERMINATION_GUARD_HEADER,
+    媒体上传运输方式_TUS, 应用状态, 构建共享仓储, TUS_INTERNAL_TERMINATION_GUARD_HEADER
 };
 use crate::{
     adapter::{媒体上传运输回执写入参数, 媒体上传运输角色},
@@ -186,22 +186,30 @@ fn 返回tus_hook拒绝termination响应(
 async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> Response {
     let upload_token = match 读取媒体上传令牌(&body.event.http_request) {
         Ok(token) => token,
-        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
+        Err((status, code, message)) => {
+            return 返回tus_hook拒绝上传响应(status, code, message)
+        }
     };
     let transport_role = match 判定tus运输角色(&body.event.upload) {
         Ok(role) => role,
-        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
+        Err((status, code, message)) => {
+            return 返回tus_hook拒绝上传响应(status, code, message)
+        }
     };
     let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id")
     {
         Ok(value) => value,
-        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
+        Err((status, code, message)) => {
+            return 返回tus_hook拒绝上传响应(status, code, message)
+        }
     };
     let upload_session_id =
         读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
     let upload_size = match 读取tus上传大小(&body.event.upload, "pre-create") {
         Ok(size) => size,
-        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
+        Err((status, code, message)) => {
+            return 返回tus_hook拒绝上传响应(status, code, message)
+        }
     };
     /*
      * `pre-create` 发生在 Tus sidecar 真正接收字节之前：
@@ -225,6 +233,7 @@ async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> R
     let state_for_repo = state.clone();
     let check_result = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_repo);
+        let media_repo = repo.媒体仓储();
         let Some(upload_session) = repo
             .根据上传令牌查询媒体上传会话(&upload_token)
             .map_err(map_domain_err_tuple)?
@@ -272,7 +281,7 @@ async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> R
                 "partial/final upload 缺少 upload_session_id".to_string(),
             ));
         }
-        let Some(prepared) = repo
+        let Some(prepared) = media_repo
             .查询待完成媒体附件(&upload_session.附件标识)
             .map_err(map_domain_err_tuple)?
         else {
@@ -401,6 +410,7 @@ async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> 
     let storage_locator_for_repo = storage_locator.clone();
     let update_result = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_repo);
+        let media_repo = repo.媒体仓储();
         let Some(upload_session) = repo
             .根据上传令牌查询媒体上传会话(&upload_token)
             .map_err(map_domain_err_tuple)?
@@ -448,7 +458,7 @@ async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> 
                 "partial/final upload 缺少 upload_session_id".to_string(),
             ));
         }
-        let Some(prepared) = repo
+        let Some(prepared) = media_repo
             .查询待完成媒体附件(&upload_session.附件标识)
             .map_err(map_domain_err_tuple)?
         else {
@@ -779,7 +789,9 @@ pub(super) fn 解析tus残留清理目标(
             if !StdPath::new(&canonical_file).is_file() {
                 return Err("storage locator 不是文件".to_string());
             }
-            Ok(Tus残留清理定位结果::当前上传目录文件(canonical_file))
+            Ok(Tus残留清理定位结果::当前上传目录文件(
+                canonical_file,
+            ))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             if let Some(parent) = resolved.parent() {

@@ -23,7 +23,8 @@ fn realtime主链闭环() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -40,9 +41,14 @@ fn realtime主链闭环() {
         }
     ));
 
-    let event =
-        koko::message::application::发送文本消息(&mut repo, &room_id, &session_id, "rt-c-1", "hello rt")
-            .expect("发送消息应成功");
+    let event = koko::message::application::发送文本消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        "rt-c-1",
+        "hello rt",
+    )
+    .expect("发送消息应成功");
     assert!(matches!(
         event,
         koko::shared::contract::领域事件::消息已创建 {
@@ -86,7 +92,8 @@ fn 异步订阅主链遇到无效会话时仍返回会话无效() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -94,8 +101,13 @@ fn 异步订阅主链遇到无效会话时仍返回会话无效() {
 
     // 这条测试专门锁住 realtime async 热路径的拒绝顺序：
     // 先挡掉无效会话，不能因为后续还会查成员资格就把错误语义漂成别的 code。
-    let result =
-        runtime.block_on(koko::realtime::application::加载房间增量事件_异步(&repo, &room_id, "s-missing", 0));
+    let realtime_repo = repo.实时仓储();
+    let result = runtime.block_on(koko::realtime::application::加载房间增量事件_异步(
+        &realtime_repo,
+        &room_id,
+        "s-missing",
+        0,
+    ));
     assert_eq!(result, Err(koko::shared::contract::错误码::会话无效));
 }
 
@@ -118,9 +130,10 @@ fn 异步订阅主链遇到非成员时仍返回成员资格不足() {
     let owner_session = koko::identity::application::引导匿名身份(&mut repo, &owner_device)
         .expect("应能引导房主身份")
         .会话标识;
-    let stranger_session = koko::identity::application::引导匿名身份(&mut repo, &stranger_device)
-        .expect("应能引导旁观身份")
-        .会话标识;
+    let stranger_session =
+        koko::identity::application::引导匿名身份(&mut repo, &stranger_device)
+            .expect("应能引导旁观身份")
+            .会话标识;
     let room = koko::room::application::按短码进房或建房(
         &mut repo,
         &owner_session,
@@ -133,8 +146,9 @@ fn 异步订阅主链遇到非成员时仍返回成员资格不足() {
     };
 
     // 这条测试锁住“有效会话但无成员资格”不能被偷改成静默订阅或系统错误。
+    let realtime_repo = repo.实时仓储();
     let result = runtime.block_on(koko::realtime::application::加载房间增量事件_异步(
-        &repo,
+        &realtime_repo,
         &room_id,
         &stranger_session,
         0,
@@ -185,7 +199,8 @@ fn 重复客户端消息标识应返回同一条已成立消息事件() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -243,10 +258,11 @@ fn 同房并发发送时事件位置仍然连续单调() {
 
     let (room_id, session_id) = std::thread::spawn(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity =
-            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
-        let room = koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &code)
-            .expect("应能进房");
+        let identity = koko::identity::application::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份");
+        let room =
+            koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &code)
+                .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
@@ -322,10 +338,12 @@ fn 不同房间并发发送时互不串号互不污染() {
 
     let (room_a, room_b, session_a, session_b) = std::thread::spawn(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity_a = koko::identity::application::引导匿名身份(&mut repo, &format!("cross-a-{uniq}"))
-            .expect("A 应能引导匿名身份");
-        let identity_b = koko::identity::application::引导匿名身份(&mut repo, &format!("cross-b-{uniq}"))
-            .expect("B 应能引导匿名身份");
+        let identity_a =
+            koko::identity::application::引导匿名身份(&mut repo, &format!("cross-a-{uniq}"))
+                .expect("A 应能引导匿名身份");
+        let identity_b =
+            koko::identity::application::引导匿名身份(&mut repo, &format!("cross-b-{uniq}"))
+                .expect("B 应能引导匿名身份");
         let room_a = koko::room::application::按短码进房或建房(
             &mut repo,
             &identity_a.会话标识,

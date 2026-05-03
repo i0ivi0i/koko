@@ -1,4 +1,4 @@
-use std::{future::Future, io};
+use std::{future::Future, io, sync::Arc};
 
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -25,16 +25,29 @@ pub(crate) use 媒体上传适配::{
     媒体上传运输记录,
 };
 
-/// PostgreSQL 适配层只做持久化翻译与事务提交，不承载业务规则。
+/// PostgreSQL 共享基座只保留连接池、运行时和共享应用口。
 ///
 /// 维护者边界提醒：
 /// 1. 这里可以做 SQL、事务、索引命中相关优化。
 /// 2. 这里不可以改“谁能发/谁是成员/消息是否成立”等业务真相。
 /// 3. 业务真相必须在领域+用例决定，适配层只负责把结果准确落库/读库。
+#[derive(Clone)]
 pub struct Pg仓储 {
     handle: tokio::runtime::Handle,
-    owned_runtime: Option<tokio::runtime::Runtime>,
+    owned_runtime: Option<Arc<tokio::runtime::Runtime>>,
     pool: PgPool,
+}
+
+/// 媒体子域专属 PostgreSQL outbound adapter。
+/// 它复用同一份 pool/runtime，但不再把媒体端口直接挂回共享仓储上。
+pub struct Pg媒体仓储 {
+    repo: Pg仓储,
+}
+
+/// realtime 热路径专属 PostgreSQL outbound adapter。
+/// 这样 socket 热链和共享冷路径就不会继续共用一个总仓储壳。
+pub struct PgRealtime仓储 {
+    repo: Pg仓储,
 }
 
 /// 生成迁移窗口内仍需保留的旧匿名身份短标识。
@@ -195,7 +208,7 @@ impl Pg仓储 {
         let handle = rt.handle().clone();
         Ok(Self {
             handle,
-            owned_runtime: Some(rt),
+            owned_runtime: Some(Arc::new(rt)),
             pool,
         })
     }
@@ -207,6 +220,20 @@ impl Pg仓储 {
             owned_runtime: None,
             pool,
         }
+    }
+
+    /// 共享基座显式拆出媒体专属仓储：
+    /// 1. 复用同一份 pool/runtime；
+    /// 2. 只改变“对外暴露哪个 bounded context 的 port”；
+    /// 3. 防止 `Pg仓储` 再继续挂满所有业务端口。
+    pub fn 媒体仓储(&self) -> Pg媒体仓储 {
+        Pg媒体仓储 { repo: self.clone() }
+    }
+
+    /// realtime 热路径单独拿自己的 outbound adapter，
+    /// 避免消息广播链和冷路径读写继续共用一个 concrete type。
+    pub fn 实时仓储(&self) -> PgRealtime仓储 {
+        PgRealtime仓储 { repo: self.clone() }
     }
 
     /// 仅用于测试事务不变量：验证房间锚点、事件条数、消息条数是否同步推进。
@@ -475,13 +502,147 @@ impl 仓储端口 for Pg仓储 {
     }
 }
 
-impl media::application::媒体仓储端口 for Pg仓储 {
+/// 媒体仓储继续复用共享应用口，但只做显式转发：
+/// 1. 不复制共享 SQL；
+/// 2. 不发明第二套成员/会话/消息提交语义；
+/// 3. 只是把“媒体子域也需要共享端口”这件事从类型层面讲清楚。
+impl 仓储端口 for Pg媒体仓储 {
+    fn 引导匿名身份(
+        &mut self,
+        设备匿名凭证: &str,
+    ) -> Result<contract::匿名身份引导结果, contract::错误码> {
+        <Pg仓储 as 仓储端口>::引导匿名身份(&mut self.repo, 设备匿名凭证)
+    }
+
+    fn 按短码进房或建房(
+        &mut self,
+        会话标识: &str,
+        房间短码: &str,
+    ) -> Result<contract::快照, contract::错误码> {
+        <Pg仓储 as 仓储端口>::按短码进房或建房(&mut self.repo, 会话标识, 房间短码)
+    }
+
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        <Pg仓储 as 仓储端口>::检查会话存在(&self.repo, 会话标识)
+    }
+
+    fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        <Pg仓储 as 仓储端口>::查询会话所属匿名身份(&self.repo, 会话标识)
+    }
+
+    fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
+        <Pg仓储 as 仓储端口>::检查房间存在(&self.repo, 房间标识)
+    }
+
+    fn 查询房间最新事件位置(
+        &self,
+        房间标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        <Pg仓储 as 仓储端口>::查询房间最新事件位置(&self.repo, 房间标识)
+    }
+
+    fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        <Pg仓储 as 仓储端口>::检查成员资格(&self.repo, 房间标识, 会话标识)
+    }
+
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
+        <Pg仓储 as 仓储端口>::查询附件快照(&self.repo, 附件标识)
+    }
+
+    fn 查询房间阅读位置(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        <Pg仓储 as 仓储端口>::查询房间阅读位置(&self.repo, 房间标识, 会话标识)
+    }
+
+    fn 拉取房间快照(
+        &self,
+        房间标识: &str,
+        上次已读事件位置: Option<i64>,
+        首条未读事件位置: Option<i64>,
+    ) -> Result<contract::快照, contract::错误码> {
+        <Pg仓储 as 仓储端口>::拉取房间快照(
+            &self.repo,
+            房间标识,
+            上次已读事件位置,
+            首条未读事件位置,
+        )
+    }
+
+    fn 拉取房间历史页(
+        &self,
+        房间标识: &str,
+        截止位置之前: i64,
+        限制条数: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        <Pg仓储 as 仓储端口>::拉取房间历史页(
+            &self.repo,
+            房间标识,
+            截止位置之前,
+            限制条数,
+        )
+    }
+
+    fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        <Pg仓储 as 仓储端口>::拉取房间增量事件(&self.repo, 房间标识, 从位置开始)
+    }
+
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        <Pg仓储 as 仓储端口>::创建统一消息事件(
+            &mut self.repo,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            附件,
+        )
+    }
+
+    fn 推进房间阅读位置(
+        &mut self,
+        房间标识: &str,
+        会话标识: &str,
+        已读到事件位置: i64,
+    ) -> Result<(), contract::错误码> {
+        <Pg仓储 as 仓储端口>::推进房间阅读位置(
+            &mut self.repo,
+            房间标识,
+            会话标识,
+            已读到事件位置,
+        )
+    }
+}
+
+impl media::application::媒体仓储端口 for Pg媒体仓储 {
     /// prepared 附件读取只暴露给上传链，不下放到其它业务入口。
     fn 查询待完成媒体附件(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::待完成媒体附件读取结果>, contract::错误码> {
-        媒体附件适配::查询待完成媒体附件(self, 附件标识)
+        媒体附件适配::查询待完成媒体附件(&self.repo, 附件标识)
     }
 
     /// prepare 阶段先只落占位记录，不提前伪造 ready 元数据。
@@ -490,14 +651,14 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         所属匿名身份标识: &str,
         附件: &crate::media::模型::媒体附件准备请求,
     ) -> Result<crate::media::模型::媒体附件准备快照, contract::错误码> {
-        媒体附件适配::创建预备媒体附件记录(self, 所属匿名身份标识, 附件)
+        媒体附件适配::创建预备媒体附件记录(&mut self.repo, 所属匿名身份标识, 附件)
     }
 
     fn 回滚预备媒体附件记录(
         &mut self,
         附件标识: &str,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::回滚预备媒体附件记录(self, 附件标识)
+        媒体附件适配::回滚预备媒体附件记录(&mut self.repo, 附件标识)
     }
 
     /// 媒体上传链的元数据落库入口。
@@ -506,7 +667,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         所属匿名身份标识: &str,
         附件: &crate::media::模型::媒体附件写入请求,
     ) -> Result<crate::media::模型::媒体附件快照, contract::错误码> {
-        媒体附件适配::创建媒体附件记录(self, 所属匿名身份标识, 附件)
+        媒体附件适配::创建媒体附件记录(&mut self.repo, 所属匿名身份标识, 附件)
     }
 
     fn 记录附件source_hash(
@@ -517,7 +678,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         source_file_name: Option<&str>,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::记录附件source_hash(
-            self,
+            &mut self.repo,
             附件标识,
             source_hash,
             source_byte_size,
@@ -535,7 +696,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         种类: crate::media::模型::媒体附件类型,
     ) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
         媒体附件适配::查询可复用source_hash媒体资产(
-            self,
+            &self.repo,
             会话标识,
             目标房间标识,
             当前匿名身份标识,
@@ -551,14 +712,14 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         源附件标识: &str,
         种类: crate::media::模型::媒体附件类型,
     ) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
-        媒体附件适配::查询可转发媒体资产(self, 会话标识, 源附件标识, 种类)
+        媒体附件适配::查询可转发媒体资产(&self.repo, 会话标识, 源附件标识, 种类)
     }
 
     fn 写入canonical媒体资产(
         &mut self,
         请求: &crate::media::模型::Canonical媒体资产写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::写入canonical媒体资产(self, 请求)
+        媒体附件适配::写入canonical媒体资产(&mut self.repo, 请求)
     }
 
     fn 绑定附件canonical媒体资产(
@@ -566,7 +727,11 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         content_hash: &str,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::绑定附件canonical媒体资产(self, 附件标识, content_hash)
+        媒体附件适配::绑定附件canonical媒体资产(
+            &mut self.repo,
+            附件标识,
+            content_hash,
+        )
     }
 
     /// 用例层只通过这个端口写入 Phase 1 分发元数据，不绕过应用层去拼 SQL。
@@ -574,14 +739,14 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         &mut self,
         请求: &crate::media::模型::协作分发元数据写入请求,
     ) -> Result<crate::media::模型::协作分发元数据快照, contract::错误码> {
-        媒体协作分发适配::写入协作分发元数据(self, 请求)
+        媒体协作分发适配::写入协作分发元数据(&mut self.repo, 请求)
     }
 
     fn 查询协作分发元数据(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::协作分发元数据快照>, contract::错误码> {
-        媒体协作分发适配::查询协作分发元数据(self, 附件标识)
+        媒体协作分发适配::查询协作分发元数据(&self.repo, 附件标识)
     }
 
     fn 列出待做种协作分发项(
@@ -589,42 +754,42 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待做种协作分发项>, contract::错误码> {
-        媒体协作分发适配::列出待做种协作分发项(self, 当前时间戳秒, 限制条数)
+        媒体协作分发适配::列出待做种协作分发项(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 写入协作分发swarm存活(
         &mut self,
         请求: &crate::media::模型::协作分发swarm存活写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体协作分发适配::写入协作分发swarm存活(self, 请求)
+        媒体协作分发适配::写入协作分发swarm存活(&mut self.repo, 请求)
     }
 
     fn 查询协作分发torrent元信息(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::协作分发torrent元信息快照>, contract::错误码> {
-        媒体协作分发适配::查询协作分发torrent元信息(self, 附件标识)
+        媒体协作分发适配::查询协作分发torrent元信息(&self.repo, 附件标识)
     }
 
     fn 写入协作分发torrent元信息(
         &mut self,
         请求: &crate::media::模型::协作分发torrent元信息写入请求,
     ) -> Result<crate::media::模型::协作分发torrent元信息快照, contract::错误码> {
-        媒体协作分发适配::写入协作分发torrent元信息(self, 请求)
+        媒体协作分发适配::写入协作分发torrent元信息(&mut self.repo, 请求)
     }
 
     fn 写入流媒体清单元数据(
         &mut self,
         请求: &crate::media::模型::流媒体清单写入请求,
     ) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
-        媒体协作分发适配::写入流媒体清单元数据(self, 请求)
+        媒体协作分发适配::写入流媒体清单元数据(&mut self.repo, 请求)
     }
 
     fn 查询流媒体清单元数据(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
-        媒体协作分发适配::查询流媒体清单元数据(self, 附件标识)
+        媒体协作分发适配::查询流媒体清单元数据(&self.repo, 附件标识)
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。
@@ -634,7 +799,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         会话标识: &str,
         变体: crate::media::模型::附件内容变体,
     ) -> Result<Option<crate::media::模型::附件内容读取结果>, contract::错误码> {
-        媒体附件适配::查询附件可读内容(self, 附件标识, 会话标识, 变体)
+        媒体附件适配::查询附件可读内容(&self.repo, 附件标识, 会话标识, 变体)
     }
 
     fn 列出待清理媒体冷源(
@@ -642,7 +807,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理媒体冷源>, contract::错误码> {
-        媒体附件适配::列出待清理媒体冷源(self, 当前时间戳秒, 限制条数)
+        媒体附件适配::列出待清理媒体冷源(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 标记媒体冷源已删除(
@@ -650,7 +815,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记媒体冷源已删除(self, 附件标识, 删除时间戳秒)
+        媒体附件适配::标记媒体冷源已删除(&mut self.repo, 附件标识, 删除时间戳秒)
     }
 
     fn 列出待清理canonical媒体资产(
@@ -658,7 +823,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理Canonical媒体资产>, contract::错误码> {
-        媒体附件适配::列出待清理canonical媒体资产(self, 当前时间戳秒, 限制条数)
+        媒体附件适配::列出待清理canonical媒体资产(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 标记canonical媒体资产已删除(
@@ -666,7 +831,11 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         content_hash: &str,
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记canonical媒体资产已删除(self, content_hash, 删除时间戳秒)
+        媒体附件适配::标记canonical媒体资产已删除(
+            &mut self.repo,
+            content_hash,
+            删除时间戳秒,
+        )
     }
 
     fn 列出待清理媒体回退母本(
@@ -674,7 +843,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理媒体回退母本>, contract::错误码> {
-        媒体附件适配::列出待清理媒体回退母本(self, 当前时间戳秒, 限制条数)
+        媒体附件适配::列出待清理媒体回退母本(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 标记媒体回退母本已删除(
@@ -682,7 +851,11 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记媒体回退母本已删除(self, 附件标识, 删除时间戳秒)
+        媒体附件适配::标记媒体回退母本已删除(
+            &mut self.repo,
+            附件标识,
+            删除时间戳秒,
+        )
     }
 
     fn 列出待清理流媒体清单(
@@ -690,7 +863,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
-        媒体协作分发适配::列出待清理流媒体清单(self, 当前时间戳秒, 限制条数)
+        媒体协作分发适配::列出待清理流媒体清单(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 标记流媒体清单已删除(
@@ -698,7 +871,11 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体协作分发适配::标记流媒体清单已删除(self, 附件标识, 删除时间戳秒)
+        媒体协作分发适配::标记流媒体清单已删除(
+            &mut self.repo,
+            附件标识,
+            删除时间戳秒,
+        )
     }
 
     fn 标记媒体上传已放弃(
@@ -706,7 +883,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         附件标识: &str,
         放弃时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体上传适配::标记媒体上传已放弃(self, 附件标识, 放弃时间戳秒)
+        媒体上传适配::标记媒体上传已放弃(&mut self.repo, 附件标识, 放弃时间戳秒)
     }
 
     fn 列出待清理上传残留(
@@ -714,7 +891,7 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         当前时间戳秒: i64,
         限制条数: i64,
     ) -> Result<Vec<crate::media::模型::待清理上传残留>, contract::错误码> {
-        媒体上传适配::列出待清理上传残留(self, 当前时间戳秒, 限制条数)
+        媒体上传适配::列出待清理上传残留(&self.repo, 当前时间戳秒, 限制条数)
     }
 
     fn 标记上传残留已清理(
@@ -723,24 +900,29 @@ impl media::application::媒体仓储端口 for Pg仓储 {
         清理原因: crate::media::模型::上传残留清理原因,
         清理时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体上传适配::标记上传残留已清理(self, 上传会话标识, 清理原因, 清理时间戳秒)
+        媒体上传适配::标记上传残留已清理(
+            &mut self.repo,
+            上传会话标识,
+            清理原因,
+            清理时间戳秒,
+        )
     }
 }
 
-impl application::Realtime仓储端口 for Pg仓储 {
+impl application::Realtime仓储端口 for PgRealtime仓储 {
     async fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
-        房间阅读适配::检查会话存在_异步(&self.pool, 会话标识).await
+        房间阅读适配::检查会话存在_异步(&self.repo.pool, 会话标识).await
     }
 
     async fn 查询会话所属匿名身份(
         &self,
         会话标识: &str,
     ) -> Result<Option<String>, contract::错误码> {
-        房间阅读适配::查询会话所属匿名身份_异步(&self.pool, 会话标识).await
+        房间阅读适配::查询会话所属匿名身份_异步(&self.repo.pool, 会话标识).await
     }
 
     async fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
-        房间阅读适配::检查房间存在_异步(&self.pool, 房间标识).await
+        房间阅读适配::检查房间存在_异步(&self.repo.pool, 房间标识).await
     }
 
     async fn 检查成员资格(
@@ -748,7 +930,7 @@ impl application::Realtime仓储端口 for Pg仓储 {
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, contract::错误码> {
-        房间阅读适配::检查成员资格_异步(&self.pool, 房间标识, 会话标识).await
+        房间阅读适配::检查成员资格_异步(&self.repo.pool, 房间标识, 会话标识).await
     }
 
     async fn 拉取房间增量事件(
@@ -756,14 +938,14 @@ impl application::Realtime仓储端口 for Pg仓储 {
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<contract::快照, contract::错误码> {
-        房间阅读适配::拉取房间增量事件_异步(&self.pool, 房间标识, 从位置开始).await
+        房间阅读适配::拉取房间增量事件_异步(&self.repo.pool, 房间标识, 从位置开始).await
     }
 
     async fn 查询附件快照(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
-        媒体附件适配::查询附件快照_异步(&self.pool, 附件标识).await
+        媒体附件适配::查询附件快照_异步(&self.repo.pool, 附件标识).await
     }
 
     async fn 创建统一消息事件(
@@ -775,7 +957,7 @@ impl application::Realtime仓储端口 for Pg仓储 {
         附件: &[domain::message::已校验附件引用],
     ) -> Result<contract::领域事件, contract::错误码> {
         消息事件适配::提交统一消息事件_异步(
-            &self.pool,
+            &self.repo.pool,
             房间标识,
             客户端消息标识,
             会话标识,

@@ -121,9 +121,10 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
     let attachment_id_second_for_worker = attachment_id_second.clone();
     let shared_swarm_id_for_worker = shared_swarm_id.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let mut media_repo = repo.媒体仓储();
         let first = koko::media::distribution::application::写入协作分发元数据(
-            &mut repo,
+            &mut media_repo,
             &koko::media::模型::协作分发元数据写入请求 {
                 附件标识: attachment_id_first_for_worker.clone(),
                 content_id: format!("content_{attachment_id_first_for_worker}"),
@@ -133,7 +134,7 @@ async fn 相同内容的不同附件可以共享同一swarm_id() {
             },
         );
         let second = koko::media::distribution::application::写入协作分发元数据(
-            &mut repo,
+            &mut media_repo,
             &koko::media::模型::协作分发元数据写入请求 {
                 附件标识: attachment_id_second_for_worker.clone(),
                 content_id: format!("content_{attachment_id_second_for_worker}"),

@@ -189,6 +189,32 @@ fn 应用端口不得提供默认空实现() {
 }
 
 #[test]
+fn 消息主链不得长期同时维护同步异步两套业务规则() {
+    let content = 读取("src/消息/应用.rs");
+
+    // 这里不是机械反对同步/异步双入口，而是反对“双入口各自复制一份业务规则”。
+    // 当前消息主链里，附件 owner / status / kind / width / height / preview 映射仍然在两条路径里各写一遍。
+    // 只要以后有人改漏一边，就会立刻出现“HTTP 冷路径”和“realtime 热路径”各判各的。
+    // 满分态必须把业务规则收成一条主链，只允许 transport / await 方式分叉。
+    let duplicated_rule_signals = [
+        "let mut attachments = Vec::with_capacity(附件标识列表.len());",
+        "if snapshot.所属匿名身份标识 != 发送者身份 {",
+        "if snapshot.状态 != 附件状态读取结果::就绪 {",
+        "let attachment = match snapshot.种类 {",
+        "附件种类读取结果::图片 => domain::message::待发送附件 {",
+        "附件种类读取结果::视频 => domain::message::待发送附件 {",
+    ];
+
+    for signal in duplicated_rule_signals {
+        let count = content.matches(signal).count();
+        assert!(
+            count <= 1,
+            "src/消息/应用.rs 仍在同步/异步两条路径里复制同一业务规则片段 `{signal}`（命中 {count} 次）；必须继续收口成单一消息成立主链"
+        );
+    }
+}
+
+#[test]
 fn 适配器不得横向借另一个适配器拼业务结果() {
     for (path, forbidden) in [
         ("src/房间/适配.rs", "消息事件适配::"),
@@ -200,6 +226,29 @@ fn 适配器不得横向借另一个适配器拼业务结果() {
             "{path} 不得横向调用另一个适配器拼业务结果；业务裁决必须先回到 application/domain owner: {forbidden}"
         );
     }
+}
+
+#[test]
+fn 统一_pg仓储_不得长期承载跨上下文总仓储壳() {
+    let content = 读取("src/适配/mod.rs");
+
+    // 这里不是反对“PostgreSQL 适配存在”，而是反对“一个 Pg仓储 同时挂满多个 bounded context 的 port 实现”。
+    // 一旦这种总仓储壳继续活着，未来任何人都很容易继续往同一个文件里追加方法，
+    // 看起来只是“再加一个查询”，本质上却是在重新长回跨上下文总线。
+    let pg_impls = [
+        "impl 仓储端口 for Pg仓储",
+        "impl media::application::媒体仓储端口 for Pg仓储",
+        "impl application::Realtime仓储端口 for Pg仓储",
+    ];
+    let impl_count = pg_impls
+        .into_iter()
+        .filter(|needle| content.contains(needle))
+        .count();
+
+    assert!(
+        impl_count <= 1,
+        "src/适配/mod.rs 仍像跨上下文总仓储壳：当前挂着 {impl_count} 个 Pg仓储 impl；满分态必须继续拆成按上下文负责的 adapter/repository"
+    );
 }
 
 #[test]

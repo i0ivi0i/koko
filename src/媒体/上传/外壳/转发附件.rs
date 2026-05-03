@@ -80,8 +80,9 @@ pub(super) async fn forward_media_attachment(
     };
     let state_for_usecase = state.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state_for_usecase);
-        crate::media::application::转发媒体附件到房间(&mut repo, &request)
+        let repo = 构建共享仓储(&state_for_usecase);
+        let mut media_repo = repo.媒体仓储();
+        crate::media::application::转发媒体附件到房间(&mut media_repo, &request)
             .map_err(map_domain_err_tuple)
     })
     .await;

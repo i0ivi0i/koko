@@ -743,6 +743,44 @@ const 检查未登记XStateOwner = (files) => {
   return violations;
 };
 
+const 检查总编排壳回流 = (files) => {
+  const 目标文件 = files.find(
+    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/总装/聊天应用内核.ts"
+  );
+  if (!目标文件) {
+    return [];
+  }
+
+  const source = 去掉注释(readFileSync(目标文件, "utf8"));
+
+  // 这里不是反对前端有一个 app root，而是反对它重新长成“知道所有事情”的总编排壳。
+  // root 可以做顶层命令路由、snapshot 汇总、子 owner 生命周期装配，
+  // 但恢复编排、实时编排、阅读推进、平台桥接、本地状态折叠这些职责如果继续都压在一个类里，
+  // 只是从“前端根目录总控”变成“模块内总控”，并没有达到真 DDD / 真积木。
+  const triggers = [
+    "恢复编排端口",
+    "实时编排端口",
+    "阅读推进编排端口",
+    "处理平台桥接命令(",
+    "应用本地状态折叠(",
+    "同步实时会话快照并执行副作用(",
+    "写入恢复编排状态(",
+    "写入实时编排状态(",
+    "写入阅读状态(",
+  ];
+  const hits = triggers.filter((token) => source.includes(token));
+
+  return hits.length >= 4
+    ? [
+        {
+          file: "frontend/总装/聊天应用内核.ts",
+          label: "orchestration-shell regression",
+          detail: `总编排壳仍吸附过多跨子域职责：${hits.join("、")}`,
+        },
+      ]
+    : [];
+};
+
 const 检查禁回流片段 = (files) => {
   const violations = [];
   for (const absolutePath of files) {
@@ -934,6 +972,7 @@ export const 收集架构适应度违规 = () => {
       join(仓库根目录, "scripts"),
     ]),
     ...检查未登记XStateOwner(files),
+    ...检查总编排壳回流(files),
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
     ...检查热点文件增长(),

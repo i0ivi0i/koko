@@ -41,8 +41,13 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
   it("实时编排接线仍只注入端口，不在聊天应用内核里解释控制面失败", () => {
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
+    const coordinatorSource = readFileSync(
+      resolve(process.cwd(), "总装/聊天应用编排协调器.ts"),
+      "utf8"
+    );
 
-    expect(source).toContain("创建内核实时编排端口({");
+    expect(source).not.toContain("创建内核实时编排端口(");
+    expect(coordinatorSource).toContain("创建内核实时编排端口(");
     expect(source).not.toContain("control_result");
     expect(source).not.toContain("need_snapshot_reload");
     expect(source).not.toContain('code: "invalid_session"');
@@ -85,18 +90,33 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     expect(source).not.toContain("function 浅比较对象(");
   });
 
-  it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {
+  it("聊天应用内核 会把 realtime recovery read 接线委托给 独立编排协调器", () => {
     const source = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
     const bridgeSource = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
+    const coordinatorSource = readFileSync(
+      resolve(process.cwd(), "总装/聊天应用编排协调器.ts"),
+      "utf8"
+    );
 
     expect(source).toContain('from "./聊天应用编排桥接.js"');
-    expect(source).toContain('from "../恢复/壳层/房间恢复编排.js"');
-    expect(source).toContain('from "../房间/壳层/阅读推进.js"');
-    expect(source).toContain("创建内核恢复编排端口({");
-    expect(source).toContain("创建内核实时编排端口({");
-    expect(source).toContain("创建内核阅读推进编排端口({");
+    expect(source).toContain('from "./聊天应用编排协调器.js"');
+    expect(existsSync(resolve(process.cwd(), "总装/聊天应用编排协调器.ts"))).toBe(true);
+    expect(source).toContain("private readonly 编排协调器");
+    expect(source).not.toContain("private _恢复编排端口");
+    expect(source).not.toContain("private _实时编排端口");
+    expect(source).not.toContain("private _阅读推进编排端口");
+    expect(source).not.toContain("创建内核恢复编排端口(");
+    expect(source).not.toContain("创建内核实时编排端口(");
+    expect(source).not.toContain("创建内核阅读推进编排端口(");
+    expect(source).not.toContain("private get 恢复编排端口()");
+    expect(source).not.toContain("private get 实时编排端口()");
+    expect(source).not.toContain("private get 阅读推进编排端口()");
     expect(bridgeSource).toContain('from "../恢复/壳层/房间恢复编排.js"');
     expect(bridgeSource).toContain('from "../房间/壳层/阅读推进.js"');
+    expect(coordinatorSource).toContain("export class 聊天应用编排协调器");
+    expect(coordinatorSource).toContain("创建内核恢复编排端口(");
+    expect(coordinatorSource).toContain("创建内核实时编排端口(");
+    expect(coordinatorSource).toContain("创建内核阅读推进编排端口(");
     expect(source).not.toContain("创建房间恢复编排({");
     expect(source).not.toContain("创建房间实时编排({");
     expect(source).not.toContain("创建阅读推进编排({");
@@ -155,15 +175,15 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     const kernelSource = readFileSync(resolve(process.cwd(), "总装/聊天应用内核.ts"), "utf8");
     const bridgeSource = readFileSync(resolve(process.cwd(), "总装/聊天应用编排桥接.ts"), "utf8");
 
-    expect(kernelSource).toContain("取消待刷新已读锚点: () => this.阅读推进编排端口.取消待刷新已读锚点()");
+    expect(kernelSource).toContain("取消待刷新已读锚点: () => this.编排协调器.取消待刷新已读锚点()");
     expect(kernelSource).toContain(
-      "取消待跟随最新采样: () => this.阅读推进编排端口.取消待跟随最新采样()"
+      "取消待跟随最新采样: () => this.编排协调器.取消待跟随最新采样()"
     );
     expect(bridgeSource).toContain("cancelPendingReadAnchorFlush: deps.取消待刷新已读锚点");
     expect(bridgeSource).toContain("cancelPendingFollowLatestReadSample: deps.取消待跟随最新采样");
-    expect(kernelSource).not.toContain("cancelPendingReadAnchorFlush: () => this.阅读推进编排端口.dispose()");
+    expect(kernelSource).not.toContain("cancelPendingReadAnchorFlush: () => this.编排协调器.重置端口()");
     expect(kernelSource).not.toContain(
-      "cancelPendingFollowLatestReadSample: () => this.阅读推进编排端口.dispose()"
+      "cancelPendingFollowLatestReadSample: () => this.编排协调器.重置端口()"
     );
   });
 

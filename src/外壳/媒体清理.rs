@@ -1,7 +1,7 @@
 use super::{
-    tus_hook外壳, 应用状态, 删除对象前缀下所有文件, 构建共享仓储, 推导对象父前缀,
+    tus_hook外壳, 删除对象前缀下所有文件, 应用状态, 推导对象父前缀, 构建共享仓储
 };
-use object_store::{Error as ObjectStoreError, ObjectStoreExt, path::Path as ObjectPath};
+use object_store::{path::Path as ObjectPath, Error as ObjectStoreError, ObjectStoreExt};
 use std::{
     collections::HashMap,
     io,
@@ -22,7 +22,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理冷源 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::media::application::列出待清理媒体冷源(&repo, 当前时间戳秒, 128)
+        let media_repo = repo.媒体仓储();
+        crate::media::application::列出待清理媒体冷源(&media_repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理媒体冷源失败: {err:?}")))
     })
     .await
@@ -49,9 +50,10 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let state_for_mark = state.clone();
         let attachment_id = 冷源.附件标识.clone();
         tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_mark);
+            let repo = 构建共享仓储(&state_for_mark);
+            let mut media_repo = repo.媒体仓储();
             crate::media::application::标记媒体冷源已删除(
-                &mut repo,
+                &mut media_repo,
                 &attachment_id,
                 当前时间戳秒,
             )
@@ -64,8 +66,13 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理canonical资产 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::media::application::列出待清理canonical媒体资产(&repo, 当前时间戳秒, 128)
-            .map_err(|err| io::Error::other(format!("查询待清理 canonical 媒体资产失败: {err:?}")))
+        let media_repo = repo.媒体仓储();
+        crate::media::application::列出待清理canonical媒体资产(
+            &media_repo,
+            当前时间戳秒,
+            128,
+        )
+        .map_err(|err| io::Error::other(format!("查询待清理 canonical 媒体资产失败: {err:?}")))
     })
     .await
     .map_err(|err| io::Error::other(format!("canonical 媒体资产清理查询任务失败: {err}")))??;
@@ -91,9 +98,10 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let state_for_mark = state.clone();
         let content_hash = 资产.content_hash.clone();
         tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_mark);
+            let repo = 构建共享仓储(&state_for_mark);
+            let mut media_repo = repo.媒体仓储();
             crate::media::application::标记canonical媒体资产已删除(
-                &mut repo,
+                &mut media_repo,
                 &content_hash,
                 当前时间戳秒,
             )
@@ -106,7 +114,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理回退母本 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::media::application::列出待清理媒体回退母本(&repo, 当前时间戳秒, 128)
+        let media_repo = repo.媒体仓储();
+        crate::media::application::列出待清理媒体回退母本(&media_repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理媒体回退母本失败: {err:?}")))
     })
     .await
@@ -133,9 +142,10 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let state_for_mark = state.clone();
         let attachment_id = 回退母本.附件标识.clone();
         tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_mark);
+            let repo = 构建共享仓储(&state_for_mark);
+            let mut media_repo = repo.媒体仓储();
             crate::media::application::标记媒体回退母本已删除(
-                &mut repo,
+                &mut media_repo,
                 &attachment_id,
                 当前时间戳秒,
             )
@@ -148,7 +158,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     let state_for_query = state.clone();
     let 待清理流媒体清单 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::media::application::列出待清理流媒体清单(&repo, 当前时间戳秒, 128)
+        let media_repo = repo.媒体仓储();
+        crate::media::application::列出待清理流媒体清单(&media_repo, 当前时间戳秒, 128)
             .map_err(|err| io::Error::other(format!("查询待清理流媒体清单失败: {err:?}")))
     })
     .await
@@ -178,7 +189,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             continue;
         };
 
-        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &hls前缀).await {
+        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &hls前缀).await
+        {
             tracing::error!(
                 application = "媒体冷源清理",
                 adapter = "shell",
@@ -190,7 +202,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             );
             continue;
         }
-        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &dash前缀).await {
+        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &dash前缀).await
+        {
             tracing::error!(
                 application = "媒体冷源清理",
                 adapter = "shell",
@@ -206,9 +219,10 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         let state_for_mark = state.clone();
         let attachment_id = 清单.附件标识.clone();
         tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_mark);
+            let repo = 构建共享仓储(&state_for_mark);
+            let mut media_repo = repo.媒体仓储();
             crate::media::application::标记流媒体清单已删除(
-                &mut repo,
+                &mut media_repo,
                 &attachment_id,
                 当前时间戳秒,
             )
@@ -221,11 +235,17 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     Ok(())
 }
 
-fn 上传残留清理原因标签(原因: crate::media::模型::上传残留清理原因) -> &'static str {
+fn 上传残留清理原因标签(
+    原因: crate::media::模型::上传残留清理原因
+) -> &'static str {
     match 原因 {
         crate::media::模型::上传残留清理原因::已放弃会话 => "abandoned_session",
-        crate::media::模型::上传残留清理原因::最终合并后的分片残留 => "finalized_partial",
-        crate::media::模型::上传残留清理原因::已过期未完成上传 => "expired_unfinished",
+        crate::media::模型::上传残留清理原因::最终合并后的分片残留 => {
+            "finalized_partial"
+        }
+        crate::media::模型::上传残留清理原因::已过期未完成上传 => {
+            "expired_unfinished"
+        }
     }
 }
 
@@ -241,7 +261,8 @@ pub(super) async fn 执行一次媒体上传残留清理_按会话(
     let state_for_query = state.clone();
     let 待清理残留 = tokio::task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_query);
-        crate::media::application::列出待清理上传残留(&repo, 当前时间戳秒, 256)
+        let media_repo = repo.媒体仓储();
+        crate::media::application::列出待清理上传残留(&media_repo, 当前时间戳秒, 256)
             .map_err(|err| io::Error::other(format!("查询待清理上传残留失败: {err:?}")))
     })
     .await
@@ -271,8 +292,11 @@ pub(super) async fn 执行一次媒体上传残留清理_按会话(
                 &state.tus_upload_dir,
                 残留.临时文件定位.as_str(),
             ) {
-                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件(path)) => path,
-                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) => {
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件(path)) => {
+                    path
+                }
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) =>
+                {
                     tracing::info!(
                         application = "上传残留清理",
                         adapter = "shell",
@@ -343,9 +367,10 @@ pub(super) async fn 执行一次媒体上传残留清理_按会话(
         let state_for_mark = state.clone();
         let 上传会话标识 = 上传会话标识.clone();
         tokio::task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state_for_mark);
+            let repo = 构建共享仓储(&state_for_mark);
+            let mut media_repo = repo.媒体仓储();
             crate::media::application::标记上传残留已清理(
-                &mut repo,
+                &mut media_repo,
                 &上传会话标识,
                 清理原因,
                 当前时间戳秒,

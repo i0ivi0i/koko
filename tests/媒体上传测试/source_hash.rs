@@ -150,7 +150,7 @@ async fn 构建source_hash测试应用() -> (String, koko::shell::应用状态, 
     (cfg.database_url, state, app)
 }
 
-#[path = "source_hash_跨房复用与一致性.rs"]
-mod source_hash_reuse_consistency_tests;
 #[path = "source_hash_转发与删除守卫.rs"]
 mod source_hash_forward_and_deletion_guard_tests;
+#[path = "source_hash_跨房复用与一致性.rs"]
+mod source_hash_reuse_consistency_tests;

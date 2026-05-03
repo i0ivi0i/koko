@@ -37,8 +37,10 @@ async fn 回滚prepare失败留下的预备附件(
     attachment_id: String,
 ) -> Result<(), String> {
     match task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state);
-        repo.回滚预备媒体附件记录(&attachment_id)
+        let repo = 构建共享仓储(&state);
+        let mut media_repo = repo.媒体仓储();
+        media_repo
+            .回滚预备媒体附件记录(&attachment_id)
             .map_err(map_domain_err_tuple)
     })
     .await
@@ -143,9 +145,14 @@ pub(super) async fn prepare_media_upload(
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
     let prepare_result = task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state_for_usecase);
-        上传应用::准备媒体附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
-            .map_err(map_domain_err_tuple)
+        let repo = 构建共享仓储(&state_for_usecase);
+        let mut media_repo = repo.媒体仓储();
+        上传应用::准备媒体附件上传(
+            &mut media_repo,
+            &session_id_for_usecase,
+            &prepare_request,
+        )
+        .map_err(map_domain_err_tuple)
     })
     .await;
     let snapshot = match prepare_result {

@@ -1,7 +1,10 @@
-use crate::shell::{协议响应::{event_to_json, events_to_json, map_domain_err_tuple}, 应用状态, 构建共享仓储};
-use crate::shared::contract;
 use crate::message::application as 消息应用;
 use crate::realtime::application as 实时应用;
+use crate::shared::contract;
+use crate::shell::{
+    协议响应::{event_to_json, events_to_json, map_domain_err_tuple},
+    应用状态, 构建共享仓储,
+};
 use serde::Deserialize;
 use socketioxide::{
     extract::SocketRef, socket::DisconnectReason, BroadcastError, SendError, SocketError,
@@ -137,7 +140,9 @@ pub(crate) fn 分类断开原因(reason: DisconnectReason) -> 实时发送失败
 
 /// 订阅控制面 payload 仍由 realtime adapter 自己翻译。
 /// 这样 handler 只负责拿权威结果，不再在分支里散落 JSON 细节。
-fn 构造需要重拉快照控制面(房间标识: &str, expected_position: i64) -> serde_json::Value {
+fn 构造需要重拉快照控制面(
+    房间标识: &str, expected_position: i64
+) -> serde_json::Value {
     serde_json::json!({
         "kind": "need_snapshot_reload",
         "room_id": 房间标识,
@@ -419,7 +424,8 @@ pub(crate) async fn 认证realtime连接(
         "realtime 连接认证已受理"
     );
     let repo = 构建共享仓储(&state);
-    match 实时应用::校验实时连接会话_异步(&repo, &session_id).await {
+    let realtime_repo = repo.实时仓储();
+    match 实时应用::校验实时连接会话_异步(&realtime_repo, &session_id).await {
         Ok(()) => {
             tracing::info!(
                 application = "实时连接认证",
@@ -480,7 +486,8 @@ pub(crate) async fn handle_realtime_subscribe(
     let from = payload.from;
     let session_id = auth.session_id.clone();
     let repo = 构建共享仓储(&state);
-    match 实时应用::加载房间增量事件_异步(&repo, &room_id, &session_id, from)
+    let realtime_repo = repo.实时仓储();
+    match 实时应用::加载房间增量事件_异步(&realtime_repo, &room_id, &session_id, from)
         .await
         .map_err(map_domain_err_tuple)
     {
@@ -620,9 +627,10 @@ pub(crate) async fn handle_realtime_create_message(
     let session_id = auth.session_id.clone();
     let room_id_for_log = payload.room_id.clone();
     let client_message_id_for_log = payload.client_message_id.clone();
-    let mut repo = 构建共享仓储(&state);
+    let repo = 构建共享仓储(&state);
+    let mut realtime_repo = repo.实时仓储();
     match 消息应用::创建消息_异步(
-        &mut repo,
+        &mut realtime_repo,
         &payload.room_id,
         &session_id,
         &payload.client_message_id,
@@ -704,8 +712,7 @@ pub(crate) async fn handle_realtime_create_message(
 #[cfg(test)]
 mod 实时外壳测试 {
     use super::{
-        分类单连接发送失败, 分类广播发送失败, 分类断开原因, 归纳房间广播运行观测,
-        实时发送失败级别
+        分类单连接发送失败, 分类广播发送失败, 分类断开原因, 实时发送失败级别, 归纳房间广播运行观测,
     };
     use crate::shared::contract;
     use socketioxide::{socket::DisconnectReason, BroadcastError, SendError, SocketError};
@@ -753,10 +760,8 @@ mod 实时外壳测试 {
 
     #[test]
     fn 房间广播遇到慢连接和关闭连接只记录运行态并继续房间() {
-        let error = BroadcastError::Socket(vec![
-            SocketError::Closed,
-            SocketError::InternalChannelFull,
-        ]);
+        let error =
+            BroadcastError::Socket(vec![SocketError::Closed, SocketError::InternalChannelFull]);
 
         let observation = 归纳房间广播运行观测(Err(&error));
 

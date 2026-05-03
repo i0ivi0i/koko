@@ -77,14 +77,21 @@ fn 发送消息事务性顺序成立() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
     };
 
-    let event = koko::message::application::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "hello")
-        .expect("应能发送消息");
+    let event = koko::message::application::发送文本消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        "c-1",
+        "hello",
+    )
+    .expect("应能发送消息");
     match event {
         koko::shared::contract::领域事件::消息已创建 {
             房间标识,
@@ -125,11 +132,14 @@ async fn 图片消息会把附件引用和事件一起持久化() {
 
     let (room_id, message_id) = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity =
-            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
-        let room =
-            koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
-                .expect("应能进房");
+        let identity = koko::identity::application::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份");
+        let room = koko::room::application::按短码进房或建房(
+            &mut repo,
+            &identity.会话标识,
+            &room_code,
+        )
+        .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
@@ -247,11 +257,14 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
 
     let room_id = tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity =
-            koko::identity::application::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
-        let room =
-            koko::room::application::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
-                .expect("应能进房");
+        let identity = koko::identity::application::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份");
+        let room = koko::room::application::按短码进房或建房(
+            &mut repo,
+            &identity.会话标识,
+            &room_code,
+        )
+        .expect("应能进房");
         let room_id = match room {
             koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
@@ -282,13 +295,17 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
         )
         .expect("应能创建纯图片消息");
 
-        let snapshot = koko::recovery::application::加载房间快照(&repo, &room_id, &identity.会话标识)
-            .expect("成员应能读回房间快照");
+        let snapshot =
+            koko::recovery::application::加载房间快照(&repo, &room_id, &identity.会话标识)
+                .expect("成员应能读回房间快照");
         match snapshot {
             koko::shared::contract::快照::房间 { 首屏消息, .. } => {
                 assert_eq!(首屏消息.len(), 1, "当前只应读回一条消息");
                 match &首屏消息[0] {
-                    koko::shared::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
+                    koko::shared::contract::领域事件::消息已创建 {
+                        文本, 附件,
+                    ..
+                    } => {
                         assert_eq!(文本, "", "纯图片消息允许文本为空");
                         assert_eq!(附件.len(), 1, "快照里的消息应保留图片附件列表");
                         assert!(matches!(
@@ -324,7 +341,8 @@ fn prepared附件在complete之前不能进入消息发送主链() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -388,7 +406,8 @@ fn ready视频附件可以进入create_message主链() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -448,7 +467,8 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
     let session_id = koko::identity::application::引导匿名身份(&mut repo, &device_token)
         .expect("应能引导匿名身份")
         .会话标识;
-    let room = koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room =
+        koko::room::application::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("进房应返回房间快照"),
@@ -458,17 +478,16 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
     // 这条测试锁住 realtime 热路径成功结果的权威承载体：
     // create_message_异步 成功时只能回到“消息已创建”领域事件，
     // 不能长出第二套成功 ack 或旁路结果对象。
+    let mut realtime_repo = repo.实时仓储();
     let event = koko::message::application::创建消息_异步(
-        &mut repo,
+        &mut realtime_repo,
         &room_id,
         &session_id,
         &client_message_id,
         "hello async create_message",
         &[],
     );
-    let event = runtime
-        .block_on(event)
-        .expect("异步主链应能创建消息");
+    let event = runtime.block_on(event).expect("异步主链应能创建消息");
 
     match event {
         koko::shared::contract::领域事件::消息已创建 {

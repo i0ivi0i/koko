@@ -359,8 +359,9 @@ pub(super) async fn load_media_locator(
     let session_id_for_usecase = query.session_id.clone();
     let locator = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
+        let media_repo = repo.媒体仓储();
         协作分发应用::查询媒体定位(
-            &repo,
+            &media_repo,
             &attachment_id_for_usecase,
             &session_id_for_usecase,
         )
@@ -517,8 +518,9 @@ async fn 读取受控附件内容响应(
     let session_id_for_usecase = session_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
+        let media_repo = repo.媒体仓储();
         协作分发应用::读取附件内容(
-            &repo,
+            &media_repo,
             &attachment_id_for_usecase,
             &session_id_for_usecase,
             variant,
@@ -701,14 +703,15 @@ pub(super) async fn load_media_torrent(
     let session_id_for_usecase = query.session_id.clone();
     let torrent_result = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
+        let media_repo = repo.媒体仓储();
         协作分发应用::查询媒体定位(
-            &repo,
+            &media_repo,
             &attachment_id_for_usecase,
             &session_id_for_usecase,
         )
         .map_err(map_domain_err_tuple)?;
         crate::media::application::读取协作分发torrent元信息(
-            &repo,
+            &media_repo,
             &attachment_id_for_usecase,
         )
         .map_err(map_domain_err_tuple)
@@ -763,9 +766,10 @@ pub(super) async fn update_media_distribution_presence(
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = query.session_id.clone();
     match task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state_for_usecase);
+        let repo = 构建共享仓储(&state_for_usecase);
+        let mut media_repo = repo.媒体仓储();
         crate::media::application::写入协作分发存活(
-            &mut repo,
+            &mut media_repo,
             &crate::media::模型::协作分发存活写入请求 {
                 附件标识: attachment_id_for_usecase,
                 会话标识: session_id_for_usecase,

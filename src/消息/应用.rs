@@ -1,8 +1,123 @@
 use crate::{
     application, domain,
-    media::模型::{附件状态读取结果, 附件种类读取结果},
+    media::模型::{附件状态读取结果, 附件种类读取结果, 附件读取结果},
     shared::contract,
 };
+
+fn 校验客户端消息标识(客户端消息标识: &str) -> Result<(), contract::错误码> {
+    if 客户端消息标识.trim().is_empty() {
+        return Err(contract::错误码::参数非法);
+    }
+    Ok(())
+}
+
+/// 统一把“附件快照 -> 待发送附件”这条业务规则收口在一个 owner 里：
+/// 1. owner 只认内部匿名身份，不认旧展示短串；
+/// 2. ready 才允许进入消息主链；
+/// 3. 当前切片只允许图片/视频成立消息。
+fn 从附件快照构造待发送附件(
+    发送者身份: &str,
+    snapshot: 附件读取结果,
+) -> Result<domain::message::待发送附件, contract::错误码> {
+    // 这里是消息主链对附件 owner 的唯一业务裁决点。
+    // 同步冷路径和 realtime 热路径都必须共用它，避免两套实现日后各改各的。
+    if snapshot.所属匿名身份标识 != 发送者身份 {
+        return Err(contract::错误码::附件不属于当前发送者);
+    }
+    if snapshot.状态 != 附件状态读取结果::就绪 {
+        return Err(contract::错误码::附件未就绪);
+    }
+    Ok(match snapshot.种类 {
+        附件种类读取结果::图片 => domain::message::待发送附件 {
+            附件标识: snapshot.附件标识,
+            种类: domain::message::附件种类::图片,
+            宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
+            高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+            有预览图: false,
+        },
+        附件种类读取结果::视频 => domain::message::待发送附件 {
+            附件标识: snapshot.附件标识,
+            种类: domain::message::附件种类::视频,
+            宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
+            高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+            有预览图: snapshot.允许缩略图,
+        },
+        附件种类读取结果::语音 | 附件种类读取结果::GIF | 附件种类读取结果::文件 =>
+        {
+            return Err(contract::错误码::附件类型不支持);
+        }
+    })
+}
+
+/// 同步/异步两条消息入口会先各自读出附件快照，再统一走这一层业务裁决。
+/// 这样主链只保留一份附件成立规则，外层差异只剩 IO 读取方式。
+fn 按统一消息规则校验附件快照列表(
+    发送者身份: Option<&str>,
+    附件快照列表: Vec<附件读取结果>,
+) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
+    let 发送者身份 = if 附件快照列表.is_empty() {
+        ""
+    } else {
+        发送者身份.ok_or(contract::错误码::会话无效)?
+    };
+    let mut 待发送附件列表 = Vec::with_capacity(附件快照列表.len());
+    for snapshot in 附件快照列表 {
+        待发送附件列表.push(从附件快照构造待发送附件(发送者身份, snapshot)?);
+    }
+    Ok(待发送附件列表)
+}
+
+fn 读取待发送附件(
+    仓储: &dyn application::仓储端口,
+    会话标识: &str,
+    附件标识列表: &[String],
+) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
+    let mut 附件快照列表 = Vec::with_capacity(附件标识列表.len());
+    for attachment_id in 附件标识列表 {
+        let snapshot = 仓储
+            .查询附件快照(attachment_id)?
+            .ok_or(contract::错误码::附件不存在)?;
+        附件快照列表.push(snapshot);
+    }
+    // 只有真正引用附件时，才需要解析发送者身份并校验附件 owner。
+    // 这样可以保持现有纯文本消息主链不被附件规则误伤。
+    let 发送者身份 = if 附件快照列表.is_empty() {
+        None
+    } else {
+        Some(
+            仓储
+                .查询会话所属匿名身份(会话标识)?
+                .ok_or(contract::错误码::会话无效)?,
+        )
+    };
+    按统一消息规则校验附件快照列表(发送者身份.as_deref(), 附件快照列表)
+}
+
+async fn 读取待发送附件_异步<R: application::Realtime仓储端口 + ?Sized>(
+    仓储: &R,
+    会话标识: &str,
+    附件标识列表: &[String],
+) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
+    let mut 附件快照列表 = Vec::with_capacity(附件标识列表.len());
+    for attachment_id in 附件标识列表 {
+        let snapshot = 仓储
+            .查询附件快照(attachment_id)
+            .await?
+            .ok_or(contract::错误码::附件不存在)?;
+        附件快照列表.push(snapshot);
+    }
+    let 发送者身份 = if 附件快照列表.is_empty() {
+        None
+    } else {
+        Some(
+            仓储
+                .查询会话所属匿名身份(会话标识)
+                .await?
+                .ok_or(contract::错误码::会话无效)?,
+        )
+    };
+    按统一消息规则校验附件快照列表(发送者身份.as_deref(), 附件快照列表)
+}
 
 /// 发送文本消息主链：
 /// 这里只是“纯文本消息”的语义别名，真正消息成立仍统一走 `创建消息`。
@@ -29,55 +144,12 @@ pub fn 创建消息(
     文本: &str,
     附件标识列表: &[String],
 ) -> Result<contract::领域事件, contract::错误码> {
-    if 客户端消息标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
+    校验客户端消息标识(客户端消息标识)?;
     application::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    let attachments = 读取待发送附件(仓储, 会话标识, 附件标识列表)?;
 
-    let mut attachments = Vec::with_capacity(附件标识列表.len());
-    if !附件标识列表.is_empty() {
-        // 只有真正引用附件时，才需要解析发送者身份并校验附件 owner。
-        // 这样可以保持现有纯文本消息主链不被图片第一阶段的新约束误伤。
-        let 发送者身份 = 仓储
-            .查询会话所属匿名身份(会话标识)?
-            .ok_or(contract::错误码::会话无效)?;
-        for attachment_id in 附件标识列表 {
-            let snapshot = 仓储
-                .查询附件快照(attachment_id)?
-                .ok_or(contract::错误码::附件不存在)?;
-            // 附件 owner 比对只认内部身份真相，这样旧匿名短串就不会再渗回消息主链。
-            if snapshot.所属匿名身份标识 != 发送者身份 {
-                return Err(contract::错误码::附件不属于当前发送者);
-            }
-            if snapshot.状态 != 附件状态读取结果::就绪 {
-                return Err(contract::错误码::附件未就绪);
-            }
-            let attachment = match snapshot.种类 {
-                附件种类读取结果::图片 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::图片,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: false,
-                },
-                附件种类读取结果::视频 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::视频,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
-                },
-                附件种类读取结果::语音
-                | 附件种类读取结果::GIF
-                | 附件种类读取结果::文件 => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-            };
-            attachments.push(attachment);
-        }
-    }
-
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
+    let msg =
+        domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
     仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
 }
 
@@ -92,55 +164,12 @@ pub async fn 创建消息_异步<R: application::Realtime仓储端口 + ?Sized>(
     文本: &str,
     附件标识列表: &[String],
 ) -> Result<contract::领域事件, contract::错误码> {
-    if 客户端消息标识.trim().is_empty() {
-        return Err(contract::错误码::参数非法);
-    }
+    校验客户端消息标识(客户端消息标识)?;
     application::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
+    let attachments = 读取待发送附件_异步(仓储, 会话标识, 附件标识列表).await?;
 
-    let mut attachments = Vec::with_capacity(附件标识列表.len());
-    if !附件标识列表.is_empty() {
-        let 发送者身份 = 仓储
-            .查询会话所属匿名身份(会话标识)
-            .await?
-            .ok_or(contract::错误码::会话无效)?;
-        for attachment_id in 附件标识列表 {
-            let snapshot = 仓储
-                .查询附件快照(attachment_id)
-                .await?
-                .ok_or(contract::错误码::附件不存在)?;
-            // realtime 入口和同步入口必须共用同一条内部身份 owner 规则，避免两条主链各判各的。
-            if snapshot.所属匿名身份标识 != 发送者身份 {
-                return Err(contract::错误码::附件不属于当前发送者);
-            }
-            if snapshot.状态 != 附件状态读取结果::就绪 {
-                return Err(contract::错误码::附件未就绪);
-            }
-            let attachment = match snapshot.种类 {
-                附件种类读取结果::图片 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::图片,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: false,
-                },
-                附件种类读取结果::视频 => domain::message::待发送附件 {
-                    附件标识: snapshot.附件标识,
-                    种类: domain::message::附件种类::视频,
-                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
-                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
-                },
-                附件种类读取结果::语音
-                | 附件种类读取结果::GIF
-                | 附件种类读取结果::文件 => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
-            };
-            attachments.push(attachment);
-        }
-    }
-
-    let msg = domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
+    let msg =
+        domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
     仓储
         .创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
         .await
