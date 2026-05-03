@@ -13,7 +13,7 @@ import {
   输入房间短码到操作台,
   输入消息到操作台,
 } from "./common/聊天测试支架";
-import { 聊天壳 } from "../总装/聊天壳";
+import { 聊天壳 } from "../应用根/聊天壳";
 describe("聊天壳集成 / 引导与入房", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {

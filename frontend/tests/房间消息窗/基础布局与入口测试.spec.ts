@@ -20,7 +20,7 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
   it("房间消息窗 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("房间消息窗/壳.ts");
-    const shellSource = 读取前端源码("总装/聊天壳.ts");
+    const shellSource = 读取前端源码("应用根/聊天壳.ts");
 
     expect(existsSync(resolve(process.cwd(), "房间消息窗.ts"))).toBe(false);
     expect(ownerSource).toContain("export class 房间消息窗 extends 房间消息窗时间线媒体基类");

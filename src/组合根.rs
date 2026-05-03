@@ -778,5 +778,5 @@ fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> 
 }
 
 #[cfg(test)]
-#[path = "总装/配置测试.rs"]
+#[path = "组合根/配置测试.rs"]
 mod tests;

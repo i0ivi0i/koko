@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach,describe,expect,it,vi } from "vitest";
-import { 聊天壳 } from "../总装/聊天壳";
+import { 聊天壳 } from "../应用根/聊天壳";
 import {
 createFakeStorage,
 假传输,
@@ -25,7 +25,7 @@ describe("聊天壳集成 / 恢复失败与会话刷新", () => {
   });
 
   it("聊天壳恢复入口仍只通过内核 dispatch，不自己触发 bootstrap 或 snapshot 恢复", () => {
-    const source = readFileSync(resolve(process.cwd(), "总装/聊天壳.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "应用根/聊天壳.ts"), "utf8");
 
     expect(source).toContain('this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" })');
     expect(source).not.toContain("bootstrapAnonymousIdentity(");

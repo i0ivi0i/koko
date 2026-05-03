@@ -1,7 +1,7 @@
 import { expect, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
 import { 创建房间内核 } from "../../房间/运行时";
-import { 初始聊天状态, type 聊天状态 } from "../../总装/聊天状态";
+import { 初始聊天状态, type 聊天状态 } from "../../应用根/聊天状态";
 import { type 房间时间线事件 } from "../../时间线/运行时";
 import { createFakeStorage } from "./假存储.js";
 import { 假传输 } from "./假传输.js";

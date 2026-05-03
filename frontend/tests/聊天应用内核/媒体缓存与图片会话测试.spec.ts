@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
 import { createFakeStorage, 假传输, 创建房间快照 } from "../common/聊天测试支架";
-import { 创建聊天应用内核 } from "../../总装/聊天应用内核";
+import { 创建聊天应用内核 } from "../../应用根/聊天应用内核";
 import { 创建浏览器应用平台 } from "../../平台/浏览器应用平台";
 import { 创建存储运行时 } from "../../平台/存储运行时";
 import { 创建内核依赖, 读取媒体编排供测试, 观察媒体窗口 } from "../common/聊天应用内核支架";

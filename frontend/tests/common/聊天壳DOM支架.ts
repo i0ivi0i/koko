@@ -1,9 +1,9 @@
 import { expect } from "vitest";
-import "../../总装/聊天壳";
+import "../../应用根/聊天壳";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
 import type { 媒体查看器打开请求, 媒体播放结果 } from "../../媒体/index.js";
-import { 聊天壳 } from "../../总装/聊天壳";
-import type { 聊天状态 } from "../../总装/聊天状态";
+import { 聊天壳 } from "../../应用根/聊天壳";
+import type { 聊天状态 } from "../../应用根/聊天状态";
 import { 假传输 } from "./假传输.js";
 import { 安装测试文本测量画布 } from "./测试文本测量.js";
 

@@ -5,7 +5,7 @@ import {
   type 房间时间线事件,
 } from "../../时间线/运行时";
 import type { 消息事件 } from "../../聊天共享/契约";
-import type { 聊天状态 } from "../../总装/聊天状态";
+import type { 聊天状态 } from "../../应用根/聊天状态";
 
 export function 创建房间壳补丁(
   roomKernel: ReturnType<typeof 创建房间内核>

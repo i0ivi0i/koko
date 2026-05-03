@@ -252,6 +252,27 @@ fn 统一_pg仓储_不得长期承载跨上下文总仓储壳() {
 }
 
 #[test]
+fn 业务契约迁移壳不得长期停留在共享转发表面() {
+    // 这里不是反对“共享契约存在”，而是反对“上下文契约文件永远只做 shared 的转发表面”。
+    // 一旦这种迁移壳长期活着，维护者表面上看见了 `实时/契约.rs`、`房间/契约.rs`、`消息/契约.rs`、`身份/契约.rs`，
+    // 实际却仍要回头理解旧 shared 契约的历史包袱，owner 和 published language 都没有真正收口。
+    for path in [
+        "src/实时/契约.rs",
+        "src/房间/契约.rs",
+        "src/消息/契约.rs",
+        "src/身份/契约.rs",
+    ] {
+        let content = 读取(path);
+        let still_forwarding_shared_contract = content.contains("pub use crate::shared::contract");
+        let still_declares_migration = content.contains("第一阶段") || content.contains("先复用");
+        assert!(
+            !(still_forwarding_shared_contract || still_declares_migration),
+            "{path} 仍停在迁移壳状态：共享契约转发={still_forwarding_shared_contract}，迁移注释={still_declares_migration}；满分态必须收成真正上下文契约或删除"
+        );
+    }
+}
+
+#[test]
 fn 媒体上传外壳必须持续变薄() {
     let shell = 读取("src/外壳/mod.rs");
     let shared = 读取("src/媒体/上传/外壳/媒体上传.rs");
@@ -322,10 +343,10 @@ fn 媒体上传外壳必须持续变薄() {
 }
 
 #[test]
-fn 总装和总外壳必须持续变薄() {
-    // 总装/总外壳只允许承担启动接线、route mount 和状态装配。
+fn 组合根和总外壳必须持续变薄() {
+    // 应用根/总外壳只允许承担启动接线、route mount 和状态装配。
     // 这里用单向预算防止测试、协议细节或业务裁决重新回流到根层。
-    for (path, budget) in [("src/总装.rs", 900usize), ("src/外壳/mod.rs", 478usize)] {
+    for (path, budget) in [("src/组合根.rs", 900usize), ("src/外壳/mod.rs", 478usize)] {
         let lines = 统计物理行数(path);
         assert!(
             lines <= budget,
@@ -335,10 +356,10 @@ fn 总装和总外壳必须持续变薄() {
 }
 
 #[test]
-fn 总装不得承载业务裁决() {
+fn 组合根不得承载业务裁决() {
     // 这些词代表业务成立性或媒体/房间 owner 的内部语义；
-    // 一旦出现在总装层，通常说明装配根重新偷做 usecase/domain 的裁决。
-    let text = 读取("src/总装.rs");
+    // 一旦出现在组合根层，通常说明装配根重新偷做 usecase/domain 的裁决。
+    let text = 读取("src/组合根.rs");
     for forbidden in [
         "查询附件可读内容",
         "source_hash",
@@ -349,7 +370,7 @@ fn 总装不得承载业务裁决() {
     ] {
         assert!(
             !text.contains(forbidden),
-            "src/总装.rs 只能装配和读取启动配置，不能承载业务裁决: {forbidden}"
+            "src/组合根.rs 只能装配和读取启动配置，不能承载业务裁决: {forbidden}"
         );
     }
 }
@@ -400,7 +421,7 @@ fn 根契约文件不得混入页面文案布局词或框架类型() {
 #[test]
 fn 后端根目录旧根文件必须登记为待删除债务() {
     let actual = 枚举后端根_rs文件();
-    let permanent = ["lib.rs", "main.rs", "入口.rs", "总装.rs"]
+    let permanent = ["lib.rs", "main.rs", "入口.rs", "组合根.rs"]
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
@@ -413,7 +434,7 @@ fn 后端根目录旧根文件必须登记为待删除债务() {
         }
         assert!(
             temporary_old_roots.contains(&file),
-            "src 根目录出现未登记业务文件 {file}；根目录只允许真实入口/总装，旧根文件必须单独登记为待删除债务"
+            "src 根目录出现未登记业务文件 {file}；根目录只允许真实入口/组合根，旧根文件必须单独登记为待删除债务"
         );
         let row_prefix = format!("| `src/{file}` | 待删除旧根文件");
         assert!(
@@ -715,8 +736,8 @@ fn 根目录业务文件必须逐个登记到完成矩阵() {
         "src/契约.rs",
         "src/适配.rs",
         "src/外壳.rs",
-        "frontend/总装/聊天应用内核.ts",
-        "frontend/总装/聊天壳.ts",
+        "frontend/应用根/聊天应用内核.ts",
+        "frontend/应用根/聊天壳.ts",
         "frontend/媒体/播放会话/应用.ts",
         "frontend/房间消息窗.ts",
         "frontend/媒体运行时.ts",

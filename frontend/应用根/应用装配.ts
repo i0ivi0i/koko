@@ -28,7 +28,7 @@ export interface 聊天壳应用装配 {
 }
 
 /**
- * 聊天壳总装只做一件事：把平台、内核和 AppRuntime 组装成同一份入口。
+ * 聊天壳应用根装配只做一件事：把平台、内核和 AppRuntime 组装成同一份入口。
  * 这样壳层以后只能消费装配结果，不能再私自 new 第二颗 kernel 或第二条平台订阅链。
  */
 export function 创建聊天壳应用装配(

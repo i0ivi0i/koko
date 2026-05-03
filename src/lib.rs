@@ -9,7 +9,7 @@
 pub mod adapter;
 #[path = "应用/mod.rs"]
 pub mod application;
-#[path = "总装.rs"]
+#[path = "组合根.rs"]
 pub mod assembly;
 #[path = "领域/mod.rs"]
 pub mod domain;

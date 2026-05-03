@@ -2,7 +2,7 @@ import type { 房间快照, 消息事件 } from "../聊天共享/契约.js";
 import type { 房间内核事件 } from "../房间/运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "../平台/存储.js";
-import type { 聊天状态 } from "../总装/聊天状态.js";
+import type { 聊天状态 } from "../应用根/聊天状态.js";
 
 type 恢复失败 = Error & {
   status?: number;

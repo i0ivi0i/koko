@@ -8,7 +8,7 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("前端共享契约 owner", () => {
   it("聊天共享契约已经成为唯一 owner，旧根入口已删除", () => {
     const ownerSource = 读取前端源码("聊天共享/契约.ts");
-    const stateSource = 读取前端源码("总装/聊天状态.ts");
+    const stateSource = 读取前端源码("应用根/聊天状态.ts");
     const messagePaneViewSource = 读取前端源码("房间消息窗/视图.ts");
     const transportSource = 读取前端源码("平台/传输.ts");
     const recoverySource = 读取前端源码("恢复/应用.ts");

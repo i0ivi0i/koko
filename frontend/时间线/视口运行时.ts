@@ -1,5 +1,5 @@
 import { assign, createActor, createMachine } from "xstate";
-import type { 聊天视口状态, 房间视口模式 } from "../总装/聊天状态.js";
+import type { 聊天视口状态, 房间视口模式 } from "../应用根/聊天状态.js";
 
 const 历史分页顶部节流毫秒 = 180;
 

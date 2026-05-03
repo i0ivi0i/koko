@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../../平台/存储";
 import type { 匿名身份引导结果 } from "../../聊天共享/契约";
-import { 聊天壳 } from "../../总装/聊天壳";
+import { 聊天壳 } from "../../应用根/聊天壳";
 import {
   createFakeStorage,
   假传输,

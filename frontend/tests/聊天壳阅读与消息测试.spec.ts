@@ -17,7 +17,7 @@ import {
   默认消息文本布局环境,
   派生聊天列表展示项,
 } from "../房间消息窗/视图";
-import { 聊天壳 } from "../总装/聊天壳";
+import { 聊天壳 } from "../应用根/聊天壳";
 describe("聊天壳集成 / 阅读推进与消息并流", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {

@@ -5,7 +5,7 @@ import { 创建会话失效恢复协作 } from "../../聊天恢复/壳层/会话
 import { 创建恢复应用 } from "../应用.js";
 import type { 聊天房间传输端口 } from "../../聊天共享/适配/聊天房间传输端口.js";
 import { Http接口错误 } from "../../平台/传输.js";
-import type { 聊天状态 } from "../../总装/聊天状态.js";
+import type { 聊天状态 } from "../../应用根/聊天状态.js";
 
 export type Transport异常 =
   | {

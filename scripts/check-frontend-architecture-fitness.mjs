@@ -38,7 +38,7 @@ const 前端根目录允许文件 = new Set([
  * 这里不是重新造架构描述，而是把“谁能拥有长生命周期真相”变成可执行门禁。
  */
 const 前端运行时Owner注册表 = [
-  { path: "frontend/总装/聊天应用内核.ts", symbol: "创建聊天应用内核" },
+  { path: "frontend/应用根/聊天应用内核.ts", symbol: "创建聊天应用内核" },
   { path: "frontend/后台/应用内核.ts", symbol: "创建后台应用内核" },
   { path: "frontend/恢复/应用.ts", symbol: "创建恢复应用" },
   { path: "frontend/实时/应用.ts", symbol: "创建实时应用" },
@@ -77,7 +77,7 @@ const 前端已清零根文件规则 = [
   },
   {
     path: "frontend/状态.ts",
-    ownerPath: "frontend/总装/聊天状态.ts",
+    ownerPath: "frontend/应用根/聊天状态.ts",
     requiredOwnerSnippets: ["export interface 聊天状态", "export const 初始聊天状态"],
   },
   {
@@ -87,7 +87,7 @@ const 前端已清零根文件规则 = [
   },
   {
     path: "frontend/聊天应用编排桥接.ts",
-    ownerPath: "frontend/总装/聊天应用编排桥接.ts",
+    ownerPath: "frontend/应用根/聊天应用编排桥接.ts",
     requiredOwnerSnippets: ["export interface 聊天内核平台端口", "export function 创建聊天内核平台桥接("],
   },
   {
@@ -244,7 +244,7 @@ const 前端禁回流片段规则 = [
   },
   {
     label: "chat shell private kernel/test setter barrier",
-    path: "frontend/总装/聊天壳.ts",
+    path: "frontend/应用根/聊天壳.ts",
     pattern:
       /this\.kernel\.(?!(snapshot|dispatch)\s*\()|setMedia(Player|Viewer|Publisher)ForTest|构建附件内容地址|注入快照补丁供测试/g,
   },
@@ -303,7 +303,7 @@ const 禁止生产兜底命名片段 = [
 
 const 热点文件行数上限 = [
   // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
-  { path: "frontend/总装/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
+  { path: "frontend/应用根/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
   { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1250, maxPhysicalLines: 1520 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 290, maxPhysicalLines: 330 },
   { path: "frontend/房间消息窗/视频附件渲染.ts", maxEffectiveLines: 540, maxPhysicalLines: 570 },
@@ -313,12 +313,12 @@ const 热点文件行数上限 = [
   { path: "frontend/房间消息窗/文本布局.ts", maxEffectiveLines: 240, maxPhysicalLines: 300 },
   { path: "frontend/媒体/运行时.ts", maxEffectiveLines: 700, maxPhysicalLines: 820 },
   { path: "frontend/时间线/滚动器.ts", maxEffectiveLines: 470, maxPhysicalLines: 540 },
-  { path: "frontend/总装/聊天应用内核.ts", maxEffectiveLines: 850, maxPhysicalLines: 960 },
-  { path: "frontend/总装/聊天壳.ts", maxEffectiveLines: 460, maxPhysicalLines: 560 },
-  { path: "frontend/总装/聊天壳样式.ts", maxEffectiveLines: 760, maxPhysicalLines: 900 },
-  { path: "frontend/总装/聊天内核状态投影.ts", maxEffectiveLines: 150, maxPhysicalLines: 170 },
-  { path: "frontend/总装/聊天内核平台运行时.ts", maxEffectiveLines: 110, maxPhysicalLines: 125 },
-  { path: "frontend/总装/聊天内核通知副作用.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
+  { path: "frontend/应用根/聊天应用内核.ts", maxEffectiveLines: 850, maxPhysicalLines: 960 },
+  { path: "frontend/应用根/聊天壳.ts", maxEffectiveLines: 460, maxPhysicalLines: 560 },
+  { path: "frontend/应用根/聊天壳样式.ts", maxEffectiveLines: 760, maxPhysicalLines: 900 },
+  { path: "frontend/应用根/聊天内核状态投影.ts", maxEffectiveLines: 150, maxPhysicalLines: 170 },
+  { path: "frontend/应用根/聊天内核平台运行时.ts", maxEffectiveLines: 110, maxPhysicalLines: 125 },
+  { path: "frontend/应用根/聊天内核通知副作用.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
   { path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 800, maxPhysicalLines: 900 },
   { path: "frontend/媒体/播放会话/会话投影.ts", maxEffectiveLines: 105, maxPhysicalLines: 115 },
   { path: "frontend/媒体/播放会话/草稿发布.ts", maxEffectiveLines: 105, maxPhysicalLines: 120 },
@@ -539,11 +539,11 @@ const 平台内层Import违规 = (relativePath, source) => {
     /\bimport\s*\(\s*["']([^"']*平台\/[^"']+)["']\s*\)/g,
   ];
   const 平台传输直连允许文件 = new Set([
-    "frontend/总装/聊天壳.ts",
+    "frontend/应用根/聊天壳.ts",
     "frontend/媒体/播放会话/应用.ts",
-    "frontend/总装/聊天应用内核.ts",
-    "frontend/总装/应用装配.ts",
-    "frontend/总装/聊天应用编排桥接.ts",
+    "frontend/应用根/聊天应用内核.ts",
+    "frontend/应用根/应用装配.ts",
+    "frontend/应用根/聊天应用编排桥接.ts",
     "frontend/后台/壳.ts",
     "frontend/后台/会话编排.ts",
     "frontend/后台/应用内核.ts",
@@ -552,9 +552,9 @@ const 平台内层Import违规 = (relativePath, source) => {
     "frontend/聊天实时/壳层/实时控制面协作.ts",
   ]);
   const 平台存储直连允许文件 = new Set([
-    "frontend/总装/聊天应用内核.ts",
-    "frontend/总装/聊天应用编排桥接.ts",
-    "frontend/总装/聊天状态.ts",
+    "frontend/应用根/聊天应用内核.ts",
+    "frontend/应用根/聊天应用编排桥接.ts",
+    "frontend/应用根/聊天状态.ts",
     "frontend/恢复/应用.ts",
     "frontend/房间消息窗/视图.ts",
     "frontend/恢复/壳层/房间恢复编排.ts",
@@ -579,21 +579,21 @@ const 平台内层Import违规 = (relativePath, source) => {
         continue;
       }
       if (
-        relativePath === "frontend/总装/聊天壳.ts" &&
+        relativePath === "frontend/应用根/聊天壳.ts" &&
         (importPath === "./平台/应用运行时.js" ||
           importPath.endsWith("/平台/应用运行时.js"))
       ) {
         continue;
       }
       if (
-        relativePath === "frontend/总装/聊天应用内核.ts" &&
+        relativePath === "frontend/应用根/聊天应用内核.ts" &&
         (importPath === "./平台/应用生命周期.js" ||
           importPath.endsWith("/平台/应用生命周期.js"))
       ) {
         continue;
       }
       if (
-        relativePath === "frontend/总装/应用装配.ts" &&
+        relativePath === "frontend/应用根/应用装配.ts" &&
         (importPath === "../平台/应用运行时.js" ||
           importPath.endsWith("/平台/应用运行时.js"))
       ) {
@@ -745,7 +745,7 @@ const 检查未登记XStateOwner = (files) => {
 
 const 检查总编排壳回流 = (files) => {
   const 目标文件 = files.find(
-    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/总装/聊天应用内核.ts"
+    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/应用根/聊天应用内核.ts"
   );
   if (!目标文件) {
     return [];
@@ -773,9 +773,57 @@ const 检查总编排壳回流 = (files) => {
   return hits.length >= 4
     ? [
         {
-          file: "frontend/总装/聊天应用内核.ts",
+          file: "frontend/应用根/聊天应用内核.ts",
           label: "orchestration-shell regression",
           detail: `总编排壳仍吸附过多跨子域职责：${hits.join("、")}`,
+        },
+      ]
+    : [];
+};
+
+const 检查生产宽_barrel_公开表面 = (files) => {
+  const 目标文件 = files.find(
+    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/媒体/index.ts"
+  );
+  if (!目标文件) {
+    return [];
+  }
+
+  const source = 去掉注释(readFileSync(目标文件, "utf8"));
+  const exportAllHits = source.match(/^\s*export \* from /gm) ?? [];
+
+  // 这里不是反对“前端有公开表面”，而是反对“一个 index.ts 把整个媒体子域无差别全导出去”。
+  // 媒体子域同时承接草稿、缓存、播放会话、查看器、协作分发、上传、Video.js 壳等多条 owner 线，
+  // 继续靠一个大 barrel 聚合，只会让真实消费者越来越不需要解释自己为什么依赖这条表面。
+  // 满分态必须让它退回窄而稳定的 published surface，或者直接改成依赖真实 owner。
+  return exportAllHits.length > 6
+    ? [
+        {
+          file: "frontend/媒体/index.ts",
+          label: "wide media barrel surface",
+          detail: `当前仍有 ${exportAllHits.length} 条 export * from；这已经是媒体子域第二入口，不是窄而稳定的公开表面`,
+        },
+      ]
+    : [];
+};
+
+const 检查遗留装配命名残留 = (files) => {
+  const 遗留装配词 = "总" + "装";
+  const 命中遗留装配命名的文件 = files
+    .map((absolutePath) => ({
+      file: 转成仓库相对路径(absolutePath),
+      source: 去掉注释(readFileSync(absolutePath, "utf8")),
+    }))
+    .filter(({ source }) => source.includes(遗留装配词));
+
+  // 这里不是反对 `应用根 / 组合根 / 协调器 / 装配` 这些显式中文命名，
+  // 而是反对旧装配叫法继续留在生产文件里，让维护者误以为还存在一个模糊的大总线层。
+  return 命中遗留装配命名的文件.length > 0
+    ? [
+        {
+          file: 命中遗留装配命名的文件[0].file,
+          label: "assembly naming still treated as final",
+          detail: `仍有 ${命中遗留装配命名的文件.length} 个前端生产文件保留遗留装配命名；必须改回显式层名和真实 owner`,
         },
       ]
     : [];
@@ -973,6 +1021,8 @@ export const 收集架构适应度违规 = () => {
     ]),
     ...检查未登记XStateOwner(files),
     ...检查总编排壳回流(files),
+    ...检查生产宽_barrel_公开表面(files),
+    ...检查遗留装配命名残留(files),
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
     ...检查热点文件增长(),

@@ -10,7 +10,7 @@ const 读取前端源码 = (relativePath: string): string =>
 describe("房间时间线运行时", () => {
   it("时间线运行时 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("时间线/运行时.ts");
-    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
+    const kernelSource = 读取前端源码("应用根/聊天应用内核.ts");
     const realtimeSource = 读取前端源码("实时/应用.ts");
     const recoverySource = 读取前端源码("恢复/应用.ts");
     const recoveryShellSource = 读取前端源码("恢复/壳层/房间恢复编排.ts");

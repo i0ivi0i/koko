@@ -1,7 +1,7 @@
 import type { 附件快照, 消息事件 } from "../聊天共享/契约.js";
 import type { 首页房间历史条目 } from "../平台/存储.js";
 import type { 媒体附件草稿 } from "../媒体/媒体草稿.js";
-import type { 房间视口模式 } from "../总装/聊天状态.js";
+import type { 房间视口模式 } from "../应用根/聊天状态.js";
 import {
   默认文本布局器,
   type 文本布局结果,

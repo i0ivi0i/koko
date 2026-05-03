@@ -21,7 +21,7 @@ export interface 聊天应用编排协调器依赖 {
 }
 
 /**
- * recovery / realtime / 阅读推进 三条编排口的唯一总装 owner。
+ * recovery / realtime / 阅读推进 三条编排口的唯一应用根编排 owner。
  *
  * 约束：
  * 1. 它只负责懒创建、重置和跨编排口协作；

@@ -13,7 +13,7 @@ import {
   设置测试滚动阶段,
   模拟消息滚动视口,
 } from "./common/聊天测试支架";
-import { 聊天壳 } from "../总装/聊天壳";
+import { 聊天壳 } from "../应用根/聊天壳";
 describe("聊天壳集成 / 未读恢复与跟随", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {

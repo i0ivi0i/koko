@@ -1,4 +1,4 @@
-import type { 聊天应用命令 } from "../总装/聊天应用内核.js";
+import type { 聊天应用命令 } from "../应用根/聊天应用内核.js";
 import type { 浏览器应用平台事件 } from "./index.js";
 
 type 应用运行时命令 = Extract<

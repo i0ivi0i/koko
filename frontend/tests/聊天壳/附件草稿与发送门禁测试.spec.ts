@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it, vi } from "vitest";
-import { 聊天壳 } from "../../总装/聊天壳";
+import { 聊天壳 } from "../../应用根/聊天壳";
 import {
   创建已入房聊天壳,
   假传输,

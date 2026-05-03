@@ -1,8 +1,8 @@
 use super::*;
 use serial_test::serial;
 
-// 这些测试仍然贴着总装模块编译，是因为它们要验证启动配置私有函数。
-// 测试正文单独落在本文件，避免 src/总装.rs 被测试样板撑胖成“装配 + 测试大桶”。
+// 这些测试仍然贴着组合根模块编译，是因为它们要验证启动配置私有函数。
+// 测试正文单独落在本文件，避免 src/组合根.rs 被测试样板撑胖成“装配 + 测试大桶”。
 fn 读并清空环境变量(key: &str) -> Option<String> {
     let old = env::var(key).ok();
     env::remove_var(key);

@@ -52,7 +52,7 @@ where
     }
     migrate_result?;
 
-    // 这里仅做路由总装，不参与任何业务语义判断。
+    // 这里仅做路由装配，不参与任何业务语义判断。
     let state = crate::shell::构建应用状态(
         config.database_url.clone(),
         config.admin_password.clone(),
@@ -69,7 +69,7 @@ where
             return Err(std::io::Error::other(format!("监听端口失败: {err}")));
         }
     };
-    // 只有监听端口与路由总装都完成后，才允许宣告启动 succeeded。
+    // 只有监听端口与路由装配都完成后，才允许宣告启动 succeeded。
     tracing::info!(
         application = "服务启动",
         adapter = "entry",

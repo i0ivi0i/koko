@@ -1,7 +1,7 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
 import type { 消息事件 } from "../聊天共享/契约.js";
 import { 推进房间时间线 } from "./领域.js";
-import type { 聊天时间线状态 } from "../总装/聊天状态.js";
+import type { 聊天时间线状态 } from "../应用根/聊天状态.js";
 
 export interface 房间时间线上下文 {
   messages: 消息事件[];

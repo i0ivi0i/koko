@@ -82,6 +82,51 @@ const 转发表面命中 = 生产源码文件
 
 const 高风险汇聚点 = [];
 
+const 迁移壳契约清单 = [
+  "src/实时/契约.rs",
+  "src/房间/契约.rs",
+  "src/消息/契约.rs",
+  "src/身份/契约.rs",
+]
+  .map((relativePath) => ({
+    path: relativePath,
+    source: 读取源码(join(仓库根目录, ...relativePath.split("/"))),
+  }))
+  .filter(
+    ({ source }) =>
+      source.includes("pub use crate::shared::contract") ||
+      source.includes("第一阶段") ||
+      source.includes("先复用")
+  )
+  .map(({ path }) => path);
+
+const 遗留装配词 = "总" + "装";
+
+const 遗留装配命名残留清单 = [
+  "src/lib.rs",
+  "src/main.rs",
+  "scripts/check-frontend-architecture-fitness.mjs",
+  "scripts/check-full-architecture-completion.mjs",
+  "frontend/入口.ts",
+]
+  .map((relativePath) => ({
+    path: relativePath,
+    source: 读取源码(join(仓库根目录, ...relativePath.split("/"))),
+  }))
+  .filter(({ source }) => source.includes(遗留装配词))
+  .map(({ path }) => path);
+
+const 宽公开表面清单 = [];
+const 媒体聚合表面源码 = 读取源码(join(仓库根目录, "frontend", "媒体", "index.ts"));
+const 媒体_export_all_数量 = (媒体聚合表面源码.match(/^\s*export \* from /gm) ?? []).length;
+if (媒体_export_all_数量 > 6) {
+  宽公开表面清单.push({
+    file: "frontend/媒体/index.ts",
+    kind: "wide media barrel surface",
+    detail: `当前仍有 ${媒体_export_all_数量} 条 export * from；必须收成窄而稳定的公开表面，或改成直连真实 owner`,
+  });
+}
+
 const 消息应用源码 = 读取源码(join(仓库根目录, "src", "消息", "应用.rs"));
 const 重复规则片段 = [
   "let mut attachments = Vec::with_capacity(附件标识列表.len());",
@@ -114,7 +159,9 @@ if (pg仓储Impl命中.length > 1) {
   });
 }
 
-const 总装内核源码 = 读取源码(join(仓库根目录, "frontend", "总装", "聊天应用内核.ts"));
+const 应用根内核源码 = 读取源码(
+  join(仓库根目录, "frontend", "应用根", "聊天应用内核.ts")
+);
 const 编排吸附片段 = [
   "恢复编排端口",
   "实时编排端口",
@@ -123,10 +170,10 @@ const 编排吸附片段 = [
   "应用本地状态折叠(",
   "同步实时会话快照并执行副作用(",
 ];
-const 编排命中 = 编排吸附片段.filter((fragment) => 总装内核源码.includes(fragment));
+const 编排命中 = 编排吸附片段.filter((fragment) => 应用根内核源码.includes(fragment));
 if (编排命中.length >= 4) {
   高风险汇聚点.push({
-    file: "frontend/总装/聊天应用内核.ts",
+    file: "frontend/应用根/聊天应用内核.ts",
     kind: "total orchestration shell",
     detail: `仍吸附过多跨子域职责: ${编排命中.join("、")}`,
   });
@@ -142,6 +189,9 @@ const 输出 = {
   innerLeaks: 内层泄漏文件,
   fallbackNames: 兜底命中文件,
   reexports: 转发表面命中,
+  migrationContractShells: 迁移壳契约清单,
+  assemblyNamingResiduals: 遗留装配命名残留清单,
+  widePublicSurfaces: 宽公开表面清单,
   highRiskConvergencePoints: 高风险汇聚点,
   graphifySummary: 图谱摘要,
 };
@@ -152,6 +202,9 @@ if (
   超预算文件.length > 0 ||
   内层泄漏文件.length > 0 ||
   兜底命中文件.length > 0 ||
+  迁移壳契约清单.length > 0 ||
+  遗留装配命名残留清单.length > 0 ||
+  宽公开表面清单.length > 0 ||
   高风险汇聚点.length > 0
 ) {
   process.exitCode = 1;

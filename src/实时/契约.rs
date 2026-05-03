@@ -1,3 +1,5 @@
-/// realtime 业务模块当前只复用共享契约中的快照与错误码。
-/// 第一阶段先把热路径 owner 收清楚，不复制控制面 JSON 或 socket 层协议细节。
-pub use crate::shared::contract::{快照, 错误码};
+/// realtime 上下文对外承认的稳定 published surface。
+/// 这里显式声明本上下文只共享“快照 + 错误码”两类稳定语义，
+/// 其余 socket / JSON / 协议细节一律留在外壳与适配层。
+pub type 快照 = crate::shared::contract::快照;
+pub type 错误码 = crate::shared::contract::错误码;

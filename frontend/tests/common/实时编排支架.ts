@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { 创建房间内核 } from "../../房间/运行时";
-import { 初始聊天状态, type 聊天状态 } from "../../总装/聊天状态";
+import { 初始聊天状态, type 聊天状态 } from "../../应用根/聊天状态";
 import { type 消息事件 } from "../../聊天共享/契约";
 import { type 房间时间线事件 } from "../../时间线/运行时";
 import { 假传输 } from "./假传输.js";

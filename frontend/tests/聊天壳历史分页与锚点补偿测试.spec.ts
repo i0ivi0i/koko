@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach,describe,expect,it,vi } from "vitest";
-import { 聊天壳 } from "../总装/聊天壳";
+import { 聊天壳 } from "../应用根/聊天壳";
 import type { 房间历史页 } from "../聊天共享/契约";
 import {
 createFakeStorage,

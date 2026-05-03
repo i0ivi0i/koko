@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { 匿名身份引导结果 } from "../../聊天共享/契约";
-import { 聊天壳 } from "../../总装/聊天壳";
+import { 聊天壳 } from "../../应用根/聊天壳";
 import {
   派生壳主舞台模式,
   派生控制台模式,
@@ -30,7 +30,7 @@ describe("聊天壳集成 / 界面骨架与布局", () => {
   });
 
   it("媒体编排已经下沉到聊天内核，聊天壳不再自己持有媒体 runtime 真相", async () => {
-    const source = 读取前端源码("总装/聊天壳.ts");
+    const source = 读取前端源码("应用根/聊天壳.ts");
     const el = document.createElement("koko-chat-shell") as 聊天壳;
 
     expect(source).not.toContain("private readonly 媒体定位器");
@@ -48,8 +48,8 @@ describe("聊天壳集成 / 界面骨架与布局", () => {
     expect("媒体发布器" in (el as object)).toBe(false);
   });
 
-  it("聊天壳通过总装入口拿 kernel 和 runtime，不再自己 new 业务入口", () => {
-    const source = 读取前端源码("总装/聊天壳.ts");
+  it("聊天壳通过应用根入口拿 kernel 和 runtime，不再自己 new 业务入口", () => {
+    const source = 读取前端源码("应用根/聊天壳.ts");
 
     expect(source).toContain('from "./应用装配.js"');
     expect(source).toContain("创建聊天壳应用装配(");

@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { 房间消息窗 } from "../../房间消息窗/壳";
-import { 聊天壳 } from "../../总装/聊天壳";
+import { 聊天壳 } from "../../应用根/聊天壳";
 import {
   假传输,
   创建房间快照,

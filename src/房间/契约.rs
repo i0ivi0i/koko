@@ -1,3 +1,5 @@
-/// 房间业务模块当前先复用旧总契约中的稳定快照与命令结果。
-/// 第一阶段只先显式宣告 owner，不复制类型定义。
-pub use crate::shared::contract::{命令结果, 快照};
+/// 房间上下文对外承认的稳定 published surface。
+/// 房间主链只共享“快照 + 命令结果”这两类契约语义，
+/// 不让历史 shared 契约继续伪装成房间上下文自己的入口。
+pub type 命令结果 = crate::shared::contract::命令结果;
+pub type 快照 = crate::shared::contract::快照;

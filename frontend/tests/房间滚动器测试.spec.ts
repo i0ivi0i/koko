@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { 聊天状态 } from "../总装/聊天状态";
+import type { 聊天状态 } from "../应用根/聊天状态";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(process.cwd(), relativePath), "utf8");
@@ -64,8 +64,8 @@ describe("房间滚动器", () => {
   it("时间线滚动 owner 直连生效，旧根入口已经删除", () => {
     const ownerSource = 读取前端源码("时间线/滚动器.ts");
     const timelineAppSource = 读取前端源码("时间线/应用.ts");
-    const kernelSource = 读取前端源码("总装/聊天应用内核.ts");
-    const assembleSource = 读取前端源码("总装/应用装配.ts");
+    const kernelSource = 读取前端源码("应用根/聊天应用内核.ts");
+    const assembleSource = 读取前端源码("应用根/应用装配.ts");
     const readProgressSource = 读取前端源码("房间/壳层/阅读推进.ts");
 
     expect(existsSync(resolve(process.cwd(), "房间滚动器.ts"))).toBe(false);
