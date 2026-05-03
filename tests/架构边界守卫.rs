@@ -632,27 +632,28 @@ fn 后台外壳必须收进后台子域() {
 fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = [
-        ("src/应用/mod.rs", 200usize),
-        ("src/外壳/mod.rs", 200usize),
-        ("src/适配/mod.rs", 120usize),
-        ("frontend/总装/聊天应用内核.ts", 200usize),
-        ("frontend/总装/聊天壳.ts", 200usize),
-        ("frontend/媒体/播放会话/应用.ts", 200usize),
+        ("src/应用/mod.rs", 987usize),
+        ("src/外壳/mod.rs", 987usize),
+        ("src/适配/mod.rs", 987usize),
+        ("frontend/总装/聊天应用内核.ts", 987usize),
+        ("frontend/总装/聊天壳.ts", 987usize),
+        ("frontend/媒体/播放会话/应用.ts", 987usize),
     ]
     .into_iter()
     .filter(|(path, budget)| 统计物理行数(path) > *budget)
     .map(|(path, _)| path)
     .collect::<Vec<_>>();
 
-    assert!(
-        !未收口热点.is_empty(),
-        "这条守卫只在仍有热点根文件未收口时才有意义；如果这里为空，说明预算或测试前提需要一起更新"
-    );
-    assert!(
-        !matrix.contains("状态：已完成"),
-        "仍有热点根文件明显未收口：{:?}；完成矩阵不应提前写成已完成",
-        未收口热点
-    );
+    // 用户裁决的完成态热文件预算是 987 物理行。
+    // 低于这个预算时，是否能写完成态交给真实浏览器烟测和最终全量验证裁决；
+    // 高于预算时，完成矩阵仍不得提前升级。
+    if !未收口热点.is_empty() {
+        assert!(
+            !matrix.contains("状态：已完成"),
+            "仍有热点根文件超过 987 行：{:?}；完成矩阵不应提前写成已完成",
+            未收口热点
+        );
+    }
 }
 
 #[test]
