@@ -1,5 +1,66 @@
 use super::*;
 
+struct TusPreCreate场景 {
+    attachment_id: String,
+    upload_session_id: String,
+    authorization: String,
+}
+
+async fn 准备_tus_pre_create场景(
+    app: axum::Router,
+    session_id: &str,
+    prepare_path: &str,
+    file_name: &str,
+    mime_type: &str,
+    byte_size: i64,
+) -> TusPreCreate场景 {
+    let (prepare_status, prepare_body) = send_json(
+        app,
+        Method::POST,
+        prepare_path,
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": file_name,
+            "mime_type": mime_type,
+            "byte_size": byte_size
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    TusPreCreate场景 {
+        attachment_id: prepare_body["attachment_id"]
+            .as_str()
+            .expect("attachment_id")
+            .to_string(),
+        upload_session_id: prepare_body["upload_session_id"]
+            .as_str()
+            .expect("upload_session_id")
+            .to_string(),
+        authorization: 提取媒体上传授权头(&prepare_body),
+    }
+}
+
+fn 构造带授权的_tus_pre_create_hook(
+    scene: &TusPreCreate场景,
+    upload_id: &str,
+    file_name: &str,
+    mime_type: &str,
+    size: i64,
+) -> serde_json::Value {
+    构造tus_hook请求体(
+        "pre-create",
+        Some(scene.authorization.as_str()),
+        upload_id,
+        scene.attachment_id.as_str(),
+        file_name,
+        mime_type,
+        size,
+        0,
+        None,
+    )
+}
+
 #[tokio::test]
 #[serial]
 async fn 内部tus_hook入口应使用协议命名而不是供应商命名() {
@@ -108,39 +169,26 @@ async fn tus_pre_create允许offset为0且length等于metadata_byte_size() {
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (prepare_status, prepare_body) = send_json(
+    let scene = 准备_tus_pre_create场景(
         app.clone(),
-        Method::POST,
+        session_id,
         "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "pre-create.png",
-            "mime_type": "image/png",
-            "byte_size": 68
-        })),
-        &[],
+        "pre-create.png",
+        "image/png",
+        68,
     )
     .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
 
     let (status, body) = send_json(
         app,
         Method::POST,
         "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "pre-create",
-            Some(authorization.as_str()),
-            &format!("upload-pre-create-{attachment_id}"),
-            attachment_id,
+        Some(构造带授权的_tus_pre_create_hook(
+            &scene,
+            &format!("upload-pre-create-{}", scene.attachment_id),
             "pre-create.png",
             "image/png",
             68,
-            0,
-            None,
         )),
         &[],
     )
@@ -177,41 +225,28 @@ async fn tus_pre_create缺少byte_size元数据时仍按prepare权威长度放�
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (prepare_status, prepare_body) = send_json(
+    let scene = 准备_tus_pre_create场景(
         app.clone(),
-        Method::POST,
+        session_id,
         "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "pre-create-metadata.png",
-            "mime_type": "image/png",
-            "byte_size": 68
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
-    let mut hook_body = 构造tus_hook请求体(
-        "pre-create",
-        Some(authorization.as_str()),
-        &format!("upload-pre-create-metadata-{attachment_id}"),
-        attachment_id,
         "pre-create-metadata.png",
         "image/png",
         68,
-        0,
-        None,
+    )
+    .await;
+    let mut hook_body = 构造带授权的_tus_pre_create_hook(
+        &scene,
+        &format!("upload-pre-create-metadata-{}", scene.attachment_id),
+        "pre-create-metadata.png",
+        "image/png",
+        68,
     );
     /*
      * 真实 Tus create-upload 场景里，hook 不保证把每个 metadata 键都稳定回显给主服务。
      * 这里故意只保留 attachment_id，锁住“pre-create 应依赖 prepare 权威长度，而不是重复 metadata.byte_size”。
      */
     hook_body["Event"]["Upload"]["MetaData"] = serde_json::json!({
-        "attachment_id": attachment_id
+        "attachment_id": scene.attachment_id
     });
 
     let (status, body) = send_json(
@@ -254,24 +289,15 @@ async fn tus_pre_create长度小于prepare整文件大小时会拒绝当前parti
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (prepare_status, prepare_body) = send_json(
+    let scene = 准备_tus_pre_create场景(
         app.clone(),
-        Method::POST,
+        session_id,
         "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "pre-create-partial.png",
-            "mime_type": "image/png",
-            "byte_size": 68
-        })),
-        &[],
+        "pre-create-partial.png",
+        "image/png",
+        68,
     )
     .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
 
     /*
      * 当前主链仍以“单附件 = 一条最终运输回执”为真相：
@@ -283,16 +309,12 @@ async fn tus_pre_create长度小于prepare整文件大小时会拒绝当前parti
         app,
         Method::POST,
         "/internal/tus/hooks",
-        Some(构造tus_hook请求体(
-            "pre-create",
-            Some(authorization.as_str()),
-            &format!("upload-pre-create-partial-{attachment_id}"),
-            attachment_id,
+        Some(构造带授权的_tus_pre_create_hook(
+            &scene,
+            &format!("upload-pre-create-partial-{}", scene.attachment_id),
             "pre-create-partial.png",
             "image/png",
             34,
-            0,
-            None,
         )),
         &[],
     )
@@ -339,27 +361,15 @@ async fn tus_pre_create_partial在同会话下未来应当放行但当前还做�
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (prepare_status, prepare_body) = send_json(
+    let scene = 准备_tus_pre_create场景(
         app.clone(),
-        Method::POST,
+        session_id,
         "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "future-partial.png",
-            "mime_type": "image/png",
-            "byte_size": 68
-        })),
-        &[],
+        "future-partial.png",
+        "image/png",
+        68,
     )
     .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id");
-    let upload_session_id = prepare_body["upload_session_id"]
-        .as_str()
-        .expect("upload_session_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
 
     /*
      * 这条红测锁的是未来真正要打通的语义：
@@ -380,8 +390,8 @@ async fn tus_pre_create_partial在同会话下未来应当放行但当前还做�
                     "SizeIsDeferred": false,
                     "Offset": 0,
                     "MetaData": {
-                        "attachment_id": attachment_id,
-                        "upload_session_id": upload_session_id,
+                        "attachment_id": scene.attachment_id,
+                        "upload_session_id": scene.upload_session_id,
                         "file_name": "future-partial.png",
                         "mime_type": "image/png",
                         "byte_size": "68"
@@ -391,14 +401,14 @@ async fn tus_pre_create_partial在同会话下未来应当放行但当前还做�
                     "PartialUploads": serde_json::Value::Null,
                     "Storage": serde_json::Value::Null
                 },
-                "HTTPRequest": {
-                    "Method": "POST",
-                    "URI": "/files",
-                    "Header": {
-                        "Authorization": [authorization.as_str()]
+                    "HTTPRequest": {
+                        "Method": "POST",
+                        "URI": "/files",
+                        "Header": {
+                            "Authorization": [scene.authorization.as_str()]
+                        }
                     }
                 }
-            }
         })),
         &[],
     )
@@ -435,27 +445,15 @@ async fn tus_pre_create_final_concat在同会话下会放行() {
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (prepare_status, prepare_body) = send_json(
+    let scene = 准备_tus_pre_create场景(
         app.clone(),
-        Method::POST,
+        session_id,
         "/api/media/video/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "future-final.mp4",
-            "mime_type": "video/mp4",
-            "byte_size": 96
-        })),
-        &[],
+        "future-final.mp4",
+        "video/mp4",
+        96,
     )
     .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"]
-        .as_str()
-        .expect("attachment_id");
-    let upload_session_id = prepare_body["upload_session_id"]
-        .as_str()
-        .expect("upload_session_id");
-    let authorization = 提取媒体上传授权头(&prepare_body);
 
     let (status, body) = send_json(
         app,
@@ -463,10 +461,10 @@ async fn tus_pre_create_final_concat在同会话下会放行() {
         "/internal/tus/hooks",
         Some(构造tus_concatenation_hook请求体(
             "pre-create",
-            Some(authorization.as_str()),
-            &format!("final-upload-{attachment_id}"),
-            attachment_id,
-            upload_session_id,
+            Some(scene.authorization.as_str()),
+            &format!("final-upload-{}", scene.attachment_id),
+            scene.attachment_id.as_str(),
+            scene.upload_session_id.as_str(),
             "future-final.mp4",
             "video/mp4",
             96,
