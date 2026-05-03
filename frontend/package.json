@@ -12,6 +12,7 @@
   "scripts": {
     "test": "vitest run --exclude dist/**",
     "test:e2e": "vitest run --exclude dist/** tests/端到端测试.spec.ts",
+    "check:test-architecture": "node ../scripts/check-test-architecture-fitness.mjs --report",
     "check:browser-app-constitution": "node ../scripts/check-frontend-browser-app-constitution.mjs",
     "check:architecture-fitness": "node ../scripts/check-frontend-architecture-fitness.mjs",
     "typecheck": "tsc --noEmit",
