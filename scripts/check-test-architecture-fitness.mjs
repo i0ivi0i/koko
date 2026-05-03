@@ -10,9 +10,18 @@ const 后端测试目录 = join(仓库根目录, "tests");
 const 报告模式 = process.argv.includes("--report");
 const 强制模式 = process.argv.includes("--enforce");
 const 输出最大文件数量 = 30;
+const 完成态顶层文件硬上限 = 1000;
 
 /**
- * 第一阶段只把真正阻断“测试现代化完成态”的硬债务变成 fail：
+ * 当前脚本同时承担两层职责：
+ * 1. 第一阶段预算体检，继续提示需要持续治理的超大测试文件；
+ * 2. spec 完成态门禁，直接拦住任何超过 1000 行的顶层测试文件。
+ *
+ * 这里故意不把 “缺失 repo-native e2e 包” 做成 fail，
+ * 因为最新 spec 已经把真实浏览器主链裁定为
+ * `run.ps1 + playwright-cli + trace`，而不是仓库内固定 Playwright 项目。
+ *
+ * 第一阶段仍然只把这些硬债务变成 fail：
  * 1. helper 超 800 行；
  * 2. 前端 spec 超 1000 行；
  * 3. Rust 顶层集成测试超 1200 行；
@@ -174,6 +183,24 @@ function 收集行数违规(relativePath, lines) {
   ];
 }
 
+function 收集完成态顶层超限(relativePath, lines) {
+  // spec 的最终完成态比第一阶段预算更严格：
+  // 所有顶层测试文件都必须收敛到 1000 行以内，避免“体检通过但尚未彻底完成”。
+  if (!是Rust顶层集成测试(relativePath) && !relativePath.startsWith("frontend/tests/")) {
+    return [];
+  }
+  if (lines.length <= 完成态顶层文件硬上限) {
+    return [];
+  }
+  return [
+    {
+      file: relativePath,
+      label: "不满足 spec 完成态",
+      detail: `${relativePath}: ${lines.length} lines > ${完成态顶层文件硬上限}`,
+    },
+  ];
+}
+
 function 统计测试规模(records) {
   const sums = {
     生产化前端测试文件数: 0,
@@ -231,6 +258,7 @@ const records = 收集测试文件()
 
 const violations = records.flatMap((record) => [
   ...收集行数违规(record.relativePath, record.lineArray),
+  ...收集完成态顶层超限(record.relativePath, record.lineArray),
   ...收集only违规(record.relativePath, record.lineArray),
   ...收集skip违规(record.relativePath, record.lineArray),
 ]);
