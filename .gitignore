@@ -32,6 +32,9 @@ __pycache__/
 # Local runtime data stays out of version control.
 /data/
 tmp/
+.tmp/
+.tmp-run-*.log
+/artifacts/smoke/
 
 # Graphify output is local generated state and should not participate in version control.
 graphify-out/
@@ -39,6 +42,7 @@ graphify-out/
 # Local Codex runtime noise
 .codex-*.log
 .codex-*.pid
+.codex/smoke-launch/
 
 # Local Playwright crash/runtime folders should remain untracked.
 /.playwright-cli/
