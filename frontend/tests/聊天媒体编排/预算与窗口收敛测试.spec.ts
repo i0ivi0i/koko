@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
-import { 生成视频消息, 生成连续视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
+import {
+  生成视频消息,
+  生成连续视频消息,
+  刷新异步队列,
+  适配媒体编排供测试,
+} from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
 
@@ -34,18 +39,7 @@ describe("聊天媒体编排 - 预算与窗口收敛", () => {
       登记程序滚动来源: () => undefined,
       清除程序滚动来源: () => undefined,
     });
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn(
         async () =>
           ({

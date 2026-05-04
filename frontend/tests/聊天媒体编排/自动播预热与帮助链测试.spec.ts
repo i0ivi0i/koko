@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
-import { 生成视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
+import {
+  生成视频消息,
+  刷新异步队列,
+  适配媒体编排供测试,
+} from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 消息事件 } from "../../聊天共享/契约";
 import type { 媒体播放结果 } from "../../媒体";
@@ -86,28 +90,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
       })),
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({ 解析播放结果 });
+    适配媒体编排供测试(编排).设置媒体播放器供测试({ 解析播放结果 });
 
     编排.同步媒体窗口附件([attachmentId]);
     await 刷新异步队列();
@@ -293,29 +276,10 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
       })),
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-            onSessionEvent?: (event: unknown) => void;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({ 解析播放结果, 激活协作补齐 });
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
+      解析播放结果,
+      激活协作补齐,
+    });
 
     try {
       编排.同步媒体窗口附件([attachmentId]);
@@ -401,29 +365,7 @@ describe("聊天媒体编排 - 自动播预热与帮助链", () => {
       })),
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-            onSessionEvent?: (event: unknown) => void;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn(async () => playback),
       激活协作补齐,
       释放附件播放资源,

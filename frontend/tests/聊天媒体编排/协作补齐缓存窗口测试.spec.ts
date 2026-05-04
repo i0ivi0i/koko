@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 创建内存媒体缓存仓库 } from "../../媒体";
-import { 生成图片消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
+import {
+  生成图片消息,
+  刷新异步队列,
+  适配媒体编排供测试,
+} from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 消息事件 } from "../../聊天共享/契约";
-import type { 媒体播放结果 } from "../../媒体";
 
 describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
   it("缓存启动后只恢复当前帮助窗口里的本房间完整附件，不会把隐藏历史和别房间扫进来", async () => {
@@ -68,28 +71,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
       清除程序滚动来源: () => {},
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "anchor",
         attachmentId: "att-image-current-room-1",
@@ -178,28 +160,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
       清除程序滚动来源: () => {},
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "anchor",
         attachmentId: "att-image-help-chain-1",

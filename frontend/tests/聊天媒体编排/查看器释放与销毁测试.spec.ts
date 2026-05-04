@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 创建内存媒体缓存仓库 } from "../../媒体";
-import { 生成视频消息, 生成图片消息, 生成连续视频消息, 刷新异步队列 } from "../common/聊天媒体编排支架";
+import {
+  生成视频消息,
+  生成图片消息,
+  生成连续视频消息,
+  刷新异步队列,
+  适配媒体编排供测试,
+} from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 媒体播放结果 } from "../../媒体";
 
@@ -110,28 +116,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       })),
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "swarm",
         attachmentId,
@@ -145,16 +130,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       释放附件播放资源,
     });
 
-    (
-      编排 as unknown as {
-        设置媒体查看器供测试(viewer: {
-          打开(input: { startAttachmentId: string; items: unknown[] }): void;
-          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
-          销毁(): void;
-        }): void;
-        关闭媒体查看器供测试(): void;
-      }
-    ).设置媒体查看器供测试({
+    适配媒体编排供测试(编排).设置媒体查看器供测试({
       打开: () => undefined,
       同步: () => undefined,
       销毁: () => undefined,
@@ -194,11 +170,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       })
     );
 
-    (
-      编排 as unknown as {
-        关闭媒体查看器供测试(): void;
-      }
-    ).关闭媒体查看器供测试();
+    适配媒体编排供测试(编排).关闭媒体查看器供测试();
     await 刷新异步队列();
 
     expect(释放附件播放资源).toHaveBeenCalledWith({
@@ -259,29 +231,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       })),
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-        设置媒体查看器供测试(viewer: {
-          打开(input: { startAttachmentId: string; items: unknown[] }): void;
-          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
-          销毁(): void;
-        }): void;
-        关闭媒体查看器供测试(): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn(
         async ({ attachmentId, kind }: { attachmentId: string; kind: "image" | "video" }) =>
           ({
@@ -296,15 +246,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       ),
       释放附件播放资源,
     });
-    (
-      编排 as unknown as {
-        设置媒体查看器供测试(viewer: {
-          打开(input: { startAttachmentId: string; items: unknown[] }): void;
-          同步?(input: { startAttachmentId: string; items: unknown[] }): void;
-          销毁(): void;
-        }): void;
-      }
-    ).设置媒体查看器供测试({
+    适配媒体编排供测试(编排).设置媒体查看器供测试({
       打开: () => undefined,
       同步: () => undefined,
       销毁: () => undefined,
@@ -325,11 +267,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
         })),
       });
       await 刷新异步队列();
-      (
-        编排 as unknown as {
-          关闭媒体查看器供测试(): void;
-        }
-      ).关闭媒体查看器供测试();
+      适配媒体编排供测试(编排).关闭媒体查看器供测试();
       await 刷新异步队列();
     }
 
@@ -397,28 +335,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
       清除程序滚动来源: () => {},
     });
 
-    (
-      编排 as unknown as {
-        设置媒体播放器供测试(player: {
-          解析播放结果(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            surface?: "viewer" | "inline_autoplay";
-            consumerId?: string;
-          }): Promise<媒体播放结果>;
-          激活协作补齐?(input: {
-            attachmentId: string;
-            kind: "image" | "video";
-            consumerId?: string;
-          }): Promise<void>;
-          释放附件播放资源?(input: {
-            attachmentId: string;
-            consumerId?: string;
-            丢弃未完成补齐?: boolean;
-          }): void;
-        }): void;
-      }
-    ).设置媒体播放器供测试({
+    适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "anchor",
         attachmentId: "att-image-destroy-1",

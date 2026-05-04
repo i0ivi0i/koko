@@ -883,15 +883,5 @@ export function 创建媒体播放会话应用(
     内部桥,
   };
 
-  for (const [name, value] of [
-    [["设置", "媒体播放器", "供测试"].join(""), 内部桥.替换媒体播放器],
-    [["设置", "媒体查看器", "供测试"].join(""), 内部桥.替换媒体查看器],
-    [["关闭", "媒体查看器", "供测试"].join(""), 内部桥.关闭媒体查看器],
-    [["设置", "媒体发布器", "供测试"].join(""), 内部桥.替换媒体发布器],
-    [["写入", "媒体草稿列表", "供测试"].join(""), 内部桥.替换媒体草稿列表],
-  ] as const) {
-    Object.defineProperty(应用端口 as unknown as object, name, { value, configurable: true });
-  }
-
   return 应用端口;
 }

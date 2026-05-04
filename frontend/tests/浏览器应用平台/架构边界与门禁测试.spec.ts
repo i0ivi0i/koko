@@ -706,6 +706,14 @@ const stillKeep = true;
     expect(mediaSessionSource).not.toContain("关闭媒体查看器供测试(");
     expect(mediaSessionSource).not.toContain("设置媒体发布器供测试(");
     expect(mediaSessionSource).not.toContain("写入媒体草稿列表供测试(");
+    expect(mediaSessionSource).not.toContain('["设置", "媒体播放器", "供测试"].join("")');
+    expect(mediaSessionSource).not.toContain('["设置", "媒体查看器", "供测试"].join("")');
+    expect(mediaSessionSource).not.toContain('["关闭", "媒体查看器", "供测试"].join("")');
+    expect(mediaSessionSource).not.toContain('["设置", "媒体发布器", "供测试"].join("")');
+    expect(mediaSessionSource).not.toContain('["写入", "媒体草稿列表", "供测试"].join("")');
+    expect(mediaSessionSource).not.toContain(
+      "Object.defineProperty(应用端口 as unknown as object, name, { value, configurable: true });"
+    );
   });
 
   it("平台传输运行时直接依赖平台 owner，旧根入口已经删除", () => {

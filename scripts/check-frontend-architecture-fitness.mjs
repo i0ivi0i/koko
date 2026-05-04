@@ -284,7 +284,7 @@ const 前端禁回流片段规则 = [
     label: "media session prod test seam barrier",
     path: "frontend/媒体/播放会话/应用.ts",
     pattern:
-      /设置媒体播放器供测试\s*\(|设置媒体查看器供测试\s*\(|关闭媒体查看器供测试\s*\(|设置媒体发布器供测试\s*\(|写入媒体草稿列表供测试\s*\(/g,
+      /设置媒体播放器供测试\s*\(|设置媒体查看器供测试\s*\(|关闭媒体查看器供测试\s*\(|设置媒体发布器供测试\s*\(|写入媒体草稿列表供测试\s*\(|\["设置",\s*"媒体播放器",\s*"供测试"\]\.join\(""\)|\["设置",\s*"媒体查看器",\s*"供测试"\]\.join\(""\)|\["关闭",\s*"媒体查看器",\s*"供测试"\]\.join\(""\)|\["设置",\s*"媒体发布器",\s*"供测试"\]\.join\(""\)|\["写入",\s*"媒体草稿列表",\s*"供测试"\]\.join\(""\)|Object\.defineProperty\(\s*应用端口\s+as\s+unknown\s+as\s+object,\s*name,\s*\{\s*value,\s*configurable:\s*true\s*\}\s*\)/g,
   },
   {
     label: "legacy room realtime owner reflux",

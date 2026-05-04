@@ -57,7 +57,7 @@ export function 创建聊天应用编排协调器依赖(
       写入恢复状态: (patch) => input.状态协调器.写入恢复状态(patch),
       接收时间线事实: (event) => input.接收时间线事实(event),
       /**
-       * `setTransportForTest()` 会先 `重置端口()`，再把内核当前 transport 指针切到假传输。
+       * 测试支架切换假 transport 时会先 `重置端口()`，再把内核当前 transport 指针切到替身。
        * 因此这里绝不能继续闭包捕获旧 transport 实例，而要在每次懒创建恢复编排时读取当前值。
        */
       transport: input.读取房间传输(),
