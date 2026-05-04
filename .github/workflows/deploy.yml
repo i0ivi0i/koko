@@ -1,0 +1,106 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 手动部署时可选版本号；留空则自动生成
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
+
+      - name: Deployment preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/部署门禁测试.mjs
+          node scripts/check-deployment-architecture-fitness.mjs --enforce
+          pnpm --dir frontend build
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Package release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_VERSION="${{ inputs.version }}"
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            VERSION="main-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          fi
+          ARCHIVE="koko-${VERSION}.tar.gz"
+          git archive --format=tar.gz --output "${ARCHIVE}" HEAD
+          echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Upload release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp "${ARCHIVE}" "${VPS_USER}@${VPS_HOST}:/tmp/${ARCHIVE}"
+
+      - name: Deploy release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh "${VPS_USER}@${VPS_HOST}" "VERSION='${VERSION}' ARCHIVE='${ARCHIVE}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          run_as_root() {
+            if [ "$(id -u)" -eq 0 ]; then
+              "$@"
+            elif command -v sudo >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              echo "当前 VPS 用户既不是 root，也没有 sudo，无法执行正式部署。" >&2
+              exit 1
+            fi
+          }
+
+          run_as_root mkdir -p /opt/koko/shared/incoming
+          run_as_root mv "/tmp/${ARCHIVE}" "/opt/koko/shared/incoming/${VERSION}.tar.gz"
+
+          tmp_dir="/tmp/koko-deploy-${VERSION}"
+          rm -rf "${tmp_dir}"
+          mkdir -p "${tmp_dir}"
+          tar -xzf "/opt/koko/shared/incoming/${VERSION}.tar.gz" -C "${tmp_dir}"
+
+          run_as_root bash "${tmp_dir}/ops/deploy.sh" "${VERSION}" "/opt/koko/shared/incoming/${VERSION}.tar.gz"
+          run_as_root bash "/opt/koko/current/ops/healthcheck.sh"
+
+          rm -rf "${tmp_dir}"
+          REMOTE

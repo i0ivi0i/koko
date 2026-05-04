@@ -1,0 +1,155 @@
+name: koko
+
+x-sidecar-build: &sidecar-build
+  context: ..
+  dockerfile: Dockerfile
+  target: sidecar-runtime
+
+services:
+  app:
+    # 正式 app 只跑 Rust 二进制和已构建前端产物；
+    # 浏览器 contract 继续由后端统一收口，禁止把内部 sidecar 地址暴露出去。
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runtime
+    image: ${KOKO_APP_IMAGE:-koko-app:local}
+    restart: unless-stopped
+    env_file:
+      - ${KOKO_ENV_FILE:-/opt/koko/env/production.env}
+    environment:
+      APP_PORT: "8080"
+      ATTACHMENT_STORAGE_DIR: "/app/data/attachments"
+      MEDIA_TUS_PUBLIC_ENDPOINT: "/files"
+      MEDIA_TUS_SERVER_PORT: "1081"
+      MEDIA_TUS_BASE_PATH: "/files"
+      MEDIA_TUS_UPLOAD_DIR: "/app/data/tus"
+      MEDIA_TUS_INTERNAL_BASE_URL: "http://tusd:1081"
+      SWARM_TRACKER_PUBLIC_URL: "/api/swarm/announce"
+      SWARM_TRACKER_UPSTREAM_URL: "ws://tracker:7072"
+      SWARM_SEEDER_CONTROL_BASE_URL: "http://seeder:7073"
+      SWARM_SEEDER_TRACKER_URL: "ws://app:8080/api/swarm/announce"
+    volumes:
+      - /opt/koko/shared/attachments:/app/data/attachments
+      - /opt/koko/shared/tus:/app/data/tus
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+    networks:
+      - koko-internal
+
+  postgres:
+    # Postgres 继续只在内网暴露，数据统一落到 shared 目录。
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    env_file:
+      - ${KOKO_ENV_FILE:-/opt/koko/env/production.env}
+    volumes:
+      - /opt/koko/shared/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "5432"
+    networks:
+      - koko-internal
+
+  tusd:
+    # tusd 只做协议执行和临时文件落盘；
+    # 上传 hook 继续回到 Rust 后端，不让 sidecar 自己长业务脑子。
+    image: tusproject/tusd:v2.9.2
+    restart: unless-stopped
+    command:
+      - -host
+      - 0.0.0.0
+      - -port
+      - "1081"
+      - -base-path
+      - /files
+      - -upload-dir
+      - /data/tus
+      - -max-size
+      - "209715200"
+      - -disable-download
+      - -hooks-http
+      - http://app:8080/internal/tus/hooks
+      - -hooks-enabled-events
+      - pre-create,post-finish,pre-terminate,post-terminate
+      - -hooks-http-forward-headers
+      - Authorization,X-Request-ID,X-Koko-Internal-Termination
+      - -behind-proxy
+    volumes:
+      - /opt/koko/shared/tus:/data/tus
+    expose:
+      - "1081"
+    networks:
+      - koko-internal
+
+  tracker:
+    # tracker 继续复用成熟 WebTorrent tracker 轮子；
+    # 它不持有业务密钥，也不替代 Rust 后端的验票入口。
+    build: *sidecar-build
+    image: ${KOKO_SIDECAR_IMAGE:-koko-sidecar:local}
+    restart: unless-stopped
+    command:
+      - node
+      - /app/frontend/node_modules/bittorrent-tracker/bin/cmd.js
+      - --port
+      - "7072"
+      - --ws
+      - --http
+      - --stats
+      - --http-hostname
+      - 0.0.0.0
+    expose:
+      - "7072"
+    networks:
+      - koko-internal
+
+  seeder:
+    # seeder 只承接 strong seed 控制面，不承接成员资格或消息真相。
+    build: *sidecar-build
+    image: ${KOKO_SIDECAR_IMAGE:-koko-sidecar:local}
+    restart: unless-stopped
+    env_file:
+      - ${KOKO_ENV_FILE:-/opt/koko/env/production.env}
+    environment:
+      SWARM_SEEDER_PORT: "7073"
+      SWARM_SEEDER_TRACKER_URL: "ws://app:8080/api/swarm/announce"
+    command:
+      - node
+      - /app/frontend/dev-seeder.mjs
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7073"
+    expose:
+      - "7073"
+    networks:
+      - koko-internal
+
+  caddy:
+    # Caddy 是唯一对外公网入口，正式环境只暴露 80/443。
+    image: caddy:2.10
+    restart: unless-stopped
+    depends_on:
+      - app
+    env_file:
+      - ${KOKO_ENV_FILE:-/opt/koko/env/production.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/koko/shared/caddy/data:/data
+      - /opt/koko/shared/caddy/config:/config
+    networks:
+      - koko-internal
+
+networks:
+  koko-internal:
+    driver: bridge

@@ -1,0 +1,26 @@
+{$KOKO_DOMAIN} {
+  # 正式公网入口只允许一套：Caddy 收 80/443，后端继续做同源代理与业务裁决。
+  encode zstd gzip
+
+  # `/files` 是浏览器公开上传/读取 contract；
+  # 它必须继续先进入 Rust 后端，再由后端决定如何转给内部 tusd。
+  handle /files* {
+    reverse_proxy app:8080
+  }
+
+  # `/api/swarm/announce` 是浏览器唯一公开 announce contract；
+  # tracker 本体永远留在内网，验票和 contract 收口继续由后端 owner 负责。
+  handle /api/swarm/announce* {
+    reverse_proxy app:8080
+  }
+
+  # 其它 `/api/*` 也统一先交给后端，不让 Caddy 私自长第二套协议脑子。
+  handle /api/* {
+    reverse_proxy app:8080
+  }
+
+  # 根页面和静态入口依然走后端壳层，由后端拼 `frontend/index.html + asset-manifest.json`。
+  handle {
+    reverse_proxy app:8080
+  }
+}

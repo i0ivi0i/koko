@@ -1,0 +1,51 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 要回滚到的版本号
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Rollback target version
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh "${VPS_USER}@${VPS_HOST}" "TARGET_VERSION='${{ inputs.target_version }}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          run_as_root() {
+            if [ "$(id -u)" -eq 0 ]; then
+              "$@"
+            elif command -v sudo >/dev/null 2>&1; then
+              sudo "$@"
+            else
+              echo "当前 VPS 用户既不是 root，也没有 sudo，无法执行正式回滚。" >&2
+              exit 1
+            fi
+          }
+
+          run_as_root bash "/opt/koko/current/ops/rollback.sh" "${TARGET_VERSION}"
+          run_as_root bash "/opt/koko/current/ops/healthcheck.sh"
+          REMOTE

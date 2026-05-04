@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -175,6 +176,7 @@ const 遗留装配命名残留清单 = [
   "src/lib.rs",
   "src/main.rs",
   "scripts/check-frontend-architecture-fitness.mjs",
+  "scripts/check-deployment-architecture-fitness.mjs",
   "scripts/check-full-architecture-completion.mjs",
   "frontend/入口.ts",
 ]
@@ -423,6 +425,25 @@ const 图谱摘要 =
   图谱报告.match(/## God Nodes[\s\S]*?## Surprising Connections/)?.[0] ??
   "未能提取 graphify 摘要";
 
+let 部署门禁结果 = { ok: true, output: "部署门禁通过" };
+try {
+  const output = execFileSync(
+    process.execPath,
+    [join(仓库根目录, "scripts", "check-deployment-architecture-fitness.mjs"), "--enforce"],
+    {
+      cwd: 仓库根目录,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  部署门禁结果 = { ok: true, output: output.trim() || "部署门禁通过" };
+} catch (error) {
+  部署门禁结果 = {
+    ok: false,
+    output: `${error.stdout ?? ""}${error.stderr ?? ""}`.trim() || String(error),
+  };
+}
+
 const 输出 = {
   overBudget: 超预算文件,
   innerLeaks: 内层泄漏文件,
@@ -432,6 +453,7 @@ const 输出 = {
   assemblyNamingResiduals: 遗留装配命名残留清单,
   widePublicSurfaces: 宽公开表面清单,
   highRiskConvergencePoints: 高风险汇聚点,
+  deploymentGate: 部署门禁结果,
   graphifySummary: 图谱摘要,
 };
 
@@ -444,7 +466,8 @@ if (
   迁移壳契约清单.length > 0 ||
   遗留装配命名残留清单.length > 0 ||
   宽公开表面清单.length > 0 ||
-  高风险汇聚点.length > 0
+  高风险汇聚点.length > 0 ||
+  !部署门禁结果.ok
 ) {
   process.exitCode = 1;
 }
