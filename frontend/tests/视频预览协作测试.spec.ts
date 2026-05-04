@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建视频预览协作 } from "../媒体/壳层/视频预览协作";
-import type { 预览缓存端口, 预览缓存记录 } from "../媒体";
+import type { 预览缓存端口, 预览缓存记录 } from "../媒体/预览缓存";
 
 const 刷新异步队列 = async (): Promise<void> => {
   await Promise.resolve();

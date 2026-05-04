@@ -1,10 +1,7 @@
 import type { 媒体定位结果, 媒体种类 } from "../../聊天共享/契约.js";
 import type { 媒体运行时事件 } from "../运行时.js";
-import type {
-  预览缓存端口,
-  视频预览状态,
-  从媒体源抓取视频预览,
-} from "../index.js";
+import type { 预览缓存端口 } from "../预览缓存.js";
+import type { 视频预览状态, 从媒体源抓取视频预览 } from "../视频预览.js";
 
 type 媒体附件条目 = {
   attachmentId: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
-import { 创建内存媒体缓存仓库 } from "../../媒体";
+import { 创建内存媒体缓存仓库 } from "../../媒体/媒体缓存";
 import {
   生成视频消息,
   生成图片消息,
@@ -9,7 +9,7 @@ import {
   适配媒体编排供测试,
 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
-import type { 媒体播放结果 } from "../../媒体";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 
 describe("聊天媒体编排 - 查看器释放与销毁", () => {
   it("视频查看器关闭后，当前时间线只保留预览状态，不再把正式播放源长期挂回卡片", async () => {

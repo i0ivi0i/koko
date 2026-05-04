@@ -3,11 +3,9 @@ import type { 应用运行时端口 } from "../平台/应用运行时.js";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
 import "../房间消息窗/壳.js";
 import type { 聊天运行时预算状态 } from "./聊天状态.js";
-import {
-  type 媒体会话信号,
-  type 媒体播放位置,
-  type 媒体查看器打开请求,
-} from "../媒体/index.js";
+import type { 媒体会话信号 } from "../媒体/媒体会话.js";
+import type { 媒体播放位置 } from "../媒体/媒体播放.js";
+import type { 媒体查看器打开请求 } from "../媒体/媒体查看器.js";
 import { 创建聊天壳应用装配 } from "./应用装配.js";
 import {
   派生壳主舞台模式,

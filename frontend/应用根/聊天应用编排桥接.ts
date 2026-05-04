@@ -13,11 +13,9 @@ import {
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
 } from "../房间/壳层/阅读推进.js";
-import type {
-  媒体缓存仓库,
-  媒体定位缓存仓库,
-  预览缓存端口,
-} from "../媒体/index.js";
+import type { 媒体缓存仓库 } from "../媒体/媒体缓存.js";
+import type { 媒体定位缓存仓库 } from "../媒体/媒体定位.js";
+import type { 预览缓存端口 } from "../媒体/预览缓存.js";
 import type {
   浏览器应用平台,
   浏览器应用平台命令,

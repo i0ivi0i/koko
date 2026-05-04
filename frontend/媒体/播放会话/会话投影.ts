@@ -6,12 +6,9 @@ import {
   type 媒体运行时上下文,
 } from "../运行时.js";
 import type { 媒体协作分发应用端口 } from "../协作分发/应用.js";
-import type {
-  媒体会话端口,
-  媒体播放结果,
-  媒体播放位置,
-  视频预览状态,
-} from "../index.js";
+import type { 媒体会话端口 } from "../媒体会话.js";
+import type { 媒体播放结果, 媒体播放位置 } from "../媒体播放.js";
+import type { 视频预览状态 } from "../视频预览.js";
 import type { 附件内容地址快照 } from "../壳层/快照投影协作.js";
 
 export type 媒体播放会话快照 = {

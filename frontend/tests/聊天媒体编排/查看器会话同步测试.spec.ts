@@ -9,7 +9,7 @@ import {
   适配媒体编排供测试,
 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
-import type { 媒体播放结果 } from "../../媒体";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 
 describe("聊天媒体编排 - 查看器会话同步", () => {
   it("查看器在 no_online_seed 终态下再次手动打开时，会立刻触发一轮恢复重试", async () => {

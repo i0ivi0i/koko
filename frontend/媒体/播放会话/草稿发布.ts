@@ -6,14 +6,14 @@ import type {
   媒体附件上传结果,
   媒体种类,
 } from "../../聊天共享/契约.js";
+import { 创建媒体发布器 } from "../媒体发布.js";
 import {
-  创建媒体发布器,
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
-} from "../index.js";
+} from "../媒体草稿.js";
 
 interface 播放会话草稿发布依赖 {
   transport(): {

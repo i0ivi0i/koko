@@ -5,12 +5,9 @@ import {
   type 信息流视频预算投影,
   type 正式媒体字节来源,
 } from "../信息流视频预算.js";
-import type {
-  媒体会话快照,
-  媒体会话端口,
-  媒体播放结果,
-  WebTorrentSessionLifecycleSnapshot,
-} from "../index.js";
+import type { WebTorrentSessionLifecycleSnapshot } from "../资产协作分发运行时.js";
+import type { 媒体会话快照, 媒体会话端口 } from "../媒体会话.js";
+import type { 媒体播放结果 } from "../媒体播放.js";
 import type { 媒体运行时上下文 } from "../运行时.js";
 
 export type 附件内容地址快照 = {

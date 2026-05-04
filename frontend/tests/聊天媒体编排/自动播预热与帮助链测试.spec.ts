@@ -7,7 +7,7 @@ import {
 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
 import type { 消息事件 } from "../../聊天共享/契约";
-import type { 媒体播放结果 } from "../../媒体";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 
 describe("聊天媒体编排 - 自动播预热与帮助链", () => {
   it("可见自动播候选只保留预热层，不会在真正自动播前提前启动正式媒体会话", async () => {

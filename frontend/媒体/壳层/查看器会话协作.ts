@@ -1,11 +1,7 @@
-import type {
-  媒体会话快照,
-  媒体会话端口,
-  媒体播放结果,
-  媒体查看器打开请求,
-  视频预览状态,
-} from "../index.js";
-import { 视频地址属于旧流媒体清单 } from "../index.js";
+import type { 媒体会话快照, 媒体会话端口 } from "../媒体会话.js";
+import { 视频地址属于旧流媒体清单, type 媒体播放结果 } from "../媒体播放.js";
+import type { 媒体查看器打开请求 } from "../媒体查看器.js";
+import type { 视频预览状态 } from "../视频预览.js";
 
 type 查看器会话协作依赖 = {
   读取当前查看器请求(): 媒体查看器打开请求 | null;

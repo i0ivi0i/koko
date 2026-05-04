@@ -1,4 +1,5 @@
-import type { 媒体会话端口, 媒体查看器打开请求 } from "../index.js";
+import type { 媒体会话端口 } from "../媒体会话.js";
+import type { 媒体查看器打开请求 } from "../媒体查看器.js";
 
 type 查看器播放释放请求 = {
   attachmentId: string;

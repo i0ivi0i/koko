@@ -7,7 +7,7 @@ import {
   适配媒体编排供测试,
 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
-import type { 媒体播放结果 } from "../../媒体";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 
 describe("聊天媒体编排 - 预算与窗口收敛", () => {
   it("预算快照会暴露附件级视频重量原因，而不是只给一组聚合数字", async () => {

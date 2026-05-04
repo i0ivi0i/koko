@@ -1,15 +1,12 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
-import type {
-  媒体会话信号,
-  媒体查看器打开请求,
-  消息视频自动播候选,
-  媒体播放结果,
-  媒体播放位置,
-} from "./index.js";
+import type { 媒体会话信号 } from "./媒体会话.js";
+import type { 媒体查看器打开请求 } from "./媒体查看器.js";
+import type { 媒体播放结果, 媒体播放位置 } from "./媒体播放.js";
+import type { 消息视频自动播候选 } from "./消息视频自动播编排.js";
 import {
   选择消息视频自动播Owner,
   选择消息视频自动播连续Owner候选,
-} from "./index.js";
+} from "./消息视频自动播编排.js";
 
 /**
  * 媒体运行时 owner 只拥有查看器、自动播与媒体预算这条前端体验真相。

@@ -890,22 +890,16 @@ const 检查生产宽_barrel_公开表面 = (files) => {
     return [];
   }
 
-  const source = 去掉注释(readFileSync(目标文件, "utf8"));
-  const exportAllHits = source.match(/^\s*export \* from /gm) ?? [];
-
-  // 这里不是反对“前端有公开表面”，而是反对“一个 index.ts 把整个媒体子域无差别全导出去”。
-  // 媒体子域同时承接草稿、缓存、播放会话、查看器、协作分发、上传、Video.js 壳等多条 owner 线，
-  // 继续靠一个大 barrel 聚合，只会让真实消费者越来越不需要解释自己为什么依赖这条表面。
-  // 满分态必须让它退回窄而稳定的 published surface，或者直接改成依赖真实 owner。
-  return exportAllHits.length > 6
-    ? [
-        {
-          file: "frontend/媒体/index.ts",
-          label: "wide media barrel surface",
-          detail: `当前仍有 ${exportAllHits.length} 条 export * from；这已经是媒体子域第二入口，不是窄而稳定的公开表面`,
-        },
-      ]
-    : [];
+  // 这里要拦的已经不是 `export *` 这一种写法，而是整个第二入口本身。
+  // 只要 `frontend/媒体/index.ts` 还活着，生产 owner 就可以继续绕过真实媒体 owner，
+  // 把草稿、缓存、播放、查看器、协作分发等多条线重新聚回一个 barrel。
+  return [
+    {
+      file: "frontend/媒体/index.ts",
+      label: "media barrel second entry",
+      detail: "媒体子域第二入口仍然存在；满分态必须删除 barrel，并让生产 owner 直连真实媒体 owner 文件",
+    },
+  ];
 };
 
 const 检查遗留装配命名残留 = (files) => {

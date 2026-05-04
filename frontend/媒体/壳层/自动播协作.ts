@@ -1,5 +1,6 @@
 import type { 媒体运行时上下文, 媒体运行时事件 } from "../运行时.js";
-import type { 媒体会话快照, 媒体播放结果 } from "../index.js";
+import type { 媒体会话快照 } from "../媒体会话.js";
+import type { 媒体播放结果 } from "../媒体播放.js";
 
 type 媒体附件条目 = {
   attachmentId: string;

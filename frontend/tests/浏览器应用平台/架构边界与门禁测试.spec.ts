@@ -724,6 +724,26 @@ const stillKeep = true;
     );
   });
 
+  it("媒体第二入口必须删除，生产 owner 只能直连真实媒体 owner", () => {
+    const mediaBarrelPath = resolve(process.cwd(), "媒体", "index.ts");
+    const inputSource = 读取前端源码("输入框/应用.ts");
+    const shellSource = 读取前端源码("应用根/聊天壳.ts");
+    const kernelSource = 读取前端源码("应用根/聊天应用内核.ts");
+    const bridgeSource = 读取前端源码("应用根/聊天应用编排桥接.ts");
+    const fitnessGateSource = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+    const completionGateSource = 读取仓库脚本源码("scripts/check-full-architecture-completion.mjs");
+
+    expect(existsSync(mediaBarrelPath)).toBe(false);
+    expect(inputSource).not.toContain('from "../媒体/index.js"');
+    expect(shellSource).not.toContain('from "../媒体/index.js"');
+    expect(kernelSource).not.toContain('from "../媒体/index.js"');
+    expect(bridgeSource).not.toContain('from "../媒体/index.js"');
+    expect(fitnessGateSource).toContain('label: "media barrel second entry"');
+    expect(fitnessGateSource).toContain("frontend/媒体/index.ts");
+    expect(completionGateSource).toContain('kind: "media barrel second entry"');
+    expect(completionGateSource).toContain("frontend/媒体/index.ts");
+  });
+
   it("平台传输运行时直接依赖平台 owner，旧根入口已经删除", () => {
     const transportOwnerSource = 读取前端源码("平台/传输.ts");
     const transportRuntimeSource = 读取前端源码("平台/传输运行时.ts");

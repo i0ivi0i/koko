@@ -1,5 +1,6 @@
 import type { 媒体种类 } from "../../聊天共享/契约.js";
-import type { 媒体会话信号, 媒体会话端口, 媒体播放结果 } from "../index.js";
+import type { 媒体会话信号, 媒体会话端口 } from "../媒体会话.js";
+import type { 媒体播放结果 } from "../媒体播放.js";
 import type { 协作分发会话事件 } from "../媒体协作分发.js";
 
 type 媒体附件条目 = {

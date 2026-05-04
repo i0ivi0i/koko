@@ -8,7 +8,7 @@ import {
   适配媒体编排供测试,
 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
-import type { 媒体播放结果 } from "../../媒体";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 
 describe("聊天媒体编排 - 视频预览源与缺源恢复", () => {
   it("新附件带协作分发片段时，视频预览优先走同一 swarm 主链，不回退 canonical/original 冷源", async () => {

@@ -164,14 +164,16 @@ const 遗留装配命名残留清单 = [
   .map(({ path }) => path);
 
 const 宽公开表面清单 = [];
-const 媒体聚合表面源码 = 读取源码(join(仓库根目录, "frontend", "媒体", "index.ts"));
-const 媒体_export_all_数量 = (媒体聚合表面源码.match(/^\s*export \* from /gm) ?? []).length;
-if (媒体_export_all_数量 > 6) {
-  宽公开表面清单.push({
-    file: "frontend/媒体/index.ts",
-    kind: "wide media barrel surface",
-    detail: `当前仍有 ${媒体_export_all_数量} 条 export * from；必须收成窄而稳定的公开表面，或改成直连真实 owner`,
-  });
+const 媒体聚合表面路径 = join(仓库根目录, "frontend", "媒体", "index.ts");
+if (statSync(dirname(媒体聚合表面路径)).isDirectory()) {
+  try {
+    读取源码(媒体聚合表面路径);
+    宽公开表面清单.push({
+      file: "frontend/媒体/index.ts",
+      kind: "media barrel second entry",
+      detail: "媒体子域第二入口仍然存在；满分态必须删除 barrel，并让生产 owner 直连真实媒体 owner 文件",
+    });
+  } catch {}
 }
 
 // 这里要拦的不是“测试存在”，而是“测试 seam 直接活在生产公开表面里”。

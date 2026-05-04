@@ -67,12 +67,10 @@ import {
   type 实时会话事件,
   type 实时会话快照,
 } from "../实时/会话运行时.js";
-import {
-  type 消息视频自动播候选,
-  type 媒体会话信号,
-  type 媒体播放位置,
-  type 媒体查看器打开请求,
-} from "../媒体/index.js";
+import type { 消息视频自动播候选 } from "../媒体/消息视频自动播编排.js";
+import type { 媒体会话信号 } from "../媒体/媒体会话.js";
+import type { 媒体播放位置 } from "../媒体/媒体播放.js";
+import type { 媒体查看器打开请求 } from "../媒体/媒体查看器.js";
 import {
   type 媒体播放会话快照,
   type 媒体播放会话应用端口,

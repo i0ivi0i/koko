@@ -1,5 +1,5 @@
 import type { 消息事件, 媒体种类 } from "../../聊天共享/契约.js";
-import type { 媒体缓存快照 } from "../index.js";
+import type { 媒体缓存快照 } from "../媒体缓存.js";
 
 export type 媒体附件条目 = {
   attachmentId: string;

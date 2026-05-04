@@ -1,5 +1,6 @@
 import type { 消息事件 } from "../../聊天共享/契约";
-import type { 媒体查看器打开请求, 媒体播放结果 } from "../../媒体";
+import type { 媒体查看器打开请求 } from "../../媒体/媒体查看器";
+import type { 媒体播放结果 } from "../../媒体/媒体播放";
 import type { 媒体附件草稿 } from "../../媒体/媒体草稿";
 import type { 媒体会话信号 } from "../../媒体/媒体会话";
 

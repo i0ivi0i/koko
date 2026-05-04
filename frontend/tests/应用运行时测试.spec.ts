@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建应用运行时 } from "../平台/应用运行时";
 import type { 浏览器应用平台事件 } from "../平台";
-import type { 媒体查看器打开请求 } from "../媒体";
+import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 import type { 媒体播放位置 } from "../媒体/媒体播放";
 

@@ -1,4 +1,4 @@
-import type { 媒体附件草稿 } from "../媒体/index.js";
+import type { 媒体附件草稿 } from "../媒体/媒体草稿.js";
 
 type 媒体草稿状态摘要 = Pick<媒体附件草稿, "status">;
 

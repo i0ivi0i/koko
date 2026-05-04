@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
-import { 创建内存媒体缓存仓库 } from "../../媒体";
+import { 创建内存媒体缓存仓库 } from "../../媒体/媒体缓存";
 import {
   生成图片消息,
   刷新异步队列,

@@ -31,27 +31,31 @@ import {
 } from "../壳层/窗口附件协作.js";
 import {
   创建媒体定位器,
-  创建媒体缓存,
-  创建内存预览缓存,
   创建内存媒体定位缓存仓库,
-  创建内存媒体缓存仓库,
-  创建媒体播放器,
-  创建媒体会话,
-  创建媒体查看器,
-  从媒体源抓取视频预览,
-  type 消息视频自动播候选,
-  type 媒体附件草稿,
-  type 媒体缓存仓库,
   type 媒体定位缓存仓库,
-  type 媒体查看器打开请求,
-  type 媒体会话信号,
-  type 媒体会话端口,
+} from "../媒体定位.js";
+import {
+  创建媒体缓存,
+  创建内存媒体缓存仓库,
+  type 媒体缓存仓库,
+} from "../媒体缓存.js";
+import { 创建内存预览缓存, type 预览缓存端口 } from "../预览缓存.js";
+import {
+  创建媒体播放器,
   type 媒体播放结果,
   type 媒体播放位置,
-  type 协作分发会话事件,
-  type 预览缓存端口,
-  type WebTorrentSessionLifecycleSnapshot,
-} from "../index.js";
+} from "../媒体播放.js";
+import {
+  创建媒体会话,
+  type 媒体会话信号,
+  type 媒体会话端口,
+} from "../媒体会话.js";
+import { 创建媒体查看器, type 媒体查看器打开请求 } from "../媒体查看器.js";
+import { 从媒体源抓取视频预览 } from "../视频预览.js";
+import type { 协作分发会话事件 } from "../媒体协作分发.js";
+import type { WebTorrentSessionLifecycleSnapshot } from "../资产协作分发运行时.js";
+import type { 消息视频自动播候选 } from "../消息视频自动播编排.js";
+import type { 媒体附件草稿 } from "../媒体草稿.js";
 import {
   投影媒体播放会话快照,
   投影媒体播放会话预算,
