@@ -1,14 +1,14 @@
 use crate::media_distribution::同源协作分发ANNOUNCE路径;
 use sqlx::{
-    postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions,
+    postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::{
     env, io, panic,
     sync::{Once, OnceLock},
     time::Duration,
 };
-use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::time::OffsetTime};
 
 static PANIC_HOOK_INIT: Once = Once::new();
 static LOG_INIT_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
@@ -335,8 +335,8 @@ fn 提取panic消息(panic_info: &panic::PanicHookInfo<'_>) -> String {
 /// 启动前自动追平迁移，保证数据库结构与代码版本一致。
 /// 这是“基础设施准备动作”，不是业务语义。
 /// 维护者注意：
-/// - 这里必须忠实执行 migrations 目录里的每一个顺序迁移；
-/// - 发现真实线上/本地 bug 时，优先补顺序迁移修正，不要回改已发布迁移编号。
+/// - 这里只执行 `migrations/` 目录里被审查过的当前数据库基线；
+/// - 探索期或发布期临时 SQL 先在外部验证，稳定后再折叠回单一基线，避免长期迁移膨胀。
 pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {
     let connect_options = 构建迁移数据库连接选项(database_url)?;
     let pool = sqlx::postgres::PgPoolOptions::new()
