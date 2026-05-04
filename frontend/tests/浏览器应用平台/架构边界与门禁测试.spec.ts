@@ -123,12 +123,16 @@ describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
     expect(shellSource).not.toContain("setMediaPlayerForTest(");
     expect(shellSource).not.toContain("setMediaViewerForTest(");
     expect(shellSource).not.toContain("setMediaPublisherForTest(");
+    expect(shellSource).not.toContain("setTransportForTest(");
     expect(shellSource).not.toContain("host: this,");
 
     expect(kernelSource).not.toContain("构建附件内容地址(attachmentId: string");
+    expect(kernelSource).not.toContain("setTransportForTest(transport: 前端传输端口)");
     expect(kernelSource).not.toContain("设置媒体播放器供测试(");
     expect(kernelSource).not.toContain("设置媒体查看器供测试(");
     expect(kernelSource).not.toContain("设置媒体发布器供测试(");
+    expect(kernelSource).not.toContain("读取房间滚动器供测试(");
+    expect(kernelSource).not.toContain("写入视口调试状态供测试(");
     expect(kernelSource).not.toContain("export interface 聊天应用内核宿主");
     expect(kernelSource).not.toContain("deps.host.updateComplete");
     expect(kernelSource).not.toContain("deps.host.requestUpdate()");
@@ -682,13 +686,26 @@ const stillKeep = true;
     expect(adminOwnerSource).not.toContain('from "../平台/index.js"');
     expect(adminOwnerSource).not.toContain("private transport:");
     expect(adminOwnerSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+    expect(adminOwnerSource).not.toContain("setTransportForTest(");
+    expect(adminOwnerSource).not.toContain("setKernelForTest(");
     expect(adminKernelOwnerSource).toContain('from "../平台/index.js"');
     expect(adminKernelOwnerSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
     expect(adminKernelOwnerSource).toContain("this.platform.transport.后台查询传输()");
     expect(adminKernelOwnerSource).toContain("this.platform.transport.后台会话传输()");
     expect(adminKernelOwnerSource).not.toContain("this.platform.transport.transport()");
+    expect(adminKernelOwnerSource).not.toContain("setTransportForTest(");
     expect(adminKernelOwnerSource).not.toContain("overviewText:");
     expect(adminKernelOwnerSource).not.toContain("detailText:");
+  });
+
+  it("媒体播放会话生产公开表面不得继续暴露供测试 seam", () => {
+    const mediaSessionSource = 读取前端源码("媒体/播放会话/应用.ts");
+
+    expect(mediaSessionSource).not.toContain("设置媒体播放器供测试(");
+    expect(mediaSessionSource).not.toContain("设置媒体查看器供测试(");
+    expect(mediaSessionSource).not.toContain("关闭媒体查看器供测试(");
+    expect(mediaSessionSource).not.toContain("设置媒体发布器供测试(");
+    expect(mediaSessionSource).not.toContain("写入媒体草稿列表供测试(");
   });
 
   it("平台传输运行时直接依赖平台 owner，旧根入口已经删除", () => {

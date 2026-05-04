@@ -279,18 +279,65 @@ fn 统一_pg仓储_不得长期承载跨上下文总仓储壳() {
     // - `PgRealtime仓储` 也在同一个 mod.rs 里继续拼热路径适配
     // 这两种形态短期能跑，但长期每扩一个端口都会把复杂度重新吸回 `src/适配/mod.rs`。
     let 跨上下文impl命中 = [
-        "impl 仓储端口 for Pg媒体仓储",
-        "impl application::Realtime仓储端口 for PgRealtime仓储",
+        "impl identity::application::会话身份读取端口 for Pg媒体仓储",
+        "impl room::application::会话房间校验仓储端口 for Pg媒体仓储",
+        "impl message::application::消息仓储端口 for Pg媒体仓储",
+        "impl media::application::媒体仓储端口 for Pg媒体仓储",
+        "impl realtime::application::实时会话房间校验仓储端口 for PgRealtime仓储",
+        "impl realtime::application::实时房间仓储端口 for PgRealtime仓储",
+        "impl message::application::Realtime消息仓储端口 for PgRealtime仓储",
     ];
     let impl_count = 跨上下文impl命中
         .into_iter()
         .filter(|needle| content.contains(needle))
         .count();
-    let 共享转发次数 = content.matches("<Pg仓储 as 仓储端口>::").count();
+    let 共享转发次数 = [
+        "房间阅读适配::查询会话所属匿名身份(&self.repo, 会话标识)",
+        "媒体附件适配::创建预备媒体附件记录(&mut self.repo",
+        "媒体附件适配::创建媒体附件记录(&mut self.repo",
+    ]
+    .into_iter()
+    .filter(|needle| content.contains(needle))
+    .count();
 
     assert!(
         impl_count == 0 && 共享转发次数 == 0,
         "src/适配/mod.rs 仍像跨上下文总仓储壳：跨上下文 impl 命中 {impl_count} 处，共享转发命中 {共享转发次数} 处；满分态必须把这些 impl/转发拆出共享基座文件"
+    );
+}
+
+#[test]
+fn 身份_bootstrap_真相不得继续留在适配层() {
+    let identity_application = 读取("src/身份/应用.rs");
+    let shared_pg_adapter = 读取("src/适配/mod.rs");
+
+    // 这里不是反对“仓储能持久化匿名身份”，而是反对“身份 bootstrap 的业务裁决仍由 persistence 拍板”。
+    // 满分态要求：
+    // 1. 身份上下文 owner 负责决定要不要新建匿名身份、生成什么 bootstrap 草案、幂等冲突后如何恢复；
+    // 2. adapter 只负责读写既有结果、落库草案和翻译唯一约束冲突。
+    let 应用层仍自认真相在仓储后面 =
+        identity_application.contains("真正的业务真相仍在仓储端口后面");
+    let 应用层仍只是一次转发 =
+        identity_application.contains("仓储.引导匿名身份(设备匿名凭证)");
+    let 适配层仍直接生成bootstrap真相片段命中 = [
+        "fn 生成匿名身份标识() -> String",
+        "fn 生成会话标识() -> String",
+        "user_identity::生成内部身份()",
+        "user_identity::随机分配资料投影()",
+        "impl identity::application::身份仓储端口 for Pg仓储",
+    ]
+    .into_iter()
+    .filter(|needle| shared_pg_adapter.contains(needle))
+    .count();
+
+    assert!(
+        !应用层仍自认真相在仓储后面
+            && !应用层仍只是一次转发
+            && 适配层仍直接生成bootstrap真相片段命中 == 0,
+        "身份 bootstrap 真相仍未回到身份上下文 owner：应用层仓储后置真相={}, 应用层薄转发={}, 适配层直接生成 bootstrap 真相片段命中 {} 处",
+        应用层仍自认真相在仓储后面,
+        应用层仍只是一次转发,
+        适配层仍直接生成bootstrap真相片段命中
     );
 }
 
@@ -786,6 +833,46 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
             !matrix.contains("状态：已完成"),
             "仍有生产 Rust 热点文件超过 987 有效代码行：{:?}；完成矩阵不应提前写成已完成",
             未收口热点
+        );
+    }
+}
+
+#[test]
+fn 新真缺口未收口时_完成矩阵不得继续宣称已完成() {
+    let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
+    let identity_application = 读取("src/身份/应用.rs");
+    let shared_pg_adapter = 读取("src/适配/mod.rs");
+    let chat_kernel = 读取("frontend/应用根/聊天应用内核.ts");
+    let admin_shell = 读取("frontend/后台/壳.ts");
+    let media_session = 读取("frontend/媒体/播放会话/应用.ts");
+
+    // 这里要兜住的不是“行数过大”那种旧热点，而是当前已经被新一轮深度审查确认的真缺口：
+    // - 身份 bootstrap 真相仍在 adapter；
+    // - `Pg仓储` 仍是共享适配枢纽；
+    // - 生产公开表面仍暴露测试 seam。
+    let 仍有身份bootstrap真缺口 = identity_application.contains("真正的业务真相仍在仓储端口后面")
+        || shared_pg_adapter.contains("user_identity::随机分配资料投影()");
+    let 仍有共享适配枢纽真缺口 =
+        shared_pg_adapter.contains("impl media::application::媒体仓储端口 for Pg媒体仓储")
+            || shared_pg_adapter.contains(
+                "impl realtime::application::实时房间仓储端口 for PgRealtime仓储",
+            );
+    let 仍有生产测试缝真缺口 = chat_kernel.contains("setTransportForTest(")
+        || chat_kernel.contains("读取房间滚动器供测试(")
+        || chat_kernel.contains("写入视口调试状态供测试(")
+        || admin_shell.contains("setTransportForTest(")
+        || admin_shell.contains("setKernelForTest(")
+        || media_session.contains("设置媒体播放器供测试(")
+        || media_session.contains("设置媒体查看器供测试(")
+        || media_session.contains("设置媒体发布器供测试(");
+
+    if 仍有身份bootstrap真缺口 || 仍有共享适配枢纽真缺口 || 仍有生产测试缝真缺口 {
+        assert!(
+            !matrix.contains("状态：已完成"),
+            "当前仍有新一轮深度审查确认的真缺口：identity_bootstrap={}, shared_adapter_hub={}, prod_test_seam={}；完成矩阵不应继续写成已完成",
+            仍有身份bootstrap真缺口,
+            仍有共享适配枢纽真缺口,
+            仍有生产测试缝真缺口
         );
     }
 }

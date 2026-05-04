@@ -249,6 +249,27 @@ const 前端禁回流片段规则 = [
       /this\.kernel\.(?!(snapshot|dispatch)\s*\()|setMedia(Player|Viewer|Publisher)ForTest|构建附件内容地址|注入快照补丁供测试/g,
   },
   {
+    label: "chat shell prod test seam barrier",
+    path: "frontend/应用根/聊天壳.ts",
+    pattern: /setTransportForTest\s*\(/g,
+  },
+  {
+    label: "chat kernel prod test seam barrier",
+    path: "frontend/应用根/聊天应用内核.ts",
+    pattern:
+      /setTransportForTest\s*\(|读取房间滚动器供测试\s*\(|写入视口调试状态供测试\s*\(/g,
+  },
+  {
+    label: "admin shell prod test seam barrier",
+    path: "frontend/后台/壳.ts",
+    pattern: /setTransportForTest\s*\(|setKernelForTest\s*\(/g,
+  },
+  {
+    label: "admin kernel prod test seam barrier",
+    path: "frontend/后台/应用内核.ts",
+    pattern: /setTransportForTest\s*\(/g,
+  },
+  {
     label: "global smooth autoplay must not own player or bytes",
     path: "frontend/媒体/全局丝滑自动播.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b|\bvideojs\b|\bdocument\.createElement\b/g,
@@ -258,6 +279,12 @@ const 前端禁回流片段规则 = [
     path: "frontend/媒体/播放会话/应用.ts",
     pattern:
       /创建资产协作分发运行时|const 启动查看器起始附件会话\s*=|const 补启动查看器正式会话Consumer\s*=|const 当前请求命中热自动播会话\s*=/g,
+  },
+  {
+    label: "media session prod test seam barrier",
+    path: "frontend/媒体/播放会话/应用.ts",
+    pattern:
+      /设置媒体播放器供测试\s*\(|设置媒体查看器供测试\s*\(|关闭媒体查看器供测试\s*\(|设置媒体发布器供测试\s*\(|写入媒体草稿列表供测试\s*\(/g,
   },
   {
     label: "legacy room realtime owner reflux",

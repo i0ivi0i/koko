@@ -174,6 +174,57 @@ if (媒体_export_all_数量 > 6) {
   });
 }
 
+// 这里要拦的不是“测试存在”，而是“测试 seam 直接活在生产公开表面里”。
+// 一旦生产源码自己暴露 `forTest/供测试` setter，测试就会自然绕开真实 owner，
+// 壳层和会话 owner 也会被迫长期背着一套假 API。
+for (const { file, fragments, kind } of [
+  {
+    file: "frontend/应用根/聊天壳.ts",
+    kind: "chat shell prod test seam",
+    fragments: ["setTransportForTest("],
+  },
+  {
+    file: "frontend/应用根/聊天应用内核.ts",
+    kind: "chat kernel prod test seam",
+    fragments: [
+      "setTransportForTest(",
+      "读取房间滚动器供测试(",
+      "写入视口调试状态供测试(",
+    ],
+  },
+  {
+    file: "frontend/后台/应用内核.ts",
+    kind: "admin kernel prod test seam",
+    fragments: ["setTransportForTest("],
+  },
+  {
+    file: "frontend/后台/壳.ts",
+    kind: "admin shell prod test seam",
+    fragments: ["setTransportForTest(", "setKernelForTest("],
+  },
+  {
+    file: "frontend/媒体/播放会话/应用.ts",
+    kind: "media session prod test seam",
+    fragments: [
+      "设置媒体播放器供测试(",
+      "设置媒体查看器供测试(",
+      "关闭媒体查看器供测试(",
+      "设置媒体发布器供测试(",
+      "写入媒体草稿列表供测试(",
+    ],
+  },
+]) {
+  const source = 读取源码(join(仓库根目录, ...file.split("/")));
+  const hits = fragments.filter((fragment) => source.includes(fragment));
+  if (hits.length > 0) {
+    宽公开表面清单.push({
+      file,
+      kind,
+      detail: `生产公开表面仍暴露测试 seam：${hits.join("、")}`,
+    });
+  }
+}
+
 const 消息应用源码 = 读取源码(join(仓库根目录, "src", "消息", "应用.rs"));
 const 重复规则片段 = [
   "let mut attachments = Vec::with_capacity(附件标识列表.len());",
@@ -194,15 +245,44 @@ if (规则复制命中.length > 0) {
 
 const 适配源码 = 读取源码(join(仓库根目录, "src", "适配", "mod.rs"));
 const 共享适配impl命中 = [
-  "impl 仓储端口 for Pg媒体仓储",
-  "impl application::Realtime仓储端口 for PgRealtime仓储",
+  "impl identity::application::会话身份读取端口 for Pg媒体仓储",
+  "impl room::application::会话房间校验仓储端口 for Pg媒体仓储",
+  "impl message::application::消息仓储端口 for Pg媒体仓储",
+  "impl media::application::媒体仓储端口 for Pg媒体仓储",
+  "impl realtime::application::实时会话房间校验仓储端口 for PgRealtime仓储",
+  "impl realtime::application::实时房间仓储端口 for PgRealtime仓储",
+  "impl message::application::Realtime消息仓储端口 for PgRealtime仓储",
 ].filter((fragment) => 适配源码.includes(fragment));
-const 共享适配转发命中次数 = (适配源码.match(/<Pg仓储 as 仓储端口>::/g) ?? []).length;
+const 共享适配转发命中次数 = [
+  "房间阅读适配::查询会话所属匿名身份(&self.repo, 会话标识)",
+  "媒体附件适配::创建预备媒体附件记录(&mut self.repo",
+  "媒体附件适配::创建媒体附件记录(&mut self.repo",
+].filter((fragment) => 适配源码.includes(fragment)).length;
 if (共享适配impl命中.length > 0 || 共享适配转发命中次数 > 0) {
   高风险汇聚点.push({
     file: "src/适配/mod.rs",
     kind: "shared adapter hub",
     detail: `共享基座文件仍承载跨上下文 impl/转发：impl=${共享适配impl命中.join("、") || "0"}，forward=${共享适配转发命中次数}`,
+  });
+}
+
+const 身份应用源码 = 读取源码(join(仓库根目录, "src", "身份", "应用.rs"));
+const 身份bootstrap应用命中 = [
+  "真正的业务真相仍在仓储端口后面",
+  "仓储.引导匿名身份(设备匿名凭证)",
+].filter((fragment) => 身份应用源码.includes(fragment));
+const 身份bootstrap适配命中 = [
+  "fn 生成匿名身份标识() -> String",
+  "fn 生成会话标识() -> String",
+  "user_identity::生成内部身份()",
+  "user_identity::随机分配资料投影()",
+  "impl identity::application::身份仓储端口 for Pg仓储",
+].filter((fragment) => 适配源码.includes(fragment));
+if (身份bootstrap应用命中.length > 0 || 身份bootstrap适配命中.length > 0) {
+  高风险汇聚点.push({
+    file: "src/身份/应用.rs",
+    kind: "identity bootstrap truth still persistence-owned",
+    detail: `身份 bootstrap 真相仍未回到身份上下文 owner：应用层命中=${身份bootstrap应用命中.join("、") || "0"}；适配层命中=${身份bootstrap适配命中.join("、") || "0"}`,
   });
 }
 
