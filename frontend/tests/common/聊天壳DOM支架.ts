@@ -2,11 +2,14 @@ import { expect } from "vitest";
 import "./测试原型补丁.js";
 import "../../应用根/聊天壳";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
-import type { 媒体查看器打开请求, 媒体播放结果 } from "../../媒体/index.js";
 import { 聊天壳 } from "../../应用根/聊天壳";
 import type { 聊天状态 } from "../../应用根/聊天状态";
 import { 假传输 } from "./假传输.js";
 import { 安装测试文本测量画布 } from "./测试文本测量.js";
+import {
+  type 聊天媒体测试端口,
+  适配媒体编排供测试,
+} from "./聊天媒体编排支架.js";
 
 安装测试文本测量画布();
 
@@ -30,50 +33,8 @@ type 聊天壳测试内核 = {
   >;
 };
 
-type 聊天媒体测试端口 = {
-  替换媒体播放器(player: {
-    解析播放结果(input: {
-      attachmentId: string;
-      kind: "image" | "video";
-      surface?: "viewer" | "inline_autoplay";
-      consumerId?: string;
-    }): Promise<媒体播放结果>;
-    释放附件播放资源?(input: {
-      attachmentId: string;
-      consumerId?: string;
-      丢弃未完成补齐?: boolean;
-    }): void;
-  }): void;
-  替换媒体查看器(viewer: {
-    打开(input: 媒体查看器打开请求): void;
-    同步?(input: 媒体查看器打开请求): void;
-    销毁(): void;
-  }): void;
-  替换媒体发布器(publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    继续上传草稿(localId: string): Promise<void>;
-    重新上传草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }): void;
-  替换媒体草稿列表(drafts: 图片附件草稿[]): void;
-};
-
 function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
   return (el as unknown as { kernel: 聊天壳测试内核 }).kernel;
-}
-
-/**
- * 测试替身只注入到“媒体编排”这一层。
- * 正式壳层和内核表面不再暴露这些 setter，避免测试缝重新长回生产入口。
- */
-function 读取聊天媒体编排供测试(el: 聊天壳): 聊天媒体测试端口 {
-  return (
-    读取聊天壳测试内核(el) as unknown as {
-      媒体编排: { 内部桥: 聊天媒体测试端口 };
-    }
-  ).媒体编排.内部桥;
 }
 
 export async function 等待组件稳定(el: 聊天壳): Promise<void> {
@@ -123,7 +84,7 @@ export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): vo
     (读取聊天壳测试内核(el) as unknown as {
       snapshot(): 聊天状态 & { composerMediaDrafts?: 图片附件草稿[] };
     }).snapshot?.().composerMediaDrafts ?? [];
-  读取聊天媒体编排供测试(el).替换媒体草稿列表([
+  适配媒体编排供测试(读取聊天壳测试内核(el)).写入媒体草稿列表供测试([
     ...当前草稿.filter((item) => item.localId !== draft.localId),
     draft,
   ]);
@@ -135,46 +96,23 @@ export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): vo
 
 export function 注入媒体播放器供测试(
   el: 聊天壳,
-  player: {
-    解析播放结果(input: {
-      attachmentId: string;
-      kind: "image" | "video";
-      surface?: "viewer" | "inline_autoplay";
-      consumerId?: string;
-    }): Promise<媒体播放结果>;
-    释放附件播放资源?(input: {
-      attachmentId: string;
-      consumerId?: string;
-      丢弃未完成补齐?: boolean;
-    }): void;
-  }
+  player: Parameters<聊天媒体测试端口["设置媒体播放器供测试"]>[0]
 ): void {
-  读取聊天媒体编排供测试(el).替换媒体播放器(player);
+  适配媒体编排供测试(读取聊天壳测试内核(el)).设置媒体播放器供测试(player);
 }
 
 export function 注入媒体查看器供测试(
   el: 聊天壳,
-  viewer: {
-    打开(input: 媒体查看器打开请求): void;
-    同步?(input: 媒体查看器打开请求): void;
-    销毁(): void;
-  }
+  viewer: Parameters<聊天媒体测试端口["设置媒体查看器供测试"]>[0]
 ): void {
-  读取聊天媒体编排供测试(el).替换媒体查看器(viewer);
+  适配媒体编排供测试(读取聊天壳测试内核(el)).设置媒体查看器供测试(viewer);
 }
 
 export function 注入媒体发布器供测试(
   el: 聊天壳,
-  publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    继续上传草稿(localId: string): Promise<void>;
-    重新上传草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }
+  publisher: Parameters<聊天媒体测试端口["设置媒体发布器供测试"]>[0]
 ): void {
-  读取聊天媒体编排供测试(el).替换媒体发布器(publisher);
+  适配媒体编排供测试(读取聊天壳测试内核(el)).设置媒体发布器供测试(publisher);
 }
 
 export function 读取操作台主输入(el: 聊天壳): HTMLTextAreaElement | HTMLInputElement {

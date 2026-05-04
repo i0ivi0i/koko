@@ -118,6 +118,7 @@ describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
     const kernelSource = 读取前端源码("应用根/聊天应用内核.ts");
     const swarmSource = 读取前端源码("媒体/媒体协作分发.ts");
     const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
+    const shellDomHarnessSource = 读取前端源码("tests/common/聊天壳DOM支架.ts");
 
     expect(shellSource).not.toContain("this.kernel.构建附件内容地址(");
     expect(shellSource).not.toContain("setMediaPlayerForTest(");
@@ -138,6 +139,13 @@ describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
     expect(kernelSource).not.toContain("deps.host.requestUpdate()");
     expect(kernelSource).not.toContain("注入快照补丁供测试(");
     expect(testHarnessSource).not.toContain("注入聊天快照补丁供测试(");
+    expect(shellDomHarnessSource).toContain(
+      'from "./聊天媒体编排支架.js"'
+    );
+    expect(shellDomHarnessSource).not.toContain("type 聊天媒体测试端口 = {");
+    expect(shellDomHarnessSource).not.toContain(
+      "function 读取聊天媒体编排供测试(el: 聊天壳): 聊天媒体测试端口"
+    );
     expect(swarmSource).not.toContain("navigator.serviceWorker.ready");
   });
 
