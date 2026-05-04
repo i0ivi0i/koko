@@ -1,9 +1,8 @@
 use std::{future::Future, io, sync::Arc};
 
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
 
-use crate::{domain, identity, media, message, realtime, room, shared::contract, user_identity};
+use crate::{domain, identity, media, message, realtime, room, shared::contract};
 
 #[path = "../媒体/上传/适配.rs"]
 mod 媒体上传适配;
@@ -43,22 +42,6 @@ pub struct Pg媒体仓储 {
 /// 这样 socket 热链和共享冷路径就不会继续共用一个总仓储壳。
 pub struct PgRealtime仓储 {
     repo: Pg仓储,
-}
-
-/// 生成迁移窗口内仍需保留的旧匿名身份短标识。
-/// 约束：
-/// 1. 它只是旧链路接缝，不再冒充内部真实主键；
-/// 2. 真正的内部身份已经升级到 `anonymous_identities.identity_uuid`。
-fn 生成匿名身份标识() -> String {
-    let raw = Uuid::new_v4().simple().to_string();
-    format!("a-{}", &raw[..12])
-}
-
-/// 生成稳定格式的会话标识。
-/// 约束：会话是运行锚点，不承载展示语义。
-fn 生成会话标识() -> String {
-    let raw = Uuid::new_v4().simple().to_string();
-    format!("s-{}", &raw[..12])
 }
 
 async fn 查询引导结果_异步(
@@ -302,40 +285,38 @@ impl identity::application::会话身份读取端口 for Pg仓储 {
     }
 }
 
-impl identity::application::身份仓储端口 for Pg仓储 {
-    /// 设备级匿名身份引导：
-    /// - 同一设备入口凭证恢复同一个匿名内部身份
-    /// - 同一设备入口凭证恢复同一个稳定会话
-    /// - 花名首次生成后持久化，后续直接恢复
-    fn 引导匿名身份(
+impl identity::application::身份引导仓储端口 for Pg仓储 {
+    fn 查询既有匿名身份引导结果(
+        &self,
+        设备匿名凭证: &str,
+    ) -> Result<Option<contract::匿名身份引导结果>, contract::错误码> {
+        self.在运行时执行(查询引导结果_异步(&self.pool, 设备匿名凭证))
+    }
+
+    /// PostgreSQL 适配层此时只负责：
+    /// 1. 把身份上下文已经裁决好的 bootstrap 草案落库；
+    /// 2. 如果设备入口凭证撞上唯一约束，就明确把它翻成“幂等冲突”，交回 application 二次回查。
+    fn 写入匿名身份引导草案(
         &mut self,
         设备匿名凭证: &str,
-    ) -> Result<contract::匿名身份引导结果, contract::错误码> {
+        草案: &identity::application::匿名身份引导草案,
+    ) -> Result<identity::application::匿名身份引导写入结果, contract::错误码> {
         self.在运行时执行(async {
-            if let Some(existing) = 查询引导结果_异步(&self.pool, 设备匿名凭证).await? {
-                return Ok(existing);
-            }
-
             let mut tx = self
                 .pool
                 .begin()
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
-            let anonymous_identity_id = 生成匿名身份标识();
-            let internal_identity = user_identity::生成内部身份();
-            let projection = user_identity::随机分配资料投影();
-            let session_id = 生成会话标识();
-
             let identity_row = sqlx::query(
                 "INSERT INTO anonymous_identities (anonymous_identity_id, identity_uuid, theme_key, display_alias) \
                  VALUES ($1, $2::uuid, $3, $4) \
                  RETURNING id",
             )
-            .bind(&anonymous_identity_id)
-            .bind(internal_identity.to_string())
-            .bind(&projection.theme_key)
-            .bind(&projection.display_alias)
+            .bind(&草案.匿名身份标识)
+            .bind(草案.内部身份标识.to_string())
+            .bind(&草案.主题键)
+            .bind(&草案.展示花名)
             .fetch_one(&mut *tx)
             .await
             .map_err(|_| contract::错误码::系统错误)?;
@@ -346,8 +327,8 @@ impl identity::application::身份仓储端口 for Pg仓储 {
                 "INSERT INTO sessions (session_id, display_name, anonymous_identity_id, device_anonymous_token) \
                  VALUES ($1, $2, $3, $4)",
             )
-            .bind(&session_id)
-            .bind(&projection.display_alias)
+            .bind(&草案.会话标识)
+            .bind(&草案.展示花名)
             .bind(identity_db_id)
             .bind(设备匿名凭证)
             .execute(&mut *tx)
@@ -357,9 +338,7 @@ impl identity::application::身份仓储端口 for Pg仓储 {
                     tx.rollback()
                         .await
                         .map_err(|_| contract::错误码::系统错误)?;
-                    return 查询引导结果_异步(&self.pool, 设备匿名凭证)
-                        .await?
-                        .ok_or(contract::错误码::系统错误);
+                    return Ok(identity::application::匿名身份引导写入结果::设备匿名凭证已存在);
                 }
                 return Err(contract::错误码::系统错误);
             }
@@ -368,10 +347,9 @@ impl identity::application::身份仓储端口 for Pg仓储 {
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
-            Ok(contract::匿名身份引导结果 {
-                展示花名: projection.display_alias,
-                会话标识: session_id,
-            })
+            Ok(identity::application::匿名身份引导写入结果::已写入(
+                草案.导出引导结果(),
+            ))
         })
     }
 }

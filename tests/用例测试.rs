@@ -137,17 +137,19 @@ fn 读取缓冲日志(buffer: &Arc<Mutex<Vec<u8>>>) -> String {
 
 #[derive(Default)]
 struct 假仓储 {
-    会话计数: usize,
-    匿名身份计数: usize,
     房间计数: usize,
     消息计数: usize,
     统一消息事件调用次数: usize,
     增量事件读取调用次数: Cell<usize>,
+    引导结果查询调用次数: Cell<usize>,
+    引导草案写入调用次数: Cell<usize>,
     最新位置: i64,
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
     会话到匿名身份: HashMap<String, String>,
     设备匿名身份: HashMap<String, 测试匿名身份记录>,
+    首次查询伪装为缺失: RefCell<HashSet<String>>,
+    最近写入草案: Option<koko::identity::application::匿名身份引导草案>,
     房间阅读位置: HashMap<(String, String), i64>,
     历史页读取参数: RefCell<Vec<(String, i64, i64)>>,
     附件: HashMap<String, koko::media::模型::附件读取结果>,
@@ -155,10 +157,35 @@ struct 假仓储 {
 
 #[derive(Clone)]
 struct 测试匿名身份记录 {
+    匿名身份标识: String,
     引导结果: koko::shared::contract::匿名身份引导结果,
 }
 
 impl 假仓储 {
+    /// 某些 red test 需要模拟“第一次查不到，但真正写入时撞上唯一约束”的 bootstrap 幂等竞态。
+    /// 这里显式预置既有记录，再配合 `首次查询伪装为缺失` 使用，避免测试偷偷退化成第二套假业务逻辑。
+    fn 预置设备匿名身份(
+        &mut self,
+        设备匿名凭证: &str,
+        匿名身份标识: &str,
+        展示花名: &str,
+        会话标识: &str,
+    ) {
+        let snapshot = koko::shared::contract::匿名身份引导结果 {
+            展示花名: 展示花名.to_string(),
+            会话标识: 会话标识.to_string(),
+        };
+        self.会话到匿名身份
+            .insert(会话标识.to_string(), 匿名身份标识.to_string());
+        self.设备匿名身份.insert(
+            设备匿名凭证.to_string(),
+            测试匿名身份记录 {
+                匿名身份标识: 匿名身份标识.to_string(),
+                引导结果: snapshot,
+            },
+        );
+    }
+
     /// 用例层红测需要显式控制附件 owner / kind / status，
     /// 这里用最小 helper 造假数据，避免每个测试都手拼同一坨附件快照。
     fn 放入附件(
@@ -197,32 +224,58 @@ impl koko::identity::application::会话身份读取端口 for 假仓储 {
     }
 }
 
-impl koko::identity::application::身份仓储端口 for 假仓储 {
-    /// 假实现：同一设备凭证恢复同一个匿名身份与稳定会话。
-    fn 引导匿名身份(
+impl koko::identity::application::身份引导仓储端口 for 假仓储 {
+    fn 查询既有匿名身份引导结果(
+        &self,
+        设备匿名凭证: &str,
+    ) -> Result<Option<koko::shared::contract::匿名身份引导结果>, koko::shared::contract::错误码> {
+        self.引导结果查询调用次数
+            .set(self.引导结果查询调用次数.get() + 1);
+        if self
+            .首次查询伪装为缺失
+            .borrow_mut()
+            .remove(设备匿名凭证)
+        {
+            return Ok(None);
+        }
+        Ok(self
+            .设备匿名身份
+            .get(设备匿名凭证)
+            .map(|record| record.引导结果.clone()))
+    }
+
+    /// 假实现：
+    /// 1. 正常路径按 application 生成的草案落库；
+    /// 2. 已存在设备凭证时返回幂等冲突，由 application 负责二次回查。
+    fn 写入匿名身份引导草案(
         &mut self,
         设备匿名凭证: &str,
-    ) -> Result<koko::shared::contract::匿名身份引导结果, koko::shared::contract::错误码> {
+        草案: &koko::identity::application::匿名身份引导草案,
+    ) -> Result<koko::identity::application::匿名身份引导写入结果, koko::shared::contract::错误码> {
+        self.引导草案写入调用次数
+            .set(self.引导草案写入调用次数.get() + 1);
+        self.最近写入草案 = Some(草案.clone());
         if let Some(existing) = self.设备匿名身份.get(设备匿名凭证) {
-            return Ok(existing.引导结果.clone());
+            self.会话到匿名身份.insert(
+                existing.引导结果.会话标识.clone(),
+                existing.匿名身份标识.clone(),
+            );
+            return Ok(koko::identity::application::匿名身份引导写入结果::设备匿名凭证已存在);
         }
 
-        self.匿名身份计数 += 1;
-        self.会话计数 += 1;
-        let 匿名身份标识 = format!("a-{}", self.匿名身份计数);
-        let snapshot = koko::shared::contract::匿名身份引导结果 {
-            展示花名: format!("暴躁的企鹅-{}", self.匿名身份计数),
-            会话标识: format!("s-{}", self.会话计数),
-        };
+        let snapshot = 草案.导出引导结果();
         self.会话到匿名身份
-            .insert(snapshot.会话标识.clone(), 匿名身份标识.clone());
+            .insert(snapshot.会话标识.clone(), 草案.匿名身份标识.clone());
         self.设备匿名身份.insert(
             设备匿名凭证.to_string(),
             测试匿名身份记录 {
+                匿名身份标识: 草案.匿名身份标识.clone(),
                 引导结果: snapshot.clone(),
             },
         );
-        Ok(snapshot)
+        Ok(koko::identity::application::匿名身份引导写入结果::已写入(
+            snapshot,
+        ))
     }
 }
 
@@ -559,6 +612,61 @@ fn 未来改花名不应要求替换匿名内部身份() {
         }
         _ => panic!("应返回匿名身份快照"),
     }
+}
+
+#[test]
+fn bootstrap用例会先查既有结果_缺失时再写入草案() {
+    let mut repo = 假仓储::default();
+
+    let result = koko::identity::application::引导匿名身份(&mut repo, "device-draft-1")
+        .expect("首次 bootstrap 应成功");
+    let 草案 = repo
+        .最近写入草案
+        .as_ref()
+        .expect("application 应该先生成并提交 bootstrap 草案");
+
+    assert_eq!(
+        repo.引导结果查询调用次数.get(),
+        1,
+        "首次 bootstrap 必须先查询既有结果，再决定是否新建"
+    );
+    assert_eq!(
+        repo.引导草案写入调用次数.get(),
+        1,
+        "首次 bootstrap 缺失时必须写入一次草案"
+    );
+    assert_eq!(草案.展示花名, result.展示花名);
+    assert_eq!(草案.会话标识, result.会话标识);
+    assert_eq!(
+        repo.会话到匿名身份.get(&result.会话标识),
+        Some(&草案.匿名身份标识),
+        "application 生成的草案必须成为会话 -> 内部匿名身份的唯一映射"
+    );
+}
+
+#[test]
+fn bootstrap写入遇到设备幂等冲突时会回查既有结果() {
+    let mut repo = 假仓储::default();
+    repo.预置设备匿名身份("device-race-1", "a-existing", "旧花名", "s-existing");
+    repo.首次查询伪装为缺失
+        .borrow_mut()
+        .insert("device-race-1".to_string());
+
+    let result = koko::identity::application::引导匿名身份(&mut repo, "device-race-1")
+        .expect("幂等冲突后应用层应回查并恢复既有结果");
+
+    assert_eq!(result.展示花名, "旧花名");
+    assert_eq!(result.会话标识, "s-existing");
+    assert_eq!(
+        repo.引导结果查询调用次数.get(),
+        2,
+        "写入撞上设备幂等冲突后，application 必须再次回查既有结果"
+    );
+    assert_eq!(
+        repo.引导草案写入调用次数.get(),
+        1,
+        "冲突场景里 application 仍应只尝试写入一次草案"
+    );
 }
 
 #[test]
