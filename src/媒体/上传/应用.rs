@@ -1,4 +1,4 @@
-use crate::{application, media, shared::contract};
+use crate::{media, room, shared::contract};
 
 /// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
 /// 上传业务模块只承认“占位申请”和“prepared -> ready”两段真相，
@@ -15,7 +15,7 @@ pub fn 准备媒体附件上传(
     {
         return Err(contract::错误码::参数非法);
     }
-    application::校验实时连接会话(仓储, 会话标识)?;
+    room::application::校验实时连接会话(仓储, 会话标识)?;
     if let Some(source_hash) = 附件.source_hash.as_deref() {
         if !crate::media::模型::是64位小写hex(source_hash)
             || 附件.source_byte_size.is_none_or(|byte_size| byte_size <= 0)
@@ -55,7 +55,7 @@ pub fn 读取待完成媒体附件(
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    application::校验实时连接会话(仓储, 会话标识)?;
+    room::application::校验实时连接会话(仓储, 会话标识)?;
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(会话标识)?
         .ok_or(contract::错误码::会话无效)?;

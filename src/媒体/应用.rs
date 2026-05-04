@@ -1,4 +1,4 @@
-use crate::{application, message, shared::contract};
+use crate::{message, room, shared::contract};
 
 use super::模型::*;
 
@@ -6,9 +6,9 @@ use super::模型::*;
 ///
 /// 约束：
 /// 1. 这里只放附件上传、资产复用、协作分发与后台清理的持久化能力；
-/// 2. 房间成员资格、消息成立与会话有效性仍走共享 `application::仓储端口`；
-/// 3. 任何媒体子域函数需要额外能力时，优先加在这里，而不是回灌到共享应用层。
-pub trait 媒体仓储端口: application::仓储端口 {
+/// 2. 媒体如果需要会话/成员/消息主链能力，显式复用消息 owner 的最小端口，而不是回灌共享应用总口；
+/// 3. 任何媒体子域函数需要额外能力时，优先判断是不是媒体真需要，而不是顺手加回共享中心。
+pub trait 媒体仓储端口: message::application::消息仓储端口 {
     fn 查询待完成媒体附件(
         &self,
         附件标识: &str,
@@ -264,7 +264,7 @@ pub fn 复用source_hash媒体附件(
     {
         return Err(contract::错误码::参数非法);
     }
-    application::校验房间订阅资格(仓储, &请求.房间标识, &请求.会话标识)?;
+    room::application::校验房间订阅资格(仓储, &请求.房间标识, &请求.会话标识)?;
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(&请求.会话标识)?
         .ok_or(contract::错误码::会话无效)?;
@@ -314,7 +314,7 @@ pub fn 转发媒体附件到房间(
     {
         return Err(contract::错误码::参数非法);
     }
-    application::校验房间订阅资格(仓储, &请求.目标房间标识, &请求.会话标识)?;
+    room::application::校验房间订阅资格(仓储, &请求.目标房间标识, &请求.会话标识)?;
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(&请求.会话标识)?
         .ok_or(contract::错误码::会话无效)?;
@@ -545,7 +545,7 @@ pub fn 放弃媒体上传(
     if 附件标识.trim().is_empty() || 放弃时间戳秒 < 0 {
         return Err(contract::错误码::参数非法);
     }
-    application::校验实时连接会话(仓储, 会话标识)?;
+    room::application::校验实时连接会话(仓储, 会话标识)?;
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(会话标识)?
         .ok_or(contract::错误码::会话无效)?;

@@ -6,8 +6,49 @@ fn 读取(path: &str) -> String {
     fs::read_to_string(Path::new(path)).expect("应能读取架构边界目标文件")
 }
 
-fn 统计物理行数(path: &str) -> usize {
-    读取(path).lines().count()
+fn 统计有效代码行数(path: &str) -> usize {
+    let mut in_block_comment = false;
+    let mut count = 0;
+    for raw_line in 读取(path).lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if in_block_comment {
+            if let Some(end) = line.find("*/") {
+                let trailing = line[end + 2..].trim();
+                in_block_comment = false;
+                if trailing.is_empty() || trailing.starts_with("//") {
+                    continue;
+                }
+                count += 1;
+            }
+            continue;
+        }
+        if line.starts_with("//")
+            || line.starts_with("///")
+            || line.starts_with("//!")
+            || line == "/*"
+            || line.starts_with('*')
+            || line == "*/"
+        {
+            continue;
+        }
+        if line.starts_with("/*") {
+            if let Some(end) = line.find("*/") {
+                let trailing = line[end + 2..].trim();
+                if trailing.is_empty() || trailing.starts_with("//") {
+                    continue;
+                }
+                count += 1;
+                continue;
+            }
+            in_block_comment = true;
+            continue;
+        }
+        count += 1;
+    }
+    count
 }
 
 // 这里直接枚举 src 根目录的 .rs 文件，防止后续有人往根目录偷偷加新的业务文件却没进矩阵和门禁。
@@ -232,22 +273,24 @@ fn 适配器不得横向借另一个适配器拼业务结果() {
 fn 统一_pg仓储_不得长期承载跨上下文总仓储壳() {
     let content = 读取("src/适配/mod.rs");
 
-    // 这里不是反对“PostgreSQL 适配存在”，而是反对“一个 Pg仓储 同时挂满多个 bounded context 的 port 实现”。
-    // 一旦这种总仓储壳继续活着，未来任何人都很容易继续往同一个文件里追加方法，
-    // 看起来只是“再加一个查询”，本质上却是在重新长回跨上下文总线。
-    let pg_impls = [
-        "impl 仓储端口 for Pg仓储",
-        "impl media::application::媒体仓储端口 for Pg仓储",
-        "impl application::Realtime仓储端口 for Pg仓储",
+    // 这里不是反对“PostgreSQL 适配存在”，而是反对“共享基座文件重新长回跨上下文总线”。
+    // 上一轮门禁只盯 `Pg仓储` 自己挂多个 impl，已经挡不住新的变体：
+    // - `Pg媒体仓储` 在同一个 mod.rs 里整段转发共享 `仓储端口`
+    // - `PgRealtime仓储` 也在同一个 mod.rs 里继续拼热路径适配
+    // 这两种形态短期能跑，但长期每扩一个端口都会把复杂度重新吸回 `src/适配/mod.rs`。
+    let 跨上下文impl命中 = [
+        "impl 仓储端口 for Pg媒体仓储",
+        "impl application::Realtime仓储端口 for PgRealtime仓储",
     ];
-    let impl_count = pg_impls
+    let impl_count = 跨上下文impl命中
         .into_iter()
         .filter(|needle| content.contains(needle))
         .count();
+    let 共享转发次数 = content.matches("<Pg仓储 as 仓储端口>::").count();
 
     assert!(
-        impl_count <= 1,
-        "src/适配/mod.rs 仍像跨上下文总仓储壳：当前挂着 {impl_count} 个 Pg仓储 impl；满分态必须继续拆成按上下文负责的 adapter/repository"
+        impl_count == 0 && 共享转发次数 == 0,
+        "src/适配/mod.rs 仍像跨上下文总仓储壳：跨上下文 impl 命中 {impl_count} 处，共享转发命中 {共享转发次数} 处；满分态必须把这些 impl/转发拆出共享基座文件"
     );
 }
 
@@ -273,10 +316,40 @@ fn 业务契约迁移壳不得长期停留在共享转发表面() {
 }
 
 #[test]
+fn 共享应用入口不得继续维持跨上下文总仓储口() {
+    let content = 读取("src/应用/mod.rs");
+
+    // 这里不是反对应用层有共享 helper，而是反对共享入口继续维持“一个 trait 覆盖身份/房间/消息/阅读/实时”。
+    // 只要 `src/应用/mod.rs` 还保留这种总仓储口，调用方就会自然继续先往共享口加方法，
+    // 再把不同 bounded context 一起拖回一个文件里。
+    let 同步总仓储口仍存在 = content.contains("pub trait 仓储端口");
+    let 异步总仓储口仍存在 = content.contains("pub trait Realtime仓储端口");
+    let 跨上下文方法命中 = [
+        "fn 引导匿名身份(",
+        "fn 拉取房间快照(",
+        "fn 创建统一消息事件(",
+        "fn 推进房间阅读位置(",
+        "async fn 检查会话存在(",
+        "async fn 创建统一消息事件(",
+    ]
+    .into_iter()
+    .filter(|needle| content.contains(needle))
+    .count();
+
+    assert!(
+        !同步总仓储口仍存在 && !异步总仓储口仍存在 && 跨上下文方法命中 == 0,
+        "src/应用/mod.rs 仍保留跨上下文总仓储口：同步口={}, 异步口={}, 跨上下文方法命中 {} 处；满分态必须把端口拆回各自上下文",
+        同步总仓储口仍存在,
+        异步总仓储口仍存在,
+        跨上下文方法命中
+    );
+}
+
+#[test]
 fn 媒体上传外壳必须持续变薄() {
     let shell = 读取("src/外壳/mod.rs");
     let shared = 读取("src/媒体/上传/外壳/媒体上传.rs");
-    let lines = 统计物理行数("src/媒体/上传/外壳/媒体上传.rs");
+    let lines = 统计有效代码行数("src/媒体/上传/外壳/媒体上传.rs");
     assert!(
         lines <= 450,
         "src/媒体/上传/外壳/媒体上传.rs 当前 {lines} 行；它只能保留上传壳共享协议小函数，真实端点必须落到各自 owner"
@@ -347,7 +420,7 @@ fn 组合根和总外壳必须持续变薄() {
     // 应用根/总外壳只允许承担启动接线、route mount 和状态装配。
     // 这里用单向预算防止测试、协议细节或业务裁决重新回流到根层。
     for (path, budget) in [("src/组合根.rs", 900usize), ("src/外壳/mod.rs", 478usize)] {
-        let lines = 统计物理行数(path);
+        let lines = 统计有效代码行数(path);
         assert!(
             lines <= budget,
             "{path} 当前 {lines} 行，必须只保留装配/配置骨架；测试和具体 owner 逻辑要下沉"
@@ -449,7 +522,7 @@ fn 后端旧根文件删除前只能变薄不能变厚() {
     let budgets: [(&str, usize); 0] = [];
 
     for (path, budget) in budgets {
-        let lines = 统计物理行数(path);
+        let lines = 统计有效代码行数(path);
         assert!(
             lines <= budget,
             "{path} 当前 {lines} 行，超过待删除旧根文件预算 {budget}；旧根文件删除前只允许变薄，不允许继续长胖"
@@ -703,14 +776,15 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = 枚举后端生产_rs文件()
         .into_iter()
-        .filter(|path| 统计物理行数(path) > 987)
+        .filter(|path| 统计有效代码行数(path) > 987)
         .collect::<Vec<_>>();
 
-    // 用户裁决的完成态热文件预算是 987 物理行；这里扫全部生产 Rust 文件，不再靠白名单证明完成态。
+    // 用户已经明确裁决：纯注释和空行不计入预算。
+    // 因此这里扫全部生产 Rust 文件时，只按有效代码行判断完成态热文件预算。
     if !未收口热点.is_empty() {
         assert!(
             !matrix.contains("状态：已完成"),
-            "仍有生产 Rust 热点文件超过 987 行：{:?}；完成矩阵不应提前写成已完成",
+            "仍有生产 Rust 热点文件超过 987 有效代码行：{:?}；完成矩阵不应提前写成已完成",
             未收口热点
         );
     }

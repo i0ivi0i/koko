@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建操作台附件入口编排 } from "../操作台/附件入口/index.js";
+import { 创建操作台附件入口编排 } from "../操作台/附件入口/附件入口编排.js";
 
 describe("操作台附件入口编排", () => {
   it("即使存在 showPicker，统一附件入口也继续走隐藏 input.click 主路径", () => {

@@ -73,6 +73,7 @@ export type 媒体播放会话应用依赖 = {
   读取当前房间标识?(): string | null;
   读取消息(): 消息事件[];
   读取草稿(): 媒体附件草稿[];
+  写入媒体选择中过渡计数?(count: number): void;
   媒体缓存仓库?: 媒体缓存仓库;
   媒体定位仓库?: 媒体定位缓存仓库;
   预览缓存?: 预览缓存端口;
@@ -162,8 +163,13 @@ export function 创建媒体播放会话应用(
   deps: 媒体播放会话应用依赖
 ): 媒体播放会话应用端口 {
   const 媒体运行时 = 创建媒体运行时Actor();
+  let 媒体选择中过渡计数 = 0;
   let 媒体缓存已启动 = false;
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
+  const 变更媒体选择中过渡计数 = (delta: number): void => {
+    媒体选择中过渡计数 = Math.max(0, 媒体选择中过渡计数 + delta);
+    deps.写入媒体选择中过渡计数?.(媒体选择中过渡计数);
+  };
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
     loadMediaLocator: (sessionId, attachmentId, signal) =>
@@ -648,6 +654,8 @@ export function 创建媒体播放会话应用(
     媒体运行时.send({ type: "VIEWER_CLOSED" });
     媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
     媒体查看器.销毁();
+    媒体选择中过渡计数 = 0;
+    deps.写入媒体选择中过渡计数?.(0);
     if (input.发布器动作 === "clear") {
       媒体发布器.清空();
     } else {
@@ -703,7 +711,22 @@ export function 创建媒体播放会话应用(
     },
 
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
-      await 媒体发布器.处理选择媒体文件(files);
+      const selectedFiles = Array.from(files);
+      if (selectedFiles.length === 0) {
+        return;
+      }
+      /**
+       * 文件 picker 返回到真正草稿出现之间存在一个短暂但真实的异步窗口：
+       * - source-hash 预检、图片规范化、视频预制都会先 await；
+       * - 这时草稿列表可能还是空，但“附件已被选中”已经成立；
+       * - 所以必须先把这段过渡态写进输入 slice，封死纯文本先发的抢跑窗口。
+       */
+      变更媒体选择中过渡计数(selectedFiles.length);
+      try {
+        await 媒体发布器.处理选择媒体文件(selectedFiles);
+      } finally {
+        变更媒体选择中过渡计数(-selectedFiles.length);
+      }
     },
 
     async 转发媒体附件(

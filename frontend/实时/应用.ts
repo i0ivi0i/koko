@@ -32,6 +32,7 @@ type 实时编排状态 = Pick<
   | "viewportMode"
   | "messageInput"
   | "composerMediaDrafts"
+  | "mediaSelectionPendingCount"
   | "pending"
 >;
 
@@ -174,6 +175,10 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
   async function sendMessage(): Promise<void> {
     const state = deps.读取实时状态();
     if (!state.roomId) {
+      return;
+    }
+    // 这里和输入框门禁保持同一份过渡态真相，避免其他发送入口绕过 picker -> 草稿注册窗口。
+    if (state.mediaSelectionPendingCount > 0) {
       return;
     }
     const text = state.messageInput.trim();

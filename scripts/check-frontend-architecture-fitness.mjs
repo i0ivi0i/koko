@@ -14,7 +14,7 @@ const 媒体查看器测试目录 = join(前端测试目录, "媒体查看器");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
-const 前端生产文件完成态物理行上限 = 987;
+const 前端生产文件完成态有效代码行上限 = 987;
 const 前端根目录允许文件 = new Set([
   ".tsbuildinfo",
   "入口.ts",
@@ -302,7 +302,8 @@ const 禁止生产兜底命名片段 = [
 ];
 
 const 热点文件行数上限 = [
-  // 同时钉住有效源码和物理行数：有效行防逻辑回胖，物理行防大文件靠注释/留白继续失控。
+  // 这里只再钉有效代码行。
+  // 用户已经明确裁决：纯注释和空行不再计入预算，因此完成态预算只看真正需要维护的代码体量。
   { path: "frontend/应用根/聊天状态.ts", maxEffectiveLines: 220, maxPhysicalLines: 280 },
   { path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1250, maxPhysicalLines: 1520 },
   { path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 290, maxPhysicalLines: 330 },
@@ -503,8 +504,6 @@ export const 统计有效源码行数 = (source) => {
   }
   return count;
 };
-
-export const 统计物理源码行数 = (source) => source.split(/\r?\n/).length;
 
 const 收集文件 = (directory) => {
   const files = [];
@@ -758,15 +757,15 @@ const 检查总编排壳回流 = (files) => {
   // 但恢复编排、实时编排、阅读推进、平台桥接、本地状态折叠这些职责如果继续都压在一个类里，
   // 只是从“前端根目录总控”变成“模块内总控”，并没有达到真 DDD / 真积木。
   const triggers = [
-    "恢复编排端口",
-    "实时编排端口",
-    "阅读推进编排端口",
+    "new 聊天应用编排协调器({",
+    "创建恢复编排依赖: () => ({",
+    "创建实时编排依赖: () => ({",
+    "创建阅读推进依赖: () => ({",
+    "this.媒体编排 = 创建媒体播放会话应用({",
+    "async dispatch(command: 聊天应用命令): Promise<void> {",
+    "private exitCurrentRoomView(",
     "处理平台桥接命令(",
     "应用本地状态折叠(",
-    "同步实时会话快照并执行副作用(",
-    "写入恢复编排状态(",
-    "写入实时编排状态(",
-    "写入阅读状态(",
   ];
   const hits = triggers.filter((token) => source.includes(token));
 
@@ -776,6 +775,81 @@ const 检查总编排壳回流 = (files) => {
           file: "frontend/应用根/聊天应用内核.ts",
           label: "orchestration-shell regression",
           detail: `总编排壳仍吸附过多跨子域职责：${hits.join("、")}`,
+        },
+      ]
+    : [];
+};
+
+const 检查媒体发布厨房水槽 = (files) => {
+  const 目标文件 = files.find(
+    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/媒体/媒体发布.ts"
+  );
+  if (!目标文件) {
+    return [];
+  }
+
+  const source = 去掉注释(readFileSync(目标文件, "utf8"));
+
+  // 这里不是反对媒体发布器存在，而是反对一个工厂函数同时知道：
+  // 上传器池、source-hash 预检、prepare/complete、失败恢复、restart 与草稿清理。
+  // 只要这些子系统继续锁在一个函数里，以后任意一条上传边界再变，都会把复杂度继续压回这个点。
+  const triggers = [
+    "const handleMediaUploadAdded =",
+    "const handleMediaUploadSuccess =",
+    "const handleMediaUploadError =",
+    "const ensureUploader =",
+    "const 尝试计算源文件SourceHash =",
+    "const 尝试复用SourceHash媒体资产 =",
+    "const 继续上传失败草稿 =",
+    "const 重新上传失败草稿 =",
+    "async 处理选择媒体文件(files: Iterable<File>): Promise<void> {",
+  ];
+  const hits = triggers.filter((token) => source.includes(token));
+
+  return hits.length >= 6
+    ? [
+        {
+          file: "frontend/媒体/媒体发布.ts",
+          label: "media publisher kitchen-sink factory",
+          detail: `同一发布器函数仍锁着过多子系统：${hits.join("、")}`,
+        },
+      ]
+    : [];
+};
+
+const 检查时间线媒体继承大桶 = (files) => {
+  const 目标文件 = files.find(
+    (absolutePath) => 转成仓库相对路径(absolutePath) === "frontend/房间消息窗/时间线媒体基类.ts"
+  );
+  if (!目标文件) {
+    return [];
+  }
+
+  const source = 去掉注释(readFileSync(目标文件, "utf8"));
+  const 有效代码行数 = 统计有效源码行数(source);
+
+  // 这里不是反对“时间线媒体很复杂”，而是反对把自动播观察、首帧缓存、canonical 接管、
+  // 查看器打开和 DOM 信号翻译继续压成一个超大继承基类。
+  // 真正的满分态应该是组合 owner，而不是再养一个近 1000 行的基类等着下轮继续长胖。
+  const triggers = [
+    "export abstract class 房间消息窗时间线媒体基类 extends LitElement",
+    "new 自动播候选观察Owner({",
+    "new 媒体窗口观察Owner(",
+    "new 时间线播放器宿主Owner({",
+    "new 时间线画面缓存Owner({",
+    "protected 读取即将渲染的时间线视频表面期望(",
+    "protected 同步即将退场Owner底板预览(",
+    "protected 打开媒体查看器(",
+    "protected 广播媒体会话信号(",
+  ];
+  const hits = triggers.filter((token) => source.includes(token));
+
+  return hits.length >= 6 || 有效代码行数 > 900
+    ? [
+        {
+          file: "frontend/房间消息窗/时间线媒体基类.ts",
+          label: "timeline media inheritance bucket",
+          detail: `继承大桶仍然存在：结构片段命中 ${hits.length} 个，有效代码行 ${有效代码行数}`,
         },
       ]
     : [];
@@ -909,36 +983,25 @@ export const 检查热点文件增长 = (
         detail: `${effectiveLineCount} 行超过有效上限 ${hotFile.maxEffectiveLines} 行`,
       });
     }
-    const physicalLineCount = 统计物理源码行数(source);
-    if (
-      hotFile.maxPhysicalLines !== undefined &&
-      physicalLineCount > hotFile.maxPhysicalLines
-    ) {
-      violations.push({
-        file: hotFile.path,
-        label: "hotspot physical growth ratchet",
-        detail: `${physicalLineCount} 行超过物理上限 ${hotFile.maxPhysicalLines} 行`,
-      });
-    }
   }
   return violations;
 };
 
-const 检查前端生产文件完成态物理行 = (files) => {
+const 检查前端生产文件完成态有效代码行 = (files) => {
   const violations = [];
   for (const absolutePath of files) {
     const relativePath = 转成仓库相对路径(absolutePath);
     if (relativePath.endsWith(".d.ts")) {
       continue;
     }
-    const physicalLineCount = 统计物理源码行数(readFileSync(absolutePath, "utf8"));
-    if (physicalLineCount <= 前端生产文件完成态物理行上限) {
+    const effectiveLineCount = 统计有效源码行数(readFileSync(absolutePath, "utf8"));
+    if (effectiveLineCount <= 前端生产文件完成态有效代码行上限) {
       continue;
     }
     violations.push({
       file: relativePath,
       label: "frontend production file completion-state budget",
-      detail: `${physicalLineCount} 行超过完成态上限 ${前端生产文件完成态物理行上限} 行`,
+      detail: `${effectiveLineCount} 行超过完成态上限 ${前端生产文件完成态有效代码行上限} 行`,
     });
   }
   return violations;
@@ -1021,12 +1084,14 @@ export const 收集架构适应度违规 = () => {
     ]),
     ...检查未登记XStateOwner(files),
     ...检查总编排壳回流(files),
+    ...检查媒体发布厨房水槽(files),
+    ...检查时间线媒体继承大桶(files),
     ...检查生产宽_barrel_公开表面(files),
     ...检查遗留装配命名残留(files),
     ...检查禁回流片段(files),
     ...检查禁用前端文件名(files),
     ...检查热点文件增长(),
-    ...检查前端生产文件完成态物理行(files),
+    ...检查前端生产文件完成态有效代码行(files),
     ...检查前端测试热点边界(),
   ];
 

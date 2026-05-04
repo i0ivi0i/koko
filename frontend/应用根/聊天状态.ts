@@ -33,6 +33,8 @@ export interface 聊天输入状态 {
   messageInput: string;
   /** 发送区当前暂存的媒体草稿，是壳层唯一允许持有的附件体验态。 */
   composerMediaDrafts: 媒体附件草稿[];
+  /** 文件已选中但尚未完成草稿注册/上传起步的过渡计数，用来封死纯文本抢跑窗口。 */
+  mediaSelectionPendingCount: number;
 }
 
 /**
@@ -168,6 +170,7 @@ export const 初始聊天输入状态: 聊天输入状态 = {
   roomCodeInput: "",
   messageInput: "",
   composerMediaDrafts: [],
+  mediaSelectionPendingCount: 0,
 };
 
 export const 初始聊天时间线状态: 聊天时间线状态 = {

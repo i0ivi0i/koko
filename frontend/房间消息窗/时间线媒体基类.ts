@@ -3,8 +3,7 @@ import type { 信息流视频预算投影 } from "../媒体/信息流视频预�
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 消息视频自动播候选 } from "../媒体/消息视频自动播编排.js";
-import type { 媒体会话信号 } from "../媒体/媒体会话.js";
-import type { 媒体查看器打开请求, 媒体查看器项目 } from "../媒体/媒体查看器.js";
+import type { 媒体查看器项目 } from "../媒体/媒体查看器.js";
 import {
   读取保存续帧是否允许承接时间线预览底板 as 读取保存续帧是否允许承接时间线预览底板投影,
   读取附件播放源 as 读取附件播放源投影,
@@ -20,11 +19,11 @@ import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 import { 自动播候选观察Owner } from "./自动播候选观察器.js";
 import { 时间线播放器宿主Owner } from "./时间线播放器宿主.js";
 import { 时间线画面缓存Owner } from "./时间线画面缓存.js";
+import { 媒体窗口观察Owner } from "./媒体窗口.js";
 import {
-  媒体窗口观察Owner,
-  读取即将渲染的时间线视频附件,
-  读取允许渲染真实预览视频附件集合,
-} from "./媒体窗口.js";
+  广播房间媒体会话信号,
+  读取时间线视频表面期望,
+} from "./时间线媒体协作.js";
 
 export abstract class 房间消息窗时间线媒体基类 extends LitElement {
   declare items: 聊天列表展示项[];
@@ -93,7 +92,11 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       广播播放位置: (attachmentId, video, force = false, allowReleasedOwner = false) =>
         this.广播自动播播放位置(attachmentId, video, force, allowReleasedOwner),
       广播媒体会话信号: (attachmentId, signal) =>
-        this.广播媒体会话信号(attachmentId, signal),
+        广播房间媒体会话信号({
+          dispatcher: this,
+          attachmentId,
+          signal,
+        }),
     });
     this.时间线画面缓存Owner = new 时间线画面缓存Owner({
       读取视频当前播放源: (video) => this.读取视频当前播放源(video),
@@ -115,103 +118,6 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
         this.自动播位置上报记录.delete(attachmentId);
       }
     }
-  }
-
-  protected 读取即将渲染的时间线视频表面期望(virtualItems = this.读取当前虚拟消息项()): {
-    previewVideoSrcByAttachmentId: Map<string, string>;
-    canonicalVideoSrcByAttachmentId: Map<string, string>;
-  } {
-    const 可渲染真实预览视频附件 = 读取允许渲染真实预览视频附件集合({
-      items: this.items,
-      virtualItems,
-      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
-      最近退场Owner附件Id: this.最近退场Owner附件Id,
-      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
-      inlineAutoplayPositionByAttachmentId: this.inlineAutoplayPositionByAttachmentId,
-      读取时间线视频已就绪首帧预览源: (attachmentId) =>
-        this.时间线画面缓存Owner.读取已就绪首帧预览源(attachmentId),
-    });
-    const previewVideoSrcByAttachmentId = new Map<string, string>();
-    const canonicalVideoSrcByAttachmentId = new Map<string, string>();
-    for (const attachment of 读取即将渲染的时间线视频附件({
-      items: this.items,
-      virtualItems,
-      inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
-      最近退场Owner附件Id: this.最近退场Owner附件Id,
-      自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
-      时间线隐藏接管附件Id: this.时间线隐藏接管附件Id,
-      dom视频附件标识: Array.from(
-        this.querySelectorAll<HTMLElement>(
-          "video.message-video-preview[data-attachment-id]," +
-            ".message-video-canonical-host[data-attachment-id]," +
-            ".message-video-canonical-stage-host[data-attachment-id]"
-        ),
-        (video) => video.dataset.attachmentId
-      ),
-    })) {
-      const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-      const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
-      const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
-      const hasRuntimePreview = Boolean(runtimePreview);
-      const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(attachment, playback, {
-        有静态封面: hasSourcePoster,
-        有运行时预览: hasRuntimePreview,
-      });
-      const savedTimelineFrame =
-        this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
-      const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-      const knownReadyTimelineFrameSrc = this.时间线画面缓存Owner.读取已就绪首帧预览源(
-        attachment.attachmentId
-      );
-      const shouldReuseSavedTimelineFrameAsPreview =
-        this.读取保存续帧是否允许承接时间线预览底板({
-          attachmentId: attachment.attachmentId,
-          playback,
-          playbackTimelineVideoSrc,
-          savedTimelineFrameSrc,
-        });
-      const timelinePreviewVideoSrcCandidate =
-        playbackTimelineVideoSrc ??
-        (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-        knownReadyTimelineFrameSrc;
-      const budget = this.读取时间线视频预算投影(
-        attachment,
-        timelinePreviewVideoSrcCandidate
-      );
-      const timelinePreviewVideoSrc =
-        budget.previewVideoSrc ??
-        (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
-        knownReadyTimelineFrameSrc;
-      const hasKnownReadyPreviewFrame = this.时间线画面缓存Owner.读取首帧是否就绪(
-        attachment.attachmentId,
-        timelinePreviewVideoSrc
-      );
-      const hasExistingSameSourcePreviewFrame = this.读取时间线现有预览视频是否可继续显示(
-        attachment.attachmentId,
-        timelinePreviewVideoSrc
-      );
-      if (
-        this.读取时间线预览视频是否允许渲染(budget, {
-          hasExistingSameSourcePreviewFrame,
-          hasKnownReadyPreviewFrame,
-          previewVideoSrc: timelinePreviewVideoSrc,
-          shouldReuseSavedTimelineFrameAsPreview,
-        }) &&
-        timelinePreviewVideoSrc &&
-        (可渲染真实预览视频附件.has(attachment.attachmentId) ||
-          hasExistingSameSourcePreviewFrame ||
-          hasKnownReadyPreviewFrame)
-      ) {
-        previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
-      }
-      if (budget.allowInlineCanonical && budget.canonicalVideoSrc) {
-        canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, budget.canonicalVideoSrc);
-      }
-    }
-    return {
-      previewVideoSrcByAttachmentId,
-      canonicalVideoSrcByAttachmentId,
-    };
   }
 
   protected 释放时间线预览视频资源(video: HTMLVideoElement): void {
@@ -236,7 +142,33 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
 
   protected 清理即将退场时间线视频表面(virtualItems = this.读取当前虚拟消息项()): void {
     const { previewVideoSrcByAttachmentId, canonicalVideoSrcByAttachmentId } =
-      this.读取即将渲染的时间线视频表面期望(virtualItems);
+      读取时间线视频表面期望({
+        root: this,
+        items: this.items,
+        virtualItems,
+        inlineAutoplayOwnerAttachmentId: this.inlineAutoplayOwnerAttachmentId,
+        最近退场Owner附件Id: this.最近退场Owner附件Id,
+        时间线隐藏接管附件Id: this.时间线隐藏接管附件Id,
+        自动播候选可见条目: this.自动播候选观察Owner.自动播候选可见条目,
+        inlineAutoplayPositionByAttachmentId: this.inlineAutoplayPositionByAttachmentId,
+        mediaPlaybackByAttachmentId: this.mediaPlaybackByAttachmentId,
+        读取时间线视频已就绪首帧预览源: (attachmentId) =>
+          this.时间线画面缓存Owner.读取已就绪首帧预览源(attachmentId),
+        读取时间线视频首帧是否就绪: (attachmentId, src) =>
+          this.时间线画面缓存Owner.读取首帧是否就绪(attachmentId, src),
+        读取时间线视频运行时预览: (attachmentId) =>
+          this.读取时间线视频运行时预览(attachmentId),
+        读取时间线视频首帧预览源: (attachment, playback, input) =>
+          this.读取时间线视频首帧预览源(attachment, playback, input),
+        读取时间线视频预算投影: (attachment, previewVideoSrcCandidate) =>
+          this.读取时间线视频预算投影(attachment, previewVideoSrcCandidate),
+        读取保存续帧是否允许承接时间线预览底板: (input) =>
+          this.读取保存续帧是否允许承接时间线预览底板(input),
+        读取时间线现有预览视频是否可继续显示: (attachmentId, src) =>
+          this.读取时间线现有预览视频是否可继续显示(attachmentId, src),
+        读取时间线预览视频是否允许渲染: (budget, input) =>
+          this.读取时间线预览视频是否允许渲染(budget, input),
+      });
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       'video.message-video-preview:not([data-canonical-player="true"])'
     );
@@ -525,60 +457,6 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       return null;
     }
     return position;
-  }
-
-  protected 同步即将退场Owner底板预览(attachmentId: string): void {
-    const previewVideo = this.querySelector<HTMLVideoElement>(
-      `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
-    );
-    const canonicalVideo = this.querySelector<HTMLVideoElement>(
-      `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
-    );
-    if (!canonicalVideo) {
-      return;
-    }
-    const canonicalSrc = this.读取视频当前播放源(canonicalVideo);
-    const normalizedCanonicalSrc = this.归一化时间线视频播放源(canonicalSrc);
-    if (!normalizedCanonicalSrc) {
-      return;
-    }
-    const localBridge = this.自动播位置上报记录.get(attachmentId);
-    const normalizedLocalBridgeSrc = this.归一化时间线视频播放源(localBridge?.src ?? null);
-    const hasNewerLocalBridge =
-      Boolean(localBridge) &&
-      normalizedLocalBridgeSrc === normalizedCanonicalSrc &&
-      Number.isFinite(localBridge?.currentTime) &&
-      (localBridge?.currentTime ?? 0) > canonicalVideo.currentTime + 0.25;
-    const targetCurrentTime = hasNewerLocalBridge
-      ? (localBridge?.currentTime ?? canonicalVideo.currentTime)
-      : canonicalVideo.currentTime;
-    /**
-     * 旧 owner 退场前只认 canonical player 这一颗真实视频：
-     * 1. 先从 canonical 捕获暂停帧，退场后用只读图片承接像素；
-     * 2. 同时强制刷新一把本地位置桥，兜住 runtime snapshot 慢一拍的窗口；
-     * 3. 如果旧版本 DOM 里还残留 preview video，只允许顺手对齐它，不能再依赖它做第二播放表面。
-     */
-    this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, canonicalSrc);
-    this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, canonicalVideo);
-    if (!hasNewerLocalBridge) {
-      this.广播自动播播放位置(attachmentId, canonicalVideo, true, true);
-    }
-    if (!previewVideo) {
-      return;
-    }
-    const previewSrc = this.读取视频当前播放源(previewVideo);
-    const normalizedPreviewSrc = this.归一化时间线视频播放源(previewSrc);
-    if (normalizedCanonicalSrc !== normalizedPreviewSrc) {
-      return;
-    }
-    if (Math.abs(previewVideo.currentTime - targetCurrentTime) < 0.25) {
-      return;
-    }
-    try {
-      previewVideo.currentTime = targetCurrentTime;
-    } catch {
-      // preview 底板自己还没完全稳定时，后续的恢复位置桥会再补一次，这里不升级成失败。
-    }
   }
 
   protected 读取时间线现有预览视频是否可继续显示(
@@ -876,8 +754,12 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       return;
     }
     this.失效视频封面地址.set(attachmentId, failedPosterSrc);
-    this.广播媒体会话信号(attachmentId, {
-      type: "PLAYER_ERROR",
+    广播房间媒体会话信号({
+      dispatcher: this,
+      attachmentId,
+      signal: {
+        type: "PLAYER_ERROR",
+      },
     });
     this.requestUpdate();
   }
@@ -936,25 +818,6 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     return items;
   }
 
-  protected 打开媒体查看器(event: Event, startAttachmentId: string): void {
-    event.preventDefault();
-    event.stopPropagation();
-    const items = this.读取媒体查看器项目();
-    if (!items.some((item) => item.attachmentId === startAttachmentId)) {
-      return;
-    }
-    this.dispatchEvent(
-      new CustomEvent<媒体查看器打开请求>("room-open-media-viewer", {
-        detail: {
-          startAttachmentId,
-          items,
-        },
-        bubbles: true,
-        composed: true,
-      })
-    );
-  }
-
   protected 阻止时间线媒体预览原生菜单(event: Event): void {
     /**
      * 时间线卡片只表达“打开查看器”这一种意图。
@@ -963,23 +826,4 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     event.preventDefault();
   }
 
-  /**
-   * `video` 元素抛出来的只是浏览器层运行时信号。
-   * 这里统一翻译后回抛给外层应用运行时，真正的恢复/等待/降级仍由媒体会话 owner 裁决。
-   */
-  protected 广播媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
-    this.dispatchEvent(
-      new CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>(
-        "room-media-session-signal",
-        {
-          detail: {
-            attachmentId,
-            signal,
-          },
-          bubbles: true,
-          composed: true,
-        }
-      )
-    );
-  }
 }

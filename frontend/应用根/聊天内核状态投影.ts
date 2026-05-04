@@ -118,6 +118,7 @@ export function 投影实时编排状态(
     viewportMode: input.视口状态.viewportMode,
     messageInput: input.输入状态.messageInput,
     composerMediaDrafts: input.输入状态.composerMediaDrafts,
+    mediaSelectionPendingCount: input.输入状态.mediaSelectionPendingCount,
     pending: input.流程状态.pending,
   };
 }

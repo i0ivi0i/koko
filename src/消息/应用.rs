@@ -1,8 +1,55 @@
 use crate::{
     application, domain,
+    identity::application as 身份应用,
     media::模型::{附件状态读取结果, 附件种类读取结果, 附件读取结果},
+    realtime::application as 实时应用,
+    room::application as 房间应用,
     shared::contract,
 };
+
+/// 消息主链自己的同步仓储口。
+/// 它只保留“成员资格校验 + 身份解析 + 附件快照读取 + 权威事件提交”这条最小依赖面。
+pub trait 消息仓储端口:
+    身份应用::会话身份读取端口 + 房间应用::会话房间校验仓储端口
+{
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<附件读取结果>, contract::错误码>;
+
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码>;
+}
+
+/// realtime 热路径专属消息仓储口。
+/// 它只补齐同步消息主链在 async 热链真正需要的三条额外能力。
+#[allow(async_fn_in_trait)]
+pub trait Realtime消息仓储端口: 实时应用::实时会话房间校验仓储端口 {
+    async fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码>;
+
+    async fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<附件读取结果>, contract::错误码>;
+
+    async fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码>;
+}
 
 fn 校验客户端消息标识(客户端消息标识: &str) -> Result<(), contract::错误码> {
     if 客户端消息标识.trim().is_empty() {
@@ -68,7 +115,7 @@ fn 按统一消息规则校验附件快照列表(
 }
 
 fn 读取待发送附件(
-    仓储: &dyn application::仓储端口,
+    仓储: &impl 消息仓储端口,
     会话标识: &str,
     附件标识列表: &[String],
 ) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
@@ -93,8 +140,8 @@ fn 读取待发送附件(
     按统一消息规则校验附件快照列表(发送者身份.as_deref(), 附件快照列表)
 }
 
-async fn 读取待发送附件_异步<R: application::Realtime仓储端口 + ?Sized>(
-    仓储: &R,
+async fn 读取待发送附件_异步(
+    仓储: &impl Realtime消息仓储端口,
     会话标识: &str,
     附件标识列表: &[String],
 ) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
@@ -122,7 +169,7 @@ async fn 读取待发送附件_异步<R: application::Realtime仓储端口 + ?Si
 /// 发送文本消息主链：
 /// 这里只是“纯文本消息”的语义别名，真正消息成立仍统一走 `创建消息`。
 pub fn 发送文本消息(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl 消息仓储端口,
     房间标识: &str,
     会话标识: &str,
     客户端消息标识: &str,
@@ -137,7 +184,7 @@ pub fn 发送文本消息(
 /// 3. 每个附件都要先过 owner / status / kind 校验。
 /// 4. 最终由领域决定“文本 + 附件”这条消息能否成立。
 pub fn 创建消息(
-    仓储: &mut dyn application::仓储端口,
+    仓储: &mut impl 消息仓储端口,
     房间标识: &str,
     会话标识: &str,
     客户端消息标识: &str,
@@ -145,7 +192,7 @@ pub fn 创建消息(
     附件标识列表: &[String],
 ) -> Result<contract::领域事件, contract::错误码> {
     校验客户端消息标识(客户端消息标识)?;
-    application::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
+    房间应用::校验房间订阅资格(仓储, 房间标识, 会话标识)?;
     let attachments = 读取待发送附件(仓储, 会话标识, 附件标识列表)?;
 
     let msg =
@@ -156,8 +203,8 @@ pub fn 创建消息(
 /// realtime 创建消息的异步版。
 /// 这里只负责把 command 落成同一条权威消息成立主链；
 /// 成功后返回的仍然只能是领域事件，由 handler 决定如何广播成 `room_event`。
-pub async fn 创建消息_异步<R: application::Realtime仓储端口 + ?Sized>(
-    仓储: &mut R,
+pub async fn 创建消息_异步(
+    仓储: &mut impl Realtime消息仓储端口,
     房间标识: &str,
     会话标识: &str,
     客户端消息标识: &str,
@@ -165,7 +212,7 @@ pub async fn 创建消息_异步<R: application::Realtime仓储端口 + ?Sized>(
     附件标识列表: &[String],
 ) -> Result<contract::领域事件, contract::错误码> {
     校验客户端消息标识(客户端消息标识)?;
-    application::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
+    实时应用::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
     let attachments = 读取待发送附件_异步(仓储, 会话标识, 附件标识列表).await?;
 
     let msg =

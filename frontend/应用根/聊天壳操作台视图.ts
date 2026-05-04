@@ -1,6 +1,6 @@
 import { html } from "lit";
 import type { 聊天应用快照 } from "./聊天应用内核.js";
-import { 创建操作台附件入口编排 } from "../操作台/index.js";
+import { 创建操作台附件入口编排 } from "../操作台/附件入口/附件入口编排.js";
 import { 默认文本布局器 } from "../房间消息窗/文本布局.js";
 import {
   默认消息文本布局环境,
@@ -16,6 +16,7 @@ type 聊天壳操作台视图输入 = {
   messageInput: 聊天应用快照["messageInput"];
   pending: 聊天应用快照["pending"];
   composerMediaDrafts: 聊天应用快照["composerMediaDrafts"];
+  mediaSelectionPendingCount: 聊天应用快照["mediaSelectionPendingCount"];
   操作台输入组宽度: number;
   获取统一媒体文件输入(): HTMLInputElement | null;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
@@ -98,6 +99,7 @@ export function 渲染聊天壳操作台(input: 聊天壳操作台视图输入) 
     statusText: input.statusText,
     statusAttention: input.statusAttention,
     composerMediaDrafts: input.composerMediaDrafts,
+    mediaSelectionPendingCount: input.mediaSelectionPendingCount,
   });
   const isMessageMode = consoleState.mode === "message";
   const isHiddenMode = consoleState.mode === "hidden";

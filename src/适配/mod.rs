@@ -3,12 +3,7 @@ use std::{future::Future, io, sync::Arc};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::{
-    application::{self, 仓储端口},
-    domain, media,
-    shared::contract,
-    user_identity,
-};
+use crate::{domain, identity, media, message, realtime, room, shared::contract, user_identity};
 
 #[path = "../媒体/上传/适配.rs"]
 mod 媒体上传适配;
@@ -297,7 +292,17 @@ impl Pg仓储 {
     }
 }
 
-impl 仓储端口 for Pg仓储 {
+impl identity::application::会话身份读取端口 for Pg仓储 {
+    /// 会话 -> 匿名内部身份的解析留在 adapter 查询，不把数据库主键暴露给应用层。
+    fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        房间阅读适配::查询会话所属匿名身份(self, 会话标识)
+    }
+}
+
+impl identity::application::身份仓储端口 for Pg仓储 {
     /// 设备级匿名身份引导：
     /// - 同一设备入口凭证恢复同一个匿名内部身份
     /// - 同一设备入口凭证恢复同一个稳定会话
@@ -369,44 +374,19 @@ impl 仓储端口 for Pg仓储 {
             })
         })
     }
+}
 
-    /// 进房/建房持久化实现：
-    /// 在同一事务内完成会话校验、房间存在性判定与成员关系幂等写入。
-    fn 按短码进房或建房(
-        &mut self,
-        会话标识: &str,
-        房间短码: &str,
-    ) -> Result<contract::快照, contract::错误码> {
-        房间阅读适配::按短码进房或建房(self, 会话标识, 房间短码)
-    }
-
+impl room::application::会话房间校验仓储端口 for Pg仓储 {
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
         房间阅读适配::检查会话存在(self, 会话标识)
     }
 
-    /// 会话 -> 匿名内部身份的解析留在 adapter 查询，不把数据库主键暴露给应用层。
-    fn 查询会话所属匿名身份(
-        &self,
-        会话标识: &str,
-    ) -> Result<Option<String>, contract::错误码> {
-        房间阅读适配::查询会话所属匿名身份(self, 会话标识)
-    }
-
     /// 房间存在性检查只回答“有没有这个 room_id”。
     /// 这样应用层可以先区分 `room_not_found`，再决定成员资格分支。
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
         房间阅读适配::检查房间存在(self, 房间标识)
-    }
-
-    /// 房间最新事件位置是顺序真相的一部分。
-    /// 这里仅读取，不把它和恢复窗口或阅读推进策略混在一起。
-    fn 查询房间最新事件位置(
-        &self,
-        房间标识: &str,
-    ) -> Result<Option<i64>, contract::错误码> {
-        房间阅读适配::查询房间最新事件位置(self, 房间标识)
     }
 
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
@@ -418,13 +398,26 @@ impl 仓储端口 for Pg仓储 {
     ) -> Result<bool, contract::错误码> {
         房间阅读适配::检查成员资格(self, 房间标识, 会话标识)
     }
+}
 
-    /// 统一消息用例通过这个只读端口拿附件事实，不直连数据库字段名。
-    fn 查询附件快照(
+impl room::application::房间仓储端口 for Pg仓储 {
+    /// 进房/建房持久化实现：
+    /// 在同一事务内完成会话校验、房间存在性判定与成员关系幂等写入。
+    fn 按短码进房或建房(
+        &mut self,
+        会话标识: &str,
+        房间短码: &str,
+    ) -> Result<contract::快照, contract::错误码> {
+        房间阅读适配::按短码进房或建房(self, 会话标识, 房间短码)
+    }
+
+    /// 房间最新事件位置是顺序真相的一部分。
+    /// 这里仅读取，不把它和恢复窗口或阅读推进策略混在一起。
+    fn 查询房间最新事件位置(
         &self,
-        附件标识: &str,
-    ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
-        媒体附件适配::查询附件快照(self, 附件标识)
+        房间标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        房间阅读适配::查询房间最新事件位置(self, 房间标识)
     }
 
     /// 拉取当前身份在房间里的阅读锚点。
@@ -468,6 +461,29 @@ impl 仓储端口 for Pg仓储 {
         房间阅读适配::拉取房间增量事件(self, 房间标识, 从位置开始)
     }
 
+    /// 身份级阅读锚点写入：
+    /// 1. 会话只用来解析出匿名内部身份；
+    /// 2. 真正持久化主键是 `(anonymous_identity_id, room_id)`；
+    /// 3. 写入只能单调前进，较早位置不会覆盖更靠后的已读事实。
+    fn 推进房间阅读位置(
+        &mut self,
+        房间标识: &str,
+        会话标识: &str,
+        已读到事件位置: i64,
+    ) -> Result<(), contract::错误码> {
+        房间阅读适配::推进房间阅读位置(self, 房间标识, 会话标识, 已读到事件位置)
+    }
+}
+
+impl message::application::消息仓储端口 for Pg仓储 {
+    /// 统一消息用例通过这个只读端口拿附件事实，不直连数据库字段名。
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
+        媒体附件适配::查询附件快照(self, 附件标识)
+    }
+
     /// 统一消息主链把纯文本和附件消息都收口到同一个事务提交入口：
     /// 锁房间 -> 写事件 -> 写消息 -> 推进房间事件锚点，四步缺一不可。
     fn 创建统一消息事件(
@@ -487,61 +503,26 @@ impl 仓储端口 for Pg仓储 {
             附件,
         )
     }
-
-    /// 身份级阅读锚点写入：
-    /// 1. 会话只用来解析出匿名内部身份；
-    /// 2. 真正持久化主键是 `(anonymous_identity_id, room_id)`；
-    /// 3. 写入只能单调前进，较早位置不会覆盖更靠后的已读事实。
-    fn 推进房间阅读位置(
-        &mut self,
-        房间标识: &str,
-        会话标识: &str,
-        已读到事件位置: i64,
-    ) -> Result<(), contract::错误码> {
-        房间阅读适配::推进房间阅读位置(self, 房间标识, 会话标识, 已读到事件位置)
-    }
 }
 
-/// 媒体仓储继续复用共享应用口，但只做显式转发：
-/// 1. 不复制共享 SQL；
-/// 2. 不发明第二套成员/会话/消息提交语义；
-/// 3. 只是把“媒体子域也需要共享端口”这件事从类型层面讲清楚。
-impl 仓储端口 for Pg媒体仓储 {
-    fn 引导匿名身份(
-        &mut self,
-        设备匿名凭证: &str,
-    ) -> Result<contract::匿名身份引导结果, contract::错误码> {
-        <Pg仓储 as 仓储端口>::引导匿名身份(&mut self.repo, 设备匿名凭证)
-    }
-
-    fn 按短码进房或建房(
-        &mut self,
-        会话标识: &str,
-        房间短码: &str,
-    ) -> Result<contract::快照, contract::错误码> {
-        <Pg仓储 as 仓储端口>::按短码进房或建房(&mut self.repo, 会话标识, 房间短码)
-    }
-
-    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
-        <Pg仓储 as 仓储端口>::检查会话存在(&self.repo, 会话标识)
-    }
-
+impl identity::application::会话身份读取端口 for Pg媒体仓储 {
+    /// 媒体 owner 只允许显式拿“当前会话属于哪个匿名内部身份”这条事实。
+    /// 这里直接走身份/房间适配查询，不再借共享大 trait 二次转发。
     fn 查询会话所属匿名身份(
         &self,
         会话标识: &str,
     ) -> Result<Option<String>, contract::错误码> {
-        <Pg仓储 as 仓储端口>::查询会话所属匿名身份(&self.repo, 会话标识)
+        房间阅读适配::查询会话所属匿名身份(&self.repo, 会话标识)
+    }
+}
+
+impl room::application::会话房间校验仓储端口 for Pg媒体仓储 {
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        房间阅读适配::检查会话存在(&self.repo, 会话标识)
     }
 
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
-        <Pg仓储 as 仓储端口>::检查房间存在(&self.repo, 房间标识)
-    }
-
-    fn 查询房间最新事件位置(
-        &self,
-        房间标识: &str,
-    ) -> Result<Option<i64>, contract::错误码> {
-        <Pg仓储 as 仓储端口>::查询房间最新事件位置(&self.repo, 房间标识)
+        房间阅读适配::检查房间存在(&self.repo, 房间标识)
     }
 
     fn 检查成员资格(
@@ -549,58 +530,16 @@ impl 仓储端口 for Pg媒体仓储 {
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, contract::错误码> {
-        <Pg仓储 as 仓储端口>::检查成员资格(&self.repo, 房间标识, 会话标识)
+        房间阅读适配::检查成员资格(&self.repo, 房间标识, 会话标识)
     }
+}
 
+impl message::application::消息仓储端口 for Pg媒体仓储 {
     fn 查询附件快照(
         &self,
         附件标识: &str,
     ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
-        <Pg仓储 as 仓储端口>::查询附件快照(&self.repo, 附件标识)
-    }
-
-    fn 查询房间阅读位置(
-        &self,
-        房间标识: &str,
-        会话标识: &str,
-    ) -> Result<Option<i64>, contract::错误码> {
-        <Pg仓储 as 仓储端口>::查询房间阅读位置(&self.repo, 房间标识, 会话标识)
-    }
-
-    fn 拉取房间快照(
-        &self,
-        房间标识: &str,
-        上次已读事件位置: Option<i64>,
-        首条未读事件位置: Option<i64>,
-    ) -> Result<contract::快照, contract::错误码> {
-        <Pg仓储 as 仓储端口>::拉取房间快照(
-            &self.repo,
-            房间标识,
-            上次已读事件位置,
-            首条未读事件位置,
-        )
-    }
-
-    fn 拉取房间历史页(
-        &self,
-        房间标识: &str,
-        截止位置之前: i64,
-        限制条数: i64,
-    ) -> Result<contract::快照, contract::错误码> {
-        <Pg仓储 as 仓储端口>::拉取房间历史页(
-            &self.repo,
-            房间标识,
-            截止位置之前,
-            限制条数,
-        )
-    }
-
-    fn 拉取房间增量事件(
-        &self,
-        房间标识: &str,
-        从位置开始: i64,
-    ) -> Result<contract::快照, contract::错误码> {
-        <Pg仓储 as 仓储端口>::拉取房间增量事件(&self.repo, 房间标识, 从位置开始)
+        媒体附件适配::查询附件快照(&self.repo, 附件标识)
     }
 
     fn 创建统一消息事件(
@@ -611,27 +550,13 @@ impl 仓储端口 for Pg媒体仓储 {
         文本: &str,
         附件: &[domain::message::已校验附件引用],
     ) -> Result<contract::领域事件, contract::错误码> {
-        <Pg仓储 as 仓储端口>::创建统一消息事件(
+        消息事件适配::创建统一消息事件(
             &mut self.repo,
             房间标识,
             客户端消息标识,
             会话标识,
             文本,
             附件,
-        )
-    }
-
-    fn 推进房间阅读位置(
-        &mut self,
-        房间标识: &str,
-        会话标识: &str,
-        已读到事件位置: i64,
-    ) -> Result<(), contract::错误码> {
-        <Pg仓储 as 仓储端口>::推进房间阅读位置(
-            &mut self.repo,
-            房间标识,
-            会话标识,
-            已读到事件位置,
         )
     }
 }
@@ -909,16 +834,9 @@ impl media::application::媒体仓储端口 for Pg媒体仓储 {
     }
 }
 
-impl application::Realtime仓储端口 for PgRealtime仓储 {
+impl realtime::application::实时会话房间校验仓储端口 for PgRealtime仓储 {
     async fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
         房间阅读适配::检查会话存在_异步(&self.repo.pool, 会话标识).await
-    }
-
-    async fn 查询会话所属匿名身份(
-        &self,
-        会话标识: &str,
-    ) -> Result<Option<String>, contract::错误码> {
-        房间阅读适配::查询会话所属匿名身份_异步(&self.repo.pool, 会话标识).await
     }
 
     async fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
@@ -932,13 +850,24 @@ impl application::Realtime仓储端口 for PgRealtime仓储 {
     ) -> Result<bool, contract::错误码> {
         房间阅读适配::检查成员资格_异步(&self.repo.pool, 房间标识, 会话标识).await
     }
+}
 
+impl realtime::application::实时房间仓储端口 for PgRealtime仓储 {
     async fn 拉取房间增量事件(
         &self,
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<contract::快照, contract::错误码> {
         房间阅读适配::拉取房间增量事件_异步(&self.repo.pool, 房间标识, 从位置开始).await
+    }
+}
+
+impl message::application::Realtime消息仓储端口 for PgRealtime仓储 {
+    async fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        房间阅读适配::查询会话所属匿名身份_异步(&self.repo.pool, 会话标识).await
     }
 
     async fn 查询附件快照(

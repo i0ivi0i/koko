@@ -19,30 +19,26 @@ import {
 } from "./视频元数据.js";
 import { 预处理待上传视频文件 } from "./视频预处理.js";
 import {
-  记录媒体上传失败诊断,
-  解析媒体上传失败代码,
   解析传输错误代码,
-  type 媒体上传失败响应,
 } from "./媒体诊断.js";
 import {
   创建媒体Tus断点UrlStorage,
   type 媒体Tus断点UrlStorage,
 } from "./媒体Tus断点存储.js";
 import {
+  确保媒体上传器,
+  type 媒体上传事件接线依赖,
+} from "./媒体发布上传事件协作.js";
+import {
   创建失败草稿标识,
   默认文件名,
   默认计算源文件SourceHash,
   构造SourceHash复用请求,
   构造媒体上传Meta,
-  构造媒体上传器键,
   读取媒体Tus请求头,
   读取媒体上传上限,
   读取媒体上传档位,
-  读取媒体种类,
-  读取本地预览地址,
-  读取预览宽高,
   识别待上传媒体种类,
-  提取媒体附件标识,
   type 媒体发布器依赖,
 } from "./媒体发布基础语义.js";
 
@@ -256,6 +252,236 @@ async function 默认让出主线程(): Promise<void> {
   });
 }
 
+type 媒体SourceHash协作依赖 = {
+  calculateSourceHash(file: File): Promise<媒体SourceHash信息>;
+  getCurrentRoomId?: (() => string | null) | undefined;
+  reuseMediaBySourceHash?: 媒体发布器依赖["reuseMediaBySourceHash"] | undefined;
+  getSessionId(): string;
+  createPreviewUrl(file: Blob | null): string;
+  writeDraft: 媒体发布器依赖["writeDraft"];
+};
+
+/**
+ * source_hash 协作只拥有“上传前加速层”：
+ * 1. 计算源文件身份；
+ * 2. 在目标房间做一次受权限约束的 ready 资产复用预检；
+ * 3. 命中后把 ready 草稿直接写回发送区。
+ *
+ * 它不碰 prepare / Tus / complete，也不碰 restart/continue 恢复。
+ */
+async function 计算源文件SourceHash(
+  deps: 媒体SourceHash协作依赖,
+  file: File
+): Promise<媒体SourceHash信息 | null> {
+  try {
+    return await deps.calculateSourceHash(file);
+  } catch (error: unknown) {
+    /**
+     * source_hash 是上传前加速层，不是“没有它就不能上传”的业务真相。
+     * 计算失败时继续走原 prepare/upload/complete 主链，后端 content_hash 仍会在上传后收口分发身份。
+     */
+    console.warn("[koko:media-source-hash:error]", {
+      fileName: file.name,
+      fileByteSize: file.size,
+      errorCode: 解析传输错误代码(error, "source_hash_failed"),
+    });
+    return null;
+  }
+}
+
+async function 预检SourceHash媒体复用(
+  deps: 媒体SourceHash协作依赖,
+  kind: 媒体种类,
+  sourceHash: 媒体SourceHash信息 | null
+): Promise<媒体SourceHash复用结果> {
+  const roomId = deps.getCurrentRoomId?.()?.trim() ?? "";
+  if (!sourceHash || !roomId || !deps.reuseMediaBySourceHash) {
+    return { status: "miss" };
+  }
+  try {
+    return await deps.reuseMediaBySourceHash(
+      kind,
+      构造SourceHash复用请求({
+        sessionId: deps.getSessionId(),
+        roomId,
+        sourceHash,
+      })
+    );
+  } catch (error: unknown) {
+    /**
+     * 复用预检失败不能变成上传硬失败：
+     * - 会话/权限真相仍会在后续 prepare 再裁一次；
+     * - 这里降级为 miss，避免一次去重探测故障卡住真实发送。
+     */
+    console.warn("[koko:media-source-hash:dedupe-error]", {
+      roomId,
+      kind,
+      sourceHash: sourceHash.source_hash,
+      errorCode: 解析传输错误代码(error, "source_hash_dedupe_failed"),
+    });
+    return { status: "miss" };
+  }
+}
+
+function 写入SourceHash命中草稿(
+  deps: Pick<媒体SourceHash协作依赖, "createPreviewUrl" | "writeDraft">,
+  ready: 媒体附件上传结果,
+  sourceFile: File
+): void {
+  deps.writeDraft({
+    localId: ready.attachment_id,
+    kind: ready.kind,
+    attachmentId: ready.attachment_id,
+    // 命中复用时不会再解码视频取本地 poster；视频草稿用占位符，避免把 video Blob 塞进 <img>。
+    previewUrl: ready.kind === "video" ? "" : deps.createPreviewUrl(sourceFile),
+    width: ready.width,
+    height: ready.height,
+    status: "ready",
+    fileName: sourceFile.name || 默认文件名(ready.kind),
+    errorCode: "",
+    sourceFile,
+  });
+}
+
+type 媒体失败草稿恢复依赖 = {
+  读取媒体草稿(localId: string): 媒体附件草稿 | undefined;
+  读取草稿所属上传器(localId: string): 媒体上传器 | null;
+  getSessionId(): string;
+  abandonMediaUpload: 媒体发布器依赖["abandonMediaUpload"];
+  prepareMediaUpload: 媒体发布器依赖["prepareMediaUpload"];
+  updateDraft: 媒体发布器依赖["updateDraft"];
+  removeDraft: 媒体发布器依赖["removeDraft"];
+  草稿上传器键表: Map<string, string>;
+  读取或创建上传器(
+    input: 媒体上传器创建参数
+  ): { key: string; uploader: 媒体上传器 };
+  sourceHash协作依赖: 媒体SourceHash协作依赖;
+};
+
+/**
+ * 失败草稿恢复只回答两件事：
+ * 1. `resume` 如何在同一 upload 语义内继续；
+ * 2. `restart` 如何显式 abandon 旧上传后重开一轮 prepare。
+ *
+ * 它不参与 added/success/error/stalled 事件接线，也不参与 source_hash 预检命中写草稿。
+ */
+async function 继续失败草稿上传(
+  deps: 媒体失败草稿恢复依赖,
+  localId: string
+): Promise<void> {
+  const draft = deps.读取媒体草稿(localId);
+  if (!draft) {
+    return;
+  }
+  const currentUploader = deps.读取草稿所属上传器(localId);
+  deps.updateDraft(localId, {
+    status: "transporting",
+    errorCode: "",
+  });
+  if (!currentUploader || !currentUploader.getFile(localId)) {
+    deps.updateDraft(localId, {
+      status: "failed",
+      errorCode: "attachment_upload_failed",
+    });
+    return;
+  }
+  void currentUploader.retryUpload(localId).catch((error: unknown) => {
+    deps.updateDraft(localId, {
+      status: "failed",
+      errorCode: 解析传输错误代码(error),
+    });
+  });
+}
+
+async function 重新开始失败草稿上传(
+  deps: 媒体失败草稿恢复依赖,
+  localId: string
+): Promise<void> {
+  const draft = deps.读取媒体草稿(localId);
+  if (!draft) {
+    return;
+  }
+  const currentUploader = deps.读取草稿所属上传器(localId);
+  const attachmentId = draft.attachmentId.trim();
+  if (attachmentId) {
+    try {
+      /**
+       * restart 的第一步必须是显式 abandon 旧上传：
+       * - 让后端留下 abandoned 事实；
+       * - 让迟到的 post-finish/complete 不会复活旧附件；
+       * - 为后续临时文件清理创造权威锚点。
+       */
+      await deps.abandonMediaUpload(deps.getSessionId(), attachmentId);
+    } catch (error: unknown) {
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: 解析传输错误代码(error),
+      });
+      return;
+    }
+  }
+  if (currentUploader?.getFile(localId)) {
+    currentUploader.removeFile(localId);
+  }
+  deps.草稿上传器键表.delete(localId);
+  deps.updateDraft(localId, {
+    attachmentId: "",
+    status: "transporting",
+    errorCode: "",
+  });
+  if (!draft.sourceFile) {
+    deps.updateDraft(localId, {
+      status: "failed",
+      errorCode: "attachment_upload_failed",
+    });
+    return;
+  }
+  try {
+    const sourceHash = await 计算源文件SourceHash(deps.sourceHash协作依赖, draft.sourceFile);
+    const prepared = await deps.prepareMediaUpload(
+      draft.kind,
+      deps.getSessionId(),
+      draft.sourceFile,
+      sourceHash ?? undefined
+    );
+    const uploaderInput: 媒体上传器创建参数 = {
+      tusEndpoint: prepared.tus_endpoint,
+      profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
+      attachmentId: prepared.attachment_id,
+      uploadSessionId: prepared.upload_session_id,
+    };
+    const { key: uploaderKey, uploader: nextUploader } = deps.读取或创建上传器(uploaderInput);
+    const nextLocalId = nextUploader.addFile({
+      id: localId,
+      name: draft.fileName,
+      type: draft.sourceFile.type,
+      data: draft.sourceFile,
+      meta: 构造媒体上传Meta({
+        sessionId: deps.getSessionId(),
+        kind: draft.kind,
+        prepared,
+        previewWidth: draft.width,
+        previewHeight: draft.height,
+      }),
+    });
+    deps.草稿上传器键表.set(nextLocalId, uploaderKey);
+    /**
+     * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
+     * 不保证等于我们传给 addFile 的 `id`。如果 restart 后还把旧草稿留着，
+     * 就会同时留下“旧失败草稿 + 新上传草稿”两条活路径。
+     */
+    if (nextLocalId !== localId) {
+      deps.草稿上传器键表.delete(localId);
+      deps.removeDraft(localId);
+    }
+  } catch (error: unknown) {
+    deps.updateDraft(localId, {
+      status: "failed",
+      errorCode: 解析传输错误代码(error),
+    });
+  }
+}
+
 export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const createUploader = deps.createUploader ?? 创建默认媒体上传器;
   const readVideoMetadata = deps.readVideoMetadata ?? 读取视频文件元数据;
@@ -277,173 +503,23 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     return 上传器表.get(uploaderKey) ?? null;
   };
 
-  /**
-   * file-added 是 UI 草稿真正进入“transporting”的唯一时刻。
-   * kind / attachment_id / 本地预览都从同一份上传 meta 读取，避免壳层再猜第二遍。
-   */
-  const handleMediaUploadAdded = (uploaderKey: string, file: 媒体上传文件): void => {
-    const sourceFile = file.data instanceof File ? file.data : null;
-    const kind = 读取媒体种类(file);
-    const previewSize = 读取预览宽高(file);
-    草稿上传器键表.set(file.id, uploaderKey);
-    deps.writeDraft({
-      localId: file.id,
-      kind,
-      attachmentId: 提取媒体附件标识(file),
-      previewUrl: 读取本地预览地址(file, createPreviewUrl),
-      width: previewSize.width,
-      height: previewSize.height,
-      status: "transporting",
-      fileName: file.name ?? 默认文件名(kind),
-      errorCode: "",
-      sourceFile,
-    });
+  const 上传事件接线依赖: 媒体上传事件接线依赖 = {
+    读取媒体草稿,
+    读取草稿所属上传器,
+    createUploader,
+    completeMediaUpload: deps.completeMediaUpload,
+    getSessionId: deps.getSessionId,
+    createPreviewUrl,
+    writeDraft: deps.writeDraft,
+    updateDraft: deps.updateDraft,
+    removeDraft: deps.removeDraft,
+    上传器表,
+    草稿上传器键表,
   };
 
-  const handleMediaUploadSuccess = async (
-    uploaderKey: string,
-    file: 媒体上传文件 | undefined,
-    _response: { body?: 媒体上传响应体 } | undefined
-  ): Promise<void> => {
-    if (!file) {
-      return;
-    }
-    草稿上传器键表.set(file.id, uploaderKey);
-    const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
-    if (!attachmentId) {
-      deps.updateDraft(file.id, {
-        status: "failed",
-        errorCode: "attachment_upload_failed",
-      });
-      return;
-    }
-    const currentDraft = 读取媒体草稿(file.id);
-    if (!currentDraft || currentDraft.status !== "transporting") {
-      return;
-    }
-    /**
-     * transport success 不是业务 ready。
-     * 这里先把壳层状态切到 processing，明确告诉用户“字节已上传完，正在等后端 complete”。
-     */
-    deps.updateDraft(file.id, {
-      status: "processing",
-      errorCode: "",
-    });
-    try {
-      const ready = await deps.completeMediaUpload(deps.getSessionId(), attachmentId);
-      const processedDraft = 读取媒体草稿(file.id);
-      if (!processedDraft || processedDraft.status !== "processing") {
-        return;
-      }
-      deps.updateDraft(file.id, {
-        kind: ready.kind,
-        attachmentId: ready.attachment_id,
-        width: ready.width,
-        height: ready.height,
-        status: "ready",
-        errorCode: "",
-      });
-    } catch (error: unknown) {
-      const processedDraft = 读取媒体草稿(file.id);
-      if (
-        !processedDraft ||
-        (processedDraft.status !== "transporting" && processedDraft.status !== "processing")
-      ) {
-        return;
-      }
-      deps.updateDraft(file.id, {
-        status: "failed",
-        errorCode: 解析传输错误代码(error, "system_error"),
-      });
-    }
-  };
-
-  const handleMediaUploadError = (
-    file: 媒体上传文件 | undefined,
-    error: { message: string },
-    response?: 媒体上传失败响应
-  ): void => {
-    if (!file) {
-      return;
-    }
-    const kind = 读取媒体种类(file);
-    const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
-    const errorCode = 解析媒体上传失败代码(error, response);
-    记录媒体上传失败诊断({
-      attachmentId,
-      localId: file.id,
-      fileName: file.name ?? 默认文件名(kind),
-      error,
-      response,
-      errorCode,
-    });
-    deps.updateDraft(file.id, {
-      status: "failed",
-      errorCode,
-    });
-  };
-
-  const handleMediaUploadRemoved = (file: 媒体上传文件): void => {
-    草稿上传器键表.delete(file.id);
-    deps.removeDraft(file.id);
-  };
-
-  /**
-   * stalled 事件本身只会告诉我们“这条上传卡住了”，不会把 UI 草稿收口。
-   * 这里统一做三件事：
-   * 1. 主动移除当前上传文件，触发 Uppy 自己的清理；
-   * 2. 立刻补回 failed 草稿，保住预览和重试入口；
-   * 3. 不让“上传中”无限挂住，也不让草稿凭空消失。
-   */
-  const handleMediaUploadStalled = (
-    uploaderKey: string,
-    _error: { message: string },
-    files: 媒体上传文件[]
-  ): void => {
-    const uploader = 上传器表.get(uploaderKey);
-    if (!uploader) {
-      return;
-    }
-    for (const file of files) {
-      const existingDraft = 读取媒体草稿(file.id);
-      const sourceFile = file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
-      const kind = existingDraft?.kind ?? 读取媒体种类(file);
-      uploader.removeFile(file.id);
-      草稿上传器键表.delete(file.id);
-      deps.writeDraft({
-        localId: file.id,
-        kind,
-        attachmentId: "",
-        previewUrl: createPreviewUrl(sourceFile),
-        width: existingDraft?.width ?? 0,
-        height: existingDraft?.height ?? 0,
-        status: "failed",
-        fileName: file.name ?? existingDraft?.fileName ?? 默认文件名(kind),
-        errorCode: "attachment_upload_stalled",
-        sourceFile,
-      });
-    }
-  };
-
-  const ensureUploader = (input: 媒体上传器创建参数): { key: string; uploader: 媒体上传器 } => {
-    const key = 构造媒体上传器键(input);
-    const existingUploader = 上传器表.get(key);
-    if (existingUploader) {
-      return { key, uploader: existingUploader };
-    }
-    const nextUploader = createUploader(input);
-    nextUploader.on("file-added", (file) => handleMediaUploadAdded(key, file));
-    nextUploader.on("upload-success", (file, response) =>
-      handleMediaUploadSuccess(key, file, response)
-    );
-    nextUploader.on("upload-error", handleMediaUploadError);
-    nextUploader.on("upload-stalled", (error, files) =>
-      handleMediaUploadStalled(key, error, files)
-    );
-    nextUploader.on("file-removed", handleMediaUploadRemoved);
-    上传器表.set(key, nextUploader);
-    return { key, uploader: nextUploader };
-  };
+  const 读取或创建上传器 = (
+    input: 媒体上传器创建参数
+  ): { key: string; uploader: 媒体上传器 } => 确保媒体上传器(上传事件接线依赖, input);
 
   /**
    * 各类媒体在进入 Uppy 之前先完成自己最小的本地预处理：
@@ -515,73 +591,13 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     return localId;
   };
 
-  const 尝试计算源文件SourceHash = async (file: File): Promise<媒体SourceHash信息 | null> => {
-    try {
-      return await calculateSourceHash(file);
-    } catch (error: unknown) {
-      /**
-       * source_hash 是上传前加速层，不是“没有它就不能上传”的业务真相。
-       * 计算失败时继续走原 prepare/upload/complete 主链，后端 content_hash 仍会在上传后收口分发身份。
-       */
-      console.warn("[koko:media-source-hash:error]", {
-        fileName: file.name,
-        fileByteSize: file.size,
-        errorCode: 解析传输错误代码(error, "source_hash_failed"),
-      });
-      return null;
-    }
-  };
-
-  const 尝试复用SourceHash媒体资产 = async (
-    kind: 媒体种类,
-    sourceHash: 媒体SourceHash信息 | null
-  ): Promise<媒体SourceHash复用结果> => {
-    const roomId = deps.getCurrentRoomId?.()?.trim() ?? "";
-    if (!sourceHash || !roomId || !deps.reuseMediaBySourceHash) {
-      return { status: "miss" };
-    }
-    try {
-      return await deps.reuseMediaBySourceHash(
-        kind,
-        构造SourceHash复用请求({
-          sessionId: deps.getSessionId(),
-          roomId,
-          sourceHash,
-        })
-      );
-    } catch (error: unknown) {
-      /**
-       * 复用预检失败不能变成上传硬失败：
-       * - 会话/权限真相仍会在后续 prepare 再裁一次；
-       * - 这里降级为 miss，避免一次去重探测故障卡住真实发送。
-       */
-      console.warn("[koko:media-source-hash:dedupe-error]", {
-        roomId,
-        kind,
-        sourceHash: sourceHash.source_hash,
-        errorCode: 解析传输错误代码(error, "source_hash_dedupe_failed"),
-      });
-      return { status: "miss" };
-    }
-  };
-
-  const 写入SourceHash命中草稿 = (
-    ready: 媒体附件上传结果,
-    sourceFile: File
-  ): void => {
-    deps.writeDraft({
-      localId: ready.attachment_id,
-      kind: ready.kind,
-      attachmentId: ready.attachment_id,
-      // 命中复用时不会再解码视频取本地 poster；视频草稿用占位符，避免把 video Blob 塞进 <img>。
-      previewUrl: ready.kind === "video" ? "" : createPreviewUrl(sourceFile),
-      width: ready.width,
-      height: ready.height,
-      status: "ready",
-      fileName: sourceFile.name || 默认文件名(ready.kind),
-      errorCode: "",
-      sourceFile,
-    });
+  const SourceHash协作依赖: 媒体SourceHash协作依赖 = {
+    calculateSourceHash,
+    getCurrentRoomId: deps.getCurrentRoomId,
+    reuseMediaBySourceHash: deps.reuseMediaBySourceHash,
+    getSessionId: deps.getSessionId,
+    createPreviewUrl: (file: Blob | null) => createPreviewUrl(file),
+    writeDraft: deps.writeDraft,
   };
 
   const 处理选择同类媒体文件 = async (
@@ -622,8 +638,8 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             }, 15 * 60 * 1000)
           : null;
       try {
-        const sourceHash = await 尝试计算源文件SourceHash(sourceFile);
-        const reuseResult = await 尝试复用SourceHash媒体资产(kind, sourceHash);
+        const sourceHash = await 计算源文件SourceHash(SourceHash协作依赖, sourceFile);
+        const reuseResult = await 预检SourceHash媒体复用(SourceHash协作依赖, kind, sourceHash);
         if (reuseResult.status === "reused") {
           if (preprocessingDraftDelayTimer) {
             globalThis.clearTimeout(preprocessingDraftDelayTimer);
@@ -634,7 +650,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           if (preprocessingDraftId) {
             deps.removeDraft(preprocessingDraftId);
           }
-          写入SourceHash命中草稿(reuseResult.attachment, sourceFile);
+          写入SourceHash命中草稿(SourceHash协作依赖, reuseResult.attachment, sourceFile);
           continue;
         }
         const preparedFile = await 准备待上传媒体文件(kind, sourceFile);
@@ -669,7 +685,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           attachmentId: prepared.attachment_id,
           uploadSessionId: prepared.upload_session_id,
         };
-        const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
+        const { key: uploaderKey, uploader: currentUploader } = 读取或创建上传器(uploaderInput);
         const nextLocalId = currentUploader.addFile({
           // 让 prepared 生成的 attachment_id 直接成为上传文件主键，
           // 可以保证 prepare / tus / complete / 草稿日志 全部围绕一条真相关联。
@@ -720,131 +736,21 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
   };
 
-  /**
-   * `resume` 只允许在同一上传语义内继续：
-   * - 不重新 prepare；
-   * - 不改 attachmentId；
-   * - 旧 uploader/file 一旦丢失，就明确失败，不再偷偷转成 restart。
-   */
-  const 继续上传失败草稿 = async (localId: string): Promise<void> => {
-    const draft = 读取媒体草稿(localId);
-    if (!draft) {
-      return;
-    }
-    const currentUploader = 读取草稿所属上传器(localId);
-    deps.updateDraft(localId, {
-      status: "transporting",
-      errorCode: "",
-    });
-    if (!currentUploader || !currentUploader.getFile(localId)) {
-      deps.updateDraft(localId, {
-        status: "failed",
-        errorCode: "attachment_upload_failed",
-      });
-      return;
-    }
-    void currentUploader.retryUpload(localId).catch((error: unknown) => {
-      deps.updateDraft(localId, {
-        status: "failed",
-        errorCode: 解析传输错误代码(error),
-      });
-    });
-  };
-
-  /**
-   * `restart` 是显式放弃旧上传后的新一轮 prepare：
-   * - 这里会清空旧 attachmentId；
-   * - 然后重新拿新的 prepare 结果；
-   * - 最后仍然只保留一条草稿真相，避免 restart 长出幽灵副本。
-   */
-  const 重新上传失败草稿 = async (localId: string): Promise<void> => {
-    const draft = 读取媒体草稿(localId);
-    if (!draft) {
-      return;
-    }
-    const currentUploader = 读取草稿所属上传器(localId);
-    const attachmentId = draft.attachmentId.trim();
-    if (attachmentId) {
-      try {
-        /**
-         * restart 的第一步必须是显式 abandon 旧上传：
-         * - 让后端留下 abandoned 事实；
-         * - 让迟到的 post-finish/complete 不会复活旧附件；
-         * - 为后续临时文件清理创造权威锚点。
-         */
-        await deps.abandonMediaUpload(deps.getSessionId(), attachmentId);
-      } catch (error: unknown) {
-        deps.updateDraft(localId, {
-          status: "failed",
-          errorCode: 解析传输错误代码(error),
-        });
-        return;
-      }
-    }
-    if (currentUploader?.getFile(localId)) {
-      currentUploader.removeFile(localId);
-    }
-    草稿上传器键表.delete(localId);
-    deps.updateDraft(localId, {
-      attachmentId: "",
-      status: "transporting",
-      errorCode: "",
-    });
-    if (!draft.sourceFile) {
-      deps.updateDraft(localId, {
-        status: "failed",
-        errorCode: "attachment_upload_failed",
-      });
-      return;
-    }
-    try {
-      const sourceHash = await 尝试计算源文件SourceHash(draft.sourceFile);
-      const prepared = await deps.prepareMediaUpload(
-        draft.kind,
-        deps.getSessionId(),
-        draft.sourceFile,
-        sourceHash ?? undefined
-      );
-      const uploaderInput: 媒体上传器创建参数 = {
-        tusEndpoint: prepared.tus_endpoint,
-        profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
-        attachmentId: prepared.attachment_id,
-        uploadSessionId: prepared.upload_session_id,
-      };
-      const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
-      const nextLocalId = currentUploader.addFile({
-        id: localId,
-        name: draft.fileName,
-        type: draft.sourceFile.type,
-        data: draft.sourceFile,
-        meta: 构造媒体上传Meta({
-          sessionId: deps.getSessionId(),
-          kind: draft.kind,
-          prepared,
-          previewWidth: draft.width,
-          previewHeight: draft.height,
-        }),
-      });
-      草稿上传器键表.set(nextLocalId, uploaderKey);
-      /**
-       * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
-       * 不保证等于我们传给 addFile 的 `id`。如果 restart 后还把旧草稿留着，
-       * 就会同时留下“旧失败草稿 + 新上传草稿”两条活路径。
-       */
-      if (nextLocalId !== localId) {
-        草稿上传器键表.delete(localId);
-        deps.removeDraft(localId);
-      }
-    } catch (error: unknown) {
-      deps.updateDraft(localId, {
-        status: "failed",
-        errorCode: 解析传输错误代码(error),
-      });
-    }
+  const 失败草稿恢复依赖: 媒体失败草稿恢复依赖 = {
+    读取媒体草稿,
+    读取草稿所属上传器,
+    getSessionId: deps.getSessionId,
+    abandonMediaUpload: deps.abandonMediaUpload,
+    prepareMediaUpload: deps.prepareMediaUpload,
+    updateDraft: deps.updateDraft,
+    removeDraft: deps.removeDraft,
+    草稿上传器键表,
+    读取或创建上传器,
+    sourceHash协作依赖: SourceHash协作依赖,
   };
 
   return {
-    async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
+    处理选择媒体文件: async (files: Iterable<File>): Promise<void> => {
       const selectedFiles = Array.from(files);
       if (selectedFiles.length === 0) {
         return;
@@ -895,11 +801,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     async 继续上传草稿(localId: string): Promise<void> {
-      await 继续上传失败草稿(localId);
+      await 继续失败草稿上传(失败草稿恢复依赖, localId);
     },
 
     async 重新上传草稿(localId: string): Promise<void> {
-      await 重新上传失败草稿(localId);
+      await 重新开始失败草稿上传(失败草稿恢复依赖, localId);
     },
 
     清空(): void {

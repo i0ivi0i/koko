@@ -444,7 +444,7 @@ async fn 查询附件快照会带出图片真实资产与冷源生命周期字�
     let attachment_id_for_query = attachment_id.clone();
     let snapshot = tokio::task::spawn_blocking(move || {
         let repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        koko::application::仓储端口::查询附件快照(&repo, &attachment_id_for_query)
+        koko::message::application::消息仓储端口::查询附件快照(&repo, &attachment_id_for_query)
             .expect("query ok")
             .expect("attachment exists")
     })

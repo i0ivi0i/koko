@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   创建附件能力注册表,
   type 统一媒体文件选择配置,
-} from "../操作台/附件入口/index.js";
+} from "../操作台/附件入口/附件能力注册.js";
 
 function 读取媒体文件选择类型集合(
   配置: 统一媒体文件选择配置

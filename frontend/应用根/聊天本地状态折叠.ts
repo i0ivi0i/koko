@@ -119,6 +119,14 @@ export function 应用聊天本地状态折叠(
       patch.composerMediaDrafts ?? []
     );
   }
+  if (Object.hasOwn(patch, "mediaSelectionPendingCount")) {
+    记录有变化字段(
+      当前状态.输入状态,
+      输入补丁,
+      "mediaSelectionPendingCount",
+      patch.mediaSelectionPendingCount ?? 0
+    );
+  }
   if (Object.hasOwn(patch, "messages")) {
     记录有变化字段(当前状态.时间线状态, 时间线补丁, "messages", patch.messages ?? [], () => {
       消息列表发生变化 = true;

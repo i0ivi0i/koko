@@ -639,8 +639,10 @@ export function 派生壳级操作台状态(input: {
   statusText: string;
   statusAttention?: boolean;
   composerMediaDrafts?: 媒体附件草稿[];
+  mediaSelectionPendingCount?: number;
 }): 壳级操作台状态 {
   const 媒体草稿列表 = input.composerMediaDrafts ?? [];
+  const 媒体选择中过渡数 = input.mediaSelectionPendingCount ?? 0;
   const 运输中的媒体数 = 媒体草稿列表.filter((draft) => draft.status === "transporting").length;
   const 处理中的媒体数 = 媒体草稿列表.filter((draft) => draft.status === "processing").length;
   const 失败媒体数 = 媒体草稿列表.filter((draft) => draft.status === "failed").length;
@@ -686,13 +688,16 @@ export function 派生壳级操作台状态(input: {
     const statusText =
       失败媒体数 > 0
         ? `${失败媒体数} 个媒体附件上传失败，请重试或删除`
+        : 媒体选择中过渡数 > 0
+          ? `正在准备 ${媒体选择中过渡数} 个媒体附件`
         : 运输中的媒体数 > 0
           ? `正在上传 ${运输中的媒体数} 个媒体附件`
           : 处理中的媒体数 > 0
             ? `正在处理 ${处理中的媒体数} 个媒体附件`
           : input.statusText;
     const statusAttention = 失败媒体数 > 0 || Boolean(input.statusAttention);
-    const hasBlockingDraft = 运输中的媒体数 > 0 || 处理中的媒体数 > 0 || 失败媒体数 > 0;
+    const hasBlockingDraft =
+      媒体选择中过渡数 > 0 || 运输中的媒体数 > 0 || 处理中的媒体数 > 0 || 失败媒体数 > 0;
     return {
       mode: "message",
       ...baseState,
@@ -700,7 +705,7 @@ export function 派生壳级操作台状态(input: {
       statusAttention,
       auxSlot: {
         visible: true,
-        disabled: input.pending,
+        disabled: input.pending || 媒体选择中过渡数 > 0,
         label: "+",
       },
       primaryInput: {

@@ -10,12 +10,12 @@ const 后端测试目录 = join(仓库根目录, "tests");
 const 报告模式 = process.argv.includes("--report");
 const 强制模式 = process.argv.includes("--enforce");
 const 输出最大文件数量 = 30;
-const 完成态顶层文件硬上限 = 1000;
+const 完成态顶层文件有效代码行硬上限 = 1000;
 
 /**
  * 当前脚本同时承担两层职责：
  * 1. 第一阶段预算体检，继续提示需要持续治理的超大测试文件；
- * 2. spec 完成态门禁，直接拦住任何超过 1000 行的顶层测试文件。
+ * 2. spec 完成态门禁，直接拦住任何超过 1000 有效代码行的顶层测试文件。
  *
  * 这里故意不把 “缺失 repo-native e2e 包” 做成 fail，
  * 因为最新 spec 已经把真实浏览器主链裁定为
@@ -73,8 +73,21 @@ function 读取源码(path) {
   return readFileSync(path, "utf8");
 }
 
-function 统计物理行数(text) {
-  return text.split(/\r?\n/).length;
+function 统计有效代码行数(text) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return (
+        trimmed !== "" &&
+        !trimmed.startsWith("//") &&
+        !trimmed.startsWith("///") &&
+        !trimmed.startsWith("//!") &&
+        !trimmed.startsWith("/*") &&
+        !trimmed.startsWith("*") &&
+        !trimmed.startsWith("*/")
+      );
+    }).length;
 }
 
 function 是前端测试文件(path) {
@@ -171,32 +184,32 @@ function 收集行数违规(relativePath, lines) {
   if (!类型) {
     return [];
   }
-  if (lines.length <= 类型.maxLines) {
+  if (lines <= 类型.maxLines) {
     return [];
   }
   return [
     {
       file: relativePath,
       label: "测试文件超出第一阶段硬预算",
-      detail: `${relativePath}: ${lines.length} lines > ${类型.maxLines} (${类型.label})`,
+      detail: `${relativePath}: ${lines} effective lines > ${类型.maxLines} (${类型.label})`,
     },
   ];
 }
 
 function 收集完成态顶层超限(relativePath, lines) {
   // spec 的最终完成态比第一阶段预算更严格：
-  // 所有顶层测试文件都必须收敛到 1000 行以内，避免“体检通过但尚未彻底完成”。
+  // 所有顶层测试文件都必须收敛到 1000 有效代码行以内，避免“体检通过但尚未彻底完成”。
   if (!是Rust顶层集成测试(relativePath) && !relativePath.startsWith("frontend/tests/")) {
     return [];
   }
-  if (lines.length <= 完成态顶层文件硬上限) {
+  if (lines <= 完成态顶层文件有效代码行硬上限) {
     return [];
   }
   return [
     {
       file: relativePath,
       label: "不满足 spec 完成态",
-      detail: `${relativePath}: ${lines.length} lines > ${完成态顶层文件硬上限}`,
+      detail: `${relativePath}: ${lines} effective lines > ${完成态顶层文件有效代码行硬上限}`,
     },
   ];
 }
@@ -222,8 +235,10 @@ function 统计测试规模(records) {
 
 function 打印规模(stats) {
   console.log("测试规模：");
-  console.log(`- frontend tests: ${stats.生产化前端测试文件数} files / ${stats.前端测试代码行数} lines`);
-  console.log(`- rust tests: ${stats.Rust测试文件数} files / ${stats.Rust测试代码行数} lines`);
+  console.log(
+    `- frontend tests: ${stats.生产化前端测试文件数} files / ${stats.前端测试代码行数} effective lines`
+  );
+  console.log(`- rust tests: ${stats.Rust测试文件数} files / ${stats.Rust测试代码行数} effective lines`);
 }
 
 function 打印最大文件(records) {
@@ -250,15 +265,15 @@ const records = 收集测试文件()
       path,
       relativePath,
       text,
-      lines: 统计物理行数(text),
+      lines: 统计有效代码行数(text),
       lineArray: text.split(/\r?\n/),
     };
   })
   .sort((a, b) => b.lines - a.lines);
 
 const violations = records.flatMap((record) => [
-  ...收集行数违规(record.relativePath, record.lineArray),
-  ...收集完成态顶层超限(record.relativePath, record.lineArray),
+  ...收集行数违规(record.relativePath, record.lines),
+  ...收集完成态顶层超限(record.relativePath, record.lines),
   ...收集only违规(record.relativePath, record.lineArray),
   ...收集skip违规(record.relativePath, record.lineArray),
 ]);

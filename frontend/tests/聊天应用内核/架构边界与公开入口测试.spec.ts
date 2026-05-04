@@ -59,11 +59,17 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
       resolve(process.cwd(), "应用根/聊天内核通知副作用.ts"),
       "utf8"
     );
+    const stateCoordinatorSource = readFileSync(
+      resolve(process.cwd(), "应用根/聊天应用本地状态协调器.ts"),
+      "utf8"
+    );
 
     expect(source).toContain("创建聊天内核平台桥接(");
     expect(source).toContain("private readonly 平台桥接: 聊天内核平台端口;");
     expect(existsSync(resolve(process.cwd(), "应用根/聊天本地状态折叠.ts"))).toBe(true);
-    expect(source).toContain('from "./聊天本地状态折叠.js"');
+    expect(source).toContain('from "./聊天应用本地状态协调器.js"');
+    expect(stateCoordinatorSource).toContain('from "./聊天本地状态折叠.js"');
+    expect(stateCoordinatorSource).toContain("应用聊天本地状态折叠(");
     expect(source).toContain("this.平台桥接.聊天房间传输()");
     expect(source).toContain("this.平台桥接.聊天实时连接()");
     expect(source).toContain("this.平台桥接.媒体传输()");
@@ -124,9 +130,14 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
   it("聊天应用内核通过媒体播放会话应用接入媒体 owner，而不是继续直连旧媒体编排入口", () => {
     const source = readFileSync(resolve(process.cwd(), "应用根/聊天应用内核.ts"), "utf8");
+    const mediaFactorySource = readFileSync(
+      resolve(process.cwd(), "应用根/聊天应用媒体编排工厂.ts"),
+      "utf8"
+    );
 
-    expect(source).toContain('from "../媒体/播放会话/应用.js"');
-    expect(source).toContain("创建媒体播放会话应用(");
+    expect(source).toContain('from "./聊天应用媒体编排工厂.js"');
+    expect(mediaFactorySource).toContain('from "../媒体/播放会话/应用.js"');
+    expect(mediaFactorySource).toContain("创建媒体播放会话应用(");
     expect(source).not.toContain('from "./聊天媒体编排.js"');
   });
 
@@ -144,14 +155,21 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
 
   it("进房与输入框命令不再在聊天应用内核里内联裁剪和草稿清理逻辑", () => {
     const source = readFileSync(resolve(process.cwd(), "应用根/聊天应用内核.ts"), "utf8");
+    const commandRouterSource = readFileSync(
+      resolve(process.cwd(), "应用根/聊天应用命令路由.ts"),
+      "utf8"
+    );
 
-    expect(source).toContain('from "../房间/应用.js"');
-    expect(source).toContain('from "../输入框/应用.js"');
-    expect(source).toContain("处理房间号输入变更(");
-    expect(source).toContain("处理进房请求(");
-    expect(source).toContain("处理历史房间进房请求(");
-    expect(source).toContain("处理消息输入变更(");
-    expect(source).toContain("处理发送消息请求(");
+    expect(source).toContain('from "./聊天应用命令路由.js"');
+    expect(commandRouterSource).toContain('from "../房间/应用.js"');
+    expect(commandRouterSource).toContain('from "../输入框/应用.js"');
+    expect(commandRouterSource).toContain("处理房间号输入变更(");
+    expect(commandRouterSource).toContain("处理进房请求(");
+    expect(commandRouterSource).toContain("处理历史房间进房请求(");
+    expect(commandRouterSource).toContain("处理消息输入变更(");
+    expect(commandRouterSource).toContain("处理发送消息请求(");
+    expect(source).not.toContain('from "../房间/应用.js"');
+    expect(source).not.toContain('from "../输入框/应用.js"');
     expect(source).not.toContain("const trimmedRoomCode = command.roomCode.trim();");
     expect(source).not.toContain("const currentDrafts = this.输入状态.composerMediaDrafts;");
     expect(source).not.toContain("const hasReadyDraft = currentDrafts.some");

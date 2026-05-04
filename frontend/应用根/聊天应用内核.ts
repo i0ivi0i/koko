@@ -5,15 +5,6 @@ import {
   type 房间壳外观,
 } from "../房间/运行时.js";
 import {
-  type 房间恢复编排依赖,
-} from "../恢复/壳层/房间恢复编排.js";
-import {
-  type 房间实时编排依赖,
-} from "../实时/应用.js";
-import {
-  type 阅读推进编排依赖,
-} from "../房间/壳层/阅读推进.js";
-import {
   创建聊天内核平台桥接,
   type 聊天内核平台端口,
 } from "./聊天应用编排桥接.js";
@@ -23,13 +14,7 @@ import {
   type 房间滚动器依赖,
   type 房间滚动器宿主,
 } from "../时间线/滚动器.js";
-import {
-  处理历史房间进房请求,
-  处理房间号输入变更,
-  处理进房请求,
-} from "../房间/应用.js";
 import { 创建房间滚动应用 } from "../时间线/应用.js";
-import { 处理发送消息请求, 处理消息输入变更 } from "../输入框/应用.js";
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
@@ -59,22 +44,14 @@ import {
 } from "./聊天状态.js";
 import {
   投影房间壳补丁,
-  投影恢复编排状态,
-  投影实时编排状态,
   投影聊天基础快照,
   投影聊天运行时预算,
-  投影阅读推进状态,
   type 房间壳补丁,
 } from "./聊天内核状态投影.js";
 import {
-  处理聊天内核平台桥接命令,
   type 平台桥接命令,
 } from "./聊天内核平台运行时.js";
 import { 处理权威新消息平台副作用 } from "./聊天内核通知副作用.js";
-import {
-  应用聊天本地状态折叠,
-  type 聊天本地状态补丁,
-} from "./聊天本地状态折叠.js";
 import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
   创建房间视口Actor,
@@ -97,10 +74,18 @@ import {
   type 媒体查看器打开请求,
 } from "../媒体/index.js";
 import {
-  创建媒体播放会话应用,
   type 媒体播放会话快照,
   type 媒体播放会话应用端口,
 } from "../媒体/播放会话/应用.js";
+import {
+  创建聊天应用本地状态协调器,
+  type 聊天应用本地状态协调器,
+} from "./聊天应用本地状态协调器.js";
+import { 创建聊天应用编排协调器依赖 } from "./聊天应用编排依赖工厂.js";
+import { 创建聊天应用媒体编排 } from "./聊天应用媒体编排工厂.js";
+import { 处理聊天应用命令 } from "./聊天应用命令路由.js";
+import { 执行聊天房间视图退场 } from "./聊天房间视图退场.js";
+import { 处理聊天内核平台桥接命令 } from "./聊天内核平台运行时.js";
 
 export type 聊天应用快照 = 聊天状态 & {
   bootstrapState: 房间壳外观["bootstrapState"];
@@ -216,6 +201,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 媒体传输: 媒体传输端口;
   private storage: 前端存储端口;
   private readonly 媒体编排: 媒体播放会话应用端口;
+  private readonly 状态协调器: 聊天应用本地状态协调器;
+  private readonly 执行平台桥接命令: (command: 平台桥接命令) => Promise<void>;
+  private readonly 执行房间视图退场: (
+    opts?: { keepRoomCodeCache: boolean }
+  ) => void;
 
   /**
    * 恢复专用补锚标记仍只属于阅读/滚动协作链路。
@@ -229,6 +219,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 这样浏览器滚动信号就先收进内核，再由阅读推进编排消费，不再让壳层横穿业务边界。
    */
   private readonly roomScroller: ReturnType<typeof 创建房间滚动应用>;
+  readonly dispatch: 聊天应用内核端口["dispatch"];
 
   constructor(deps: 聊天应用内核依赖) {
     this.deps = deps;
@@ -248,6 +239,46 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       ...初始聊天运行时状态,
       runtimeBudget: { ...初始聊天运行时状态.runtimeBudget },
     };
+    this.状态协调器 = 创建聊天应用本地状态协调器({
+      读取状态箱: () => ({
+        会话状态: this.会话状态,
+        输入状态: this.输入状态,
+        时间线状态: this.时间线状态,
+        视口状态: this.视口状态,
+        流程状态: this.流程状态,
+        运行时状态: this.运行时状态,
+      }),
+      写回状态箱: (next) => {
+        if (next.会话状态) {
+          this.会话状态 = next.会话状态;
+        }
+        if (next.输入状态) {
+          this.输入状态 = next.输入状态;
+        }
+        if (next.时间线状态) {
+          this.时间线状态 = next.时间线状态;
+        }
+        if (next.视口状态) {
+          this.视口状态 = next.视口状态;
+        }
+        if (next.流程状态) {
+          this.流程状态 = next.流程状态;
+        }
+        if (next.运行时状态) {
+          this.运行时状态 = next.运行时状态;
+        }
+      },
+      读取房间壳补丁: () => this.回填房间壳补丁(),
+      同步消息附件播放结果: () => this.媒体编排.同步消息附件播放结果(),
+      请求重渲染: () => this.deps.渲染桥.请求重渲染(),
+      发送恢复基线同步: (firstUnreadEventPosition) => {
+        this.roomViewport.send({
+          type: "SNAPSHOT_BASELINE_SYNCED",
+          firstUnreadEventPosition,
+        });
+      },
+      同步房间视口快照: () => this.同步房间视口快照(),
+    });
     this.同步房间视口快照();
     this.roomScroller = 创建房间滚动应用(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
@@ -270,12 +301,39 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.编排协调器.接收候选已读位置(position);
       },
     });
-    this.编排协调器 = new 聊天应用编排协调器({
-      创建恢复编排依赖: () => ({
-        读取恢复状态: () => this.读取恢复状态快照(),
-        写入恢复状态: (patch) => this.写入恢复状态补丁(patch),
+    this.执行房间视图退场 = (opts) => {
+      执行聊天房间视图退场(
+        {
+          清除当前房间标识: () => this.storage.清除当前房间标识(),
+          清除当前房间短码: () => this.storage.清除当前房间短码(),
+          重置编排端口: () => this.编排协调器.重置端口(),
+          取消挂起滚动副作用: () => this.roomScroller.取消挂起滚动副作用(),
+          写入恢复补锚标记: (value) => {
+            this.shouldPrimeReadAnchorAfterInitialSettle = value;
+          },
+          清空媒体编排: () => this.媒体编排.清空(),
+          重置时间线房间视图: () => {
+            this.roomTimeline.send({ type: "ROOM_SOFT_RESET" });
+          },
+          同步房间时间线快照: () => this.同步房间时间线快照(),
+          标记房间视图已退出: () => {
+            this.roomViewport.send({ type: "ROOM_VIEW_EXITED" });
+          },
+          写入本地状态: (patch) => {
+            this.状态协调器.写入本地状态(patch);
+          },
+          同步房间视口快照: () => this.同步房间视口快照(),
+        },
+        opts
+      );
+    };
+    this.编排协调器 = new 聊天应用编排协调器(
+      创建聊天应用编排协调器依赖({
+        状态协调器: this.状态协调器,
         接收时间线事实: (event) => this.接收时间线事实(event),
-        transport: this.房间传输,
+        接收实时会话事实: (event) => this.接收实时会话事实(event),
+        读取房间传输: () => this.房间传输,
+        读取实时传输: () => this.实时连接,
         storage: this.storage,
         roomKernel: {
           send: (event) => this.发送房间事件(event),
@@ -285,23 +343,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         subscribeRoom: (from) => this.编排协调器.subscribeRoom(from),
         取消待刷新已读锚点: () => this.编排协调器.取消待刷新已读锚点(),
         取消待跟随最新采样: () => this.编排协调器.取消待跟随最新采样(),
-        exitCurrentRoomView: (opts) => this.exitCurrentRoomView(opts),
+        exitCurrentRoomView: (opts) => this.执行房间视图退场(opts),
         disconnectRealtime: () => this.编排协调器.disconnectRealtime(),
         写入恢复补锚标记: (value) => {
           this.shouldPrimeReadAnchorAfterInitialSettle = value;
         },
         等待壳渲染完成: async () => {
           await this.deps.渲染桥.等待壳渲染完成();
-        },
-      }),
-      创建实时编排依赖: () => ({
-        读取实时状态: () => this.读取实时状态快照(),
-        写入实时状态: (patch) => this.写入实时状态补丁(patch),
-        接收时间线事实: (event) => this.接收时间线事实(event),
-        接收实时会话事实: (event) => this.接收实时会话事实(event),
-        transport: this.实时连接,
-        roomKernel: {
-          send: (event) => this.发送房间事件(event),
         },
         上报Transport异常: async (error) => {
           await this.编排协调器.接收Transport异常(error);
@@ -328,12 +376,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           return (await this.平台桥接.请求后台补发同步?.(tag)) ?? false;
         },
         读取当前时间: () => Date.now(),
-      }),
-      创建阅读推进依赖: () => ({
-        读取阅读状态: () => this.读取阅读状态快照(),
-        写入阅读状态: (patch) => this.写入阅读状态补丁(patch),
-        接收时间线事实: (event) => this.接收时间线事实(event),
-        transport: this.房间传输,
         上报历史前插开始: () => {
           this.roomViewport.send({
             type: "PROGRAMMATIC_SCROLL_STARTED",
@@ -341,33 +383,23 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           });
           this.同步房间视口快照();
         },
-        roomScroller: this.roomScroller,
         withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
           this.编排协调器.withSessionRefreshOnInvalid(operation),
-        等待壳渲染完成: async () => {
-          await this.deps.渲染桥.等待壳渲染完成();
-        },
-        滚到最新位置: () => this.roomScroller.滚到最新位置(),
-      }),
-      排空到期任务: this.平台桥接.排空到期任务,
-    });
-    this.媒体编排 = 创建媒体播放会话应用({
-      transport: () => this.媒体传输,
+        排空到期任务: this.平台桥接.排空到期任务,
+      })
+    );
+    this.媒体编排 = 创建聊天应用媒体编排({
+      读取媒体传输: () => this.媒体传输,
       读取会话编号: () => this.回填房间壳补丁().sessionId,
       读取当前房间标识: () => this.回填房间壳补丁().roomId || null,
       读取消息: () => this.时间线状态.messages,
       读取草稿: () => this.输入状态.composerMediaDrafts,
-      ...(this.平台桥接.媒体资产仓库
-        ? { 媒体缓存仓库: this.平台桥接.媒体资产仓库() }
-        : {}),
-      ...(this.平台桥接.媒体定位仓库
-        ? { 媒体定位仓库: this.平台桥接.媒体定位仓库() }
-        : {}),
-      ...(this.平台桥接.视频预览仓库
-        ? { 预览缓存: this.平台桥接.视频预览仓库() }
-        : {}),
+      写入媒体选择中过渡计数: (count) => {
+        this.状态协调器.写入本地状态({ mediaSelectionPendingCount: count });
+      },
+      平台扩展: this.平台桥接,
       写入草稿列表: (nextDrafts) => {
-        this.应用本地状态折叠({ composerMediaDrafts: nextDrafts });
+        this.状态协调器.写入本地状态({ composerMediaDrafts: nextDrafts });
       },
       请求重渲染: () => {
         this.deps.渲染桥.请求重渲染();
@@ -382,6 +414,41 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.roomScroller.清除程序滚动来源(source);
       },
     });
+    this.执行平台桥接命令 = async (command) => {
+      await 处理聊天内核平台桥接命令(command, {
+        appLifecycle: this.appLifecycle,
+        媒体编排: this.媒体编排,
+        读取运行时预算: () => this.运行时状态.runtimeBudget,
+        写入本地状态: (patch) => {
+          this.状态协调器.写入本地状态(patch);
+        },
+        接收实时会话事实: (event) => {
+          this.接收实时会话事实(event);
+        },
+      });
+    };
+    this.dispatch = async (command) => {
+      await 处理聊天应用命令(command, {
+        编排协调器: this.编排协调器,
+        媒体编排: this.媒体编排,
+        roomScroller: this.roomScroller,
+        roomViewport: this.roomViewport,
+        读取媒体草稿: () => this.输入状态.composerMediaDrafts,
+        读取媒体选择中过渡计数: () => this.输入状态.mediaSelectionPendingCount,
+        写入房间号输入: (value) => {
+          this.状态协调器.写入本地状态({ roomCodeInput: value });
+        },
+        写入消息输入: (value) => {
+          this.状态协调器.写入本地状态({ messageInput: value });
+        },
+        标记用户滚动意图: () => this.标记用户滚动意图(),
+        同步房间视口快照: () => this.同步房间视口快照(),
+        处理平台桥接命令: async (platformCommand) => {
+          await this.执行平台桥接命令(platformCommand);
+        },
+        leaveCurrentRoomView: () => this.leaveCurrentRoomView(),
+      });
+    };
   }
 
   snapshot(): 聊天应用快照 {
@@ -389,107 +456,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       ...this.读取聊天基础快照(),
       media: this.媒体编排.snapshot(),
     };
-  }
-
-  async dispatch(command: 聊天应用命令): Promise<void> {
-    switch (command.type) {
-      case "BOOTSTRAP_REQUESTED":
-        await this.编排协调器.bootstrap();
-        return;
-      case "ROOM_CODE_INPUT_CHANGED":
-        处理房间号输入变更({
-          value: command.value,
-          写入房间号输入: (value) => {
-            this.应用本地状态折叠({ roomCodeInput: value });
-          },
-        });
-        return;
-      case "MESSAGE_INPUT_CHANGED":
-        处理消息输入变更({
-          value: command.value,
-          写入消息输入: (value) => {
-            this.应用本地状态折叠({ messageInput: value });
-          },
-        });
-        return;
-      case "JOIN_ROOM_REQUESTED":
-        await 处理进房请求({
-          roomCode: command.roomCode,
-          写入房间号输入: (value) => {
-            this.应用本地状态折叠({ roomCodeInput: value });
-          },
-          触发进房: () => this.编排协调器.joinRoom(),
-        });
-        return;
-      case "JOIN_HISTORY_ROOM_REQUESTED":
-        await 处理历史房间进房请求({
-          roomCode: command.roomCode,
-          写入房间号输入: (value) => {
-            this.应用本地状态折叠({ roomCodeInput: value });
-          },
-          触发进房: () => this.编排协调器.joinRoom(),
-        });
-        return;
-      case "LEAVE_ROOM_VIEW_REQUESTED":
-        this.leaveCurrentRoomView();
-        return;
-      case "SEND_MESSAGE_REQUESTED":
-        await 处理发送消息请求({
-          读取媒体草稿: () => this.输入状态.composerMediaDrafts,
-          触发发送: () => this.编排协调器.sendMessage(),
-          清空媒体草稿: () => this.媒体编排.清空草稿(),
-        });
-        return;
-      case "ROOM_SCROLL_INTENT":
-        this.标记用户滚动意图();
-        return;
-      case "ROOM_SCROLL_OBSERVED":
-        this.roomScroller.处理滚动事件();
-        return;
-      case "ROOM_MEDIA_WINDOW_OBSERVED":
-        this.媒体编排.同步媒体窗口附件(command.attachmentIds);
-        return;
-      case "MEDIA_INLINE_AUTOPLAY_OBSERVED":
-        this.媒体编排.处理自动播候选(command.candidates);
-        return;
-      case "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED":
-        this.媒体编排.更新媒体播放位置({
-          attachmentId: command.attachmentId,
-          position: command.position,
-        });
-        return;
-      case "ROOM_JUMP_TO_LATEST_REQUESTED":
-        this.roomViewport.send({ type: "JUMP_TO_LATEST_REQUESTED" });
-        this.同步房间视口快照();
-        await this.编排协调器.请求跳到最新();
-        return;
-      case "MEDIA_OPEN_REQUESTED":
-        this.媒体编排.打开查看器(command.request);
-        return;
-      case "MEDIA_SESSION_SIGNALLED":
-        this.媒体编排.处理媒体会话信号(command.attachmentId, command.signal);
-        return;
-      case "MEDIA_FILES_SELECTED":
-        await this.媒体编排.处理选择媒体文件(command.files);
-        return;
-      case "MEDIA_DRAFT_REMOVE_REQUESTED":
-        this.媒体编排.移除媒体草稿(command.localId);
-        return;
-      case "MEDIA_DRAFT_RESUME_REQUESTED":
-        await this.媒体编排.继续上传媒体草稿(command.localId);
-        return;
-      case "MEDIA_DRAFT_RESTART_REQUESTED":
-        await this.媒体编排.重新上传媒体草稿(command.localId);
-        return;
-      case "PLATFORM_LIFECYCLE_CHANGED":
-      case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
-      case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
-      case "PLATFORM_CACHE_UPDATE_CHANGED":
-      case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
-      case "PLATFORM_OFFLINE_STATUS_CHANGED":
-        await this.处理平台桥接命令(command);
-        return;
-    }
   }
 
   setTransportForTest(transport: 前端传输端口): void {
@@ -557,7 +523,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private 同步房间视口快照(): void {
-    this.应用本地状态折叠(投影视口快照到聊天视口状态(this.roomViewport.snapshot()));
+    this.状态协调器.写入本地状态(
+      投影视口快照到聊天视口状态(this.roomViewport.snapshot())
+    );
   }
 
   读取房间滚动器供测试(): ReturnType<typeof 创建房间滚动应用> {
@@ -571,7 +539,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 房间壳派生状态仍然要翻成真实 room event，而不是直接改房间真相。
    */
   写入视口调试状态供测试(patch: Partial<聊天视口调试状态>): void {
-    this.应用本地状态折叠(patch);
+    this.状态协调器.写入本地状态(patch);
     const nextFirstUnreadEventPosition =
       Object.hasOwn(patch, "firstUnreadEventPosition")
         ? patch.firstUnreadEventPosition ?? null
@@ -610,20 +578,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       });
     }
     this.同步房间视口快照();
-  }
-
-  private async 处理平台桥接命令(command: 平台桥接命令): Promise<void> {
-    await 处理聊天内核平台桥接命令(command, {
-      appLifecycle: this.appLifecycle,
-      媒体编排: this.媒体编排,
-      读取运行时预算: () => this.运行时状态.runtimeBudget,
-      写入本地状态: (patch) => {
-        this.应用本地状态折叠(patch);
-      },
-      接收实时会话事实: (event) => {
-        this.接收实时会话事实(event);
-      },
-    });
   }
 
   /**
@@ -677,51 +631,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private 同步房间时间线快照(): void {
     const snapshot = this.roomTimeline.getSnapshot();
-    this.应用本地状态折叠(投影时间线快照到聊天时间线状态(snapshot));
-  }
-
-  /**
-   * 本地 slice 写入口只负责聊天内核自己拥有的状态。
-   * room kernel 派生字段不会在这里落地，避免重新长回“共享大状态 + 多处 patch”。
-   */
-  private 应用本地状态折叠(patch: 聊天本地状态补丁): boolean {
-    const 结果 = 应用聊天本地状态折叠(
-      {
-        会话状态: this.会话状态,
-        输入状态: this.输入状态,
-        时间线状态: this.时间线状态,
-        视口状态: this.视口状态,
-        流程状态: this.流程状态,
-        运行时状态: this.运行时状态,
-      },
-      patch
-    );
-    if (!结果.写入了本地补丁) {
-      return false;
-    }
-    if (结果.会话状态) {
-      this.会话状态 = 结果.会话状态;
-    }
-    if (结果.输入状态) {
-      this.输入状态 = 结果.输入状态;
-    }
-    if (结果.时间线状态) {
-      this.时间线状态 = 结果.时间线状态;
-    }
-    if (结果.视口状态) {
-      this.视口状态 = 结果.视口状态;
-    }
-    if (结果.流程状态) {
-      this.流程状态 = 结果.流程状态;
-    }
-    if (结果.运行时状态) {
-      this.运行时状态 = 结果.运行时状态;
-    }
-    if (结果.消息列表发生变化) {
-      this.媒体编排.同步消息附件播放结果();
-    }
-    this.deps.渲染桥.请求重渲染();
-    return true;
+    this.状态协调器.写入本地状态(投影时间线快照到聊天时间线状态(snapshot));
   }
 
   private 读取聊天基础快照(): Omit<聊天应用快照, "media"> {
@@ -757,65 +667,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       hasUserScrollIntent: this.视口状态.hasUserScrollIntent,
       historyLoadThrottleUntil: this.视口状态.historyLoadThrottleUntil,
     };
-  }
-
-  private 读取恢复状态快照(): ReturnType<房间恢复编排依赖["读取恢复状态"]> {
-    return 投影恢复编排状态({
-      会话状态: this.会话状态,
-      输入状态: this.输入状态,
-      时间线状态: this.时间线状态,
-      视口状态: this.视口状态,
-      流程状态: this.流程状态,
-      房间壳: this.回填房间壳补丁(),
-    });
-  }
-
-  private 写入恢复状态补丁(
-    patch: Parameters<房间恢复编排依赖["写入恢复状态"]>[0]
-  ): void {
-    this.应用本地状态折叠(patch);
-    if (
-      Object.hasOwn(patch, "initialUnreadSettled") &&
-      patch.initialUnreadSettled === false &&
-      Object.hasOwn(patch, "firstUnreadEventPosition")
-    ) {
-      this.roomViewport.send({
-        type: "SNAPSHOT_BASELINE_SYNCED",
-        firstUnreadEventPosition: patch.firstUnreadEventPosition ?? null,
-      });
-      this.同步房间视口快照();
-    }
-  }
-
-  private 读取实时状态快照(): ReturnType<房间实时编排依赖["读取实时状态"]> {
-    return 投影实时编排状态({
-      会话状态: this.会话状态,
-      输入状态: this.输入状态,
-      时间线状态: this.时间线状态,
-      视口状态: this.视口状态,
-      流程状态: this.流程状态,
-      房间壳: this.回填房间壳补丁(),
-    });
-  }
-
-  private 写入实时状态补丁(
-    patch: Parameters<房间实时编排依赖["写入实时状态"]>[0]
-  ): void {
-    this.应用本地状态折叠(patch);
-  }
-
-  private 读取阅读状态快照(): ReturnType<阅读推进编排依赖["读取阅读状态"]> {
-    return 投影阅读推进状态({
-      时间线状态: this.时间线状态,
-      视口状态: this.视口状态,
-      房间壳: this.回填房间壳补丁(),
-    });
-  }
-
-  private 写入阅读状态补丁(
-    patch: Parameters<阅读推进编排依赖["写入阅读状态"]>[0]
-  ): void {
-    this.应用本地状态折叠(patch);
   }
 
   /**
@@ -856,41 +707,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     return 投影房间壳补丁(派生房间壳外观(this.roomKernel.getSnapshot()));
   }
 
-  /**
-   * 房间页退场必须同时清掉 socket、滚动尾波和壳层本地媒体副作用。
-   * 否则 UI 已经退回首页了，旧房间的上传器/播放态还活着，就会制造幽灵状态。
-   */
-  private exitCurrentRoomView(
-    opts: { keepRoomCodeCache: boolean } = {
-      keepRoomCodeCache: true,
-    }
-  ): void {
-    this.storage.清除当前房间标识();
-    if (!opts.keepRoomCodeCache) {
-      this.storage.清除当前房间短码();
-    }
-    this.编排协调器.重置端口();
-    this.roomScroller.取消挂起滚动副作用();
-    this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    this.媒体编排.清空();
-    this.roomTimeline.send({ type: "ROOM_SOFT_RESET" });
-    this.同步房间时间线快照();
-    this.roomViewport.send({ type: "ROOM_VIEW_EXITED" });
-    this.应用本地状态折叠({
-      messageInput: "",
-      lastReadEventPosition: null,
-      firstUnreadEventPosition: null,
-      pendingReadAnchorPosition: null,
-      pending: false,
-      historyLoading: false,
-      historyErrorCode: "",
-    });
-    this.同步房间视口快照();
-  }
-
   private leaveCurrentRoomView(): void {
     this.发送房间事件({ type: "SOFT_LEAVE_REQUESTED" });
-    this.exitCurrentRoomView({ keepRoomCodeCache: true });
+    this.执行房间视图退场({ keepRoomCodeCache: true });
   }
 
 }

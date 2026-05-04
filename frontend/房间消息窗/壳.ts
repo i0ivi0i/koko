@@ -20,6 +20,11 @@ import {
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 import { 房间消息窗时间线媒体基类 } from "./时间线媒体基类.js";
 import { 读取允许渲染真实预览视频附件集合 } from "./媒体窗口.js";
+import {
+  同步时间线退场Owner底板预览,
+  广播房间媒体会话信号,
+  请求打开房间媒体查看器,
+} from "./时间线媒体协作.js";
 
 /**
  * 真正的房间消息窗 owner 收进本文件：
@@ -154,7 +159,29 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
          * 3. 这里先把最后一拍位置灌回本地桥，再对齐底板 preview，用户看到的才是同一帧退场。
          */
         this.时间线播放器宿主Owner.冲刷当前播放位置();
-        this.同步即将退场Owner底板预览(previousOwnerAttachmentId);
+        同步时间线退场Owner底板预览({
+          root: this,
+          attachmentId: previousOwnerAttachmentId,
+          自动播位置上报记录: this.自动播位置上报记录,
+          读取视频当前播放源: (video) => this.读取视频当前播放源(video),
+          归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
+          标记时间线视频首帧已就绪: (attachmentId, src) =>
+            this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, src),
+          捕获时间线自动播冻结帧: (attachmentId, video) =>
+            this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video),
+          广播自动播播放位置: (
+            attachmentId,
+            video,
+            force = false,
+            allowReleasedOwner = false
+          ) =>
+            this.广播自动播播放位置(
+              attachmentId,
+              video,
+              force,
+              allowReleasedOwner
+            ),
+        });
         this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
         this.最近退场Owner附件Id = previousOwnerAttachmentId;
       } else if (!currentOwnerAttachmentId) {
@@ -350,11 +377,20 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
         标记视频封面加载失败: (attachmentId, event) =>
           this.标记视频封面加载失败(attachmentId, event),
         广播媒体会话信号: (attachmentId, signal) =>
-          this.广播媒体会话信号(attachmentId, signal),
+          广播房间媒体会话信号({
+            dispatcher: this,
+            attachmentId,
+            signal,
+          }),
         阻止时间线媒体预览原生菜单: (event) =>
           this.阻止时间线媒体预览原生菜单(event),
         打开媒体查看器: (event, startAttachmentId) =>
-          this.打开媒体查看器(event, startAttachmentId),
+          请求打开房间媒体查看器({
+            dispatcher: this,
+            triggerEvent: event,
+            startAttachmentId,
+            items: this.读取媒体查看器项目(),
+          }),
       },
       item,
       可渲染真实预览视频附件

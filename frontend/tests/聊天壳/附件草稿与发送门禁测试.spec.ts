@@ -316,6 +316,45 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
     el.remove();
   });
 
+  it("统一媒体文件刚选中但草稿尚未注册时，也会立刻禁用发送并阻止纯文本抢跑", async () => {
+    const transport = new 假传输();
+    const el = await 创建已入房聊天壳(transport);
+    const fake媒体发布器 = 创建假媒体发布器();
+    let 结束媒体选择!: () => void;
+    fake媒体发布器.处理选择媒体文件.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          结束媒体选择 = resolve;
+        })
+    );
+    注入媒体发布器供测试(el, fake媒体发布器);
+    输入消息到操作台(el, "文本不能先发");
+    const imageFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", { type: "image/jpeg" });
+    const input = 读取统一媒体文件输入(el);
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [imageFile],
+    });
+
+    input.dispatchEvent(new Event("change"));
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在准备");
+
+    读取操作台表单(el).dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(transport.socket.sentEvents.some(({ event }) => event === "create_message")).toBe(false);
+
+    结束媒体选择();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(false);
+    el.remove();
+  });
+
   it("组件销毁时会销毁媒体发布器，避免旧上传器泄漏到下一次挂载", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();

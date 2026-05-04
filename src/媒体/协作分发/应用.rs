@@ -1,4 +1,4 @@
-use crate::{application, media, shared::contract};
+use crate::{media, room, shared::contract};
 
 /// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在媒体分发语义里。
 /// handler 只负责调度，不直接越层操纵仓储。
@@ -65,7 +65,7 @@ pub fn 读取附件内容(
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    application::校验实时连接会话(仓储, 会话标识)?;
+    room::application::校验实时连接会话(仓储, 会话标识)?;
     let snapshot = 仓储
         .查询附件快照(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
@@ -101,7 +101,7 @@ pub fn 查询媒体定位(
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
-    application::校验实时连接会话(仓储, 会话标识)?;
+    room::application::校验实时连接会话(仓储, 会话标识)?;
     let snapshot = 仓储
         .查询附件快照(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;

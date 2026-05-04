@@ -188,7 +188,16 @@ impl 假仓储 {
     }
 }
 
-impl koko::application::仓储端口 for 假仓储 {
+impl koko::identity::application::会话身份读取端口 for 假仓储 {
+    fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, koko::shared::contract::错误码> {
+        Ok(self.会话到匿名身份.get(会话标识).cloned())
+    }
+}
+
+impl koko::identity::application::身份仓储端口 for 假仓储 {
     /// 假实现：同一设备凭证恢复同一个匿名身份与稳定会话。
     fn 引导匿名身份(
         &mut self,
@@ -215,7 +224,39 @@ impl koko::application::仓储端口 for 假仓储 {
         );
         Ok(snapshot)
     }
+}
 
+impl koko::room::application::会话房间校验仓储端口 for 假仓储 {
+    /// 假实现：当前测试里，形如 `s-*` 的会话都视为已存在。
+    fn 检查会话存在(
+        &self,
+        会话标识: &str,
+    ) -> Result<bool, koko::shared::contract::错误码> {
+        Ok(会话标识.starts_with("s-"))
+    }
+
+    /// 假实现：房间存在性查询。
+    fn 检查房间存在(
+        &self,
+        房间标识: &str,
+    ) -> Result<bool, koko::shared::contract::错误码> {
+        Ok(self.房间成员.contains_key(房间标识))
+    }
+
+    /// 假实现：成员资格查询。
+    fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, koko::shared::contract::错误码> {
+        Ok(self
+            .房间成员
+            .get(房间标识)
+            .is_some_and(|set| set.contains(会话标识)))
+    }
+}
+
+impl koko::room::application::房间仓储端口 for 假仓储 {
     /// 假实现：按短码创建或复用房间，并写入成员关系。
     fn 按短码进房或建房(
         &mut self,
@@ -245,22 +286,6 @@ impl koko::application::仓储端口 for 假仓储 {
         })
     }
 
-    /// 假实现：当前测试里，形如 `s-*` 的会话都视为已存在。
-    fn 检查会话存在(
-        &self,
-        会话标识: &str,
-    ) -> Result<bool, koko::shared::contract::错误码> {
-        Ok(会话标识.starts_with("s-"))
-    }
-
-    /// 假实现：房间存在性查询。
-    fn 检查房间存在(
-        &self,
-        房间标识: &str,
-    ) -> Result<bool, koko::shared::contract::错误码> {
-        Ok(self.房间成员.contains_key(房间标识))
-    }
-
     /// 假实现：房间最新事件位置就是本地计数器。
     fn 查询房间最新事件位置(
         &self,
@@ -271,18 +296,6 @@ impl koko::application::仓储端口 for 假仓储 {
         } else {
             Ok(None)
         }
-    }
-
-    /// 假实现：成员资格查询。
-    fn 检查成员资格(
-        &self,
-        房间标识: &str,
-        会话标识: &str,
-    ) -> Result<bool, koko::shared::contract::错误码> {
-        Ok(self
-            .房间成员
-            .get(房间标识)
-            .is_some_and(|set| set.contains(会话标识)))
     }
 
     /// 假实现：房间快照读取。
@@ -349,32 +362,6 @@ impl koko::application::仓储端口 for 假仓储 {
         })
     }
 
-    /// 假实现：统一消息入口直接生成消息已创建事件并推进本地事件位置。
-    fn 创建统一消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-        附件: &[koko::domain::message::已校验附件引用],
-    ) -> Result<koko::shared::contract::领域事件, koko::shared::contract::错误码> {
-        // 用例测试只关心“统一入口是否单路径提交”，这里保持最小可验证快照。
-        let _ = 附件;
-        self.统一消息事件调用次数 += 1;
-        self.消息计数 += 1;
-        self.最新位置 += 1;
-        Ok(koko::shared::contract::领域事件::消息已创建 {
-            房间标识: 房间标识.to_string(),
-            消息标识: format!("m-{}", self.消息计数),
-            客户端消息标识: 客户端消息标识.to_string(),
-            发送者会话标识: 会话标识.to_string(),
-            发送者花名: "测试用户".to_string(),
-            文本: 文本.to_string(),
-            附件: Vec::new(),
-            事件位置: self.最新位置,
-        })
-    }
-
     /// 假实现：阅读锚点按 `(匿名身份, 房间)` 收口，且只能单调前进。
     fn 推进房间阅读位置(
         &mut self,
@@ -406,35 +393,56 @@ impl koko::application::仓储端口 for 假仓储 {
             .get(&(identity.clone(), 房间标识.to_string()))
             .copied())
     }
+}
 
-    fn 查询会话所属匿名身份(
-        &self,
-        会话标识: &str,
-    ) -> Result<Option<String>, koko::shared::contract::错误码> {
-        Ok(self.会话到匿名身份.get(会话标识).cloned())
-    }
-
+impl koko::message::application::消息仓储端口 for 假仓储 {
     fn 查询附件快照(
         &self,
         附件标识: &str,
     ) -> Result<Option<koko::media::模型::附件读取结果>, koko::shared::contract::错误码> {
         Ok(self.附件.get(附件标识).cloned())
     }
+
+    /// 假实现：统一消息入口直接生成消息已创建事件并推进本地事件位置。
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[koko::domain::message::已校验附件引用],
+    ) -> Result<koko::shared::contract::领域事件, koko::shared::contract::错误码> {
+        // 用例测试只关心“统一入口是否单路径提交”，这里保持最小可验证快照。
+        let _ = 附件;
+        self.统一消息事件调用次数 += 1;
+        self.消息计数 += 1;
+        self.最新位置 += 1;
+        Ok(koko::shared::contract::领域事件::消息已创建 {
+            房间标识: 房间标识.to_string(),
+            消息标识: format!("m-{}", self.消息计数),
+            客户端消息标识: 客户端消息标识.to_string(),
+            发送者会话标识: 会话标识.to_string(),
+            发送者花名: "测试用户".to_string(),
+            文本: 文本.to_string(),
+            附件: Vec::new(),
+            事件位置: self.最新位置,
+        })
+    }
 }
 
-impl koko::application::Realtime仓储端口 for 假仓储 {
+impl koko::realtime::application::实时会话房间校验仓储端口 for 假仓储 {
     async fn 检查会话存在(
         &self,
         会话标识: &str,
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::检查会话存在(self, 会话标识)
+        <Self as koko::room::application::会话房间校验仓储端口>::检查会话存在(self, 会话标识)
     }
 
     async fn 检查房间存在(
         &self,
         房间标识: &str,
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::检查房间存在(self, 房间标识)
+        <Self as koko::room::application::会话房间校验仓储端口>::检查房间存在(self, 房间标识)
     }
 
     async fn 检查成员资格(
@@ -442,33 +450,44 @@ impl koko::application::Realtime仓储端口 for 假仓储 {
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::检查成员资格(self, 房间标识, 会话标识)
+        <Self as koko::room::application::会话房间校验仓储端口>::检查成员资格(
+            self,
+            房间标识,
+            会话标识,
+        )
     }
+}
 
+impl koko::realtime::application::实时房间仓储端口 for 假仓储 {
     async fn 拉取房间增量事件(
         &self,
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<koko::shared::contract::快照, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::拉取房间增量事件(
+        <Self as koko::room::application::房间仓储端口>::拉取房间增量事件(
             self,
             房间标识,
             从位置开始,
         )
     }
+}
 
+impl koko::message::application::Realtime消息仓储端口 for 假仓储 {
     async fn 查询会话所属匿名身份(
         &self,
         会话标识: &str,
     ) -> Result<Option<String>, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::查询会话所属匿名身份(self, 会话标识)
+        <Self as koko::identity::application::会话身份读取端口>::查询会话所属匿名身份(
+            self,
+            会话标识,
+        )
     }
 
     async fn 查询附件快照(
         &self,
         附件标识: &str,
     ) -> Result<Option<koko::media::模型::附件读取结果>, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::查询附件快照(self, 附件标识)
+        <Self as koko::message::application::消息仓储端口>::查询附件快照(self, 附件标识)
     }
 
     async fn 创建统一消息事件(
@@ -479,7 +498,7 @@ impl koko::application::Realtime仓储端口 for 假仓储 {
         文本: &str,
         附件: &[koko::domain::message::已校验附件引用],
     ) -> Result<koko::shared::contract::领域事件, koko::shared::contract::错误码> {
-        <Self as koko::application::仓储端口>::创建统一消息事件(
+        <Self as koko::message::application::消息仓储端口>::创建统一消息事件(
             self,
             房间标识,
             客户端消息标识,
@@ -620,7 +639,7 @@ fn 校验房间订阅资格会拒绝非成员() {
         _ => panic!("应返回房间快照"),
     };
 
-    let result = koko::application::校验房间订阅资格(&repo, &room_id, "s-2");
+    let result = koko::room::application::校验房间订阅资格(&repo, &room_id, "s-2");
     assert!(matches!(
         result,
         Err(koko::shared::contract::错误码::成员资格不足)

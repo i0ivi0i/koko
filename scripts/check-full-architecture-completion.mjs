@@ -8,7 +8,54 @@ const 仓库根目录 = resolve(当前文件目录, "..");
 
 const 转相对路径 = (path) => relative(仓库根目录, path).replaceAll("\\", "/");
 const 读取源码 = (path) => readFileSync(path, "utf8");
-const 统计物理行数 = (source) => source.split(/\r?\n/).length;
+const 统计有效代码行数 = (source) => {
+  let inBlockComment = false;
+  let count = 0;
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    if (inBlockComment) {
+      const commentEnd = line.indexOf("*/");
+      if (commentEnd === -1) {
+        continue;
+      }
+      const trailing = line.slice(commentEnd + 2).trim();
+      inBlockComment = false;
+      if (!trailing || trailing.startsWith("//")) {
+        continue;
+      }
+      count += 1;
+      continue;
+    }
+    if (
+      line.startsWith("//") ||
+      line.startsWith("///") ||
+      line.startsWith("//!") ||
+      line === "/*" ||
+      line.startsWith("*") ||
+      line === "*/"
+    ) {
+      continue;
+    }
+    if (line.startsWith("/*")) {
+      const commentEnd = line.indexOf("*/");
+      if (commentEnd === -1) {
+        inBlockComment = true;
+        continue;
+      }
+      const trailing = line.slice(commentEnd + 2).trim();
+      if (!trailing || trailing.startsWith("//")) {
+        continue;
+      }
+      count += 1;
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+};
 
 const 枚举文件 = (dir, skip = new Set()) => {
   const out = [];
@@ -45,7 +92,7 @@ const 超预算文件 = 生产源码文件
     const source = 读取源码(path);
     return {
       path: 转相对路径(path),
-      lines: 统计物理行数(source),
+      lines: 统计有效代码行数(source),
     };
   })
   .filter((item) => item.lines > 987);
@@ -146,16 +193,35 @@ if (规则复制命中.length > 0) {
 }
 
 const 适配源码 = 读取源码(join(仓库根目录, "src", "适配", "mod.rs"));
-const pg仓储Impl命中 = [
-  "impl 仓储端口 for Pg仓储",
-  "impl media::application::媒体仓储端口 for Pg仓储",
-  "impl application::Realtime仓储端口 for Pg仓储",
+const 共享适配impl命中 = [
+  "impl 仓储端口 for Pg媒体仓储",
+  "impl application::Realtime仓储端口 for PgRealtime仓储",
 ].filter((fragment) => 适配源码.includes(fragment));
-if (pg仓储Impl命中.length > 1) {
+const 共享适配转发命中次数 = (适配源码.match(/<Pg仓储 as 仓储端口>::/g) ?? []).length;
+if (共享适配impl命中.length > 0 || 共享适配转发命中次数 > 0) {
   高风险汇聚点.push({
     file: "src/适配/mod.rs",
-    kind: "total repository shell",
-    detail: `Pg仓储 仍挂着多个上下文 impl: ${pg仓储Impl命中.join("、")}`,
+    kind: "shared adapter hub",
+    detail: `共享基座文件仍承载跨上下文 impl/转发：impl=${共享适配impl命中.join("、") || "0"}，forward=${共享适配转发命中次数}`,
+  });
+}
+
+const 应用共享入口源码 = 读取源码(join(仓库根目录, "src", "应用", "mod.rs"));
+const 共享应用端口命中 = [
+  "pub trait 仓储端口",
+  "pub trait Realtime仓储端口",
+  "fn 引导匿名身份(",
+  "fn 拉取房间快照(",
+  "fn 创建统一消息事件(",
+  "fn 推进房间阅读位置(",
+  "async fn 检查会话存在(",
+  "async fn 创建统一消息事件(",
+].filter((fragment) => 应用共享入口源码.includes(fragment));
+if (共享应用端口命中.length > 0) {
+  高风险汇聚点.push({
+    file: "src/应用/mod.rs",
+    kind: "shared application port hub",
+    detail: `共享应用入口仍保留跨上下文总仓储口信号：${共享应用端口命中.join("、")}`,
   });
 }
 
@@ -163,19 +229,82 @@ const 应用根内核源码 = 读取源码(
   join(仓库根目录, "frontend", "应用根", "聊天应用内核.ts")
 );
 const 编排吸附片段 = [
-  "恢复编排端口",
-  "实时编排端口",
-  "阅读推进编排端口",
+  "new 聊天应用编排协调器({",
+  "创建恢复编排依赖: () => ({",
+  "创建实时编排依赖: () => ({",
+  "创建阅读推进依赖: () => ({",
+  "this.媒体编排 = 创建媒体播放会话应用({",
+  "async dispatch(command: 聊天应用命令): Promise<void> {",
+  "private exitCurrentRoomView(",
   "处理平台桥接命令(",
   "应用本地状态折叠(",
-  "同步实时会话快照并执行副作用(",
+  "写入恢复状态补丁(",
+  "写入实时状态补丁(",
+  "写入阅读状态补丁(",
 ];
 const 编排命中 = 编排吸附片段.filter((fragment) => 应用根内核源码.includes(fragment));
 if (编排命中.length >= 4) {
   高风险汇聚点.push({
     file: "frontend/应用根/聊天应用内核.ts",
-    kind: "total orchestration shell",
+    kind: "frontend total coordination shell",
     detail: `仍吸附过多跨子域职责: ${编排命中.join("、")}`,
+  });
+}
+
+const 媒体发布源码 = 读取源码(join(仓库根目录, "frontend", "媒体", "媒体发布.ts"));
+const 媒体发布厨房水槽片段 = [
+  "const handleMediaUploadAdded =",
+  "const handleMediaUploadSuccess =",
+  "const handleMediaUploadError =",
+  "const ensureUploader =",
+  "const 尝试计算源文件SourceHash =",
+  "const 尝试复用SourceHash媒体资产 =",
+  "const 继续上传失败草稿 =",
+  "const 重新上传失败草稿 =",
+  "async 处理选择媒体文件(files: Iterable<File>): Promise<void> {",
+];
+const 媒体发布厨房水槽命中 = 媒体发布厨房水槽片段.filter((fragment) =>
+  媒体发布源码.includes(fragment)
+);
+if (媒体发布厨房水槽命中.length >= 6) {
+  高风险汇聚点.push({
+    file: "frontend/媒体/媒体发布.ts",
+    kind: "media publisher kitchen-sink factory",
+    detail: `同一发布器函数仍同时承载多条局部子系统：${媒体发布厨房水槽命中.join("、")}`,
+  });
+}
+
+const 时间线媒体基类路径 = join(
+  仓库根目录,
+  "frontend",
+  "房间消息窗",
+  "时间线媒体基类.ts"
+);
+const 时间线媒体基类源码 = 读取源码(时间线媒体基类路径);
+const 时间线媒体大桶片段 = [
+  "export abstract class 房间消息窗时间线媒体基类 extends LitElement",
+  "new 自动播候选观察Owner({",
+  "new 媒体窗口观察Owner(",
+  "new 时间线播放器宿主Owner({",
+  "new 时间线画面缓存Owner({",
+  "protected 读取即将渲染的时间线视频表面期望(",
+  "protected 同步即将退场Owner底板预览(",
+  "protected 打开媒体查看器(",
+  "protected 广播媒体会话信号(",
+];
+const 时间线媒体大桶命中 = 时间线媒体大桶片段.filter((fragment) =>
+  时间线媒体基类源码.includes(fragment)
+);
+if (
+  时间线媒体大桶命中.length >= 6 ||
+  统计有效代码行数(时间线媒体基类源码) > 900
+) {
+  高风险汇聚点.push({
+    file: "frontend/房间消息窗/时间线媒体基类.ts",
+    kind: "timeline media inheritance bucket",
+    detail: `时间线媒体基类仍是继承大桶：命中 ${时间线媒体大桶命中.length} 个结构片段，有效代码行 ${统计有效代码行数(
+      时间线媒体基类源码
+    )}`,
   });
 }
 

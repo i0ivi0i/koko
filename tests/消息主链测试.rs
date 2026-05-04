@@ -53,7 +53,7 @@ fn 会话所属匿名身份返回内部uuid而不是兼容旧串() {
     );
 
     let resolved_identity =
-        koko::application::仓储端口::查询会话所属匿名身份(&repo, &session_id)
+        koko::identity::application::会话身份读取端口::查询会话所属匿名身份(&repo, &session_id)
             .expect("查询会话所属匿名身份不应报错")
             .expect("应能解析出内部身份");
     assert_eq!(

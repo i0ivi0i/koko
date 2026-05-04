@@ -23,6 +23,7 @@ describe("输入框应用", () => {
         { localId: "draft-1", status: "ready" },
         { localId: "draft-2", status: "ready" },
       ],
+      读取媒体选择中数量: () => 0,
       触发发送,
       清空媒体草稿,
     });
@@ -40,11 +41,27 @@ describe("输入框应用", () => {
         { localId: "draft-1", status: "ready" },
         { localId: "draft-2", status: "transporting" },
       ],
+      读取媒体选择中数量: () => 0,
       触发发送,
       清空媒体草稿,
     });
 
     expect(触发发送).toHaveBeenCalledTimes(1);
+    expect(清空媒体草稿).not.toHaveBeenCalled();
+  });
+
+  it("存在媒体选择中过渡态时不会先把纯文本送进发送主链", async () => {
+    const 触发发送 = vi.fn().mockResolvedValue(undefined);
+    const 清空媒体草稿 = vi.fn();
+
+    await 处理发送消息请求({
+      读取媒体草稿: () => [],
+      读取媒体选择中数量: () => 1,
+      触发发送,
+      清空媒体草稿,
+    });
+
+    expect(触发发送).not.toHaveBeenCalled();
     expect(清空媒体草稿).not.toHaveBeenCalled();
   });
 });

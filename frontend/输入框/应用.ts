@@ -9,6 +9,7 @@ export interface 消息输入变更请求 {
 
 export interface 发送消息请求 {
   读取媒体草稿(): ReadonlyArray<媒体草稿状态摘要>;
+  读取媒体选择中数量(): number;
   触发发送(): Promise<void>;
   清空媒体草稿(): void;
 }
@@ -40,9 +41,17 @@ export function 处理消息输入变更({
  */
 export async function 处理发送消息请求({
   读取媒体草稿,
+  读取媒体选择中数量,
   触发发送,
   清空媒体草稿,
 }: 发送消息请求): Promise<void> {
+  /**
+   * 文件刚从 picker 返回时，媒体草稿可能还没写进列表；
+   * 这段过渡态如果继续放行发送，就会把纯文本先发出去，附件反而滞留在本地。
+   */
+  if (读取媒体选择中数量() > 0) {
+    return;
+  }
   const drafts = 读取媒体草稿();
   await 触发发送();
   if (发送成功后需要清空媒体草稿(drafts)) {

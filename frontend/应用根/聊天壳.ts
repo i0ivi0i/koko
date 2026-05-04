@@ -256,6 +256,7 @@ export class 聊天壳 extends LitElement {
       pending: this.读取聊天快照().pending,
       statusText: "",
       composerMediaDrafts: this.读取聊天快照().composerMediaDrafts,
+      mediaSelectionPendingCount: this.读取聊天快照().mediaSelectionPendingCount,
     }).primaryAction.disabled;
   }
 
@@ -355,6 +356,7 @@ export class 聊天壳 extends LitElement {
       messageInput: 聊天快照.messageInput,
       pending: 聊天快照.pending,
       composerMediaDrafts: 聊天快照.composerMediaDrafts,
+      mediaSelectionPendingCount: 聊天快照.mediaSelectionPendingCount,
       操作台输入组宽度: this.操作台输入组宽度缓存,
       获取统一媒体文件输入: () =>
         this.shadowRoot?.querySelector<HTMLInputElement>('#shellConsoleAuxSlot input[type="file"]') ??
