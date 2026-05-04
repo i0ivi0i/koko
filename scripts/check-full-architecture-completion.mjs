@@ -118,14 +118,36 @@ const 兜底命中文件 = 生产源码文件
   .map(转相对路径)
   .filter((relativePath) => 兜底命名正则.test(relativePath));
 
+const 计算起始行号 = (source, index) => source.slice(0, index).split(/\r?\n/).length;
+
+const 收集转发表面 = (path, source) => {
+  const 命中 = [];
+  const patterns = [
+    /\bpub\s+use[\s\S]*?;/g,
+    /\bexport\s+\*[\s\S]*?\sfrom\s*["'][^"']+["'];?/g,
+    /\bexport\s*\{[\s\S]*?\}\s*from\s*["'][^"']+["'];?/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const text = match[0]?.trim();
+      if (!text) {
+        continue;
+      }
+      命中.push({
+        path,
+        line: 计算起始行号(source, match.index ?? 0),
+        text,
+      });
+    }
+  }
+
+  return 命中.sort((left, right) => left.line - right.line || left.text.localeCompare(right.text));
+};
+
 const 转发表面命中 = 生产源码文件
   .map((path) => ({ path: 转相对路径(path), source: 读取源码(path) }))
-  .flatMap(({ path, source }) =>
-    source
-      .split(/\r?\n/)
-      .map((line, index) => ({ path, line: index + 1, text: line.trim() }))
-      .filter((item) => /\bpub use\b|export \* from|export \{.*\} from/.test(item.text))
-  );
+  .flatMap(({ path, source }) => 收集转发表面(path, source));
 
 const 高风险汇聚点 = [];
 

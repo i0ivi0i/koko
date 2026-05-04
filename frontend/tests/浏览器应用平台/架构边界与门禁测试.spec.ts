@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -742,6 +743,29 @@ const stillKeep = true;
     expect(fitnessGateSource).toContain("frontend/媒体/index.ts");
     expect(completionGateSource).toContain('kind: "media barrel second entry"');
     expect(completionGateSource).toContain("frontend/媒体/index.ts");
+  });
+
+  it("completion 门禁必须能抓到多行 re-export barrel", () => {
+    const repoRoot = resolve(process.cwd(), "..");
+    const completionGatePath = resolve(repoRoot, "scripts", "check-full-architecture-completion.mjs");
+    const output = execFileSync(process.execPath, [completionGatePath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    const result = JSON.parse(output) as {
+      reexports: Array<{ path: string; line: number; text: string }>;
+    };
+
+    const platformBarrelHits = result.reexports.filter(
+      (item) => item.path === "frontend/平台/index.ts"
+    );
+
+    expect(platformBarrelHits.length).toBeGreaterThanOrEqual(10);
+    expect(platformBarrelHits[0]).toMatchObject({
+      path: "frontend/平台/index.ts",
+      line: 19,
+    });
+    expect(platformBarrelHits[0]?.text).toContain('export {');
   });
 
   it("平台传输运行时直接依赖平台 owner，旧根入口已经删除", () => {
