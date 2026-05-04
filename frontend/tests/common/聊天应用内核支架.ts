@@ -68,8 +68,17 @@ export type 聊天媒体测试端口 = {
   关闭媒体查看器供测试(): void;
 };
 
+type 媒体编排内部桥 = {
+  替换媒体发布器: 聊天媒体测试端口["设置媒体发布器供测试"];
+  替换媒体查看器: 聊天媒体测试端口["设置媒体查看器供测试"];
+  替换媒体播放器: 聊天媒体测试端口["设置媒体播放器供测试"];
+  关闭媒体查看器: () => void;
+};
+
 export const 读取媒体编排供测试 = (kernel: unknown): 聊天媒体测试端口 =>
-  (kernel as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
+  (kernel as {
+    媒体编排: 聊天媒体测试端口 & { 内部桥: 媒体编排内部桥 };
+  }).媒体编排;
 
 export const 观察媒体窗口 = async (
   kernel: { dispatch(command: unknown): Promise<unknown> },

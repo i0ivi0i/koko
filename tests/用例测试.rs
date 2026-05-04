@@ -113,9 +113,7 @@ struct 共享写入器(Arc<Mutex<Vec<u8>>>);
 impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for 共享写入器 {
     type Writer = 缓冲写入器;
 
-    fn make_writer(&'a self) -> Self::Writer {
-        缓冲写入器(self.0.clone())
-    }
+    fn make_writer(&'a self) -> Self::Writer { 缓冲写入器(self.0.clone()) }
 }
 
 struct 缓冲写入器(Arc<Mutex<Vec<u8>>>);
@@ -126,9 +124,7 @@ impl io::Write for 缓冲写入器 {
         Ok(buf.len())
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 
 fn 读取缓冲日志(buffer: &Arc<Mutex<Vec<u8>>>) -> String {
@@ -157,8 +153,7 @@ struct 假仓储 {
 
 #[derive(Clone)]
 struct 测试匿名身份记录 {
-    匿名身份标识: String,
-    引导结果: koko::shared::contract::匿名身份引导结果,
+    匿名身份标识: String, 引导结果: koko::shared::contract::匿名身份引导结果,
 }
 
 impl 假仓储 {

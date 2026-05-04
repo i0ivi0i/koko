@@ -23,7 +23,6 @@ export interface 聊天壳应用装配 {
   readonly kernel: 聊天应用内核端口;
   读取应用运行时(): 应用运行时端口;
   读取预算烟测快照(): 聊天运行时预算状态;
-  设置测试传输(transport: 前端传输端口): void;
   销毁(): void;
 }
 
@@ -47,10 +46,16 @@ export function 创建聊天壳应用装配(
     清理房间视图本地状态: deps.清理房间视图本地状态,
   });
   let 应用运行时: 应用运行时端口 | null = null;
+  type 可重线聊天内核 = {
+    切换传输端口(transport: 前端传输端口): void;
+  };
+  type 聊天壳测试装配 = 聊天壳应用装配 & {
+    设置测试传输(transport: 前端传输端口): void;
+  };
 
   const 读取聊天快照 = (): 聊天应用快照 => kernel.snapshot();
 
-  return {
+  const 装配: 聊天壳测试装配 = {
     平台,
     kernel,
     读取应用运行时(): 应用运行时端口 {
@@ -68,7 +73,7 @@ export function 创建聊天壳应用装配(
     设置测试传输(transport: 前端传输端口): void {
       应用运行时?.dispose();
       应用运行时 = null;
-      kernel.setTransportForTest(transport);
+      (kernel as unknown as 可重线聊天内核).切换传输端口(transport);
     },
     销毁(): void {
       应用运行时?.dispose();
@@ -76,4 +81,6 @@ export function 创建聊天壳应用装配(
       kernel.dispose();
     },
   };
+
+  return 装配;
 }

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use sqlx::{postgres::PgRow, PgPool, Row};
 
-use crate::{shared::contract, domain};
+use crate::{domain, message, shared::contract};
 
-use super::Pg仓储;
+use super::{Pg媒体仓储, Pg仓储};
 
 // 消息事件适配 owner 统一持有：
 // 1. 消息行到共享事件的翻译；
@@ -342,4 +342,54 @@ pub(super) fn 创建统一消息事件(
         文本,
         附件,
     ))
+}
+
+/// 消息 owner 统一托管同步消息端口。
+/// 共享基座只保留连接池和运行时，消息成立真相对应的落库入口收回消息上下文文件。
+impl message::application::消息仓储端口 for Pg仓储 {
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
+        super::媒体附件适配::查询附件快照(self, 附件标识)
+    }
+
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        创建统一消息事件(self, 房间标识, 客户端消息标识, 会话标识, 文本, 附件)
+    }
+}
+
+/// 媒体子域复用消息主链时，只借稳定的消息端口，不再在 `src/适配/mod.rs` 转发。
+impl message::application::消息仓储端口 for Pg媒体仓储 {
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::附件读取结果>, contract::错误码> {
+        super::媒体附件适配::查询附件快照(&self.repo, 附件标识)
+    }
+
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        创建统一消息事件(
+            &mut self.repo,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            附件,
+        )
+    }
 }

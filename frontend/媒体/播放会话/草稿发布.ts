@@ -95,7 +95,7 @@ export function 创建播放会话草稿发布(deps: 播放会话草稿发布依
 
     清空媒体草稿,
 
-    写入媒体草稿列表供测试(drafts: 媒体附件草稿[]): void {
+    替换媒体草稿列表(drafts: 媒体附件草稿[]): void {
       const 旧草稿预览地址 = deps.读取草稿().map((draft) => draft.previewUrl);
       const 保留中的预览地址 = new Set(drafts.map((draft) => draft.previewUrl));
       const 需要回收的预览地址 = 旧草稿预览地址.filter(

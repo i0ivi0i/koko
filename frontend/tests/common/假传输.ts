@@ -403,3 +403,4 @@ export function 创建传输错误(status: number, code: string, message = code)
   error.code = code;
   return error;
 }
+import "./测试原型补丁.js";

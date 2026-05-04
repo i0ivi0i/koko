@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import "./测试原型补丁.js";
 import "../../应用根/聊天壳";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
 import type { 媒体查看器打开请求, 媒体播放结果 } from "../../媒体/index.js";
@@ -11,26 +12,26 @@ import { 安装测试文本测量画布 } from "./测试文本测量.js";
 
 type 聊天壳测试内核 = {
   snapshot(): 聊天状态;
-  写入视口调试状态供测试(
-    patch: Partial<
-      Pick<
-        聊天状态,
-        | "lastReadEventPosition"
-        | "firstUnreadEventPosition"
-        | "initialUnreadSettled"
-        | "scrollPhase"
-        | "hasUserScrollIntent"
-        | "pendingReadAnchorPosition"
-        | "historyLoadThrottleUntil"
-        | "viewportMode"
-      >
-    >
-  ): void;
-  读取房间滚动器供测试(): unknown;
+  roomScroller: unknown;
+  状态协调器: {
+    写入本地状态(patch: Partial<聊天状态>): void;
+  };
+  roomViewport: {
+    send(event: Record<string, unknown>): void;
+  };
+  视口状态: Pick<
+    聊天状态,
+    | "firstUnreadEventPosition"
+    | "scrollPhase"
+    | "hasUserScrollIntent"
+    | "pendingReadAnchorPosition"
+    | "historyLoadThrottleUntil"
+    | "viewportMode"
+  >;
 };
 
 type 聊天媒体测试端口 = {
-  设置媒体播放器供测试(player: {
+  替换媒体播放器(player: {
     解析播放结果(input: {
       attachmentId: string;
       kind: "image" | "video";
@@ -43,12 +44,12 @@ type 聊天媒体测试端口 = {
       丢弃未完成补齐?: boolean;
     }): void;
   }): void;
-  设置媒体查看器供测试(viewer: {
+  替换媒体查看器(viewer: {
     打开(input: 媒体查看器打开请求): void;
     同步?(input: 媒体查看器打开请求): void;
     销毁(): void;
   }): void;
-  设置媒体发布器供测试(publisher: {
+  替换媒体发布器(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
     继续上传草稿(localId: string): Promise<void>;
@@ -56,7 +57,7 @@ type 聊天媒体测试端口 = {
     清空(): void;
     销毁(): void;
   }): void;
-  写入媒体草稿列表供测试(drafts: 图片附件草稿[]): void;
+  替换媒体草稿列表(drafts: 图片附件草稿[]): void;
 };
 
 function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
@@ -68,7 +69,11 @@ function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
  * 正式壳层和内核表面不再暴露这些 setter，避免测试缝重新长回生产入口。
  */
 function 读取聊天媒体编排供测试(el: 聊天壳): 聊天媒体测试端口 {
-  return (读取聊天壳测试内核(el) as unknown as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
+  return (
+    读取聊天壳测试内核(el) as unknown as {
+      媒体编排: { 内部桥: 聊天媒体测试端口 };
+    }
+  ).媒体编排.内部桥;
 }
 
 export async function 等待组件稳定(el: 聊天壳): Promise<void> {
@@ -105,7 +110,7 @@ export function 读取聊天快照供测试(el: 聊天壳): 聊天状态 {
 }
 
 export function 读取房间滚动器供测试<T = unknown>(el: 聊天壳): T {
-  return 读取聊天壳测试内核(el).读取房间滚动器供测试() as T;
+  return 读取聊天壳测试内核(el).roomScroller as T;
 }
 
 /**
@@ -118,7 +123,7 @@ export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): vo
     (读取聊天壳测试内核(el) as unknown as {
       snapshot(): 聊天状态 & { composerMediaDrafts?: 图片附件草稿[] };
     }).snapshot?.().composerMediaDrafts ?? [];
-  读取聊天媒体编排供测试(el).写入媒体草稿列表供测试([
+  读取聊天媒体编排供测试(el).替换媒体草稿列表([
     ...当前草稿.filter((item) => item.localId !== draft.localId),
     draft,
   ]);
@@ -144,7 +149,7 @@ export function 注入媒体播放器供测试(
     }): void;
   }
 ): void {
-  读取聊天媒体编排供测试(el).设置媒体播放器供测试(player);
+  读取聊天媒体编排供测试(el).替换媒体播放器(player);
 }
 
 export function 注入媒体查看器供测试(
@@ -155,7 +160,7 @@ export function 注入媒体查看器供测试(
     销毁(): void;
   }
 ): void {
-  读取聊天媒体编排供测试(el).设置媒体查看器供测试(viewer);
+  读取聊天媒体编排供测试(el).替换媒体查看器(viewer);
 }
 
 export function 注入媒体发布器供测试(
@@ -169,7 +174,7 @@ export function 注入媒体发布器供测试(
     销毁(): void;
   }
 ): void {
-  读取聊天媒体编排供测试(el).设置媒体发布器供测试(publisher);
+  读取聊天媒体编排供测试(el).替换媒体发布器(publisher);
 }
 
 export function 读取操作台主输入(el: 聊天壳): HTMLTextAreaElement | HTMLInputElement {
@@ -235,7 +240,36 @@ export function 设置测试滚动阶段(
     viewportMode?: 聊天状态["viewportMode"];
   }
 ): void {
-  读取聊天壳测试内核(el).写入视口调试状态供测试(patch);
+  const kernel = 读取聊天壳测试内核(el);
+  kernel.状态协调器.写入本地状态(patch);
+  const nextFirstUnreadEventPosition =
+    Object.hasOwn(patch, "firstUnreadEventPosition")
+      ? patch.firstUnreadEventPosition ?? null
+      : kernel.视口状态.firstUnreadEventPosition;
+  if (
+    Object.hasOwn(patch, "initialUnreadSettled") &&
+    patch.initialUnreadSettled === false
+  ) {
+    kernel.roomViewport.send({
+      type: "SNAPSHOT_BASELINE_SYNCED",
+      firstUnreadEventPosition: nextFirstUnreadEventPosition,
+    });
+  }
+  if (patch.hasUserScrollIntent) {
+    kernel.roomViewport.send({ type: "USER_SCROLL_INTENT_STARTED" });
+  }
+  if (patch.scrollPhase === "restoring_unread") {
+    kernel.roomViewport.send({
+      type: "PROGRAMMATIC_SCROLL_STARTED",
+      reason: "restore_unread",
+    });
+  }
+  if (patch.scrollPhase === "compensating_history") {
+    kernel.roomViewport.send({
+      type: "PROGRAMMATIC_SCROLL_STARTED",
+      reason: "compensate_history",
+    });
+  }
 }
 
 export function 模拟用户滚动意图(scroll: HTMLElement): void {

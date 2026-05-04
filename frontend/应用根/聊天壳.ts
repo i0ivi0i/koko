@@ -8,7 +8,6 @@ import {
   type 媒体播放位置,
   type 媒体查看器打开请求,
 } from "../媒体/index.js";
-import type { 前端传输端口 } from "../平台/传输.js";
 import { 创建聊天壳应用装配 } from "./应用装配.js";
 import {
   派生壳主舞台模式,
@@ -111,10 +110,6 @@ export class 聊天壳 extends LitElement {
    */
   private get 应用运行时(): 应用运行时端口 {
     return this.装配.读取应用运行时();
-  }
-
-  setTransportForTest(transport: 前端传输端口): void {
-    this.装配.设置测试传输(transport);
   }
 
   private revokeDraftPreviewUrl(previewUrl: string): void {

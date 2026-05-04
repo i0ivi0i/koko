@@ -1,8 +1,8 @@
 use sqlx::{postgres::PgRow, PgPool, Row};
 
-use crate::shared::contract;
+use crate::{media, shared::contract};
 
-use super::Pg仓储;
+use super::{Pg媒体仓储, Pg仓储};
 
 #[path = "适配/冷源清理.rs"]
 mod 冷源清理;
@@ -759,4 +759,262 @@ pub(super) fn 查询附件可读内容(
         会话标识,
         变体,
     ))
+}
+
+/// 媒体 owner 的持久化端口收口到媒体适配文件。
+/// 共享基座不再继续托管附件、上传、协作分发和清理链的具体 impl。
+impl media::application::媒体仓储端口 for Pg媒体仓储 {
+    fn 查询待完成媒体附件(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::待完成媒体附件读取结果>, contract::错误码> {
+        查询待完成媒体附件(&self.repo, 附件标识)
+    }
+
+    fn 创建预备媒体附件记录(
+        &mut self,
+        所属匿名身份标识: &str,
+        附件: &crate::media::模型::媒体附件准备请求,
+    ) -> Result<crate::media::模型::媒体附件准备快照, contract::错误码> {
+        创建预备媒体附件记录(&mut self.repo, 所属匿名身份标识, 附件)
+    }
+
+    fn 回滚预备媒体附件记录(
+        &mut self,
+        附件标识: &str,
+    ) -> Result<(), contract::错误码> {
+        回滚预备媒体附件记录(&mut self.repo, 附件标识)
+    }
+
+    fn 创建媒体附件记录(
+        &mut self,
+        所属匿名身份标识: &str,
+        附件: &crate::media::模型::媒体附件写入请求,
+    ) -> Result<crate::media::模型::媒体附件快照, contract::错误码> {
+        创建媒体附件记录(&mut self.repo, 所属匿名身份标识, 附件)
+    }
+
+    fn 记录附件source_hash(
+        &mut self,
+        附件标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        source_file_name: Option<&str>,
+    ) -> Result<(), contract::错误码> {
+        记录附件source_hash(
+            &mut self.repo,
+            附件标识,
+            source_hash,
+            source_byte_size,
+            source_file_name,
+        )
+    }
+
+    fn 查询可复用source_hash媒体资产(
+        &self,
+        会话标识: &str,
+        目标房间标识: &str,
+        当前匿名身份标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        种类: crate::media::模型::媒体附件类型,
+    ) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
+        查询可复用source_hash媒体资产(
+            &self.repo,
+            会话标识,
+            目标房间标识,
+            当前匿名身份标识,
+            source_hash,
+            source_byte_size,
+            种类,
+        )
+    }
+
+    fn 查询可转发媒体资产(
+        &self,
+        会话标识: &str,
+        源附件标识: &str,
+        种类: crate::media::模型::媒体附件类型,
+    ) -> Result<Option<crate::media::模型::可复用媒体资产>, contract::错误码> {
+        查询可转发媒体资产(&self.repo, 会话标识, 源附件标识, 种类)
+    }
+
+    fn 写入canonical媒体资产(
+        &mut self,
+        请求: &crate::media::模型::Canonical媒体资产写入请求,
+    ) -> Result<(), contract::错误码> {
+        写入canonical媒体资产(&mut self.repo, 请求)
+    }
+
+    fn 绑定附件canonical媒体资产(
+        &mut self,
+        附件标识: &str,
+        content_hash: &str,
+    ) -> Result<(), contract::错误码> {
+        绑定附件canonical媒体资产(&mut self.repo, 附件标识, content_hash)
+    }
+
+    fn 写入协作分发元数据(
+        &mut self,
+        请求: &crate::media::模型::协作分发元数据写入请求,
+    ) -> Result<crate::media::模型::协作分发元数据快照, contract::错误码> {
+        super::媒体协作分发适配::写入协作分发元数据(&mut self.repo, 请求)
+    }
+
+    fn 查询协作分发元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::协作分发元数据快照>, contract::错误码> {
+        super::媒体协作分发适配::查询协作分发元数据(&self.repo, 附件标识)
+    }
+
+    fn 列出待做种协作分发项(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待做种协作分发项>, contract::错误码> {
+        super::媒体协作分发适配::列出待做种协作分发项(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 写入协作分发swarm存活(
+        &mut self,
+        请求: &crate::media::模型::协作分发swarm存活写入请求,
+    ) -> Result<(), contract::错误码> {
+        super::媒体协作分发适配::写入协作分发swarm存活(&mut self.repo, 请求)
+    }
+
+    fn 查询协作分发torrent元信息(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::协作分发torrent元信息快照>, contract::错误码> {
+        super::媒体协作分发适配::查询协作分发torrent元信息(&self.repo, 附件标识)
+    }
+
+    fn 写入协作分发torrent元信息(
+        &mut self,
+        请求: &crate::media::模型::协作分发torrent元信息写入请求,
+    ) -> Result<crate::media::模型::协作分发torrent元信息快照, contract::错误码> {
+        super::媒体协作分发适配::写入协作分发torrent元信息(&mut self.repo, 请求)
+    }
+
+    fn 写入流媒体清单元数据(
+        &mut self,
+        请求: &crate::media::模型::流媒体清单写入请求,
+    ) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
+        super::媒体协作分发适配::写入流媒体清单元数据(&mut self.repo, 请求)
+    }
+
+    fn 查询流媒体清单元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
+        super::媒体协作分发适配::查询流媒体清单元数据(&self.repo, 附件标识)
+    }
+
+    fn 查询附件可读内容(
+        &self,
+        附件标识: &str,
+        会话标识: &str,
+        变体: crate::media::模型::附件内容变体,
+    ) -> Result<Option<crate::media::模型::附件内容读取结果>, contract::错误码> {
+        查询附件可读内容(&self.repo, 附件标识, 会话标识, 变体)
+    }
+
+    fn 列出待清理媒体冷源(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待清理媒体冷源>, contract::错误码> {
+        列出待清理媒体冷源(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记媒体冷源已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        标记媒体冷源已删除(&mut self.repo, 附件标识, 删除时间戳秒)
+    }
+
+    fn 列出待清理canonical媒体资产(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待清理Canonical媒体资产>, contract::错误码> {
+        列出待清理canonical媒体资产(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记canonical媒体资产已删除(
+        &mut self,
+        content_hash: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        标记canonical媒体资产已删除(&mut self.repo, content_hash, 删除时间戳秒)
+    }
+
+    fn 列出待清理媒体回退母本(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待清理媒体回退母本>, contract::错误码> {
+        列出待清理媒体回退母本(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记媒体回退母本已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        标记媒体回退母本已删除(&mut self.repo, 附件标识, 删除时间戳秒)
+    }
+
+    fn 列出待清理流媒体清单(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
+        super::媒体协作分发适配::列出待清理流媒体清单(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记流媒体清单已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        super::媒体协作分发适配::标记流媒体清单已删除(
+            &mut self.repo,
+            附件标识,
+            删除时间戳秒,
+        )
+    }
+
+    fn 标记媒体上传已放弃(
+        &mut self,
+        附件标识: &str,
+        放弃时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        super::媒体上传适配::标记媒体上传已放弃(&mut self.repo, 附件标识, 放弃时间戳秒)
+    }
+
+    fn 列出待清理上传残留(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<crate::media::模型::待清理上传残留>, contract::错误码> {
+        super::媒体上传适配::列出待清理上传残留(&self.repo, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记上传残留已清理(
+        &mut self,
+        上传会话标识: &str,
+        清理原因: crate::media::模型::上传残留清理原因,
+        清理时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        super::媒体上传适配::标记上传残留已清理(
+            &mut self.repo,
+            上传会话标识,
+            清理原因,
+            清理时间戳秒,
+        )
+    }
 }

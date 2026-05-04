@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import "./common/测试原型补丁.js";
 import "../应用根/聊天壳";
 import "../后台/壳";
 import { 聊天壳 } from "../应用根/聊天壳";

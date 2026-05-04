@@ -37,7 +37,6 @@ export interface 后台应用内核依赖 {
 export interface 后台应用内核端口 {
   snapshot(): 后台应用快照;
   dispatch(command: 后台应用命令): Promise<void>;
-  setTransportForTest(transport: 后台查询传输端口 & 后台会话传输端口): void;
 }
 
 /**
@@ -125,7 +124,7 @@ class 后台应用内核 implements 后台应用内核端口 {
     }
   }
 
-  setTransportForTest(
+  切换传输端口(
     transport: 后台查询传输端口 & 后台会话传输端口
   ): void {
     this.后台查询传输 = transport;

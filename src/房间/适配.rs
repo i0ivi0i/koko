@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use sqlx::{postgres::PgRow, PgPool, Row};
 
-use crate::shared::contract;
+use crate::{room, shared::contract};
 
-use super::Pg仓储;
+use super::{Pg媒体仓储, Pg仓储};
 
 // 房间阅读适配 owner 统一收口：
 // 1. 会话/房间/成员资格这类只读事实查询；
@@ -769,4 +769,103 @@ pub(super) fn 后台房间详情(
     房间标识: &str,
 ) -> Result<contract::快照, contract::错误码> {
     repo.在运行时执行(后台房间详情_异步(&repo.pool, 房间标识))
+}
+
+/// 房间 owner 自己持有冷路径需要的同步仓储口。
+/// 这样 `src/适配/mod.rs` 只保留共享基座，不再继续吸附房间业务端口实现。
+impl room::application::会话房间校验仓储端口 for Pg仓储 {
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        检查会话存在(self, 会话标识)
+    }
+
+    fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
+        检查房间存在(self, 房间标识)
+    }
+
+    fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        检查成员资格(self, 房间标识, 会话标识)
+    }
+}
+
+impl room::application::房间仓储端口 for Pg仓储 {
+    fn 按短码进房或建房(
+        &mut self,
+        会话标识: &str,
+        房间短码: &str,
+    ) -> Result<contract::快照, contract::错误码> {
+        按短码进房或建房(self, 会话标识, 房间短码)
+    }
+
+    fn 查询房间最新事件位置(
+        &self,
+        房间标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        查询房间最新事件位置(self, 房间标识)
+    }
+
+    fn 查询房间阅读位置(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        查询房间阅读位置(self, 房间标识, 会话标识)
+    }
+
+    fn 拉取房间快照(
+        &self,
+        房间标识: &str,
+        上次已读事件位置: Option<i64>,
+        首条未读事件位置: Option<i64>,
+    ) -> Result<contract::快照, contract::错误码> {
+        拉取房间快照(self, 房间标识, 上次已读事件位置, 首条未读事件位置)
+    }
+
+    fn 拉取房间历史页(
+        &self,
+        房间标识: &str,
+        截止位置之前: i64,
+        限制条数: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        拉取房间历史页(self, 房间标识, 截止位置之前, 限制条数)
+    }
+
+    fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        拉取房间增量事件(self, 房间标识, 从位置开始)
+    }
+
+    fn 推进房间阅读位置(
+        &mut self,
+        房间标识: &str,
+        会话标识: &str,
+        已读到事件位置: i64,
+    ) -> Result<(), contract::错误码> {
+        推进房间阅读位置(self, 房间标识, 会话标识, 已读到事件位置)
+    }
+}
+
+/// 媒体上传/读取链只依赖房间事实查询，不需要再从共享基座文件里借道。
+impl room::application::会话房间校验仓储端口 for Pg媒体仓储 {
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        检查会话存在(&self.repo, 会话标识)
+    }
+
+    fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
+        检查房间存在(&self.repo, 房间标识)
+    }
+
+    fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        检查成员资格(&self.repo, 房间标识, 会话标识)
+    }
 }

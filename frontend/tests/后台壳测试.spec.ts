@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
+import "./common/测试原型补丁.js";
 import "../后台/壳";
 import type { 前端传输端口 } from "../平台/传输";
 import type {
@@ -279,7 +280,6 @@ describe("后台壳", () => {
           };
         }
       },
-      setTransportForTest() {},
     };
 
     const el = document.createElement("koko-admin-shell") as 后台壳;

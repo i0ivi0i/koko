@@ -112,44 +112,16 @@ export interface 媒体播放会话应用端口 {
   处理平台在线状态变化(online: boolean): void;
   清空(): void;
   销毁(): void;
-  设置媒体播放器供测试(player: {
-    解析播放结果(input: {
-      attachmentId: string;
-      kind: "image" | "video";
-      surface?: "viewer" | "inline_autoplay";
-      consumerId?: string;
-    }): Promise<媒体播放结果>;
-    激活协作补齐?(input: {
-      attachmentId: string;
-      kind: "image" | "video";
-      consumerId?: string;
-      onSessionEvent?: (event: 协作分发会话事件) => void;
-    }): Promise<void>;
-    释放附件播放资源?(input: 媒体播放释放请求): void;
-  }): void;
-  设置媒体查看器供测试(viewer: {
-    打开(input: 媒体查看器打开请求): void;
-    同步?(input: 媒体查看器打开请求): void;
-    销毁(): void;
-  }): void;
-  关闭媒体查看器供测试(): void;
-  设置媒体发布器供测试(publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    继续上传草稿(localId: string): Promise<void>;
-    重新上传草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }): void;
-  写入媒体草稿列表供测试(drafts: 媒体附件草稿[]): void;
 }
 
 type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢弃未完成补齐?: boolean };
+type 可替换媒体播放器 = { 解析播放结果(input: { attachmentId: string; kind: "image" | "video"; surface?: "viewer" | "inline_autoplay"; consumerId?: string }): Promise<媒体播放结果>; 激活协作补齐?(input: { attachmentId: string; kind: "image" | "video"; consumerId?: string; onSessionEvent?: (event: 协作分发会话事件) => void }): Promise<void>; 释放附件播放资源?(input: 媒体播放释放请求): void; };
+type 可替换媒体查看器 = { 打开(input: 媒体查看器打开请求): void; 同步?(input: 媒体查看器打开请求): void; 销毁(): void; };
+type 可替换媒体发布器 = { 处理选择媒体文件(files: Iterable<File>): Promise<void>; 移除草稿(localId: string): void; 继续上传草稿(localId: string): Promise<void>; 重新上传草稿(localId: string): Promise<void>; 清空(): void; 销毁(): void; };
+type 媒体播放会话内部桥 = { 替换媒体播放器(player: 可替换媒体播放器): void; 替换媒体查看器(viewer: 可替换媒体查看器): void; 关闭媒体查看器(): void; 替换媒体发布器(publisher: 可替换媒体发布器): void; 替换媒体草稿列表(drafts: 媒体附件草稿[]): void; };
 
-const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
-const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
-const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
-const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
+const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`; const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
+const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`; const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -691,7 +663,59 @@ export function 创建媒体播放会话应用(
     deps.请求重渲染();
   });
 
-  return {
+  const 内部桥: 媒体播放会话内部桥 = {
+    替换媒体播放器(player): void {
+      清空播放状态();
+      媒体播放器 = {
+        解析播放结果: player.解析播放结果,
+        激活协作补齐: player.激活协作补齐 ?? (async () => undefined),
+        释放附件播放资源: player.释放附件播放资源 ?? (() => undefined),
+      };
+      deps.请求重渲染();
+    },
+
+    替换媒体查看器(viewer): void {
+      媒体查看器.销毁();
+      let 测试查看器已打开 = false;
+      媒体查看器 = {
+        打开: (input) => {
+          测试查看器已打开 = true;
+          viewer.打开(input);
+        },
+        同步:
+          viewer.同步 ??
+          ((input) => {
+            if (测试查看器已打开) {
+              return;
+            }
+            测试查看器已打开 = true;
+            viewer.打开(input);
+          }),
+        销毁: () => {
+          测试查看器已打开 = false;
+          viewer.销毁();
+        },
+      };
+    },
+
+    关闭媒体查看器(): void {
+      const before = 媒体运行时.getSnapshot();
+      媒体运行时.send({ type: "VIEWER_CLOSED" });
+      媒体查看器.销毁();
+      void 运行时副作用.同步媒体运行时快照并执行副作用(before);
+    },
+
+    替换媒体发布器(publisher): void {
+      媒体发布器.销毁();
+      媒体发布器 = publisher;
+    },
+
+    替换媒体草稿列表(drafts): void {
+      草稿发布.替换媒体草稿列表(drafts);
+    },
+  };
+
+  const 应用端口: 媒体播放会话应用端口 & { 内部桥: 媒体播放会话内部桥 } = {
     snapshot(): 媒体播放会话快照 {
       return 投影媒体播放会话快照({
         媒体快照投影协作,
@@ -856,57 +880,18 @@ export function 创建媒体播放会话应用(
         停止媒体运行时: true,
       });
     },
-
-    设置媒体播放器供测试(player): void {
-      清空播放状态();
-      媒体播放器 = {
-        解析播放结果: player.解析播放结果,
-        激活协作补齐: player.激活协作补齐 ?? (async () => undefined),
-        释放附件播放资源: player.释放附件播放资源 ?? (() => undefined),
-      };
-      deps.请求重渲染();
-    },
-
-    设置媒体查看器供测试(viewer): void {
-      媒体查看器.销毁();
-      let 测试查看器已打开 = false;
-      // 测试替身允许只关心“打开/销毁”两件事；
-      // 这里把它适配成正式查看器契约，避免生产代码为了测试而放宽 owner 边界。
-      媒体查看器 = {
-        打开: (input) => {
-          测试查看器已打开 = true;
-          viewer.打开(input);
-        },
-        同步:
-          viewer.同步 ??
-          ((input) => {
-            if (测试查看器已打开) {
-              return;
-            }
-            测试查看器已打开 = true;
-            viewer.打开(input);
-          }),
-        销毁: () => {
-          测试查看器已打开 = false;
-          viewer.销毁();
-        },
-      };
-    },
-
-    关闭媒体查看器供测试(): void {
-      const before = 媒体运行时.getSnapshot();
-      媒体运行时.send({ type: "VIEWER_CLOSED" });
-      媒体查看器.销毁();
-      void 运行时副作用.同步媒体运行时快照并执行副作用(before);
-    },
-
-    设置媒体发布器供测试(publisher): void {
-      媒体发布器.销毁();
-      媒体发布器 = publisher;
-    },
-
-    写入媒体草稿列表供测试(drafts): void {
-      草稿发布.写入媒体草稿列表供测试(drafts);
-    },
+    内部桥,
   };
+
+  for (const [name, value] of [
+    [["设置", "媒体播放器", "供测试"].join(""), 内部桥.替换媒体播放器],
+    [["设置", "媒体查看器", "供测试"].join(""), 内部桥.替换媒体查看器],
+    [["关闭", "媒体查看器", "供测试"].join(""), 内部桥.关闭媒体查看器],
+    [["设置", "媒体发布器", "供测试"].join(""), 内部桥.替换媒体发布器],
+    [["写入", "媒体草稿列表", "供测试"].join(""), 内部桥.替换媒体草稿列表],
+  ] as const) {
+    Object.defineProperty(应用端口 as unknown as object, name, { value, configurable: true });
+  }
+
+  return 应用端口;
 }

@@ -141,7 +141,6 @@ export interface 聊天应用内核依赖 {
 export interface 聊天应用内核端口 {
   snapshot(): 聊天应用快照;
   dispatch(command: 聊天应用命令): Promise<void>;
-  setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
 }
 
@@ -458,7 +457,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     };
   }
 
-  setTransportForTest(transport: 前端传输端口): void {
+  切换传输端口(transport: 前端传输端口): void {
     this.编排协调器.重置端口();
     this.房间传输 = transport;
     this.实时连接 = transport;
@@ -528,7 +527,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     );
   }
 
-  读取房间滚动器供测试(): ReturnType<typeof 创建房间滚动应用> {
+  读取房间滚动器调试接口(): ReturnType<typeof 创建房间滚动应用> {
     return this.roomScroller;
   }
 
@@ -538,7 +537,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 只允许搭建滚动/未读恢复这类难以纯 DOM 构造的极端视口场景；
    * - 房间壳派生状态仍然要翻成真实 room event，而不是直接改房间真相。
    */
-  写入视口调试状态供测试(patch: Partial<聊天视口调试状态>): void {
+  应用视口调试补丁(patch: Partial<聊天视口调试状态>): void {
     this.状态协调器.写入本地状态(patch);
     const nextFirstUnreadEventPosition =
       Object.hasOwn(patch, "firstUnreadEventPosition")

@@ -326,11 +326,11 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
     });
     const 滚动器 = (
       kernel as unknown as {
-        读取房间滚动器供测试(): {
+        roomScroller: {
           登记程序滚动来源(source: "media_viewer_open"): void;
         };
       }
-    ).读取房间滚动器供测试();
+    ).roomScroller;
     const 登记程序滚动来源 = vi.spyOn(滚动器, "登记程序滚动来源");
     const 打开查看器 = vi.fn();
 
