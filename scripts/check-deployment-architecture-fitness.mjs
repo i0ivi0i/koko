@@ -367,6 +367,9 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/actions\/setup-node@v4/.test(source)) {
       issues.push("initial-deploy.yml 缺少 Node 安装步骤");
     }
+    if (!/pnpm\s+--dir\s+frontend\s+install\s+--frozen-lockfile\b/.test(source)) {
+      issues.push("initial-deploy.yml 缺少 pnpm --dir frontend install --frozen-lockfile 预检");
+    }
     if (!/pnpm\s+--dir\s+frontend\s+build\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 pnpm --dir frontend build 预检");
     }
@@ -418,6 +421,9 @@ function 收集Workflow主链内容问题(rootDir) {
     }
     if (!/actions\/setup-node@v4/.test(source)) {
       issues.push("deploy.yml 缺少 Node 安装步骤");
+    }
+    if (!/pnpm\s+--dir\s+frontend\s+install\s+--frozen-lockfile\b/.test(source)) {
+      issues.push("deploy.yml 缺少 pnpm --dir frontend install --frozen-lockfile 预检");
     }
     if (!/pnpm\s+--dir\s+frontend\s+build\b/.test(source)) {
       issues.push("deploy.yml 缺少 pnpm --dir frontend build 预检");

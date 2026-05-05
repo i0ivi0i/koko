@@ -42,6 +42,7 @@ jobs:
           set -euo pipefail
           node --test tests/部署门禁测试.mjs
           node scripts/check-deployment-architecture-fitness.mjs --enforce
+          pnpm --dir frontend install --frozen-lockfile
           pnpm --dir frontend build
 
       - name: Prepare SSH
