@@ -22,6 +22,7 @@ jobs:
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,7 +77,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh "${VPS_USER}@${VPS_HOST}" "VERSION='${VERSION}' ARCHIVE='${ARCHIVE}' bash -s" <<'REMOTE'
+          ssh "${VPS_USER}@${VPS_HOST}" "VERSION='${VERSION}' ARCHIVE='${ARCHIVE}' CLOUDFLARE_API_TOKEN='${CLOUDFLARE_API_TOKEN}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           run_as_root() {
@@ -90,8 +91,27 @@ jobs:
             fi
           }
 
+          upsert_env_value() {
+            local key="$1"
+            local value="$2"
+            local env_file="$3"
+            local env_dir
+            local tmp_file
+
+            env_dir="$(dirname "${env_file}")"
+            tmp_file="$(mktemp)"
+
+            run_as_root mkdir -p "${env_dir}"
+            run_as_root touch "${env_file}"
+            run_as_root awk -F= -v key="${key}" '$1 != key { print }' "${env_file}" > "${tmp_file}"
+            printf '%s=%s\n' "${key}" "${value}" >> "${tmp_file}"
+            run_as_root install -m 600 "${tmp_file}" "${env_file}"
+            rm -f "${tmp_file}"
+          }
+
           run_as_root mkdir -p /opt/koko/shared/incoming
           run_as_root mv "/tmp/${ARCHIVE}" "/opt/koko/shared/incoming/${VERSION}.tar.gz"
+          upsert_env_value "CLOUDFLARE_API_TOKEN" "${CLOUDFLARE_API_TOKEN}" "/opt/koko/env/production.env"
 
           tmp_dir="/tmp/koko-bootstrap-${VERSION}"
           rm -rf "${tmp_dir}"

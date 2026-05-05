@@ -1,3 +1,9 @@
+{
+  # 长期橙云场景下，证书续期不能依赖 HTTP-01 / TLS-ALPN-01 是否恰好能打到源站。
+  # 这里显式收口到 Cloudflare DNS-01，让 Caddy 通过 API 自动写 `_acme-challenge`。
+  acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
+
 {$KOKO_DOMAIN} {
   # 正式公网入口只允许一套：Caddy 收 80/443，后端继续做同源代理与业务裁决。
   encode zstd gzip

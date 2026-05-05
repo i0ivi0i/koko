@@ -134,7 +134,11 @@ services:
 
   caddy:
     # Caddy 是唯一对外公网入口，正式环境只暴露 80/443。
-    image: caddy:2.10
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: caddy-runtime
+    image: ${KOKO_CADDY_IMAGE:-koko-caddy:local}
     restart: unless-stopped
     depends_on:
       - app

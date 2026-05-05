@@ -85,6 +85,10 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
     "ops/Caddyfile",
     extra.Caddyfile ??
       [
+        "{",
+        "  acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}",
+        "}",
+        "",
         "{$KOKO_DOMAIN} {",
         "  encode zstd gzip",
         "  reverse_proxy /files* app:8080",
@@ -106,7 +110,11 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
         "  tusd: {}",
         "  tracker: {}",
         "  seeder: {}",
-        "  caddy: {}",
+        "  caddy:",
+        "    build:",
+        "      context: ..",
+        "      dockerfile: Dockerfile",
+        "      target: caddy-runtime",
         "",
       ].join("\n")
   );
@@ -120,6 +128,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
     extra.envExample ??
       [
         "KOKO_DOMAIN=example.com",
+        "CLOUDFLARE_API_TOKEN=change-me",
         "DATABASE_URL=postgres://postgres:postgres@postgres:5432/koko",
         "ADMIN_PASSWORD=change-me",
         "POSTGRES_DB=koko",
@@ -239,7 +248,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "      - run: pnpm --dir frontend install --frozen-lockfile",
         "      - run: pnpm --dir frontend build",
         "      - run: bash ops/package-release.sh v0.1.0",
-        "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
+        "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }} ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "      - run: echo /opt/koko/env/production.env",
         "      - run: ./ops/healthcheck.sh || true",
         "",
       ].join("\n")
@@ -269,7 +279,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "      - run: pnpm --dir frontend install --frozen-lockfile",
         "      - run: pnpm --dir frontend build",
         "      - run: bash ops/package-release.sh v0.1.0",
-        "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
+        "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }} ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "      - run: echo /opt/koko/env/production.env",
         "      - run: ./ops/healthcheck.sh",
         "",
       ].join("\n")
@@ -601,6 +612,38 @@ test("runtime 门禁会拦住 Caddyfile 出现 Flexible 伪 TLS 模式", () => {
   assert.match(result.output, /ops\/Caddyfile 禁止出现 Flexible/);
 });
 
+test("runtime 门禁会拦住 Caddyfile 没有收口 Cloudflare DNS-01", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法运行主链夹具(fixtureDir, {
+    Caddyfile: "{$KOKO_DOMAIN} {\n  reverse_proxy /files* app:8080\n  reverse_proxy /api/swarm/announce* app:8080\n  reverse_proxy /api/* app:8080\n  reverse_proxy app:8080\n}\n",
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/Caddyfile 缺少 Cloudflare DNS-01 自动续期配置/);
+});
+
+test("runtime 门禁会拦住 compose 里的 caddy 没有自定义 DNS 插件构建目标", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法运行主链夹具(fixtureDir, {
+    composeYaml: [
+      "services:",
+      "  app: {}",
+      "  postgres: {}",
+      "  tusd: {}",
+      "  tracker: {}",
+      "  seeder: {}",
+      "  caddy:",
+      "    image: caddy:2.10",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/compose\.yaml 的 caddy 服务必须构建 caddy-runtime 自定义镜像/);
+});
+
 test("runtime 门禁会拦住 Dockerfile 在 runtime 阶段拷贝 docs tests 或 .git", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法运行主链夹具(fixtureDir, {
@@ -643,6 +686,24 @@ test("scripts 门禁会拦住 install.sh 漏掉固定目录真相", () => {
   assert.match(result.output, /ops\/install\.sh 缺少固定目录: \/opt\/koko\/releases/);
   assert.match(result.output, /ops\/install\.sh 缺少固定目录: \/opt\/koko\/current/);
   assert.match(result.output, /ops\/install\.sh 缺少固定目录: \/opt\/koko\/shared/);
+});
+
+test("scripts 门禁会拦住 env.production.example 漏掉 Cloudflare DNS token 变量", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    envExample: [
+      "KOKO_DOMAIN=example.com",
+      "DATABASE_URL=postgres://postgres:postgres@postgres:5432/koko",
+      "POSTGRES_DB=koko",
+      "POSTGRES_USER=postgres",
+      "POSTGRES_PASSWORD=postgres",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/env\.production\.example 缺少 CLOUDFLARE_API_TOKEN/);
 });
 
 test("scripts 门禁会拦住 install.sh 没有把 tus 共享目录准备成 tusd 可写", () => {
@@ -1024,6 +1085,42 @@ test("workflows 门禁会拦住漏掉 VPS Secrets 和 healthcheck 的 workflow",
   assert.match(result.output, /deploy\.yml 缺少 pnpm --dir frontend build 预检/);
   assert.match(result.output, /deploy\.yml 缺少部署门禁预检/);
   assert.match(result.output, /deploy\.yml 缺少 ops\/package-release\.sh 调用/);
+});
+
+test("workflows 门禁会拦住 deploy 和 initial-deploy 漏掉 Cloudflare token 同步", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法Workflow主链夹具(fixtureDir, {
+    initialDeploy: [
+      "name: Initial Deploy",
+      "on:",
+      "  workflow_dispatch:",
+      "concurrency:",
+      "  group: koko-production",
+      "  cancel-in-progress: false",
+      "jobs:",
+      "  install:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: pnpm/action-setup@v6",
+      "        with:",
+      "          package_json_file: frontend/package.json",
+      "      - uses: actions/setup-node@v4",
+      "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
+      "      - run: pnpm --dir frontend install --frozen-lockfile",
+      "      - run: pnpm --dir frontend build",
+      "      - run: bash ops/package-release.sh v0.1.0",
+      "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
+      "      - run: ./ops/healthcheck.sh || true",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /initial-deploy\.yml 缺少 CLOUDFLARE_API_TOKEN 引用/);
+  assert.match(result.output, /deploy\.yml 缺少 CLOUDFLARE_API_TOKEN 引用/);
+  assert.match(result.output, /initial-deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
+  assert.match(result.output, /deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
 });
 
 test("workflows 门禁会拦住 git pull 和 cloudflared 旁路", () => {

@@ -74,6 +74,13 @@ function 有staleComposeReplacement清理(source) {
   );
 }
 
+function 有CloudflareDns01Caddy配置(source) {
+  return (
+    /acme_dns\s+cloudflare\s+\{env\.CLOUDFLARE_API_TOKEN\}/.test(source) ||
+    /dns\s+cloudflare\s+\{env\.CLOUDFLARE_API_TOKEN\}/.test(source)
+  );
+}
+
 function 读取命令行参数(argv) {
   let scope = "full";
   let rootDir = process.cwd();
@@ -241,6 +248,15 @@ function 收集运行主链内容问题(rootDir) {
     if (/\bFlexible\b/.test(source)) {
       issues.push("ops/Caddyfile 禁止出现 Flexible");
     }
+    if (!有CloudflareDns01Caddy配置(source)) {
+      issues.push("ops/Caddyfile 缺少 Cloudflare DNS-01 自动续期配置");
+    }
+  }
+
+  if (composeSource) {
+    if (!/target:\s+caddy-runtime\b/.test(composeSource)) {
+      issues.push("ops/compose.yaml 的 caddy 服务必须构建 caddy-runtime 自定义镜像");
+    }
   }
 
   return issues;
@@ -248,6 +264,17 @@ function 收集运行主链内容问题(rootDir) {
 
 function 收集脚本主链内容问题(rootDir) {
   const issues = [];
+
+  const envExamplePath = join(rootDir, "ops", "env.production.example");
+  if (existsSync(envExamplePath)) {
+    const source = 读取非注释文本(
+      "ops/env.production.example",
+      读取文本文件(rootDir, "ops/env.production.example")
+    );
+    if (!/^CLOUDFLARE_API_TOKEN=/m.test(source)) {
+      issues.push("ops/env.production.example 缺少 CLOUDFLARE_API_TOKEN");
+    }
+  }
 
   const packageReleasePath = join(rootDir, "ops", "package-release.sh");
   if (existsSync(packageReleasePath)) {
@@ -403,10 +430,13 @@ function 收集Workflow主链内容问题(rootDir) {
       issues.push("initial-deploy.yml 缺少 workflow_dispatch");
     }
     检查production并发组(source, "initial-deploy.yml");
-    for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY"]) {
+    for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY", "CLOUDFLARE_API_TOKEN"]) {
       if (!source.includes(secretName)) {
         issues.push(`initial-deploy.yml 缺少 ${secretName} 引用`);
       }
+    }
+    if (!source.includes("/opt/koko/env/production.env") || !source.includes("CLOUDFLARE_API_TOKEN")) {
+      issues.push("initial-deploy.yml 缺少向 /opt/koko/env/production.env 同步 Cloudflare token 的步骤");
     }
     if (!/pnpm\/action-setup@v\d+/.test(source)) {
       issues.push("initial-deploy.yml 缺少 pnpm/action-setup 安装步骤");
@@ -459,10 +489,13 @@ function 收集Workflow主链内容问题(rootDir) {
       issues.push("deploy.yml 缺少 push 到 main");
     }
     检查production并发组(source, "deploy.yml");
-    for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY"]) {
+    for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY", "CLOUDFLARE_API_TOKEN"]) {
       if (!source.includes(secretName)) {
         issues.push(`deploy.yml 缺少 ${secretName} 引用`);
       }
+    }
+    if (!source.includes("/opt/koko/env/production.env") || !source.includes("CLOUDFLARE_API_TOKEN")) {
+      issues.push("deploy.yml 缺少向 /opt/koko/env/production.env 同步 Cloudflare token 的步骤");
     }
     if (!/pnpm\/action-setup@v\d+/.test(source)) {
       issues.push("deploy.yml 缺少 pnpm/action-setup 安装步骤");

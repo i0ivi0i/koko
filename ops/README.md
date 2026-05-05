@@ -6,10 +6,10 @@
   正式运行主链。告诉 Docker 该怎么一起跑 `app / postgres / tusd / tracker / seeder / caddy`。
 
 - `Caddyfile`
-  正式公网入口。只让浏览器认识正式域名、`/files`、`/api/swarm/announce`。
+  正式公网入口。只让浏览器认识正式域名、`/files`、`/api/swarm/announce`，并通过 Cloudflare DNS-01 自动续期源站证书。
 
 - `env.production.example`
-  生产环境变量模板。告诉你正式上线前哪些值必须填。
+  生产环境变量模板。告诉你正式上线前哪些值必须填，包括 Cloudflare DNS-01 自动续期 token。
 
 - `install.sh`
   首次安装脚本。空白 Debian 12 VPS 第一次准备目录和基础运行环境时用。

@@ -63,3 +63,13 @@ COPY --from=frontend-builder /app/frontend/dev-seeder.mjs /app/frontend/dev-seed
 COPY --from=frontend-builder /app/frontend/node_modules /app/frontend/node_modules
 
 CMD ["node", "frontend/dev-seeder.mjs"]
+
+# Caddy 正式环境需要接 Cloudflare DNS 插件，避免长期橙云下证书续期依赖灰云切换。
+FROM caddy:2.10-builder AS caddy-builder
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    xcaddy build \
+    --with github.com/caddy-dns/cloudflare
+
+FROM caddy:2.10 AS caddy-runtime
+COPY --from=caddy-builder /usr/bin/caddy /usr/bin/caddy
