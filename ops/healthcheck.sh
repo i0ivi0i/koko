@@ -58,6 +58,13 @@ check_tusd() {
   probe_with_seeder_node "http://tusd:1081/files" "OPTIONS"
 }
 
+check_tusd_storage_writable() {
+  # 只看 tusd 端口活着还不够；
+  # 目录权限错了时，公网 `/files` 仍会在真正写入时 500。
+  require_running_service "tusd"
+  docker compose -f "${COMPOSE_FILE}" exec -T tusd sh -lc "test -w /data/tus"
+}
+
 check_tracker() {
   require_running_service "tracker"
   probe_with_seeder_node "http://tracker:7072/stats"
@@ -72,6 +79,7 @@ main() {
   check_app_internal
   check_postgres
   check_tusd
+  check_tusd_storage_writable
   check_tracker
   check_seeder
   echo "健康检查通过。"

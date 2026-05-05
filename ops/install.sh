@@ -76,6 +76,14 @@ prepare_layout() {
   mkdir -p "${BOOTSTRAP_RELEASE_DIR}"
 }
 
+prepare_tusd_storage() {
+  # `tusd` 官方镜像默认用 uid/gid 1000 运行。
+  # 这里必须在宿主机把 shared/tus 目录直接准备成 1000:1000 可写，
+  # 否则公网上传会在 `/files` 创建阶段直接 500。
+  chown 1000:1000 "${SHARED_TUS_DIR}"
+  chmod 0775 "${SHARED_TUS_DIR}"
+}
+
 ensure_current_link() {
   # install.sh 可以重复执行，但不能把已经在跑的正式版本重新拨回 bootstrap 占位目录。
   # 这里只有两种合法情况：
@@ -104,6 +112,7 @@ main() {
   need_root
   ensure_docker
   prepare_layout
+  prepare_tusd_storage
   ensure_current_link
   prepare_env_template
   echo "Debian 12 首次安装准备完成。"

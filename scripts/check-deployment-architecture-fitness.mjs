@@ -55,6 +55,17 @@ const Dockerignore关键排除项 = [
   ["frontend/tests", "frontend/tests/"],
 ];
 
+function 有tusd共享目录权限准备(source) {
+  const 提到Tus共享目录 = /\/opt\/koko\/shared\/tus\b/.test(source) || /\$\{SHARED_TUS_DIR\}/.test(source);
+  const 有owner修复 =
+    /\bchown\b(?:.|\n)*1000:1000(?:.|\n)*(\/opt\/koko\/shared\/tus\b|\$\{SHARED_TUS_DIR\})/.test(source) ||
+    /\binstall\b(?:.|\n)*-o\s+1000(?:.|\n)*-g\s+1000(?:.|\n)*(\/opt\/koko\/shared\/tus\b|\$\{SHARED_TUS_DIR\})/.test(source);
+  const 有mode修复 =
+    /\bchmod\b(?:.|\n)*0775(?:.|\n)*(\/opt\/koko\/shared\/tus\b|\$\{SHARED_TUS_DIR\})/.test(source) ||
+    /\binstall\b(?:.|\n)*-m\s+0775(?:.|\n)*(\/opt\/koko\/shared\/tus\b|\$\{SHARED_TUS_DIR\})/.test(source);
+  return 提到Tus共享目录 && 有owner修复 && 有mode修复;
+}
+
 function 读取命令行参数(argv) {
   let scope = "full";
   let rootDir = process.cwd();
@@ -290,6 +301,9 @@ function 收集脚本主链内容问题(rootDir) {
     if (存在bootstrap占位重置 && !存在current保护) {
       issues.push("ops/install.sh 禁止无条件重置 current 到 bootstrap 占位目录");
     }
+    if (!有tusd共享目录权限准备(source)) {
+      issues.push("ops/install.sh 缺少 tusd 共享目录可写权限准备");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/install.sh");
     }
@@ -306,6 +320,9 @@ function 收集脚本主链内容问题(rootDir) {
     }
     if (!/bash\s+["']?\$\{healthcheck_script\}["']?/.test(source) && !/bash\s+\/opt\/koko\/current\/ops\/healthcheck\.sh/.test(source)) {
       issues.push("ops/deploy.sh 必须通过 bash 调用 healthcheck.sh");
+    }
+    if (!有tusd共享目录权限准备(source)) {
+      issues.push("ops/deploy.sh 缺少 tusd 共享目录权限修复");
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/deploy.sh");
@@ -337,6 +354,7 @@ function 收集脚本主链内容问题(rootDir) {
       { label: "app", patterns: [" app", "ps app", "http://app:8080"] },
       { label: "postgres", patterns: ["postgres", "pg_isready"] },
       { label: "tusd", patterns: ["tusd", "1081"] },
+      { label: "tusd 存储可写", patterns: ["test -w /data/tus"] },
       { label: "tracker", patterns: ["tracker", "7072"] },
     ];
     for (const probeRule of probeRules) {

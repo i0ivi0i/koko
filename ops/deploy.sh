@@ -11,6 +11,7 @@ readonly KOKO_ROOT="/opt/koko"
 readonly RELEASES_DIR="/opt/koko/releases"
 readonly CURRENT_LINK="/opt/koko/current"
 readonly DEFAULT_BUNDLE_DIR="/opt/koko/shared/incoming"
+readonly SHARED_TUS_DIR="/opt/koko/shared/tus"
 
 version="${1:?请传入部署版本号，例如 v0.1.0}"
 bundle_input="${2:-${DEFAULT_BUNDLE_DIR}/${version}.tar.gz}"
@@ -60,6 +61,14 @@ assert_release_shape() {
   done
 }
 
+prepare_tusd_storage() {
+  # install.sh 只覆盖首次安装；deploy.sh 还要负责把历史 root:root 目录纠正回来。
+  # 这样老机器在下一次正式部署时就会自动修好，不需要再手工进 VPS 救火。
+  mkdir -p "${SHARED_TUS_DIR}"
+  chown 1000:1000 "${SHARED_TUS_DIR}"
+  chmod 0775 "${SHARED_TUS_DIR}"
+}
+
 build_release() {
   docker compose -f "${release_compose_file}" build
 }
@@ -80,6 +89,7 @@ main() {
   ensure_release_absent
   materialize_release
   assert_release_shape
+  prepare_tusd_storage
   build_release
   switch_current
   start_release

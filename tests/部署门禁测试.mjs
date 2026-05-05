@@ -152,6 +152,9 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         'mkdir -p /opt/koko/releases /opt/koko/current /opt/koko/shared',
+        'mkdir -p /opt/koko/shared/tus',
+        'chown 1000:1000 /opt/koko/shared/tus',
+        'chmod 0775 /opt/koko/shared/tus',
         "",
       ].join("\n")
   );
@@ -164,6 +167,9 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         "set -euo pipefail",
         'version=\"${1:?missing version}\"',
         'release_dir=\"/opt/koko/releases/${version}\"',
+        'mkdir -p /opt/koko/shared/tus',
+        'chown 1000:1000 /opt/koko/shared/tus',
+        'chmod 0775 /opt/koko/shared/tus',
         'ln -sfn \"$release_dir\" /opt/koko/current',
         'docker compose -f /opt/koko/current/ops/compose.yaml build',
         'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
@@ -197,6 +203,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'curl -fsS \"https://${KOKO_DOMAIN}/\" >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml ps app >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml exec -T postgres pg_isready >/dev/null',
+        'docker compose -f /opt/koko/current/ops/compose.yaml exec -T tusd sh -lc \'test -w /data/tus\'',
         'curl -fsS http://tusd:1081/files >/dev/null || true',
         'curl -fsS http://tracker:7072/stats >/dev/null',
         "",
@@ -634,6 +641,22 @@ test("scripts 门禁会拦住 install.sh 漏掉固定目录真相", () => {
   assert.match(result.output, /ops\/install\.sh 缺少固定目录: \/opt\/koko\/shared/);
 });
 
+test("scripts 门禁会拦住 install.sh 没有把 tus 共享目录准备成 tusd 可写", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    installSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'mkdir -p /opt/koko/releases /opt/koko/current /opt/koko/shared /opt/koko/shared/tus',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/install\.sh 缺少 tusd 共享目录可写权限准备/);
+});
+
 test("scripts 门禁会拦住 install.sh 无条件把 current 重置回 bootstrap", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -670,6 +693,27 @@ test("scripts 门禁会拦住 deploy.sh 缺少 current 切换与健康检查", (
   assert.match(result.output, /ops\/deploy\.sh 缺少 healthcheck\.sh 调用/);
 });
 
+test("scripts 门禁会拦住 deploy.sh 没有修复 tus 共享目录写权限", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    deploySh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'release_dir="/opt/koko/releases/${version}"',
+      'ln -sfn "$release_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml build',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      'bash /opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/deploy\.sh 缺少 tusd 共享目录权限修复/);
+});
+
 test("scripts 门禁会拦住 deploy.sh 裸执行 healthcheck", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -699,6 +743,9 @@ test("scripts 门禁会放行 deploy.sh 使用 ln -sfnT 切换 current", () => {
       "set -euo pipefail",
       'version="${1:?missing version}"',
       'release_dir="/opt/koko/releases/${version}"',
+      'mkdir -p /opt/koko/shared/tus',
+      'chown 1000:1000 /opt/koko/shared/tus',
+      'chmod 0775 /opt/koko/shared/tus',
       'ln -sfnT "$release_dir" /opt/koko/current',
       'docker compose -f /opt/koko/current/ops/compose.yaml build',
       'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
@@ -775,6 +822,7 @@ test("scripts 门禁会拦住 healthcheck.sh 漏掉关键探针", () => {
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: app/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: postgres/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd/);
+  assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd 存储可写/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tracker/);
 });
 
@@ -817,7 +865,9 @@ test("scripts 门禁不会误伤只出现在注释里的 git pull 和 cloudflare
       "#!/usr/bin/env bash",
       "set -euo pipefail",
       "# 禁止在正式部署里用 git pull 或 cloudflared 旁路",
-      'mkdir -p /opt/koko/releases /opt/koko/current /opt/koko/shared',
+      'mkdir -p /opt/koko/releases /opt/koko/current /opt/koko/shared /opt/koko/shared/tus',
+      'chown 1000:1000 /opt/koko/shared/tus',
+      'chmod 0775 /opt/koko/shared/tus',
       "",
     ].join("\n"),
   });
