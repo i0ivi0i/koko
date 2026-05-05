@@ -100,7 +100,7 @@ describe("媒体协作分发 / 定位与运行时引导", () => {
     expect(distribution?.torrent_info_hash).toBe("torrent-info-hash-att-connecting");
   });
 
-  it("presence_url 相对地址会基于 nested asset 冷源而不是 locator.original_url 解析", () => {
+  it("presence_url 相对地址只会基于协作分发表面的 web_seed_url 解析", () => {
     const locator = {
       attachment_id: "att-presence-base",
       kind: "video" as const,
@@ -159,6 +159,68 @@ describe("媒体协作分发 / 定位与运行时引导", () => {
 
     expect(distribution?.presence_url).toBe(
       "http://media.local/api/media/att-presence-base/presence?session_id=s-test"
+    );
+  });
+
+  it("presence_url 缺少 web_seed_url 时不会再借冷源或 canonical 地址补成第二真相", () => {
+    const locator = {
+      attachment_id: "att-presence-no-webseed",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-presence-no-webseed",
+        content_hash: "hash-att-presence-no-webseed",
+        swarm_id: "swarm-att-presence-no-webseed",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-att-presence-no-webseed",
+        torrent_info_hash: "torrent-info-hash-att-presence-no-webseed",
+        announce_urls: ["ws://127.0.0.1:7072"],
+        web_seed_url: null,
+        presence_url: "/api/media/att-presence-no-webseed/presence?session_id=s-test",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      file_asset: {
+        asset_id: "att-presence-no-webseed",
+        content_hash: "hash-att-presence-no-webseed",
+        kind: "file_video" as const,
+        variants: {
+          canonical: {
+            id: "canonical",
+            url: "http://media.local/canonical-att-presence-no-webseed.mp4",
+            mime_type: "video/mp4",
+            width: 1280,
+            height: 720,
+          },
+        },
+        distribution: {
+          swarm_id: "swarm-att-presence-no-webseed",
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: null,
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "peer_only_after_expiry" as const,
+        },
+        origin: {
+          original_url: "http://media.local/original-att-presence-no-webseed",
+          expires_at_epoch_seconds: 1775942400,
+          available: false,
+          role: "cold_backup_only" as const,
+        },
+      },
+      blob_asset: null,
+    } as 媒体定位结果;
+
+    const distribution = 读取可用协作分发片段(locator);
+
+    expect(distribution?.presence_url).toBe(
+      "/api/media/att-presence-no-webseed/presence?session_id=s-test"
     );
   });
 

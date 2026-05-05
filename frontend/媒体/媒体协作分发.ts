@@ -487,12 +487,10 @@ export function 读取协作分发定位片段(
   return locator.distribution ?? null;
 }
 
-const 读取协作分发基准地址 = (locator: 媒体定位结果): string | null =>
-  locator.file_asset?.origin.original_url ??
-  locator.blob_asset?.origin.original_url ??
-  locator.file_asset?.variants.canonical?.url ??
-  locator.blob_asset?.variants.canonical?.url ??
+const 读取协作分发分发表面基准地址 = (locator: 媒体定位结果): string | null =>
   locator.distribution?.web_seed_url ??
+  locator.file_asset?.distribution.web_seed_url ??
+  locator.blob_asset?.distribution?.web_seed_url ??
   null;
 
 export function 读取可用协作分发片段(
@@ -520,14 +518,15 @@ export function 读取可用协作分发片段(
     if (!distribution.presence_url) {
       return null;
     }
-    const baseUrl = 读取协作分发基准地址(locator);
+    const baseUrl = 读取协作分发分发表面基准地址(locator);
     try {
       /**
        * presence_url 可能来自三类输入：
        * 1. transport 已经收口好的绝对地址；
        * 2. 缓存里留下的相对地址；
        * 3. 测试或本地构造对象里的相对地址。
-       * 这里只做“补全为可 fetch 地址”，不再绑死顶层 original_url。
+       * 这里只允许借协作分发表面的 web_seed 基准地址补全，
+       * 不再回退冷源 origin/canonical，避免控制面重新偷连第二真相。
        */
       return baseUrl
         ? new URL(distribution.presence_url, baseUrl).href

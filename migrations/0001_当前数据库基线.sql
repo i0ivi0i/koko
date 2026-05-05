@@ -220,19 +220,6 @@ CREATE INDEX IF NOT EXISTS idx_attachment_distribution_metadata_torrent_info_has
     ON attachment_distribution_metadata (torrent_info_hash)
     WHERE torrent_info_hash IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS attachment_streaming_manifests (
-    attachment_id TEXT PRIMARY KEY REFERENCES attachments(attachment_id) ON DELETE CASCADE,
-    hls_master_storage_key TEXT NOT NULL,
-    dash_mpd_storage_key TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    streaming_expires_at TIMESTAMPTZ NULL,
-    streaming_deleted_at TIMESTAMPTZ NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_attachment_streaming_manifest_cleanup
-    ON attachment_streaming_manifests (streaming_expires_at)
-    WHERE streaming_deleted_at IS NULL;
-
 CREATE TABLE IF NOT EXISTS swarm_peer_presence (
     swarm_id TEXT NOT NULL,
     session_id TEXT NOT NULL,

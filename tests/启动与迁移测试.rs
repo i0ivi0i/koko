@@ -180,7 +180,6 @@ fn 当前数据库基线表达最终schema而不是历史补丁链() {
         "attachment_upload_sessions",
         "attachment_upload_transports",
         "attachment_distribution_metadata",
-        "attachment_streaming_manifests",
         "swarm_peer_presence",
         "canonical_media_assets",
         "attachment_canonical_asset_refs",
@@ -239,9 +238,11 @@ fn 当前数据库基线保留媒体上传和协作分发热路径索引() {
 
     assert!(sql.contains("idx_attachment_distribution_metadata_swarm_id"));
     assert!(sql.contains("idx_attachment_distribution_metadata_content_hash"));
-    assert!(sql.contains("idx_attachment_streaming_manifest_cleanup"));
     assert!(sql.contains("idx_attachments_origin_cleanup"));
     assert!(sql.contains("idx_attachments_mezzanine_cleanup"));
+    assert!(!sql.contains("attachment_streaming_manifests"));
+    assert!(!sql.contains("hls_master_storage_key"));
+    assert!(!sql.contains("dash_mpd_storage_key"));
 }
 
 #[test]
