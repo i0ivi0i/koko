@@ -73,7 +73,7 @@ start_release() {
 }
 
 run_healthcheck() {
-  "${healthcheck_script}"
+  bash "${healthcheck_script}"
 }
 
 main() {

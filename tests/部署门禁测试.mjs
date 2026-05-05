@@ -167,7 +167,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'ln -sfn \"$release_dir\" /opt/koko/current',
         'docker compose -f /opt/koko/current/ops/compose.yaml build',
         'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
-        '/opt/koko/current/ops/healthcheck.sh',
+        'bash /opt/koko/current/ops/healthcheck.sh',
         "",
       ].join("\n")
   );
@@ -183,7 +183,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'if [[ ! -d "${target_dir}" ]]; then exit 1; fi',
         'ln -sfn \"$target_dir\" /opt/koko/current',
         'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
-        '/opt/koko/current/ops/healthcheck.sh',
+        'bash /opt/koko/current/ops/healthcheck.sh',
         "",
       ].join("\n")
   );
@@ -643,6 +643,27 @@ test("scripts 门禁会拦住 deploy.sh 缺少 current 切换与健康检查", (
   assert.match(result.output, /ops\/deploy\.sh 缺少 healthcheck\.sh 调用/);
 });
 
+test("scripts 门禁会拦住 deploy.sh 裸执行 healthcheck", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    deploySh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'release_dir="/opt/koko/releases/${version}"',
+      'ln -sfn "$release_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml build',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      '/opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/deploy\.sh 必须通过 bash 调用 healthcheck\.sh/);
+});
+
 test("scripts 门禁会拦住 rollback.sh 没有目标版本参数", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -672,6 +693,27 @@ test("scripts 门禁会拦住 rollback.sh 没有目标版本目录存在校验",
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /ops\/rollback\.sh 缺少目标版本目录存在校验/);
+});
+
+test("scripts 门禁会拦住 rollback.sh 裸执行 healthcheck", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    rollbackSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'target_version="${1:?missing target version}"',
+      'target_dir="/opt/koko/releases/${target_version}"',
+      'if [[ ! -d "${target_dir}" ]]; then exit 1; fi',
+      'ln -sfn "$target_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      '/opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/rollback\.sh 必须通过 bash 调用 healthcheck\.sh/);
 });
 
 test("scripts 门禁会拦住 healthcheck.sh 漏掉关键探针", () => {

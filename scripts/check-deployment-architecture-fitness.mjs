@@ -295,6 +295,9 @@ function 收集脚本主链内容问题(rootDir) {
     if (!/healthcheck\.sh\b/.test(source)) {
       issues.push("ops/deploy.sh 缺少 healthcheck.sh 调用");
     }
+    if (!/bash\s+["']?\$\{healthcheck_script\}["']?/.test(source) && !/bash\s+\/opt\/koko\/current\/ops\/healthcheck\.sh/.test(source)) {
+      issues.push("ops/deploy.sh 必须通过 bash 调用 healthcheck.sh");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/deploy.sh");
     }
@@ -308,6 +311,9 @@ function 收集脚本主链内容问题(rootDir) {
     }
     if (!/\-d\s+"?\$\{?target_dir\}?"?/.test(source)) {
       issues.push("ops/rollback.sh 缺少目标版本目录存在校验");
+    }
+    if (!/bash\s+["']?\$\{healthcheck_script\}["']?/.test(source) && !/bash\s+\/opt\/koko\/current\/ops\/healthcheck\.sh/.test(source)) {
+      issues.push("ops/rollback.sh 必须通过 bash 调用 healthcheck.sh");
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/rollback.sh");
