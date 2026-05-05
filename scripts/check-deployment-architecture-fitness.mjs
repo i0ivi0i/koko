@@ -15,6 +15,7 @@ const 运行主链必需文件 = [
 const 脚本主链必需文件 = [
   "ops/README.md",
   "ops/env.production.example",
+  "ops/package-release.sh",
   "ops/install.sh",
   "ops/deploy.sh",
   "ops/rollback.sh",
@@ -33,6 +34,7 @@ const 需要扫描禁词的部署文件 = [
   "ops/Caddyfile",
   "ops/compose.yaml",
   "ops/env.production.example",
+  "ops/package-release.sh",
   "ops/install.sh",
   "ops/deploy.sh",
   "ops/rollback.sh",
@@ -49,6 +51,8 @@ const Dockerignore关键排除项 = [
   ["graphify-out"],
   [".codex-*.log", ".codex"],
   ["frontend/node_modules", "frontend/node_modules/"],
+  ["frontend/dist", "frontend/dist/"],
+  ["frontend/tests", "frontend/tests/"],
 ];
 
 function 读取命令行参数(argv) {
@@ -226,6 +230,49 @@ function 收集运行主链内容问题(rootDir) {
 function 收集脚本主链内容问题(rootDir) {
   const issues = [];
 
+  const packageReleasePath = join(rootDir, "ops", "package-release.sh");
+  if (existsSync(packageReleasePath)) {
+    const source = 读取非注释文本("ops/package-release.sh", 读取文本文件(rootDir, "ops/package-release.sh"));
+    const requiredWhitelistPaths = [
+      "Dockerfile",
+      ".dockerignore",
+      "Cargo.toml",
+      "Cargo.lock",
+      "build.rs",
+      "src",
+      "migrations",
+      "assets",
+      "frontend",
+      "scripts",
+      "ops",
+    ];
+    for (const requiredPath of [
+      ...requiredWhitelistPaths,
+    ]) {
+      if (!source.includes(requiredPath)) {
+        issues.push(`ops/package-release.sh 缺少发布白名单路径: ${requiredPath}`);
+      }
+    }
+    if (!source.includes(":(exclude)frontend/tests/**")) {
+      issues.push("ops/package-release.sh 缺少前端测试排除: frontend/tests");
+    }
+    if (!source.includes(":(exclude)frontend/vitest.config.ts")) {
+      issues.push("ops/package-release.sh 缺少前端测试配置排除: frontend/vitest.config.ts");
+    }
+    const 使用GitArchive = /git\s+archive\b/.test(source) && /\bHEAD\b/.test(source);
+    const 白名单看起来齐全 =
+      requiredWhitelistPaths.every((path) => source.includes(path)) &&
+      source.includes(":(exclude)frontend/tests/**") &&
+      source.includes(":(exclude)frontend/vitest.config.ts") &&
+      source.includes("--");
+    if (使用GitArchive && !白名单看起来齐全) {
+      issues.push("ops/package-release.sh 禁止直接整仓 git archive HEAD 打包");
+    }
+    if (/git\s+pull\b/.test(source)) {
+      issues.push("禁止出现 git pull: ops/package-release.sh");
+    }
+  }
+
   const installPath = join(rootDir, "ops", "install.sh");
   if (existsSync(installPath)) {
     const source = 读取非注释文本("ops/install.sh", 读取文本文件(rootDir, "ops/install.sh"));
@@ -320,6 +367,12 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/check-deployment-architecture-fitness\.mjs\s+--enforce\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少部署门禁预检");
     }
+    if (!/ops\/package-release\.sh\b/.test(source)) {
+      issues.push("initial-deploy.yml 缺少 ops/package-release.sh 调用");
+    }
+    if (/git\s+archive(?:.|\n)*\bHEAD\b/m.test(source)) {
+      issues.push("initial-deploy.yml 禁止直接整仓 git archive HEAD 打包");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: .github/workflows/initial-deploy.yml");
     }
@@ -359,6 +412,12 @@ function 收集Workflow主链内容问题(rootDir) {
     }
     if (!/check-deployment-architecture-fitness\.mjs\s+--enforce\b/.test(source)) {
       issues.push("deploy.yml 缺少部署门禁预检");
+    }
+    if (!/ops\/package-release\.sh\b/.test(source)) {
+      issues.push("deploy.yml 缺少 ops/package-release.sh 调用");
+    }
+    if (/git\s+archive(?:.|\n)*\bHEAD\b/m.test(source)) {
+      issues.push("deploy.yml 禁止直接整仓 git archive HEAD 打包");
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: .github/workflows/deploy.yml");

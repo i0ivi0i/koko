@@ -49,6 +49,8 @@ materialize_release() {
 assert_release_shape() {
   for required_path in \
     "${release_dir}/Dockerfile" \
+    "${release_dir}/scripts/check-frontend-browser-app-constitution.mjs" \
+    "${release_dir}/scripts/check-frontend-architecture-fitness.mjs" \
     "${release_dir}/ops/compose.yaml" \
     "${release_dir}/ops/healthcheck.sh"; do
     if [[ ! -e "${required_path}" ]]; then

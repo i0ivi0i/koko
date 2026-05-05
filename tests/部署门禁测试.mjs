@@ -44,7 +44,19 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
     rootDir,
     ".dockerignore",
     extra.dockerignore ??
-      [".git", "docs", "tests", "graphify-out", ".codex", "frontend/node_modules", "target", ""].join("\n")
+      [
+        ".git",
+        "docs",
+        "tests",
+        "graphify-out",
+        ".codex",
+        "frontend/node_modules",
+        "frontend/dist",
+        "frontend/tests",
+        "frontend/.tsbuildinfo",
+        "target",
+        "",
+      ].join("\n")
   );
   写文件(
     rootDir,
@@ -113,6 +125,22 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         "POSTGRES_DB=koko",
         "POSTGRES_USER=postgres",
         "POSTGRES_PASSWORD=postgres",
+        "",
+      ].join("\n")
+  );
+  写文件(
+    rootDir,
+    "ops/package-release.sh",
+    extra.packageReleaseSh ??
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        'version="${1:?missing version}"',
+        'archive_path="${2:-koko-${version}.tar.gz}"',
+        'git archive --format=tar.gz --output "${archive_path}" HEAD \\',
+        "  Dockerfile .dockerignore Cargo.toml Cargo.lock build.rs src migrations assets frontend scripts ops -- \\",
+        "  ':(exclude)frontend/tests/**' \\",
+        "  ':(exclude)frontend/vitest.config.ts'",
         "",
       ].join("\n")
   );
@@ -193,6 +221,7 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "      - run: corepack enable",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend build",
+        "      - run: bash ops/package-release.sh v0.1.0",
         "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
         "      - run: ./ops/healthcheck.sh || true",
         "",
@@ -216,6 +245,7 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "      - run: corepack enable",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend build",
+        "      - run: bash ops/package-release.sh v0.1.0",
         "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
         "      - run: ./ops/healthcheck.sh",
         "",
@@ -506,6 +536,8 @@ test("runtime 门禁会拦住 .dockerignore 漏掉关键打包排除项", () => 
   assert.match(result.output, /\.dockerignore 缺少关键排除项: tests/);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: graphify-out/);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/node_modules/);
+  assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/dist/);
+  assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/tests/);
 });
 
 test("runtime 门禁会拦住 compose 缺少正式运行服务", () => {
@@ -663,6 +695,26 @@ test("scripts 门禁会拦住 git pull 和 cloudflared 旁路", () => {
   assert.match(result.output, /cloudflared/);
 });
 
+test("scripts 门禁会拦住 package-release.sh 缺少白名单与前端测试排除", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    packageReleaseSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'archive_path="${2:-koko-${version}.tar.gz}"',
+      'git archive --format=tar.gz --output "${archive_path}" HEAD',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/package-release\.sh 缺少发布白名单路径: scripts/);
+  assert.match(result.output, /ops\/package-release\.sh 缺少前端测试排除: frontend\/tests/);
+  assert.match(result.output, /ops\/package-release\.sh 禁止直接整仓 git archive HEAD 打包/);
+});
+
 test("scripts 门禁不会误伤只出现在注释里的 git pull 和 cloudflared", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -740,6 +792,7 @@ test("workflows 门禁会拦住漏掉 VPS Secrets 和 healthcheck 的 workflow",
   assert.match(result.output, /deploy\.yml 缺少 Node 安装步骤/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm --dir frontend build 预检/);
   assert.match(result.output, /deploy\.yml 缺少部署门禁预检/);
+  assert.match(result.output, /deploy\.yml 缺少 ops\/package-release\.sh 调用/);
 });
 
 test("workflows 门禁会拦住 git pull 和 cloudflared 旁路", () => {
@@ -767,6 +820,35 @@ test("workflows 门禁会拦住 git pull 和 cloudflared 旁路", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.output, /禁止出现 git pull: \.github\/workflows\/deploy\.yml/);
   assert.match(result.output, /cloudflared/);
+});
+
+test("workflows 门禁会拦住直接 git archive HEAD 整仓打包", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法Workflow主链夹具(fixtureDir, {
+    deployWorkflow: [
+      "name: Deploy",
+      "on:",
+      "  push:",
+      "    branches: [main]",
+      "  workflow_dispatch:",
+      "jobs:",
+      "  deploy:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/setup-node@v4",
+      "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
+      "      - run: pnpm --dir frontend build",
+      "      - run: git archive --format=tar.gz --output koko.tar.gz HEAD",
+      "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
+      "      - run: ./ops/healthcheck.sh",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /deploy\.yml 缺少 ops\/package-release\.sh 调用/);
+  assert.match(result.output, /deploy\.yml 禁止直接整仓 git archive HEAD 打包/);
 });
 
 test("workflows 门禁会放行合法的按钮主链", () => {

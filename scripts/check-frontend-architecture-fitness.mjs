@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -533,6 +533,12 @@ export const 统计有效源码行数 = (source) => {
 };
 
 const 收集文件 = (directory) => {
+  // 正式发布包会主动裁掉 frontend/tests；门禁只该把“缺目录”视为无文件，
+  // 不能把它升级成构建异常，否则部署白名单一收紧就会把前端 builder 自己打爆。
+  if (!existsSync(directory)) {
+    return [];
+  }
+
   const files = [];
   for (const entry of readdirSync(directory)) {
     if (跳过目录.has(entry)) {
@@ -1045,6 +1051,12 @@ const 检查前端测试热点边界 = () => {
 
     const supportFiles = boundary.supportFiles ?? [boundary.support];
     for (const support of supportFiles) {
+      // 正式发布包会主动裁掉 frontend/tests；门禁在这种上下文里只该跳过测试支撑，
+      // 不能把“部署时不带测试目录”误升级成构建失败。
+      if (!文件存在(join(仓库根目录, support.path))) {
+        continue;
+      }
+
       const supportSource = 读取源码(support.path);
       const supportLineCount = 统计有效源码行数(supportSource);
       if (supportLineCount > support.maxEffectiveLines) {

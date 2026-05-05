@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           VERSION="${{ inputs.version }}"
           ARCHIVE="koko-${VERSION}.tar.gz"
-          git archive --format=tar.gz --output "${ARCHIVE}" HEAD
+          bash ops/package-release.sh "${VERSION}" "${ARCHIVE}"
           echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
 
