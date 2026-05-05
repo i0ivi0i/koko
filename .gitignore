@@ -39,6 +39,9 @@ tmp/
 # Graphify output is local generated state and should not participate in version control.
 graphify-out/
 
+# Local implementation plans are working notes and should not participate in version control.
+/docs/superpowers/plans/
+
 # Local Codex runtime noise
 .codex-*.log
 .codex-*.pid
