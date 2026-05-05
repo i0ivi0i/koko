@@ -1,7 +1,7 @@
 # WebTorrent 满血协同分发要求
 
 日期：2026-04-23（2026-04-29 融合 WebTorrent 生命周期 owner 模型）
-状态：Authority / Implemented（生命周期 owner 模型为新增执行裁决）
+状态：Authority / Rectification In Progress（2026-05-05 复核确认：一阶段主链收口已完成，但纯 WebTorrent 收尾未完成）
 适用范围：`koko` 的新上传图片/视频附件、`WebTorrent` 正式媒体字节主链、前 `24 小时` 后端强 seed、`24 小时` 后纯 peer 接力、时间线自动播放、查看器、全屏、后台补齐、帮助任务恢复、前端唯一 WebTorrent 运行时 owner、后端 Rust availability 裁决模型、失败态与删除态。
 上层总纲：`docs/superpowers/specs/2026-04-25-项目视频播放要求.md`
 
@@ -30,6 +30,13 @@
 - simple-peer：<https://github.com/feross/simple-peer>
 - bittorrent-tracker：<https://github.com/webtorrent/bittorrent-tracker>
 - XState v5 Actors：<https://stately.ai/docs/actors>
+
+2026-05-05 复核说明：
+
+1. 本文继续是 `koko` WebTorrent 协同分发的 authority spec。
+2. 但旧版文档里“截至 `2026-04-27` 已彻底完成态”的口径，与当前代码已不一致。
+3. 本次复核后，正式口径改为：**一阶段主链收口完成，但纯 WebTorrent 收尾未完成；后续清理以本文最新裁决为准。**
+4. 当前仍需收尾的偏差，主要是：视频 `anchor / origin.original_url` 回退、图片 `blob/canonical + media-sw.ts` 正式读取面、以及 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 等历史残留。
 
 ---
 
@@ -86,18 +93,27 @@
 
 这些控制面可以走 `HTTPS/WSS`，但它们不拥有正式媒体字节真相。
 
+这里的“只认 WebTorrent”要说得更硬一点：
+
+1. 正式播放/查看所消费的媒体字节，必须来自同一 `WebTorrent` runtime 下的 swarm source。
+2. `.torrent`、metainfo、join ticket、locator、presence、tracker announce 可以走 `HTTPS/WSS`，它们是控制面，不是正式媒体字节面。
+3. `WebSeed` 只要仍是 swarm 内成员，就属于同一正式分发平面，不算第二主链。
+4. `/api/attachments/{attachment}/content?...`、`/api/media/{attachment}/blob/canonical`、`origin.original_url`、`originalSrc / thumbnailSrc / posterSrc` 这类受控 HTTP 地址，不能再被解释成“也是 WebTorrent 主链的一部分”。
+
 ### 2.2 禁止第二主链
 
 新媒体链路禁止长期保留或新增：
 
 1. `HLS / DASH` 正式播放链。
-2. `original_url` 正式查看链。
+2. `origin.original_url`、`file_asset.canonical.url -> 受控 HTTP 内容地址`、`mode = "anchor"` 这类正式查看链。
 3. 前端播放器直接拉服务器原文件的正式路径。
-4. CDN 正式兜底链。
-5. 临时 range 服务正式兜底链。
-6. 只给查看器用的第二媒体源。
-7. 只给时间线用的第二媒体真相。
-8. 只为首屏好看而生成的服务器 thumbnail / still 正式资产。
+4. `/api/attachments/{attachment}/content?...` 被新媒体正式播放路径消费。
+5. `/api/media/{attachment}/blob/canonical` 被新图片正式查看主链消费。
+6. CDN 正式兜底链。
+7. 临时 range 服务正式兜底链。
+8. 只给查看器用的第二媒体源。
+9. 只给时间线用的第二媒体真相。
+10. 只为首屏好看而生成的服务器 thumbnail / still 正式资产。
 
 如果某条路径仍然存在，只能是 legacy 兼容、benchmark、迁移期隔离或控制面，不能继续承担新媒体正式播放字节。
 
@@ -109,6 +125,16 @@
 2. 已经落地的 legacy `HLS / poster / thumbnail / still` 资产可以作为历史债务暂时存在。
 3. 历史 backfill、批量重种、旧资产清理应在独立 plan 中处理，不能阻塞新主链真相收口。
 4. 允许按附件代际区分 legacy 与新链路，但禁止新附件继续落回旧真相。
+5. 允许短期保留 legacy/迁移态读取面，但它们必须显式标成“待删除兼容壳”，不能继续由时间线、查看器、全屏作为默认正式消费者。
+
+### 2.4 2026-05-05 复核出的当前偏差
+
+本次复核确认，代码现状还没到“纯 WebTorrent 全量收尾完成”：
+
+1. 当前视频 `file_asset.canonical.url` 仍经由受控 HTTP 内容地址投影，前端播放器也仍保留 `anchor -> origin.original_url` 回退。
+2. 当前图片仍保留 `/api/media/{attachment}/blob/canonical` 与 `frontend/media-sw.ts` 图片缓存面。
+3. 新上传视频虽然已经不再主动生成 `HLS / DASH` 正式主链，但 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 等历史结构仍在后端。
+4. 因此，当前正式状态只能叫“**一阶段主链收口完成**”，不能再写成“**纯 WebTorrent 已彻底完成态**”。
 
 ---
 
@@ -144,7 +170,16 @@ BitTorrent / WebTorrent 的正常形态不是单来源串行下载，而是：
 
 因此 D 新进入时，目标不是“只连服务器”或“只连 A”，而是尽量同时吃 `服务器强帮助者 + A/B/C 片段帮助者 + 完整帮助者`。
 
-### 3.3 高吞吐不等于无限全连
+### 3.3 官方秒开实践进入 koko 后的硬裁决
+
+WebTorrent 官方和生态给出的实践，在 `koko` 里必须收成下面几条硬话：
+
+1. 浏览器正式媒体源应优先表现为同一 `WebTorrent client/createServer/streamTo` 会话下的 swarm source，而不是额外原文件直链。
+2. `file.select()`、`file.deselect()`、`torrent.critical()` 这类 piece 优先级能力，应该服务于首屏/首播关键字节调度，而不是拿 HTTP 冷源回退伪造秒开。
+3. `.torrent`、metainfo、join ticket、presence、tracker `ws/wss` 都是控制面；它们可以是 `HTTP/WSS`，但正式媒体内容字节不能因此退回 `HTTP origin`。
+4. 浏览器友好的 `mp4 / m4v / m4a`、容器级 `faststart / remux`、以及同一 whole-file payload 内的早期可读字节，是官方鼓励的秒开方向；禁止借“浏览器更稳”重新长第二条正式播放链。
+
+### 3.4 高吞吐不等于无限全连
 
 本文要求产品语义激进，但不要求底层愚蠢：
 
@@ -156,7 +191,7 @@ BitTorrent / WebTorrent 的正常形态不是单来源串行下载，而是：
 但这些只能是基础设施级硬边界，不能上抬成产品层保守规则。
 禁止用“浏览器有限”为理由写死“默认只保最近 `3-5` 条帮助任务”“移动端默认不补齐”“弱网默认不帮别人”“滑出视口就停”。
 
-### 3.4 状态机是 owner 约束，不是新主链
+### 3.5 状态机是 owner 约束，不是新主链
 
 随着协同分发功能变多，继续只靠散落的 `Map`、布尔值和局部 guard，会把 join ticket、source generation、reader、presence、排水退场、轻帮助态和本地完整态混在一起。这里需要状态机思想，但不能把状态机误做成新的系统大脑。
 
@@ -457,6 +492,7 @@ A 可能刷新、关闭标签页、浏览器重启，过一阵子再回来。规
 3. 把自动播放、查看器、全屏、预览、补齐这些消费者统一映射成同一 session 的不同消费模式。
 4. 让 `heavy_playback / light_help / locally_complete / draining` 之间的切换可观测、可测试、可取消。
 5. 在页面 hidden、viewer 关闭、owner 切换、消费者归零、运行时销毁时，按同一条状态转移释放 reader、listener、timer 和 source。
+6. 新附件正式读取一旦已经进入 swarm source，就不得再因为 owner 切换、可见性变化或探测失败回到 `anchor / origin / blob canonical` 受控 HTTP 回退。
 
 禁止：
 
@@ -465,6 +501,7 @@ A 可能刷新、关闭标签页、浏览器重启，过一阵子再回来。规
 3. 让前端状态机裁决 `MEDIA_READY / MEDIA_NO_ONLINE_SEED / MEDIA_DELETED` 的业务真相。
 4. 让状态机为了“恢复体验”绕回 `HLS / original_url / CDN / range` 第二正式字节链。
 5. 通过同步前后端内部状态来维持一致；前后端只能交换 contract 事件和稳定事实。
+6. 继续把 `frontend/媒体/媒体播放.ts` 里的 `anchor` 模式当作新附件正式播放完成态；它只能是待删除迁移壳，不能继续作为目标结构。
 
 ### 7.5 不主动裁掉旧帮助任务
 
@@ -486,6 +523,7 @@ A 可能刷新、关闭标签页、浏览器重启，过一阵子再回来。规
 3. 不支持渐进式解码且本地无预览缓存时，允许稳定应用级占位态。
 4. 占位态是 UI 态，不是服务器生成的第二资产。
 5. 一旦 payload 达到完整解码门槛，立即切入正式图像显示。
+6. 当前若仍保留 `/api/media/{attachment}/blob/canonical`、`buildAttachmentContentUrl(...)`、`media-sw.ts` 图片缓存面，它们只能作为 legacy/迁移态存在，不能再被描述成“图片正式主链已经纯 WebTorrent 完成”。
 
 图片冷启动允许“先稳定占位、后真实显示”，不允许“为了避免占位而偷偷回服务器拿缩略图”。
 
@@ -572,6 +610,10 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 17. 禁止后端为了形式对称引入前端式状态机框架，或把 `complete_at / web_seed_until / presence / availability / delete` 这些权威事实交给通用状态机黑箱。
 18. 禁止前后端同步彼此内部状态；只能交换 locator、join ticket、announce、presence、availability、删除事实和错误 code。
 19. 禁止用状态机名义保留旧 guard、旧 fallback、旧 owner 双活；新状态模型必须删除或压缩原有重复判断路径。
+20. 禁止 `frontend/媒体/媒体播放.ts` 继续把 `mode = "anchor"`、`origin.original_url`、受控 HTTP `canonical` 地址作为新附件正式播放兜底。
+21. 禁止 `src/媒体/资产/响应投影.rs` 继续把新视频 `file_asset.canonical.url` 指回 `/api/attachments/{attachment}/content?...` 这类受控 HTTP 地址。
+22. 禁止 `frontend/media-sw.ts`、`buildAttachmentContentUrl(...)`、`originalSrc / thumbnailSrc / posterSrc` 被新图片/新视频正式播放链继续消费；若暂时保留，只能是显式 legacy/迁移面。
+23. 禁止 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 这类历史结构继续挂在新主链 owner 上冒充“已完成但先留着”。
 
 ---
 
@@ -601,6 +643,10 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 20. 测试必须证明 `heavy_playback` 退出后可以进入 `light_help`，但 `light_help` 不持有前台播放级 reader；`draining` 只保留浏览器尾波排水，不保留零引用重播放会话。
 21. 后端 availability 裁决必须用 Rust 强类型和表驱动测试覆盖 `SeederDecision / Availability / PeerKind`，不因为引入或不引入状态机框架而改变业务真相。
 22. `chrome-devtools-cli` 真实烟测至少覆盖 `https://localhost` 或 `https://127.0.0.1`、房间 `1234b`、sender / A / B / C / D 多隔离上下文、图片和视频、前 `24 小时` 强 seed、后 `24 小时` 纯 peer、无在线种子与内容已删除，并采样 WebTorrent runtime/session 状态、reader/listener 回落和 route drain。
+23. 新上传视频的 `locator / file_asset.canonical` 不再指向 `/api/attachments/{attachment}/content?...`，前端正式播放结果也不再进入 `mode = "anchor"`。
+24. 新上传图片的正式显示不再依赖 `/api/media/{attachment}/blob/canonical` 或 `media-sw.ts` 图片 blob 缓存面；若仍存在，只能被 legacy 附件或明确迁移测试消费。
+25. 时间线、查看器、全屏对新附件不再消费 `originalSrc / thumbnailSrc / posterSrc` 作为正式字节入口。
+26. 后端新主链 owner 已清掉 `attachment_streaming_manifests` 等历史 streaming manifest 残留，或者已经被明确隔离到无生产消费者的 legacy owner。
 
 ---
 
@@ -729,20 +775,31 @@ locator 持久化缓存与 `.torrent` 描述缓存必须 session-aware：
 - PostgreSQL `swarm_peer_presence` 显示 `backend_strong_seed = 1`、`complete_peer = 4`、`partial_peer = 2`
 - fresh session `s-1ac8f6ab9ff3` 自己留下 `complete_peer`
 
-因此，截至 `2026-04-27`，WebTorrent 主链与满血协同分发可以视为经过真实多人复核后的彻底完成态。
+因此，截至 `2026-04-27`，WebTorrent 主链与满血协同分发可以视为经过真实多人复核后的**一阶段主链收口完成态**，但不等于纯 WebTorrent 收尾已经全部清空。`2026-05-05` 复核见下节。
+
+### 12.5 2026-05-05：官方复核与第二面残留审计
+
+本轮复核的结论不是“主链不存在”，而是“主链已立住，但还有几条不该继续留在正式面上的残留没有清完”。
+
+复核确认：
+
+1. 视频正式协作分发主链已经是 WebTorrent-first。
+2. 但当前 `frontend/媒体/媒体播放.ts` 仍保留 `anchor / origin.original_url` 回退，`src/媒体/资产/响应投影.rs` 也仍把视频 `file_asset.canonical.url` 投影成受控 HTTP 内容地址。
+3. 图片当前仍保留 `/api/media/{attachment}/blob/canonical` 与 `frontend/media-sw.ts` 图片缓存面。
+4. 新上传视频已不再主动生成 `HLS / DASH` 正式主链，但后端 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 历史残留仍在。
+
+因此，自本节起，本文正式撤销“纯 WebTorrent 已彻底完成态”的旧说法，改为：
+
+1. 已完成：一阶段主链收口、退字节真相、announce seam、多来源协作、唯一 runtime owner 收口。
+2. 未完成：`anchor/origin` 回退、图片 `blob/canonical` 正式面、图片缓存面、历史 manifest 残留清理。
+3. 后续代码、测试、plan 和验收，一律按本文更新后的红线和门禁执行，不再按旧口径自我判绿。
 
 ---
 
 ## 13. 自审结论
 
-本文融合后保留了旧两份 spec 的全部关键裁决：
+本文在 `2026-05-05` 复核后的自审结论是：
 
-1. `2026-04-22` 的主链唯一、服务器强 seed、`24 小时` 退字节、失败态、删除态、质量裁决、`web_seed_until` 真相都已收进第 2、4、5、8、9、11、12 节。
-2. `2026-04-23` 的自动播放即帮助、多来源并行、片段帮助者、滑走不停、任务恢复、不裁最近几条、移动端不分裂、announce seam、多人烟测证据都已收进第 3、5、6、7、8、10、11、12 节。
-3. 新文档没有把后端强 seed 和“只允许 WebTorrent”写成矛盾：后端只以 swarm 成员身份参与，不能成为第二前端直链。
-4. 新文档没有把 `partial_peer` 和 `MEDIA_READY` 混掉：片段 peer 有协作价值，但 ready 仍要看当前客户端当前窗口里的真实可恢复来源。
-5. 新文档没有把 `24 小时` 后纯 peer 可用性写成绝对可播：有来源则接住，无来源则说真话。
-6. 新文档没有把删除态与无种子态混掉：删除永远是不可恢复终态。
-7. 新文档与 `项目视频播放要求` 的关系清晰：本文是 WebTorrent 分发细则，上层总纲继续拥有 canonical 资产、唯一播放器与播放视觉连续性总裁决。
-8. 新文档没有把“全局唯一 WebTorrent”写成新的巨型状态机：前端只收口唯一协作分发 owner 内部生命周期，后端只做 Rust 权威裁决，前后端通过 contract 配合。
-9. 新文档没有把状态机当成银弹：它只用于消灭多处共写、隐式保活、reader/listener 泄漏和退场竞态，不能替代 WebTorrent 官方 runtime、后端业务事实或唯一播放器 owner。
+1. 本文继续保留旧两份 spec 的核心裁决：主链唯一、服务器强 seed、`24 小时` 退字节、失败态说真话、多来源并行、自动播放即帮助、删除优先级最高。
+2. 本文不再把“主链已立住”和“纯 WebTorrent 收尾已全部清空”混成一句话，而是把 `anchor/origin`、`blob/canonical`、图片缓存面、manifest 残留明确降级为待清理偏差。
+3. 本文已经把官方允许的 swarm/control 面与不允许继续当正式播放主链的 HTTP 回退面分开写死，后续实现和验收不再允许靠模糊口径自我判绿。
