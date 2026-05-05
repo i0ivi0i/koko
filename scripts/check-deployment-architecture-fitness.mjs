@@ -358,6 +358,9 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/pnpm\/action-setup@v\d+/.test(source)) {
       issues.push("initial-deploy.yml 缺少 pnpm/action-setup 安装步骤");
     }
+    if (!/package_json_file:\s*frontend\/package\.json/.test(source)) {
+      issues.push("initial-deploy.yml 缺少 pnpm package_json_file 指向 frontend/package.json");
+    }
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 ops/healthcheck.sh 调用");
     }
@@ -406,6 +409,9 @@ function 收集Workflow主链内容问题(rootDir) {
     }
     if (!/pnpm\/action-setup@v\d+/.test(source)) {
       issues.push("deploy.yml 缺少 pnpm/action-setup 安装步骤");
+    }
+    if (!/package_json_file:\s*frontend\/package\.json/.test(source)) {
+      issues.push("deploy.yml 缺少 pnpm package_json_file 指向 frontend/package.json");
     }
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("deploy.yml 缺少 ops/healthcheck.sh 调用");

@@ -218,6 +218,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "    runs-on: ubuntu-latest",
         "    steps:",
         "      - uses: pnpm/action-setup@v6",
+        "        with:",
+        "          package_json_file: frontend/package.json",
         "      - uses: actions/setup-node@v4",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend build",
@@ -242,6 +244,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "    runs-on: ubuntu-latest",
         "    steps:",
         "      - uses: pnpm/action-setup@v6",
+        "        with:",
+        "          package_json_file: frontend/package.json",
         "      - uses: actions/setup-node@v4",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend build",
@@ -790,6 +794,7 @@ test("workflows 门禁会拦住漏掉 VPS Secrets 和 healthcheck 的 workflow",
   assert.match(result.output, /deploy\.yml 缺少 VPS_SSH_KEY 引用/);
   assert.match(result.output, /deploy\.yml 缺少 ops\/healthcheck\.sh 调用/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm\/action-setup 安装步骤/);
+  assert.match(result.output, /deploy\.yml 缺少 pnpm package_json_file 指向 frontend\/package\.json/);
   assert.match(result.output, /deploy\.yml 缺少 Node 安装步骤/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm --dir frontend build 预检/);
   assert.match(result.output, /deploy\.yml 缺少部署门禁预检/);
