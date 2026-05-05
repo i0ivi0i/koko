@@ -19,6 +19,8 @@ use std::{
 };
 use tokio::task;
 
+const 已知_TUS_SIDECAR上传目录前缀: &[&str] = &["/data/tus"];
+
 /// 当前 hook adapter 顶层负载直接贴 tusd 官方 `Type / Event` 结构。
 /// 业务层仍然只认 attachment/upload_session/transport_role；协议字段只允许停留在 adapter。
 #[derive(Deserialize)]
@@ -711,6 +713,30 @@ fn 读取tus_metadata字段(
         ))
 }
 
+fn 映射tus存储定位到共享上传目录(tus_upload_dir: &str, storage_locator: &str) -> PathBuf {
+    let shared_root = PathBuf::from(tus_upload_dir);
+    let normalized_locator = storage_locator.trim().replace('\\', "/");
+    for sidecar_root in 已知_TUS_SIDECAR上传目录前缀 {
+        if normalized_locator == *sidecar_root {
+            return shared_root.clone();
+        }
+        if let Some(relative_path) = normalized_locator.strip_prefix(&format!("{sidecar_root}/")) {
+            let mut resolved = shared_root.clone();
+            for segment in relative_path.split('/') {
+                if !segment.is_empty() {
+                    resolved.push(segment);
+                }
+            }
+            return resolved;
+        }
+    }
+    let candidate = PathBuf::from(storage_locator);
+    if !candidate.is_absolute() {
+        return shared_root.join(candidate);
+    }
+    candidate
+}
+
 /// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
 /// 这里统一解析并锁死在 Tus upload dir 之内，避免 token 持有者伪造路径探测主机文件。
 ///
@@ -721,12 +747,7 @@ pub(super) fn 解析tus临时文件路径(
     storage_locator: &str,
 ) -> Result<PathBuf, (StatusCode, &'static str, String)> {
     let shared_root = PathBuf::from(tus_upload_dir);
-    let candidate = PathBuf::from(storage_locator);
-    let resolved = if candidate.is_absolute() {
-        candidate
-    } else {
-        shared_root.join(candidate)
-    };
+    let resolved = 映射tus存储定位到共享上传目录(tus_upload_dir, storage_locator);
     let canonical_root = std::fs::canonicalize(&shared_root).map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -773,12 +794,7 @@ pub(super) fn 解析tus残留清理目标(
     storage_locator: &str,
 ) -> Result<Tus残留清理定位结果, String> {
     let shared_root = PathBuf::from(tus_upload_dir);
-    let candidate = PathBuf::from(storage_locator);
-    let resolved = if candidate.is_absolute() {
-        candidate
-    } else {
-        shared_root.join(candidate)
-    };
+    let resolved = 映射tus存储定位到共享上传目录(tus_upload_dir, storage_locator);
     let canonical_root = std::fs::canonicalize(&shared_root)
         .map_err(|err| format!("解析 Tus upload dir 失败: {err}"))?;
     match std::fs::canonicalize(&resolved) {
@@ -894,8 +910,32 @@ async fn handle_tus_hook_post_terminate(_state: 应用状态, body: TusHookBody)
 
 #[cfg(test)]
 mod tests {
-    use super::{TusHttpRequestBody, 读取可选请求标识};
-    use std::collections::HashMap;
+    use super::{
+        TusHttpRequestBody, Tus残留清理定位结果, 解析tus临时文件路径, 解析tus残留清理目标,
+        读取可选请求标识,
+    };
+    use std::{
+        collections::HashMap,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn 创建tus上传目录夹具(file_name: &str) -> (String, PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("koko-tus-hook-{unique}"));
+        let upload_root = root.join("app-data");
+        let nested_dir = upload_root.join("tests");
+        std::fs::create_dir_all(&nested_dir).expect("应能创建上传目录夹具");
+        let file_path = nested_dir.join(file_name);
+        std::fs::write(&file_path, b"fixture").expect("应能写入 tus 临时文件夹具");
+        (
+            upload_root.to_string_lossy().to_string(),
+            std::fs::canonicalize(file_path).expect("应能 canonicalize 夹具文件"),
+        )
+    }
 
     #[test]
     fn 读取可选请求标识会返回非空x_request_id() {
@@ -908,5 +948,34 @@ mod tests {
         };
 
         assert_eq!(读取可选请求标识(&http_request).as_deref(), Some("req-123"));
+    }
+
+    #[test]
+    fn 解析tus临时文件路径会把sidecar绝对路径映射回共享上传目录() {
+        let (tus_upload_dir, expected_file) = 创建tus上传目录夹具("sidecar-path.bin");
+
+        let resolved = 解析tus临时文件路径(
+            &tus_upload_dir,
+            "/data/tus/tests/sidecar-path.bin",
+        )
+        .expect("应能把 sidecar 绝对路径映射回共享上传目录");
+
+        assert_eq!(resolved, expected_file);
+    }
+
+    #[test]
+    fn 解析tus残留清理目标会把sidecar绝对路径映射回共享上传目录() {
+        let (tus_upload_dir, expected_file) = 创建tus上传目录夹具("sidecar-cleanup.bin");
+
+        let resolved = 解析tus残留清理目标(
+            &tus_upload_dir,
+            "/data/tus/tests/sidecar-cleanup.bin",
+        )
+        .expect("应能解析 sidecar 绝对路径残留");
+
+        assert!(matches!(
+            resolved,
+            Tus残留清理定位结果::当前上传目录文件(path) if path == expected_file
+        ));
     }
 }
