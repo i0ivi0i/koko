@@ -310,6 +310,34 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "",
       ].join("\n")
   );
+  写文件(
+    rootDir,
+    ".github/workflows/release.yml",
+    extra.releaseWorkflow ??
+      [
+        "name: 正式发版",
+        "on:",
+        "  workflow_dispatch:",
+        "    inputs:",
+        "      version:",
+        "        description: 正式版本号（例如 v0.1.1）",
+        "        required: true",
+        "        type: string",
+        "permissions:",
+        "  contents: write",
+        "jobs:",
+        "  release:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - uses: actions/checkout@v4",
+        "        with:",
+        "          fetch-depth: 0",
+        "      - run: gh release create \"${{ inputs.version }}\" --target \"${{ github.sha }}\" --title \"${{ inputs.version }}\" --generate-notes",
+        "        env:",
+        "          GH_TOKEN: ${{ github.token }}",
+        "",
+      ].join("\n")
+  );
 }
 
 function 运行部署门禁(rootDir, ...args) {
@@ -355,6 +383,7 @@ test("空目录在 workflows scope 会报缺少 GitHub workflow", () => {
   assert.match(result.output, /缺少\s+\.github\/workflows\/initial-deploy\.yml/);
   assert.match(result.output, /缺少\s+\.github\/workflows\/deploy\.yml/);
   assert.match(result.output, /缺少\s+\.github\/workflows\/rollback\.yml/);
+  assert.match(result.output, /缺少\s+\.github\/workflows\/release\.yml/);
 });
 
 test("任意 runtime 夹具里出现 cloudflared 都必须失败", () => {
@@ -1121,6 +1150,35 @@ test("workflows 门禁会拦住 deploy 和 initial-deploy 漏掉 Cloudflare toke
   assert.match(result.output, /deploy\.yml 缺少 CLOUDFLARE_API_TOKEN 引用/);
   assert.match(result.output, /initial-deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
   assert.match(result.output, /deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
+});
+
+test("workflows 门禁会拦住 release 按钮缺少中文名和正式发版最小要件", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法Workflow主链夹具(fixtureDir, {
+    releaseWorkflow: [
+      "name: Release",
+      "on:",
+      "  push:",
+      "    branches: [main]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  release:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo release",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /release\.yml 必须使用中文按钮名: 正式发版/);
+  assert.match(result.output, /release\.yml 缺少 workflow_dispatch/);
+  assert.match(result.output, /release\.yml 缺少 version 输入/);
+  assert.match(result.output, /release\.yml 必须允许写 contents/);
+  assert.match(result.output, /release\.yml 缺少自动创建 GitHub Release 的步骤/);
+  assert.match(result.output, /release\.yml 缺少自动生成 release notes/);
 });
 
 test("workflows 门禁会拦住 git pull 和 cloudflared 旁路", () => {

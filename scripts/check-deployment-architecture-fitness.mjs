@@ -26,6 +26,7 @@ const Workflow主链必需文件 = [
   ".github/workflows/initial-deploy.yml",
   ".github/workflows/deploy.yml",
   ".github/workflows/rollback.yml",
+  ".github/workflows/release.yml",
 ];
 
 const 需要扫描禁词的部署文件 = [
@@ -552,6 +553,36 @@ function 收集Workflow主链内容问题(rootDir) {
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: .github/workflows/rollback.yml");
+    }
+  }
+
+  const releasePath = join(rootDir, ".github", "workflows", "release.yml");
+  if (existsSync(releasePath)) {
+    const source = 读取非注释文本(
+      ".github/workflows/release.yml",
+      读取文本文件(rootDir, ".github/workflows/release.yml")
+    );
+    if (!/^\s*name:\s*正式发版\s*$/m.test(source)) {
+      issues.push("release.yml 必须使用中文按钮名: 正式发版");
+    }
+    if (!/\bworkflow_dispatch\b/.test(source)) {
+      issues.push("release.yml 缺少 workflow_dispatch");
+    }
+    if (!/^\s*version:\s*$/m.test(source)) {
+      issues.push("release.yml 缺少 version 输入");
+    }
+    if (!/^\s*permissions:\s*$/m.test(source) || !/contents:\s*write\b/.test(source)) {
+      issues.push("release.yml 必须允许写 contents");
+    }
+    const 有创建Release步骤 =
+      /gh\s+release\s+create\b/.test(source) || /softprops\/action-gh-release@/i.test(source);
+    if (!有创建Release步骤) {
+      issues.push("release.yml 缺少自动创建 GitHub Release 的步骤");
+    }
+    const 有自动说明 =
+      /--generate-notes\b/.test(source) || /generate_release_notes:\s*true\b/.test(source);
+    if (!有自动说明) {
+      issues.push("release.yml 缺少自动生成 release notes");
     }
   }
 
