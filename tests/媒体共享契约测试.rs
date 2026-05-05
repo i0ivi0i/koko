@@ -216,7 +216,7 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         .to_string();
     let image_bytes = 最小webp字节();
 
-    let (attachment_id, complete_body) = 完成共享媒体上传(
+    let (_attachment_id, complete_body) = 完成共享媒体上传(
         app,
         &tus_upload_dir,
         session_id.as_str(),
@@ -232,9 +232,10 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
     let media_asset = complete_body["media_asset"]
         .as_object()
         .expect("complete 应返回共享 media_asset");
-    let canonical = media_asset["variants"]["canonical"]
-        .as_object()
-        .expect("Blob 资产必须返回 canonical");
+    assert!(
+        media_asset["variants"]["canonical"].is_null(),
+        "新图片共享契约不应继续把 blob canonical 地址当正式主链暴露"
+    );
     let distribution = media_asset["distribution"]
         .as_object()
         .expect("Blob 资产必须返回共享分发表面");
@@ -243,10 +244,6 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         .expect("Blob 资产必须返回冷源描述");
 
     // 共享 contract 既不能混入 Web presenter 私货，也不能继续把旧附件内容地址当正式 blob 主链。
-    assert_eq!(
-        canonical.get("url").and_then(serde_json::Value::as_str),
-        Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())
-    );
     assert!(
         media_asset.get("preview").is_none(),
         "Blob 共享契约不再保留旧 preview 变体占位"
@@ -260,7 +257,6 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         "Blob 共享契约不再保留旧 original 变体占位"
     );
     断言对象不包含壳层私货(media_asset, "blob media_asset");
-    断言对象不包含壳层私货(canonical, "blob canonical");
     断言对象不包含壳层私货(distribution, "blob distribution");
     断言对象不包含壳层私货(origin, "blob origin");
     assert!(

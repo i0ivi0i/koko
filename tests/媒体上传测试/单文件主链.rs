@@ -156,7 +156,7 @@ async fn 完成媒体上传(
 
 #[tokio::test]
 #[serial]
-async fn 图片complete后只保留一份canonical对象() {
+async fn 图片complete后只保留canonical物理资产但不再返回blob_canonical正式地址() {
     let env = 准备complete测试环境("single-file-image").await;
     let 已登记上传回执 { attachment_id } = 准备并登记上传回执(
         &env,
@@ -176,8 +176,11 @@ async fn 图片complete后只保留一份canonical对象() {
     assert_eq!(media_asset["kind"].as_str(), Some("blob_image"));
     let variants = media_asset["variants"]
         .as_object()
-        .expect("图片资产必须只暴露 variants.canonical");
-    assert!(variants["canonical"].is_object(), "{media_asset:?}");
+        .expect("图片资产必须继续保留 variants 壳层");
+    assert!(
+        variants.get("canonical").is_none() || variants["canonical"].is_null(),
+        "{media_asset:?}"
+    );
     assert!(variants.get("preview").is_none() || variants["preview"].is_null());
     assert!(variants.get("full").is_none() || variants["full"].is_null());
     assert!(variants.get("original").is_none() || variants["original"].is_null());
@@ -292,18 +295,14 @@ async fn 视频complete后不再返回hls_dash_manifest() {
         "后端不再生成视频 mezzanine 回退母本"
     );
 
-    let manifest_exists: Option<i64> = sqlx::query_scalar(
-        "SELECT 1::BIGINT
-         FROM attachment_streaming_manifests
-         WHERE attachment_id = $1",
-    )
-    .bind(&attachment_id)
-    .fetch_optional(&pool)
-    .await
-    .expect("应能查询视频流媒体清单记录");
+    let manifest_table: Option<String> =
+        sqlx::query_scalar("SELECT to_regclass('attachment_streaming_manifests')::TEXT")
+            .fetch_one(&pool)
+            .await
+            .expect("应能查询视频流媒体清单表是否仍存在");
     assert!(
-        manifest_exists.is_none(),
-        "新视频附件不再写 HLS/DASH 清单记录"
+        manifest_table.is_none(),
+        "新视频附件进入纯 WebTorrent 主链后，attachment_streaming_manifests 应整体退场"
     );
 }
 

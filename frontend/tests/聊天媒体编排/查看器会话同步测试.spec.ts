@@ -249,7 +249,7 @@ describe("聊天媒体编排 - 查看器会话同步", () => {
         {
           attachmentId,
           kind: "video",
-          src: `http://media.local/original-${attachmentId}`,
+          src: "",
         },
       ],
     });
@@ -258,16 +258,7 @@ describe("聊天媒体编排 - 查看器会话同步", () => {
     await 刷新异步队列();
     expect(解析播放结果).toHaveBeenCalledTimes(2);
     expect(viewerOpenCalls).toHaveLength(1);
-    expect(viewerSyncCalls.at(-1)).toMatchObject({
-      startAttachmentId: attachmentId,
-      items: [
-        {
-          attachmentId,
-          kind: "video",
-          src: "",
-        },
-      ],
-    });
+    expect(viewerSyncCalls).toHaveLength(0);
 
     第二轮恢复.resolve({
       mode: "degraded",
@@ -280,21 +271,12 @@ describe("聊天媒体编排 - 查看器会话同步", () => {
     });
     await 刷新异步队列();
     expect(viewerOpenCalls).toHaveLength(1);
-    expect(viewerSyncCalls.at(-1)).toMatchObject({
-      startAttachmentId: attachmentId,
-      items: [
-        {
-          attachmentId,
-          kind: "video",
-          src: "",
-        },
-      ],
-    });
+    expect(viewerSyncCalls).toHaveLength(0);
 
     编排.销毁();
   });
 
-  it("图片查看器在播放真相未到达时等待会话，不会打开 original 或空 src", async () => {
+  it("图片查看器在播放真相未到达时，会先打开空壳等待后续 swarm 同步", async () => {
     const attachmentId = "att-image-wait-swarm-1";
     const transport: 前端传输端口 = {
       loadMediaLocator: vi.fn(async () => ({
@@ -370,7 +352,17 @@ describe("聊天媒体编排 - 查看器会话同步", () => {
     });
     await 刷新异步队列();
 
-    expect(viewerOpenCalls).toHaveLength(0);
+    expect(viewerOpenCalls).toHaveLength(1);
+    expect(viewerOpenCalls[0]).toMatchObject({
+      startAttachmentId: attachmentId,
+      items: [
+        {
+          attachmentId,
+          kind: "image",
+          src: "",
+        },
+      ],
+    });
 
     图片恢复.resolve({
       mode: "swarm",
@@ -399,19 +391,10 @@ describe("聊天媒体编排 - 查看器会话同步", () => {
           {
             kind: "image",
             attachmentId,
-            src: `blob:http://media.local/swarm-${attachmentId}`,
+            src: "",
             alt: "图片附件原图",
             width: 1200,
             height: 800,
-            contentHash: `hash-${attachmentId}`,
-            distribution: {
-              swarm_id: `swarm-${attachmentId}`,
-              announce_urls: ["wss://tracker.koko.local/announce"],
-              web_seed_url: `http://media.local/web-seed-${attachmentId}`,
-              join_ticket: null,
-              ticket_expires_at: null,
-              survival_mode: "server_assisted" as const,
-            },
           },
         ],
       },

@@ -269,18 +269,14 @@ async fn complete视频上传会写入canonical并返回file_asset() {
         asset_storage_key, storage_key,
         "视频附件投影和 canonical 资产表必须指向同一内容寻址对象"
     );
-    let manifest_exists: Option<i64> = sqlx::query_scalar(
-        "SELECT 1::BIGINT
-         FROM attachment_streaming_manifests
-         WHERE attachment_id = $1",
-    )
-    .bind(&attachment_id)
-    .fetch_optional(&pool)
-    .await
-    .expect("应能查询视频流媒体清单记录");
+    let manifest_table: Option<String> =
+        sqlx::query_scalar("SELECT to_regclass('attachment_streaming_manifests')::TEXT")
+            .fetch_one(&pool)
+            .await
+            .expect("应能查询视频流媒体清单表是否仍存在");
     assert!(
-        manifest_exists.is_none(),
-        "新视频附件不再写 HLS/DASH 清单记录"
+        manifest_table.is_none(),
+        "新视频附件进入纯 WebTorrent 主链后，attachment_streaming_manifests 应整体退场"
     );
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),

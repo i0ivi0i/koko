@@ -232,7 +232,25 @@ fn 构造单文件视频资产响应体(
 }
 
 fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> serde_json::Value {
-    let canonical_url = 构造blob受控地址(参数.附件标识, 参数.会话标识, "canonical");
+    let canonical = if 参数.运行态分发.is_some() || 参数.分发快照.is_some() {
+        /*
+         * 新图片一旦进入协作分发表面，就不再把 blob canonical HTTP 地址当正式主链发给前端：
+         * 1. 正式字节真相已经收口到 WebTorrent swarm / 会话 owner；
+         * 2. 这里继续返回 canonical，只会把 locator/media_asset 又抬回第二正式读取面；
+         * 3. legacy 附件若还没进入分发表面，仍允许继续保留 canonical 兼容壳。
+         */
+        None
+    } else {
+        Some(contract::变体描述 {
+            标识: "canonical".to_string(),
+            // canonical 是客户端预制后的唯一图片对象，后端只负责校验与受控分发。
+            // MIME 继续来自附件 ready 真相，避免响应层重新猜测文件内容。
+            mime_type: 参数.mime_type.to_string(),
+            地址: 构造blob受控地址(参数.附件标识, 参数.会话标识, "canonical"),
+            宽: 参数.宽,
+            高: 参数.高,
+        })
+    };
     let asset = contract::Blob媒体资产描述 {
         资产标识: 参数.附件标识.to_string(),
         内容哈希: 参数
@@ -240,15 +258,7 @@ fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> 
             .map(|snapshot| snapshot.content_hash.clone())
             .unwrap_or_else(|| 参数.附件标识.to_string()),
         种类: contract::媒体资产种类::图片Blob,
-        canonical: Some(contract::变体描述 {
-            标识: "canonical".to_string(),
-            // canonical 是客户端预制后的唯一图片对象，后端只负责校验与受控分发。
-            // MIME 继续来自附件 ready 真相，避免响应层重新猜测文件内容。
-            mime_type: 参数.mime_type.to_string(),
-            地址: canonical_url,
-            宽: 参数.宽,
-            高: 参数.高,
-        }),
+        canonical,
         分发: 参数.分发快照.and_then(|snapshot| {
             参数.运行态分发.map(|runtime| {
                 从运行态协作分发响应提取共享分发表面(snapshot, runtime)

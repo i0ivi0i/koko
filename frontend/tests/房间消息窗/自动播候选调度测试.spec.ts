@@ -473,7 +473,7 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
       {
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/original-video-1",
+        src: "",
         posterSrc: "http://media.local/poster-video-1-fresh",
         width: 1280,
         height: 720,
@@ -652,4 +652,3 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
     }
   });
 });
-

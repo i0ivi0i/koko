@@ -36,10 +36,7 @@ export const 渲染图片附件 = (
      * 图片渲染只吃媒体 owner 已经投影出来的播放结果。
      * 原始地址和缩略图不是时间线正式像素真相，不能在这里另开冷源入口。
      */
-    playback?.mode === "swarm"
-      ? playback.src
-      : playback?.thumbnailUrl ??
-        (playback?.mode === "anchor" ? playback.src : 默认图片清单占位图);
+    playback?.mode === "swarm" ? playback.src : 默认图片清单占位图;
 
   return html`
     <div

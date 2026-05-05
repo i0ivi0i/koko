@@ -367,7 +367,13 @@ const 重算自动播候选补丁 = (
 };
 
 const 可投影为自动播播放结果 = (playback: 媒体播放结果): boolean =>
-  playback.mode === "anchor" || playback.mode === "swarm";
+  /**
+   * 自动播 owner 的已裁决播放结果只缓存 swarm：
+   * 1. runtime 允许继续记住 owner 附件是谁；
+   * 2. 但不能再把 `anchor` 当成“这条卡片已经拿到正式字节”的事实缓存下来；
+   * 3. 这样后续消息窗/查看器只能等待正式主链，而不会从 runtime 捞出第二入口。
+   */
+  playback.mode === "swarm";
 
 const 累加长任务计数补丁 = (
   current: 媒体运行时上下文,

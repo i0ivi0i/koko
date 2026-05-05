@@ -152,6 +152,7 @@ Assert-True ($cleanScript -match '\[switch\]\$Apply') "qingli.ps1 应该显式�
 Assert-True ($cleanScript -match '\[switch\]\$OptimizeStartupArtifacts') "qingli.ps1 应该显式接受启动自动优化开关，避免 run.ps1 再复制第二套清理真相。"
 Assert-True ($cleanScript -match '\[switch\]\$ReclaimWorkspaceStorage') "qingli.ps1 应该显式接受工作区重清理开关，给磁盘告急场景留出一键回收入口。"
 Assert-True (-not ($cleanScript -match 'Cloudflare|cloudflare|cloudflared|trycloudflare')) "qingli.ps1 不得继续保留任何 cloudflared / Cloudflare Tunnel 相关临时目录或清理入口。"
+Assert-True (-not ($cleanScript -match 'TRUNCATE TABLE[\s\S]*attachment_streaming_manifests')) "纯 WebTorrent 主链已经删掉 attachment_streaming_manifests；qingli.ps1 不应再把这张已退场的历史表放进真实清理 SQL。"
 Assert-True ($cleanScript -match 'MEDIA_TUS_UPLOAD_DIR') "qingli.ps1 应该跟随 tusd 主链清理 MEDIA_TUS_UPLOAD_DIR，而不是继续只盯着旧的 Rustus 目录。"
 Assert-True ($cleanScript -match 'TUSD_PORT' -or $cleanScript -match 'MEDIA_TUS_SERVER_PORT') "qingli.ps1 应该优先读取当前 tusd 端口配置，而不是只看旧的 RUSTUS_SERVER_PORT。"
 Assert-True ($cleanScript -match 'SWARM_SEEDER_PORT') "qingli.ps1 应该把 webtorrent-seeder 也纳入已识别服务停服范围。"

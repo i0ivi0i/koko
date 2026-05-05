@@ -308,6 +308,52 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     pane.remove();
   });
 
+  it("非自动播视频即使当前只拿到 anchor playback，也必须继续保持静态占位而不是偷吃旧冷源", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).toBeNull();
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
+
+    pane.remove();
+  });
+
   it("无 poster 视频在 playback 首次解析到 swarm 后，会从静态占位升级为 swarm 首帧预览", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
@@ -414,6 +460,67 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     pane.remove();
   });
 
+  it("新附件视频即使当前只拿到 anchor playback，抛出的 viewer request 也不能把它当成正式源", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/anchor-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]).toEqual({
+      startAttachmentId: "att-video-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-1",
+          src: "",
+          posterSrc: null,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+
+    pane.remove();
+  });
+
   it("图片在没有 playback 真相时，抛出的 viewer request 也不会偷带 originalSrc", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
@@ -434,6 +541,67 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
       },
     ];
     pane.mediaPlaybackByAttachmentId = {};
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-image-preview-trigger[data-attachment-id="att-image-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]).toEqual({
+      startAttachmentId: "att-image-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-1",
+          src: "",
+          alt: "图片附件原图",
+          width: 1200,
+          height: 800,
+        },
+      ],
+    });
+
+    pane.remove();
+  });
+
+  it("新附件图片即使当前只拿到 anchor playback，也不能把它当成正式查看源", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "image",
+            attachmentId: "att-image-1",
+            width: 1200,
+            height: 800,
+            displayWidth: 320,
+            displayHeight: 213,
+            thumbnailSrc: "http://media.local/thumb-image-1",
+            originalSrc: "http://media.local/original-image-1",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-image-1": {
+        mode: "anchor",
+        attachmentId: "att-image-1",
+        kind: "image",
+        src: "http://media.local/blob-canonical-image-1",
+        thumbnailUrl: "http://media.local/blob-thumb-image-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
     const details: 媒体查看器打开请求[] = [];
     pane.addEventListener("room-open-media-viewer", (event) => {
       details.push((event as CustomEvent<媒体查看器打开请求>).detail);

@@ -18,10 +18,7 @@ type 查看器会话协作依赖 = {
   清除程序滚动来源(source: "media_viewer_open"): void;
 };
 
-type 可投影媒体播放结果 = Extract<
-  媒体播放结果,
-  { mode: "swarm" | "anchor" }
->;
+type 可投影媒体播放结果 = 媒体播放结果 & { mode: "swarm" };
 
 type 自动播查看器交接缓存 = {
   playback: 可投影媒体播放结果;
@@ -58,7 +55,7 @@ export function 创建查看器会话协作(
   const 是否可投影播放结果 = (
     playback: 媒体播放结果 | null | undefined
   ): playback is 可投影媒体播放结果 =>
-    (playback?.mode === "swarm" || playback?.mode === "anchor") &&
+    playback?.mode === "swarm" &&
     !(
       playback?.kind === "video" &&
       视频地址属于旧流媒体清单(playback.src)
@@ -115,8 +112,7 @@ export function 创建查看器会话协作(
     return {
       ...item,
       src: playback.src,
-      ...((playback.mode === "anchor" || playback.mode === "swarm") &&
-      ("contentHash" in playback || "distribution" in playback)
+      ...(("contentHash" in playback || "distribution" in playback)
         ? {
             contentHash: playback.contentHash ?? null,
             distribution: playback.distribution ?? null,
@@ -187,16 +183,12 @@ export function 创建查看器会话协作(
     if (!startItem || startItem.kind !== "image") {
       return false;
     }
-    if (startItem.src.length > 0) {
-      return false;
-    }
     /**
-     * 图片查看器不能拿空 src 或 original 冷源抢跑：
-     * 1. 房间消息窗已经把“未拿到 playback”的图片 request 收成空 src；
-     * 2. 这里等待同一条媒体会话把 WebTorrent/受控 anchor 真相投影回来；
-     * 3. PhotoSwipe 只负责展示，不再成为第二套图片读取 owner。
+     * 图片正式字节还没裁到 swarm 时，查看器也要先用当前 request 开壳：
+     * 1. 空 src 现在表示“等待唯一正式主链后续同步”，不是回退原图冷源；
+     * 2. 这样 PhotoSwipe 只承担壳层与占位，不再逼系统为了先打开去偷吃 blob canonical。
      */
-    return true;
+    return false;
   };
 
   const 是否应等待本地完整视频会话真相 = (
@@ -276,6 +268,19 @@ export function 创建查看器会话协作(
       const nextRequest摘要 = 序列化查看器请求(nextRequest);
       if (nextRequest摘要 !== 序列化查看器请求(当前查看器请求)) {
         deps.更新当前查看器请求(nextRequest);
+        if (deps.读取查看器是否已打开()) {
+          return;
+        }
+        if (起始视频会话当前不可打开(nextRequest)) {
+          return;
+        }
+        if (起始图片会话当前不可打开(nextRequest)) {
+          return;
+        }
+        if (是否应等待本地完整视频会话真相(nextRequest)) {
+          return;
+        }
+        正式打开查看器(nextRequest);
         return;
       }
       if (!deps.读取查看器是否已打开()) {

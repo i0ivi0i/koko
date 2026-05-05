@@ -142,16 +142,16 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     let media_asset = complete_body["media_asset"]
         .as_object()
         .expect("图片 complete 后必须返回共享 blob media_asset");
-    let canonical_url = media_asset["variants"]["canonical"]["url"]
-        .as_str()
-        .expect("图片 complete 后必须返回 canonical 主链");
     let legacy_original_url = format!(
         "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
     );
+    let canonical_url =
+        format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}");
     assert_eq!(media_asset["kind"].as_str(), Some("blob_image"));
     assert_eq!(
-        canonical_url,
-        format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}")
+        media_asset["variants"]["canonical"].as_object(),
+        None,
+        "新图片 complete 已切到纯 WebTorrent 主链，响应里不该再把 blob canonical 地址当正式面发出来"
     );
     assert!(media_asset.get("preview").is_none());
     assert!(media_asset.get("full").is_none());
@@ -243,7 +243,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     );
 
     let (canonical_status, canonical_headers, canonical_body) =
-        send_bytes(app, Method::GET, canonical_url, &[]).await;
+        send_bytes(app, Method::GET, canonical_url.as_str(), &[]).await;
     assert_eq!(canonical_status, StatusCode::OK);
     assert_eq!(
         canonical_headers

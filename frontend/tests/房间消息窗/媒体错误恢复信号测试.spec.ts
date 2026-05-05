@@ -499,7 +499,7 @@ describe("房间消息窗媒体查看器 - 媒体错误恢复信号", () => {
     pane.remove();
   });
 
-  it("图片走 canonical 锚点主链时，卡片继续吃 preview，查看器会拿 canonical 原图", async () => {
+  it("图片只拿到 anchor 冷源时，卡片继续稳定占位，查看器也不会把它抬成正式原图", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-image-1": {
@@ -531,9 +531,7 @@ describe("房间消息窗媒体查看器 - 媒体错误恢复信号", () => {
     const preview = pane.querySelector<HTMLImageElement>(
       'img.message-image[data-attachment-id="att-image-1"]'
     );
-    expect(preview?.getAttribute("src")).toBe(
-      "http://media.local/blob/att-image-1/preview.webp"
-    );
+    expect(preview?.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
 
     pane
       .querySelector<HTMLButtonElement>(
@@ -546,16 +544,7 @@ describe("房间消息窗媒体查看器 - 媒体错误恢复信号", () => {
     expect(details[0]?.items[0]).toEqual({
       attachmentId: "att-image-1",
       kind: "image",
-      src: "http://media.local/blob/att-image-1/full.webp",
-      contentHash: "hash-image-1",
-      distribution: {
-        swarm_id: "swarm-image-1",
-        announce_urls: ["wss://tracker.koko.local/announce"],
-        web_seed_url: "http://media.local/blob/att-image-1/original.png",
-        join_ticket: null,
-        ticket_expires_at: null,
-        survival_mode: "server_assisted" as const,
-      },
+      src: "",
       alt: "图片附件原图",
       width: 1200,
       height: 800,

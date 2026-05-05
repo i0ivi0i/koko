@@ -389,6 +389,31 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     pane.remove();
   });
 
+  it("新附件图片即使只拿到 anchor playback，时间线也必须继续占位而不是吃 blob canonical", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-image-1": {
+        mode: "anchor",
+        attachmentId: "att-image-1",
+        kind: "image",
+        src: "http://media.local/blob-canonical-image-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLImageElement>(
+      'img.message-image[data-attachment-id="att-image-1"]'
+    );
+
+    expect(preview?.getAttribute("src")).not.toBe("http://media.local/blob-canonical-image-1");
+    expect(preview?.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
+
+    pane.remove();
+  });
+
   it("点按媒体入口不应被误判成滚动意图，避免触发顶部补历史", async () => {
     const pane = 创建媒体消息窗();
 

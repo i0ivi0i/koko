@@ -80,17 +80,23 @@ export function 创建媒体快照投影协作(
       const urlsByAttachmentId: Record<string, 附件内容地址快照> = {};
       for (const attachment of deps.读取当前房间媒体附件()) {
         urlsByAttachmentId[attachment.attachmentId] = {
-          originalSrc: deps.构建附件内容地址(attachment.attachmentId, "original"),
           /**
-           * 图片时间线已经不再维持独立 thumbnail 主链：
-           * 1. 图片卡片 fallback 直接回 canonical/original；
-           * 2. 只有视频 poster 继续保留 thumbnail 入口；
-           * 3. 这样视图层不会自己猜第二条图片资源地址。
+           * presenter 不再给新附件预写 original 内容地址：
+           * 1. 正式字节真相已经收口到运行时 owner / swarm source；
+           * 2. 这里继续塞 originalSrc，只会把消息窗快照层变回第二入口分发器；
+           * 3. 真要打开正式内容，必须等待播放/查看器会话后续投影出来。
+           */
+          originalSrc: "",
+          /**
+           * 这里只保留视频 poster 的静态封面地址：
+           * 1. 视频消息卡片仍允许使用后端权威 still/poster 做非正式封面；
+           * 2. 图片则不再额外生成 thumbnail/original 地址，避免 presenter 替它脑补 blob/canonical 第二面；
+           * 3. 正式显示仍然统一等待 swarm source 或稳定占位。
            */
           thumbnailSrc:
             attachment.kind === "video"
               ? deps.构建附件内容地址(attachment.attachmentId, "thumbnail")
-              : deps.构建附件内容地址(attachment.attachmentId, "original"),
+              : "",
         };
       }
       return urlsByAttachmentId;

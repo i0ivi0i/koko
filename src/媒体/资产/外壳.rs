@@ -461,10 +461,10 @@ pub(super) async fn load_media_locator(
     (StatusCode::OK, Json(response)).into_response()
 }
 
-/// blob 图片主链只是旧附件内容读取链的受控别名：
-/// - canonical 走附件 storage_key 真相；
-/// - 旧 preview/full/original 不再作为正式图片资产入口；
-/// - 这样能把正式地址身份切到 `/api/media/.../blob/canonical`，同时不复制第二套读取实现。
+/// blob 图片读取入口现在只剩 legacy/迁移壳：
+/// - 它继续复用附件 storage_key 真相，不复制第二套读取实现；
+/// - 但新图片 locator / media_asset 已不再把这条 URL 当正式主链暴露给前端；
+/// - 因而这里的职责只剩兼容读取，而不是正式图片字节真相。
 pub(super) async fn load_blob_asset_content(
     State(state): State<应用状态>,
     Path((attachment_id, blob_variant)): Path<(String, String)>,

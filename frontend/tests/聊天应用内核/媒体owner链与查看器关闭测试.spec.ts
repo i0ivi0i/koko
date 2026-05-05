@@ -252,7 +252,7 @@ describe("聊天应用内核 - 媒体 owner 链与查看器关闭", () => {
         {
           kind: "video",
           attachmentId: "att-video-switch-2",
-          src: "http://media.local/original-att-video-switch-2",
+          src: "",
           posterSrc: "http://media.local/poster-att-video-switch-2",
           width: 1920,
           height: 1080,

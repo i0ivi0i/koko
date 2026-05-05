@@ -37,7 +37,13 @@ export const 读取附件播放源 = (
   if (attachment.kind === "video" && 视频地址属于旧流媒体清单(playback?.src)) {
     return "";
   }
-  return playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : "";
+  /**
+   * 时间线正式媒体字节现在只认 swarm：
+   * 1. `anchor` 可以继续作为内部迁移态存在；
+   * 2. 但消息窗卡片不能再把它渲染成真正的 `<video>/<img>` 正式源；
+   * 3. 真拿不到 swarm 时，保持占位或静态 poster，让唯一 owner 后续继续收口。
+   */
+  return playback?.mode === "swarm" ? playback.src : "";
 };
 
 export const 读取图片查看器播放源 = (

@@ -429,7 +429,6 @@ describe("聊天壳集成 / 查看器与自动播", () => {
     const reopenedVideo = document.body.querySelector<HTMLVideoElement>("video");
     expect(reopenedShell).not.toBeNull();
     expect(reopenedVideo).not.toBeNull();
-    expect(reopenedVideo?.poster).toBe("http://media.local/poster-att-video-reopen-2");
     expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
       1
     );

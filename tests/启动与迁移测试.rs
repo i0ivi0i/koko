@@ -96,6 +96,11 @@ fn 读取当前数据库基线_sql() -> String {
     std::fs::read_to_string("migrations/0001_当前数据库基线.sql").expect("应存在当前数据库基线")
 }
 
+fn 读取streaming_manifest退场迁移_sql() -> String {
+    std::fs::read_to_string("migrations/0002_删除streaming_manifest历史残留.sql")
+        .expect("应存在 streaming manifest 退场迁移")
+}
+
 /// 启动与迁移测试：
 /// 1. 这里只守“系统是否能以正确边界启动起来”的底线。
 /// 2. 这里只守迁移脚本和共享契约是否仍然表达权威真相。
@@ -123,11 +128,14 @@ fn 启动缺配置即失败() {
 #[test]
 fn 数据库迁移不会无意识膨胀() {
     // 这是迁移目录的硬门禁：新增 SQL 不是禁止事项，但必须显式改这个测试。
-    // 这样未来 schema 变化会变成可审查的数据库契约变化，而不是探索期文件继续堆积。
+    // 这次 manifest 退场需要保留已应用 0001 的 checksum 稳定性，因此允许一条显式增量迁移。
     assert_eq!(
         当前迁移_sql文件名列表(),
-        vec!["0001_当前数据库基线.sql".to_string()],
-        "当前阶段 migrations 只允许单一基线；新增迁移必须显式改这个门禁并说明数据库契约变化"
+        vec![
+            "0001_当前数据库基线.sql".to_string(),
+            "0002_删除streaming_manifest历史残留.sql".to_string()
+        ],
+        "当前阶段 migrations 只允许基线加一条显式 manifest 退场迁移；新增迁移必须继续显式改门禁并说明数据库契约变化"
     );
 }
 
@@ -149,7 +157,7 @@ async fn 当前数据库基线可在空库一次性迁移() {
         .fetch_one(&pool)
         .await
         .expect("应能读取 sqlx 迁移记录");
-    assert_eq!(applied_count, 1, "新库只应应用一条当前基线迁移");
+    assert_eq!(applied_count, 2, "manifest 退场阶段的新库应应用基线加一条显式退场迁移");
 
     pool.close().await;
     删除迁移测试数据库(&base_database_url, &db_name).await;
@@ -234,6 +242,13 @@ fn 当前数据库基线保留媒体上传和协作分发热路径索引() {
     assert!(sql.contains("idx_attachment_streaming_manifest_cleanup"));
     assert!(sql.contains("idx_attachments_origin_cleanup"));
     assert!(sql.contains("idx_attachments_mezzanine_cleanup"));
+}
+
+#[test]
+fn streaming_manifest退场迁移会显式删除历史残留() {
+    let sql = 读取streaming_manifest退场迁移_sql();
+
+    assert!(sql.contains("DROP TABLE IF EXISTS attachment_streaming_manifests"));
 }
 
 #[test]

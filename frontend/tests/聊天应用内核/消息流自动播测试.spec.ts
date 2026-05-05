@@ -45,10 +45,10 @@ describe("聊天应用内核 - 消息流自动播", () => {
     const 解析播放结果 = vi
       .fn()
       .mockResolvedValue({
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-inline-1",
         kind: "video",
-        src: "http://media.local/original-att-video-inline-1",
+        src: "blob:http://media.local/swarm-att-video-inline-1",
         thumbnailUrl: "http://media.local/poster-att-video-inline-1",
         hint: null,
       });
@@ -158,10 +158,10 @@ describe("聊天应用内核 - 消息流自动播", () => {
       查询消息节点: () => [],
     });
     const 解析播放结果 = vi.fn().mockResolvedValue({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-inline-restore",
       kind: "video",
-      src: "http://media.local/original-att-video-inline-restore",
+      src: "blob:http://media.local/swarm-att-video-inline-restore",
       thumbnailUrl: "http://media.local/poster-att-video-inline-restore",
       hint: null,
     });
@@ -278,10 +278,10 @@ describe("聊天应用内核 - 消息流自动播", () => {
       查询消息节点: () => [],
     });
     const 解析播放结果 = vi.fn().mockResolvedValue({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-inline-fast",
       kind: "video",
-      src: "http://media.local/original-att-video-inline-fast",
+      src: "blob:http://media.local/swarm-att-video-inline-fast",
       thumbnailUrl: "http://media.local/poster-att-video-inline-fast",
       hint: null,
     });
@@ -517,10 +517,10 @@ describe("聊天应用内核 - 消息流自动播", () => {
       查询消息节点: () => [],
     });
     const 解析播放结果 = vi.fn().mockResolvedValue({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-inline-3",
       kind: "video",
-      src: "http://media.local/original-att-video-inline-3",
+      src: "blob:http://media.local/swarm-att-video-inline-3",
       thumbnailUrl: "http://media.local/poster-att-video-inline-3",
       hint: null,
     });

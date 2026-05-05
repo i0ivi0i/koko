@@ -112,7 +112,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
     });
   });
 
-  it("打开中的视频查看器在会话重裁决到 HLS manifest 后，也会同步到标准流媒体主链", async () => {
+  it("视频会话即使先后只解析到 original 与 HLS 这类 anchor，也只能空壳等待 swarm 正式源", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -204,7 +204,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(fake查看器.同步).toHaveBeenCalledWith({
+    expect(fake查看器.打开).toHaveBeenCalledWith({
       startAttachmentId: "att-video-hls",
       items: [
         {
@@ -302,6 +302,95 @@ describe("聊天应用内核 - 查看器会话同步", () => {
           posterSrc: null,
           width: 1280,
           height: 720,
+        },
+      ],
+    });
+    expect(fake查看器.同步).not.toHaveBeenCalled();
+  });
+
+  it("图片会话即使暂时只解析到 anchor playback，也不能把它同步成查看器正式原图", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-image-open-anchor",
+            client_message_id: "c-image-open-anchor",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-open-anchor",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-image-open-anchor",
+        kind: "image",
+        src: "http://media.local/blob-canonical-image-open-anchor",
+        thumbnailUrl: null,
+        hint: null,
+      }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-image-open-anchor",
+        items: [
+          {
+            kind: "image",
+            attachmentId: "att-image-open-anchor",
+            src: "",
+            alt: "图片附件原图",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      },
+    });
+
+    expect(fake查看器.打开).toHaveBeenCalledWith({
+      startAttachmentId: "att-image-open-anchor",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-open-anchor",
+          src: "",
+          alt: "图片附件原图",
+          width: 1200,
+          height: 800,
         },
       ],
     });

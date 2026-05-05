@@ -617,7 +617,7 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
   });
 
-  it("自动播候选出现单帧空观测时，不会立刻释放 owner 与已裁决播放结果", () => {
+  it("自动播候选出现单帧空观测时，不会立刻释放 owner，但 anchor 冷源也不会被缓存成正式播放结果", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
       mode: "anchor",
@@ -648,18 +648,18 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
       "att-video-inline-jitter-1"
     );
-    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
 
     actor.send({
       type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
       candidates: [],
     });
 
-    // 单帧空观测通常来自虚拟列表重排/观察器抖动；不应立刻把消息卡片从 video 切回 poster。
+    // 单帧空观测通常来自虚拟列表重排/观察器抖动；owner 不能一抖就丢，但也不能把 anchor 冷源抬成正式 video。
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
       "att-video-inline-jitter-1"
     );
-    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
 
     actor.send({
       type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
@@ -728,7 +728,7 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
   });
 
-  it("自动播 owner 正在切到新 pending 候选时，单帧空观测不会把旧 owner 提前清空", () => {
+  it("自动播 owner 正在切到新 pending 候选时，单帧空观测不会把旧 owner 提前清空，但也不会留下 anchor 正式源缓存", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
       mode: "anchor",
@@ -773,7 +773,7 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
       "att-video-inline-handoff-new"
     );
-    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
 
     actor.send({
       type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
@@ -785,7 +785,8 @@ describe("媒体运行时", () => {
      * - 如果这里把 owner 立刻清成 null，消息窗就会收到“当前没有 canonical surface”；
      * - 后面的唯一播放器随之 destroy/recreate，用户肉眼就会看到闪一下再接着播。
      *
-     * 因此在 pending 还没真正 settle 之前，单帧空观测也必须继续保留旧 owner。
+     * 因此在 pending 还没真正 settle 之前，单帧空观测也必须继续保留旧 owner；
+     * 但旧 owner 没拿到 swarm 前，runtime 也不能继续替它缓存 anchor 正式源。
      */
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
       "att-video-inline-handoff-old"
@@ -793,10 +794,10 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
       "att-video-inline-handoff-new"
     );
-    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
   });
 
-  it("高竖视频交接落入 dead zone 时，会保持旧 owner 并挂起新的 pending，而不是掉成 null", () => {
+  it("高竖视频交接落入 dead zone 时，会保持旧 owner 并挂起新的 pending，但不会把 anchor 冷源缓存成正式播放结果", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
       mode: "anchor",
@@ -850,7 +851,7 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
       "att-video-dead-zone-new"
     );
-    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
 
     actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
 

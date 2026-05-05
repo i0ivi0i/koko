@@ -379,9 +379,9 @@ function Invoke-DatabaseCleanup {
         [string]$Password
     )
 
+    # attachment_streaming_manifests 已由迁移物理删除；清理脚本只保留现存业务表。
     $sql = @"
 TRUNCATE TABLE
-  attachment_streaming_manifests,
   attachment_distribution_metadata,
   attachment_upload_transports,
   message_attachment_refs,

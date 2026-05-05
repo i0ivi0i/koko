@@ -664,7 +664,13 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     attachment: Extract<消息展示项["attachments"][number], { kind: "image" }>
   ): string {
     const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
-    return 读取图片查看器播放源投影(attachment, playback);
+    /**
+     * 图片查看器和视频查看器一样，只认 swarm 正式源：
+     * 1. `anchor/blob canonical` 可以继续留在 legacy/迁移壳里做显式兼容；
+     * 2. 但新附件正式查看器不能再直接吃这类受控 HTTP 地址；
+     * 3. 真拿不到 swarm 时继续抛空串，让查看器等待 owner 后续同步。
+     */
+    return playback?.mode === "swarm" ? 读取图片查看器播放源投影(attachment, playback) : "";
   }
 
   protected 读取时间线视频封面地址(
@@ -781,7 +787,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
             attachmentId: attachment.attachmentId,
             src: this.读取图片查看器播放源(attachment),
             ...((playback &&
-            (playback.mode === "anchor" || playback.mode === "swarm") &&
+            playback.mode === "swarm" &&
             ("contentHash" in playback || "distribution" in playback))
               ? {
                   contentHash: playback.contentHash ?? null,
@@ -794,7 +800,13 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
           });
           continue;
         }
-        const viewerVideoSrc = this.读取附件播放源(attachment);
+        /**
+         * 查看器视频项目现在只认 swarm 正式源：
+         * 1. `anchor` 仍可能作为 legacy/迁移态暂时留在别的壳层结果里；
+         * 2. 但查看器是正式播放 owner，不能再把它抬成新附件正式视频入口；
+         * 3. 真拿不到 swarm 时，继续抛空串，让查看器维持缺源等待或降级真相。
+         */
+        const viewerVideoSrc = playback?.mode === "swarm" ? this.读取附件播放源(attachment) : "";
         const viewerResumePosition = this.读取自动播恢复位置(
           attachment.attachmentId,
           viewerVideoSrc

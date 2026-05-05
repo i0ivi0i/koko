@@ -373,7 +373,7 @@ export function 创建媒体播放会话应用(
     const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
     if (
       playback &&
-      (playback.mode === "anchor" || playback.mode === "swarm") &&
+      playback.mode === "swarm" &&
       "contentHash" in playback &&
       playback.contentHash
     ) {

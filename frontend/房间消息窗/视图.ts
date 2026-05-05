@@ -358,13 +358,13 @@ function 派生媒体附件展示结果(
         displayWidth,
         displayHeight,
         /**
-         * canonical 图片已经不再存在服务端 thumbnail 派生：
-         * 1. 时间线卡片和查看器都直接围绕同一份受控 original/canonical 入口；
-         * 2. 这样 presenter 不会继续猜一条已经退场的 thumbnail 支路；
-         * 3. 真要展示更轻量的静态封面，必须来自后端显式给出的 preview 真相，而不是这里脑补。
+         * 图片 presenter 现在不再预写任何受控内容地址：
+         * 1. 时间线与查看器都等待运行时后续投影正式 swarm 源；
+         * 2. 冷启动阶段只允许稳定占位，不允许这里先偷塞 original/blob canonical；
+         * 3. 因而 original/thumbnail 两个字段只剩兼容壳形状，本轮统一清成空串。
          */
-        thumbnailSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
-        originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
+        thumbnailSrc: "",
+        originalSrc: "",
       };
     });
 

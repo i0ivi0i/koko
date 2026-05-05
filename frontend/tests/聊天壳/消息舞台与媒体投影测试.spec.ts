@@ -142,7 +142,7 @@ describe("聊天壳集成 / 消息舞台与媒体投影", () => {
       ".message-surface.media-message"
     ) as HTMLElement | null;
     expect(image).not.toBeNull();
-    expect(image?.src).toContain("/api/attachments/att-1/content?session_id=s-test&variant=original");
+    expect(image?.src.startsWith("data:image/svg+xml")).toBe(true);
     expect(el.shadowRoot!.querySelector(".message-body")).toBeNull();
     expect(mediaSurface).not.toBeNull();
     expect(mediaSurface?.classList.contains("message-bubble")).toBe(false);
@@ -160,9 +160,7 @@ describe("聊天壳集成 / 消息舞台与媒体投影", () => {
           expect.objectContaining({
             attachmentId: "att-1",
             kind: "image",
-            src: expect.stringContaining(
-              "/api/attachments/att-1/content?session_id=s-test&variant=original"
-            ),
+              src: "",
           }),
         ],
       })

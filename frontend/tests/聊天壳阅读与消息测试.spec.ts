@@ -102,8 +102,8 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].attachments).toEqual([
       expect.objectContaining({
         attachmentId: "att-1",
-        thumbnailSrc: "/api/attachments/att-1/origin",
-        originalSrc: "/api/attachments/att-1/origin",
+        thumbnailSrc: "",
+        originalSrc: "",
       }),
     ]);
     expect(items[0].bubbleWidth).toBeGreaterThan(0);

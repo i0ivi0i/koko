@@ -361,16 +361,13 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         Some(attachment_id.as_str())
     );
     assert_eq!(
-        body["blob_asset"]["variants"]["canonical"]["id"].as_str(),
-        Some("canonical")
+        body["blob_asset"]["variants"]["canonical"].as_object(),
+        None,
+        "新图片 locator 不应再把 blob canonical 地址当正式主链发给前端"
     );
     assert!(body["blob_asset"].get("preview").is_none());
     assert!(body["blob_asset"].get("full").is_none());
     assert!(body["blob_asset"].get("original").is_none());
-    assert_eq!(
-        body["blob_asset"]["variants"]["canonical"]["url"].as_str(),
-        Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())
-    );
     assert_eq!(
         body["blob_asset"]["origin"]["role"].as_str(),
         Some("cold_backup_only")
