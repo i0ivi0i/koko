@@ -98,16 +98,6 @@ pub trait 媒体仓储端口: message::application::消息仓储端口 {
         请求: &协作分发torrent元信息写入请求,
     ) -> Result<协作分发torrent元信息快照, contract::错误码>;
 
-    fn 写入流媒体清单元数据(
-        &mut self,
-        请求: &流媒体清单写入请求,
-    ) -> Result<流媒体清单快照, contract::错误码>;
-
-    fn 查询流媒体清单元数据(
-        &self,
-        附件标识: &str,
-    ) -> Result<Option<流媒体清单快照>, contract::错误码>;
-
     fn 查询附件可读内容(
         &self,
         附件标识: &str,
@@ -146,18 +136,6 @@ pub trait 媒体仓储端口: message::application::消息仓储端口 {
     ) -> Result<Vec<待清理媒体回退母本>, contract::错误码>;
 
     fn 标记媒体回退母本已删除(
-        &mut self,
-        附件标识: &str,
-        删除时间戳秒: i64,
-    ) -> Result<(), contract::错误码>;
-
-    fn 列出待清理流媒体清单(
-        &self,
-        当前时间戳秒: i64,
-        限制条数: i64,
-    ) -> Result<Vec<待清理流媒体清单>, contract::错误码>;
-
-    fn 标记流媒体清单已删除(
         &mut self,
         附件标识: &str,
         删除时间戳秒: i64,
@@ -378,22 +356,6 @@ pub fn 写入协作分发存活(
     )
 }
 
-/// 流媒体清单是媒体资产的一部分稳定真相，参数校验也必须留在媒体 owner。
-pub fn 写入流媒体清单元数据(
-    仓储: &mut impl 媒体仓储端口,
-    请求: &流媒体清单写入请求,
-) -> Result<流媒体清单快照, contract::错误码> {
-    if 请求.附件标识.trim().is_empty()
-        || 请求.hls主清单存储键.trim().is_empty()
-        || 请求.dash主清单存储键.trim().is_empty()
-        || 请求.streaming到期时间戳秒 < 0
-        || 请求.streaming删除时间戳秒.is_some_and(|value| value < 0)
-    {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.写入流媒体清单元数据(请求)
-}
-
 /// 后端强 seed / 诊断壳只读 metainfo 时，也必须通过媒体 owner 的参数校验。
 pub fn 读取协作分发torrent元信息(
     仓储: &impl 媒体仓储端口,
@@ -463,32 +425,6 @@ pub fn 列出待清理媒体回退母本(
         return Err(contract::错误码::参数非法);
     }
     仓储.列出待清理媒体回退母本(当前时间戳秒, 限制条数)
-}
-
-/// 标准流媒体冷备窗口结束后，只允许回收 manifest/segment 本身。
-/// distribution/swarm 线索必须继续活在另一条权威面，不能被这条 cleanup 顺手抹掉。
-pub fn 列出待清理流媒体清单(
-    仓储: &impl 媒体仓储端口,
-    当前时间戳秒: i64,
-    限制条数: i64,
-) -> Result<Vec<待清理流媒体清单>, contract::错误码> {
-    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.列出待清理流媒体清单(当前时间戳秒, 限制条数)
-}
-
-/// 服务端 manifest/segment 删除成功后，应用层要留下 streaming_deleted_at。
-/// 这样后续 locator、受控读取和 cleanup 重试才能共用同一条退场事实。
-pub fn 标记流媒体清单已删除(
-    仓储: &mut impl 媒体仓储端口,
-    附件标识: &str,
-    删除时间戳秒: i64,
-) -> Result<(), contract::错误码> {
-    if 附件标识.trim().is_empty() || 删除时间戳秒 < 0 {
-        return Err(contract::错误码::参数非法);
-    }
-    仓储.标记流媒体清单已删除(附件标识, 删除时间戳秒)
 }
 
 /// 上传残留清理是上传生命周期的尾处理：

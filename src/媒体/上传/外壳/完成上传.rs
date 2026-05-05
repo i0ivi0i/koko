@@ -208,7 +208,6 @@ pub(super) async fn complete_media_upload(
         .map(|value| value.as_secs() as i64)
         .unwrap_or(0);
     let 原始冷源到期时间戳秒 = ready_epoch秒 + crate::media::模型::媒体原始冷源保留秒数;
-    let streaming_manifest_request = None;
     let (ready_request, distribution_request, torrent_request, canonical_asset_request) =
         match &prepared.种类 {
             crate::media::模型::媒体附件类型::图片 => {
@@ -512,7 +511,6 @@ pub(super) async fn complete_media_upload(
     let distribution_request_for_write = distribution_request.clone();
     let torrent_request_for_write = torrent_request.clone();
     let canonical_asset_request_for_write = canonical_asset_request.clone();
-    let streaming_manifest_request_for_write = streaming_manifest_request.clone();
     let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
@@ -546,10 +544,8 @@ pub(super) async fn complete_media_upload(
             &torrent_request_for_write,
         )
         .map_err(map_domain_err_tuple)?;
-        if let Some(request) = streaming_manifest_request_for_write.as_ref() {
-            crate::media::application::写入流媒体清单元数据(&mut media_repo, request)
-                .map_err(map_domain_err_tuple)?;
-        }
+        // 2026-05-05 起新附件正式主链只保留 canonical + swarm/torrent 元信息。
+        // 旧 attachment_streaming_manifests 已退出当前写入链，避免 complete 再把 HLS/DASH 第二真相续命。
         Ok::<_, (StatusCode, &'static str, String)>(snapshot)
     })
     .await;

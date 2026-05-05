@@ -522,7 +522,10 @@ function 计算拼贴槽位高度(
 
 /**
  * 展示层只读附件地址表，不直接知道 transport/session。
- * 如果某条测试只关心 presenter 几何而没显式提供 URL，就退回稳定默认值，避免把测试绑死到网络端口。
+ * 如果当前没有显式地址表，就直接返回空串：
+ * 1. presenter 只负责消费已经投影好的附件地址，不再脑补旧的 HTTP 内容路径；
+ * 2. 这样时间线/查看器缺少正式播放真相时，只会进入静态占位或 degraded，而不会偷偷长第二入口；
+ * 3. 需要 legacy 地址的调用方，必须自己显式提供，不能把兜底责任塞回这里。
  */
 function 读取附件内容地址(
   附件内容地址表: 附件内容地址表,
@@ -533,7 +536,7 @@ function 读取附件内容地址(
   if (entry) {
     return variant === "thumbnail" ? entry.thumbnailSrc : entry.originalSrc;
   }
-  return `/api/attachments/${attachmentId}/${variant}`;
+  return "";
 }
 
 function 计算媒体附件气泡宽度(

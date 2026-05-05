@@ -128,22 +128,6 @@ fn 生成测试content_hash(附件标识: &str) -> String {
     out
 }
 
-/// 过渡完成后，ready 视频测试建数也要补齐正式 manifest 真相。
-/// 这里先只插最小清单元数据，不替代真实打包链；真正的产物字节仍应由 complete 上传链回归测试覆盖。
-pub async fn 插入流媒体清单元数据记录(pool: &PgPool, 附件标识: &str) {
-    sqlx::query(
-        "INSERT INTO attachment_streaming_manifests \
-            (attachment_id, hls_master_storage_key, dash_mpd_storage_key) \
-         VALUES ($1, $2, $3)",
-    )
-    .bind(附件标识)
-    .bind(format!("streams/{附件标识}/hls/master.m3u8"))
-    .bind(format!("streams/{附件标识}/dash/stream.mpd"))
-    .execute(pool)
-    .await
-    .expect("应能插入流媒体清单元数据");
-}
-
 /// 把某个会话登记为“同 swarm 的完整 peer”：
 /// 1. 这里明确写入 `swarm_peer_presence`，不再回写 attachment 级 last_peer_seen_at；
 /// 2. `swarm_id` 从权威 distribution 元数据查询，避免测试手工拼错；

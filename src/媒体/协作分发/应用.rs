@@ -121,11 +121,11 @@ pub fn 查询媒体定位(
         crate::media::模型::附件种类读取结果::视频 => crate::media::模型::媒体附件类型::视频,
         _ => return Err(contract::错误码::附件类型不支持),
     };
+    // 纯 WebTorrent 主链下，locator 只投影 swarm/distribution 与 origin 冷备窗口：
+    // 1. 正式字节已经唯一收口到 swarm source；
+    // 2. 历史 HLS/DASH manifest 即使还留在库里，也不能再被当前 owner 当成正式表面读出来；
+    // 3. 这样查看器/时间线/全屏都只会围绕同一份分发真相裁决。
     let distribution = 仓储.查询协作分发元数据(附件标识)?;
-    let streaming_manifest = match kind {
-        crate::media::模型::媒体附件类型::视频 => 仓储.查询流媒体清单元数据(附件标识)?,
-        crate::media::模型::媒体附件类型::图片 => None,
-    };
     Ok(crate::media::模型::媒体定位结果 {
         附件标识: snapshot.附件标识,
         种类: kind.clone(),
@@ -137,7 +137,6 @@ pub fn 查询媒体定位(
         原始冷源到期时间戳秒: snapshot.原始冷源到期时间戳秒,
         原始冷源删除时间戳秒: snapshot.原始冷源删除时间戳秒,
         协作分发: distribution,
-        流媒体清单: streaming_manifest,
     })
 }
 

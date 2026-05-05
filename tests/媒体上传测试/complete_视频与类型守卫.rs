@@ -96,15 +96,9 @@ async fn complete视频上传会写入canonical并返回file_asset() {
         Some(attachment_id.as_str()),
         "单文件视频仍以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
     );
-    let canonical_url = media_asset["variants"]["canonical"]["url"]
-        .as_str()
-        .expect("视频 complete 后必须返回 canonical 单文件读取入口");
-    assert_eq!(
-        canonical_url,
-        format!(
-            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
-        ),
-        "canonical 视频读取入口必须收口到既有受控附件内容路由，不能再下发裸对象地址"
+    assert!(
+        media_asset["variants"]["canonical"].is_null(),
+        "新视频 complete 后不应再把受控 HTTP 内容地址投影成 canonical 正式读取入口"
     );
     assert!(complete_body["preview_asset"].is_null());
     assert!(
@@ -134,7 +128,13 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     let original_url = media_asset["origin"]["original_url"]
         .as_str()
         .expect("单文件视频必须保留稳定冷备 original 描述，供 web seed 和 Range 读取复用");
-    assert_eq!(original_url, canonical_url);
+    assert_eq!(
+        original_url,
+        format!(
+            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+        ),
+        "冷备 original 仍然走受控内容路由，但它只属于 origin 冷备描述，不再属于 canonical 正式入口"
+    );
     assert!(media_asset["distribution"]["swarm_id"].is_string());
     assert!(
         media_asset["distribution"]["announce_urls"].is_array(),
@@ -157,7 +157,7 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     );
 
     let (canonical_status, canonical_headers, canonical_bytes) =
-        send_bytes(app.clone(), Method::GET, canonical_url, &[]).await;
+        send_bytes(app.clone(), Method::GET, original_url, &[]).await;
     assert_eq!(canonical_status, StatusCode::OK);
     assert_eq!(
         canonical_headers
@@ -177,7 +177,7 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     let (range_status, range_headers, range_bytes) = send_bytes(
         app.clone(),
         Method::GET,
-        canonical_url,
+        original_url,
         &[("range", "bytes=0-15")],
     )
     .await;

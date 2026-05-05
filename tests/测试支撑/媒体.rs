@@ -13,8 +13,8 @@ mod tus;
 pub use fixture::{iso5品牌mp4字节, 写入tus测试文件, 最小mp4字节, 最小png字节, 最小webp字节};
 #[allow(unused_imports)]
 pub use seed::{
-    插入ready图片附件记录, 插入ready视频附件记录, 插入流媒体清单元数据记录,
-    插入附件协作分发元数据记录, 写入完整peer存活记录, 未来冷源到期时间戳秒,
+    插入ready图片附件记录, 插入ready视频附件记录, 插入附件协作分发元数据记录,
+    写入完整peer存活记录, 未来冷源到期时间戳秒,
 };
 #[allow(unused_imports)]
 pub use tus::{

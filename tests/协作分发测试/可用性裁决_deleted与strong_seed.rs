@@ -42,7 +42,6 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             pool.close().await;
         });
 
@@ -147,7 +146,6 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
         .expect("应能直连数据库插入附件");
     插入ready视频附件记录(&pool, session_id, &attachment_id).await;
     插入附件协作分发元数据记录(&pool, &attachment_id).await;
-    插入流媒体清单元数据记录(&pool, &attachment_id).await;
     sqlx::query(
         "UPDATE attachment_distribution_metadata
          SET web_seed_until = NOW() - INTERVAL '5 minutes'
@@ -158,16 +156,6 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
     .await
     .expect("应能把 web_seed 挪出窗口");
     写入完整peer存活记录(&pool, &attachment_id, session_id).await;
-    sqlx::query(
-        "UPDATE attachment_streaming_manifests
-         SET streaming_expires_at = NOW() - INTERVAL '25 hours',
-             streaming_deleted_at = NOW() - INTERVAL '1 minute'
-         WHERE attachment_id = $1",
-    )
-    .bind(&attachment_id)
-    .execute(&pool)
-    .await
-    .expect("应能把流媒体清单标成已删除");
     pool.close().await;
 
     let (status, body) = send_json(
@@ -259,10 +247,8 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
         .expect("应能直连数据库插入附件");
     插入ready视频附件记录(&pool, session_id, &attachment_id_expired).await;
     插入附件协作分发元数据记录(&pool, &attachment_id_expired).await;
-    插入流媒体清单元数据记录(&pool, &attachment_id_expired).await;
     插入ready视频附件记录(&pool, session_id, &attachment_id_active).await;
     插入附件协作分发元数据记录(&pool, &attachment_id_active).await;
-    插入流媒体清单元数据记录(&pool, &attachment_id_active).await;
     sqlx::query(
         "UPDATE attachment_distribution_metadata
          SET swarm_id = $2,
@@ -327,15 +313,6 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
         .connect(&cfg.database_url)
         .await
         .expect("应能连接数据库清理测试附件");
-    sqlx::query(
-        "DELETE FROM attachment_streaming_manifests
-         WHERE attachment_id IN ($1, $2)",
-    )
-    .bind(&attachment_id_expired)
-    .bind(&attachment_id_active)
-    .execute(&cleanup_pool)
-    .await
-    .expect("应能清理流媒体清单元数据");
     sqlx::query(
         "DELETE FROM attachment_distribution_metadata
          WHERE attachment_id IN ($1, $2)",

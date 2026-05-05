@@ -897,20 +897,6 @@ impl media::application::媒体仓储端口 for Pg媒体仓储 {
         super::媒体协作分发适配::写入协作分发torrent元信息(&mut self.repo, 请求)
     }
 
-    fn 写入流媒体清单元数据(
-        &mut self,
-        请求: &crate::media::模型::流媒体清单写入请求,
-    ) -> Result<crate::media::模型::流媒体清单快照, contract::错误码> {
-        super::媒体协作分发适配::写入流媒体清单元数据(&mut self.repo, 请求)
-    }
-
-    fn 查询流媒体清单元数据(
-        &self,
-        附件标识: &str,
-    ) -> Result<Option<crate::media::模型::流媒体清单快照>, contract::错误码> {
-        super::媒体协作分发适配::查询流媒体清单元数据(&self.repo, 附件标识)
-    }
-
     fn 查询附件可读内容(
         &self,
         附件标识: &str,
@@ -966,26 +952,6 @@ impl media::application::媒体仓储端口 for Pg媒体仓储 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         标记媒体回退母本已删除(&mut self.repo, 附件标识, 删除时间戳秒)
-    }
-
-    fn 列出待清理流媒体清单(
-        &self,
-        当前时间戳秒: i64,
-        限制条数: i64,
-    ) -> Result<Vec<crate::media::模型::待清理流媒体清单>, contract::错误码> {
-        super::媒体协作分发适配::列出待清理流媒体清单(&self.repo, 当前时间戳秒, 限制条数)
-    }
-
-    fn 标记流媒体清单已删除(
-        &mut self,
-        附件标识: &str,
-        删除时间戳秒: i64,
-    ) -> Result<(), contract::错误码> {
-        super::媒体协作分发适配::标记流媒体清单已删除(
-            &mut self.repo,
-            附件标识,
-            删除时间戳秒,
-        )
     }
 
     fn 标记媒体上传已放弃(

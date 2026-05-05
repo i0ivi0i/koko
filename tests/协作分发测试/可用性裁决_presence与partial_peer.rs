@@ -42,7 +42,6 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '5 minutes', \
@@ -192,7 +191,6 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
             )
             .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '2 hours' \
@@ -301,7 +299,6 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
             )
             .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '2 hours' \
@@ -426,7 +423,6 @@ async fn partial_peer不能冒充available_ready来源() {
             )
             .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '2 hours' \
@@ -540,7 +536,6 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
             )
             .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_target_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_target_for_worker).await;
             插入ready视频附件记录(
                 &pool,
                 &identity.会话标识,
@@ -548,7 +543,6 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
             )
             .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_seed_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_seed_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '5 minutes', \

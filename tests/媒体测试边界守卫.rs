@@ -170,6 +170,27 @@ fn 媒体定位正式表面守卫_禁止顶层original_url回流并锁定资产�
 }
 
 #[test]
+fn 纯_webtorrent_主链守卫_生产代码不得继续消费流媒体清单第二链() {
+    let complete_upload = 读取("src/媒体/上传/外壳/完成上传.rs");
+    let locator_owner = 读取("src/媒体/协作分发/应用.rs");
+    let cleanup_shell = 读取("src/外壳/媒体清理.rs");
+
+    assert!(
+        !complete_upload.contains("写入流媒体清单元数据"),
+        "新附件 complete 已切到纯 WebTorrent 主链，完成上传端点不应再把 attachment_streaming_manifests 当权威写入面"
+    );
+    assert!(
+        !locator_owner.contains("查询流媒体清单元数据"),
+        "locator owner 只能裁决 swarm/distribution/origin，不应再查询 HLS/DASH manifest 第二链"
+    );
+    assert!(
+        !cleanup_shell.contains("列出待清理流媒体清单")
+            && !cleanup_shell.contains("标记流媒体清单已删除"),
+        "媒体冷源清理 shell 不应继续持有历史流媒体清单 cleanup owner；这条残留必须退出当前生产主链"
+    );
+}
+
+#[test]
 fn 实时外壳必须显式依赖实时业务入口而不是继续偷连统一用例细节() {
     let content = 读取("src/实时/外壳.rs");
     assert!(

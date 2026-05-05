@@ -201,4 +201,21 @@ describe("视图 / 消息展示项派生", () => {
       )
     ).toBe(true);
   });
+
+  it("没有附件地址表时，不会再凭空合成旧的 HTTP 内容路径", () => {
+    const item = 派生消息展示项(
+      创建消息事件([创建图片附件("att-image-plain")]),
+      "s-self",
+      默认消息文本布局环境,
+      {}
+    );
+
+    expect(item.attachments).toHaveLength(1);
+    expect(item.attachments[0]).toMatchObject({
+      kind: "image",
+      attachmentId: "att-image-plain",
+      thumbnailSrc: "",
+      originalSrc: "",
+    });
+  });
 });

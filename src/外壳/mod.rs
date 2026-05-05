@@ -8,8 +8,7 @@ use axum::{
 use object_store::{
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
-    path::Path as ObjectPath,
-    ObjectStore, ObjectStoreExt,
+    ObjectStore,
 };
 use socketioxide::{
     extract::{Data, Extension, SocketRef, TryData},
@@ -19,7 +18,7 @@ use socketioxide::{
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
-    fs, io,
+    fs,
     sync::{Arc, Mutex},
 };
 
@@ -117,42 +116,6 @@ pub struct 应用状态 {
     pub tus_internal_termination_token: Option<String>,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
-}
-
-fn 推导对象父前缀(存储键: &str) -> Option<ObjectPath> {
-    let (前缀, _) = 存储键.rsplit_once('/')?;
-    if 前缀.trim().is_empty() {
-        return None;
-    }
-    Some(ObjectPath::from(前缀))
-}
-
-/// manifest 清理必须递归删除同目录下的 playlist/segment。
-/// 这里只负责对象删除，不承担“该不该删”的业务判断。
-async fn 删除对象前缀下所有文件(
-    attachment_store: &Arc<dyn ObjectStore>,
-    前缀: &ObjectPath,
-) -> io::Result<()> {
-    let mut 待遍历前缀 = vec![前缀.clone()];
-    while let Some(当前前缀) = 待遍历前缀.pop() {
-        let list_result = attachment_store
-            .list_with_delimiter(Some(&当前前缀))
-            .await
-            .map_err(|err| io::Error::other(format!("列出对象前缀失败: {err}")))?;
-        for object_meta in list_result.objects {
-            match attachment_store.delete(&object_meta.location).await {
-                Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
-                Err(err) => {
-                    return Err(io::Error::other(format!(
-                        "删除对象失败(prefix={}, object={}): {err}",
-                        当前前缀, object_meta.location
-                    )));
-                }
-            }
-        }
-        待遍历前缀.extend(list_result.common_prefixes);
-    }
-    Ok(())
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。

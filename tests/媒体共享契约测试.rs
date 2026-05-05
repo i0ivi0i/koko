@@ -150,15 +150,15 @@ async fn 视频complete共享契约不包含_web_页面流程和展示文案字�
     let origin = media_asset["origin"]
         .as_object()
         .expect("单文件视频资产必须返回冷源描述");
-    let canonical = media_asset["variants"]["canonical"]
-        .as_object()
-        .expect("单文件视频资产必须返回 canonical 变体描述");
 
     断言对象不包含壳层私货(media_asset, "video media_asset");
-    断言对象不包含壳层私货(canonical, "video canonical");
     断言对象不包含壳层私货(distribution, "video distribution");
     断言对象不包含壳层私货(origin, "video origin");
     assert_eq!(media_asset["kind"].as_str(), Some("file_video"));
+    assert!(
+        media_asset["variants"]["canonical"].is_null(),
+        "纯 WebTorrent 主链下，单文件视频共享契约不再把 HTTP 内容地址包装成 canonical 正式变体"
+    );
     assert!(
         media_asset
             .get("manifest")

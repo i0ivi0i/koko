@@ -134,13 +134,7 @@ describe("媒体共享契约", () => {
       content_hash: "hash-att-shared-video-1",
       kind: "file_video",
       variants: {
-        canonical: {
-          id: "canonical",
-          mime_type: "video/mp4",
-          url: "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
-          width: 1280,
-          height: 720,
-        },
+        canonical: null,
       },
       distribution: {
         swarm_id: "swarm-hash-att-shared-video-1",
@@ -281,13 +275,18 @@ describe("媒体共享契约", () => {
   it("仓库清理后不再保留死模块、跟踪日志和未完成计划态", () => {
     expect(existsSync(new URL("../../src/房间外壳.rs", import.meta.url))).toBe(false);
     const shellSource = readFileSync(new URL("../../src/房间/外壳.rs", import.meta.url), "utf-8");
-    const planSource = readFileSync(
-      new URL("../../docs/superpowers/plans/2026-04-28-唯一WebTorrent万人群聊零崩溃零闪烁执行计划.md", import.meta.url),
-      "utf-8"
+    const 旧计划路径 = new URL(
+      "../../docs/superpowers/plans/2026-04-28-唯一WebTorrent万人群聊零崩溃零闪烁执行计划.md",
+      import.meta.url
+    );
+    const 当前计划路径 = new URL(
+      "../../docs/superpowers/plans/2026-05-05-纯WebTorrent主链收尾清理执行计划.md",
+      import.meta.url
     );
     expect(shellSource.includes("mod 流媒体打包迁移测试 {}")).toBe(false);
     expect(existsSync(new URL("../../tmp/launcher.out.log", import.meta.url))).toBe(false);
     expect(existsSync(new URL("../../tmp/launcher.err.log", import.meta.url))).toBe(false);
-    expect(planSource.includes("- [ ] **Step")).toBe(false);
+    expect(existsSync(旧计划路径)).toBe(false);
+    expect(existsSync(当前计划路径)).toBe(true);
   });
 });

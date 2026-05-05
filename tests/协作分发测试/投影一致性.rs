@@ -56,7 +56,6 @@ async fn 历史带thumbnail_storage_key的视频locator与房间快照仍共享�
             .await
             .expect("应能为测试视频补静态封面存储键");
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             pool.close().await;
         });
 

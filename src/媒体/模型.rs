@@ -318,33 +318,6 @@ pub struct 待做种协作分发项 {
     pub torrent_info_hash: String,
 }
 
-/// 流媒体清单元数据是真正把“视频主链已经切到标准 manifest”落成权威事实的持久化表面。
-/// 这里只保存稳定清单存储键，不把段列表、播放器状态或本地缓存态混进仓储真相。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 流媒体清单写入请求 {
-    pub 附件标识: String,
-    pub hls主清单存储键: String,
-    pub dash主清单存储键: String,
-    /// writer 侧必须显式写入 24h 冷备窗口的截止时间，
-    /// 避免把“清单什么时候退场”继续藏在 shell 默认值或测试约定里。
-    pub streaming到期时间戳秒: i64,
-    /// 新写入默认应为 `None`；只有后台真的删完 manifest/segment 后，才允许回写删除时间。
-    pub streaming删除时间戳秒: Option<i64>,
-}
-
-/// locator/complete 只需要知道“这条视频有没有正式清单入口”。
-/// 段文件继续通过稳定前缀派生，不把大量文件明细塞回数据库。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 流媒体清单快照 {
-    pub 附件标识: String,
-    pub hls主清单存储键: String,
-    pub dash主清单存储键: String,
-    /// 读侧允许为 `None`，是为了覆盖旧数据刚迁移但还没被 complete 重写的过渡窗口；
-    /// 真正的新主链写入请求则必须始终给出明确 TTL。
-    pub streaming到期时间戳秒: Option<i64>,
-    pub streaming删除时间戳秒: Option<i64>,
-}
-
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体定位结果 {
@@ -358,7 +331,6 @@ pub struct 媒体定位结果 {
     pub 原始冷源到期时间戳秒: Option<i64>,
     pub 原始冷源删除时间戳秒: Option<i64>,
     pub 协作分发: Option<协作分发元数据快照>,
-    pub 流媒体清单: Option<流媒体清单快照>,
 }
 
 /// 后台清理循环只需要知道“哪条附件的原始冷源该删了”。
@@ -384,15 +356,6 @@ pub struct 待清理媒体回退母本 {
     pub 回退母本存储键: String,
 }
 
-/// 流媒体清单只代表服务端 24h 标准流媒体冷备窗口。
-/// 它的删除不能顺手影响 swarm metadata，否则就会把服务器冷备和平面长期存活混成一个 owner。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 待清理流媒体清单 {
-    pub 附件标识: String,
-    pub hls主清单存储键: String,
-    pub dash主清单存储键: String,
-}
-
 /// 上传残留清理原因只表达“为什么这批临时文件已经没有长期价值”。
 /// 它不描述 shell 要怎么删文件，也不承载 UI 语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -415,9 +378,6 @@ pub struct 待清理上传残留 {
 /// 原始冷源只保留 24 小时窗口。
 /// 这里先把窗口值收成应用层常量，避免后续在外壳、handler、测试里继续散落“86400”。
 pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
-/// 标准流媒体产物同样只保留 24 小时冷备窗口。
-/// 这条常量只回答“服务端清单什么时候该退场”，不等于 swarm 长期存活时间。
-pub const 流媒体冷备保留秒数: i64 = 24 * 60 * 60;
 
 pub(crate) fn 是64位小写hex(value: &str) -> bool {
     value.len() == 64

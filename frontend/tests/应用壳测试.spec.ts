@@ -73,13 +73,13 @@ describe("应用壳缓存边界", () => {
     expect(source).toContain("...sourceHashWorkerOutputFiles");
   });
 
-  it("media-sw 会给图片 blob 受控路由留出缓存命中入口，而不是只剩裸 WebTorrent worker import", () => {
+  it("media-sw 已退回官方 WebTorrent worker，不再偷偷接管 blob canonical 第二主链", () => {
     const source = 读取前端文件("media-sw.ts");
 
     expect(source).toContain("webtorrent/dist/sw.min.js");
-    expect(source).toContain("addEventListener(\"fetch\"");
-    expect(source).toContain("\\/blob\\/");
-    expect(source).toContain("caches.open");
+    expect(source).not.toContain("addEventListener(\"fetch\"");
+    expect(source).not.toContain("\\/blob\\/");
+    expect(source).not.toContain("caches.open");
   });
 
   it("app-sw 会合并媒体 fetch 逻辑，避免两个根 scope worker 互相抢页面控制权", () => {

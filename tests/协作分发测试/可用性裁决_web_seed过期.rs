@@ -42,7 +42,6 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '5 minutes' \
@@ -139,7 +138,6 @@ async fn web_seed刚过期且最近没有peer存活时locator会先进入连接�
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '3 seconds', \
@@ -237,7 +235,6 @@ async fn web_seed已过期较久且最近没有peer存活时首次访问仍会�
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '2 hours', \
@@ -335,7 +332,6 @@ async fn web_seed过期后的locator与原图端点共享同一条服务器退�
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
-            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata
                  SET web_seed_until = NOW() - INTERVAL '2 hours',

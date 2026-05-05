@@ -244,9 +244,7 @@ describe("传输 / 媒体上传与复用", () => {
         expect.objectContaining({
           asset_id: "att-source-hit-1",
           variants: {
-            canonical: expect.objectContaining({
-              url: "http://localhost:3000/api/attachments/att-source-hit-1/content?session_id=s-1&variant=original",
-            }),
+            canonical: null,
           },
         })
       );
@@ -381,13 +379,7 @@ describe("传输 / 媒体上传与复用", () => {
       content_hash: "hash-att-ready-1",
       kind: "file_video",
       variants: {
-        canonical: {
-          id: "canonical",
-          mime_type: "video/mp4",
-          url: "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
-          width: 1080,
-          height: 1920,
-        },
+        canonical: null,
       },
       distribution: {
         swarm_id: "swarm-hash-att-ready-1",
