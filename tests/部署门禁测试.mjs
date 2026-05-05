@@ -233,6 +233,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "name: Initial Deploy",
         "on:",
         "  workflow_dispatch:",
+        "env:",
+        "  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
         "concurrency:",
         "  group: koko-production",
         "  cancel-in-progress: false",
@@ -240,10 +242,11 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "  install:",
         "    runs-on: ubuntu-latest",
         "    steps:",
+        "      - uses: actions/checkout@v5",
         "      - uses: pnpm/action-setup@v6",
         "        with:",
-        "          package_json_file: frontend/package.json",
-        "      - uses: actions/setup-node@v4",
+          "          package_json_file: frontend/package.json",
+        "      - uses: actions/setup-node@v6",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend install --frozen-lockfile",
         "      - run: pnpm --dir frontend build",
@@ -264,6 +267,8 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "  push:",
         "    branches: [main]",
         "  workflow_dispatch:",
+        "env:",
+        "  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
         "concurrency:",
         "  group: koko-production",
         "  cancel-in-progress: false",
@@ -271,10 +276,11 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "  deploy:",
         "    runs-on: ubuntu-latest",
         "    steps:",
+        "      - uses: actions/checkout@v5",
         "      - uses: pnpm/action-setup@v6",
         "        with:",
-        "          package_json_file: frontend/package.json",
-        "      - uses: actions/setup-node@v4",
+          "          package_json_file: frontend/package.json",
+        "      - uses: actions/setup-node@v6",
         "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
         "      - run: pnpm --dir frontend install --frozen-lockfile",
         "      - run: pnpm --dir frontend build",
@@ -323,13 +329,15 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "        description: 正式版本号（例如 v0.1.1）",
         "        required: true",
         "        type: string",
+        "env:",
+        "  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
         "permissions:",
         "  contents: write",
         "jobs:",
         "  release:",
         "    runs-on: ubuntu-latest",
         "    steps:",
-        "      - uses: actions/checkout@v4",
+        "      - uses: actions/checkout@v5",
         "        with:",
         "          fetch-depth: 0",
         "      - run: gh release create \"${{ inputs.version }}\" --target \"${{ github.sha }}\" --title \"${{ inputs.version }}\" --generate-notes",
@@ -1109,7 +1117,7 @@ test("workflows 门禁会拦住漏掉 VPS Secrets 和 healthcheck 的 workflow",
   assert.match(result.output, /deploy\.yml 缺少 ops\/healthcheck\.sh 调用/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm\/action-setup 安装步骤/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm package_json_file 指向 frontend\/package\.json/);
-  assert.match(result.output, /deploy\.yml 缺少 Node 安装步骤/);
+  assert.match(result.output, /deploy\.yml 的 actions\/setup-node 必须升级到 v6 或更高/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm --dir frontend install --frozen-lockfile 预检/);
   assert.match(result.output, /deploy\.yml 缺少 pnpm --dir frontend build 预检/);
   assert.match(result.output, /deploy\.yml 缺少部署门禁预检/);
@@ -1150,6 +1158,98 @@ test("workflows 门禁会拦住 deploy 和 initial-deploy 漏掉 Cloudflare toke
   assert.match(result.output, /deploy\.yml 缺少 CLOUDFLARE_API_TOKEN 引用/);
   assert.match(result.output, /initial-deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
   assert.match(result.output, /deploy\.yml 缺少向 \/opt\/koko\/env\/production\.env 同步 Cloudflare token 的步骤/);
+});
+
+test("workflows 门禁会拦住还停留在 Node20 action 版本或没强制 Node24", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法Workflow主链夹具(fixtureDir, {
+    initialDeploy: [
+      "name: Initial Deploy",
+      "on:",
+      "  workflow_dispatch:",
+      "concurrency:",
+      "  group: koko-production",
+      "  cancel-in-progress: false",
+      "jobs:",
+      "  install:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "      - uses: pnpm/action-setup@v6",
+      "        with:",
+      "          package_json_file: frontend/package.json",
+      "      - uses: actions/setup-node@v4",
+      "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
+      "      - run: pnpm --dir frontend install --frozen-lockfile",
+      "      - run: pnpm --dir frontend build",
+      "      - run: bash ops/package-release.sh v0.1.0",
+      "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }} ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+      "      - run: echo /opt/koko/env/production.env",
+      "      - run: ./ops/healthcheck.sh || true",
+      "",
+    ].join("\n"),
+    deployWorkflow: [
+      "name: Deploy",
+      "on:",
+      "  push:",
+      "    branches: [main]",
+      "  workflow_dispatch:",
+      "concurrency:",
+      "  group: koko-production",
+      "  cancel-in-progress: false",
+      "jobs:",
+      "  deploy:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "      - uses: pnpm/action-setup@v6",
+      "        with:",
+      "          package_json_file: frontend/package.json",
+      "      - uses: actions/setup-node@v4",
+      "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
+      "      - run: pnpm --dir frontend install --frozen-lockfile",
+      "      - run: pnpm --dir frontend build",
+      "      - run: bash ops/package-release.sh v0.1.0",
+      "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }} ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+      "      - run: echo /opt/koko/env/production.env",
+      "      - run: ./ops/healthcheck.sh",
+      "",
+    ].join("\n"),
+    releaseWorkflow: [
+      "name: 正式发版",
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      version:",
+      "        description: 正式版本号（例如 v0.1.1）",
+      "        required: true",
+      "        type: string",
+      "permissions:",
+      "  contents: write",
+      "jobs:",
+      "  release:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "        with:",
+      "          fetch-depth: 0",
+      "      - run: gh release create \"${{ inputs.version }}\" --target \"${{ github.sha }}\" --title \"${{ inputs.version }}\" --generate-notes",
+      "        env:",
+      "          GH_TOKEN: ${{ github.token }}",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /initial-deploy\.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true/);
+  assert.match(result.output, /deploy\.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true/);
+  assert.match(result.output, /release\.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true/);
+  assert.match(result.output, /initial-deploy\.yml 的 actions\/checkout 必须升级到 v5 或更高/);
+  assert.match(result.output, /deploy\.yml 的 actions\/checkout 必须升级到 v5 或更高/);
+  assert.match(result.output, /release\.yml 的 actions\/checkout 必须升级到 v5 或更高/);
+  assert.match(result.output, /initial-deploy\.yml 的 actions\/setup-node 必须升级到 v6 或更高/);
+  assert.match(result.output, /deploy\.yml 的 actions\/setup-node 必须升级到 v6 或更高/);
 });
 
 test("workflows 门禁会拦住 release 按钮缺少中文名和正式发版最小要件", () => {

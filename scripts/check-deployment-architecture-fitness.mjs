@@ -430,7 +430,13 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/\bworkflow_dispatch\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 workflow_dispatch");
     }
+    if (!/FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*["']?true["']?/i.test(source)) {
+      issues.push("initial-deploy.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true");
+    }
     检查production并发组(source, "initial-deploy.yml");
+    if (!/actions\/checkout@v([5-9]|\d{2,})\b/.test(source)) {
+      issues.push("initial-deploy.yml 的 actions/checkout 必须升级到 v5 或更高");
+    }
     for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY", "CLOUDFLARE_API_TOKEN"]) {
       if (!source.includes(secretName)) {
         issues.push(`initial-deploy.yml 缺少 ${secretName} 引用`);
@@ -448,8 +454,8 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 ops/healthcheck.sh 调用");
     }
-    if (!/actions\/setup-node@v4/.test(source)) {
-      issues.push("initial-deploy.yml 缺少 Node 安装步骤");
+    if (!/actions\/setup-node@v([6-9]|\d{2,})\b/.test(source)) {
+      issues.push("initial-deploy.yml 的 actions/setup-node 必须升级到 v6 或更高");
     }
     if (!/pnpm\s+--dir\s+frontend\s+install\s+--frozen-lockfile\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 pnpm --dir frontend install --frozen-lockfile 预检");
@@ -489,7 +495,13 @@ function 收集Workflow主链内容问题(rootDir) {
     ) {
       issues.push("deploy.yml 缺少 push 到 main");
     }
+    if (!/FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*["']?true["']?/i.test(source)) {
+      issues.push("deploy.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true");
+    }
     检查production并发组(source, "deploy.yml");
+    if (!/actions\/checkout@v([5-9]|\d{2,})\b/.test(source)) {
+      issues.push("deploy.yml 的 actions/checkout 必须升级到 v5 或更高");
+    }
     for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY", "CLOUDFLARE_API_TOKEN"]) {
       if (!source.includes(secretName)) {
         issues.push(`deploy.yml 缺少 ${secretName} 引用`);
@@ -507,8 +519,8 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("deploy.yml 缺少 ops/healthcheck.sh 调用");
     }
-    if (!/actions\/setup-node@v4/.test(source)) {
-      issues.push("deploy.yml 缺少 Node 安装步骤");
+    if (!/actions\/setup-node@v([6-9]|\d{2,})\b/.test(source)) {
+      issues.push("deploy.yml 的 actions/setup-node 必须升级到 v6 或更高");
     }
     if (!/pnpm\s+--dir\s+frontend\s+install\s+--frozen-lockfile\b/.test(source)) {
       issues.push("deploy.yml 缺少 pnpm --dir frontend install --frozen-lockfile 预检");
@@ -565,6 +577,9 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/^\s*name:\s*正式发版\s*$/m.test(source)) {
       issues.push("release.yml 必须使用中文按钮名: 正式发版");
     }
+    if (!/FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*["']?true["']?/i.test(source)) {
+      issues.push("release.yml 缺少 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true");
+    }
     if (!/\bworkflow_dispatch\b/.test(source)) {
       issues.push("release.yml 缺少 workflow_dispatch");
     }
@@ -573,6 +588,9 @@ function 收集Workflow主链内容问题(rootDir) {
     }
     if (!/^\s*permissions:\s*$/m.test(source) || !/contents:\s*write\b/.test(source)) {
       issues.push("release.yml 必须允许写 contents");
+    }
+    if (!/actions\/checkout@v([5-9]|\d{2,})\b/.test(source)) {
+      issues.push("release.yml 的 actions/checkout 必须升级到 v5 或更高");
     }
     const 有创建Release步骤 =
       /gh\s+release\s+create\b/.test(source) || /softprops\/action-gh-release@/i.test(source);
