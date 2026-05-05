@@ -66,6 +66,14 @@ function 有tusd共享目录权限准备(source) {
   return 提到Tus共享目录 && 有owner修复 && 有mode修复;
 }
 
+function 有staleComposeReplacement清理(source) {
+  return (
+    /com\.docker\.compose\.replace/.test(source) &&
+    /\bstatus=created\b/.test(source) &&
+    /\bdocker\s+rm\s+-f\b/.test(source)
+  );
+}
+
 function 读取命令行参数(argv) {
   let scope = "full";
   let rootDir = process.cwd();
@@ -324,6 +332,9 @@ function 收集脚本主链内容问题(rootDir) {
     if (!有tusd共享目录权限准备(source)) {
       issues.push("ops/deploy.sh 缺少 tusd 共享目录权限修复");
     }
+    if (!有staleComposeReplacement清理(source)) {
+      issues.push("ops/deploy.sh 缺少 stale compose replacement 清理");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/deploy.sh");
     }
@@ -340,6 +351,9 @@ function 收集脚本主链内容问题(rootDir) {
     }
     if (!/bash\s+["']?\$\{healthcheck_script\}["']?/.test(source) && !/bash\s+\/opt\/koko\/current\/ops\/healthcheck\.sh/.test(source)) {
       issues.push("ops/rollback.sh 必须通过 bash 调用 healthcheck.sh");
+    }
+    if (!有staleComposeReplacement清理(source)) {
+      issues.push("ops/rollback.sh 缺少 stale compose replacement 清理");
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/rollback.sh");

@@ -69,6 +69,20 @@ prepare_tusd_storage() {
   chmod 0775 "${SHARED_TUS_DIR}"
 }
 
+cleanup_stale_compose_replacements() {
+  # Docker Compose 在 recreate 中断时会留下 `<hash>_koko-<service>-1` 这种 replacement 容器。
+  # 下次再升级时，如果不先清掉这些 `Created` 残留，`up -d` 会直接因为重名冲突失败。
+  mapfile -t stale_replace_ids < <(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=koko" \
+      --filter "label=com.docker.compose.replace" \
+      --filter "status=created"
+  )
+  if (( ${#stale_replace_ids[@]} > 0 )); then
+    docker rm -f "${stale_replace_ids[@]}"
+  fi
+}
+
 build_release() {
   docker compose -f "${release_compose_file}" build
 }
@@ -78,6 +92,7 @@ switch_current() {
 }
 
 start_release() {
+  cleanup_stale_compose_replacements
   docker compose -f "${compose_file}" up -d --remove-orphans
 }
 

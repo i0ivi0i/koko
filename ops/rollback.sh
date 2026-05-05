@@ -28,7 +28,22 @@ switch_current() {
   ln -sfnT "${target_dir}" "${CURRENT_LINK}"
 }
 
+cleanup_stale_compose_replacements() {
+  # 回滚和升级都会走容器 recreate；
+  # 上次失败残留的 replacement 容器如果不先清掉，会把这次回滚也一起卡死。
+  mapfile -t stale_replace_ids < <(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=koko" \
+      --filter "label=com.docker.compose.replace" \
+      --filter "status=created"
+  )
+  if (( ${#stale_replace_ids[@]} > 0 )); then
+    docker rm -f "${stale_replace_ids[@]}"
+  fi
+}
+
 restart_release() {
+  cleanup_stale_compose_replacements
   docker compose -f "${compose_file}" build
   docker compose -f "${compose_file}" up -d --remove-orphans
 }

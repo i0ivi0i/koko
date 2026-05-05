@@ -167,6 +167,8 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         "set -euo pipefail",
         'version=\"${1:?missing version}\"',
         'release_dir=\"/opt/koko/releases/${version}\"',
+        'mapfile -t stale_replace_ids < <(docker ps -aq --filter label=com.docker.compose.project=koko --filter label=com.docker.compose.replace --filter status=created)',
+        'if (( ${#stale_replace_ids[@]} > 0 )); then docker rm -f "${stale_replace_ids[@]}"; fi',
         'mkdir -p /opt/koko/shared/tus',
         'chown 1000:1000 /opt/koko/shared/tus',
         'chmod 0775 /opt/koko/shared/tus',
@@ -187,6 +189,8 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'target_version=\"${1:?missing target version}\"',
         'target_dir=\"/opt/koko/releases/${target_version}\"',
         'if [[ ! -d "${target_dir}" ]]; then exit 1; fi',
+        'mapfile -t stale_replace_ids < <(docker ps -aq --filter label=com.docker.compose.project=koko --filter label=com.docker.compose.replace --filter status=created)',
+        'if (( ${#stale_replace_ids[@]} > 0 )); then docker rm -f "${stale_replace_ids[@]}"; fi',
         'ln -sfn \"$target_dir\" /opt/koko/current',
         'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
         'bash /opt/koko/current/ops/healthcheck.sh',
@@ -714,6 +718,30 @@ test("scripts 门禁会拦住 deploy.sh 没有修复 tus 共享目录写权限",
   assert.match(result.output, /ops\/deploy\.sh 缺少 tusd 共享目录权限修复/);
 });
 
+test("scripts 门禁会拦住 deploy.sh 没有清理 stale compose replacement 容器", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    deploySh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'release_dir="/opt/koko/releases/${version}"',
+      'mkdir -p /opt/koko/shared/tus',
+      'chown 1000:1000 /opt/koko/shared/tus',
+      'chmod 0775 /opt/koko/shared/tus',
+      'ln -sfn "$release_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml build',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      'bash /opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/deploy\.sh 缺少 stale compose replacement 清理/);
+});
+
 test("scripts 门禁会拦住 deploy.sh 裸执行 healthcheck", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -743,6 +771,8 @@ test("scripts 门禁会放行 deploy.sh 使用 ln -sfnT 切换 current", () => {
       "set -euo pipefail",
       'version="${1:?missing version}"',
       'release_dir="/opt/koko/releases/${version}"',
+      'mapfile -t stale_replace_ids < <(docker ps -aq --filter label=com.docker.compose.project=koko --filter label=com.docker.compose.replace --filter status=created)',
+      'if (( ${#stale_replace_ids[@]} > 0 )); then docker rm -f "${stale_replace_ids[@]}"; fi',
       'mkdir -p /opt/koko/shared/tus',
       'chown 1000:1000 /opt/koko/shared/tus',
       'chmod 0775 /opt/koko/shared/tus',
@@ -787,6 +817,27 @@ test("scripts 门禁会拦住 rollback.sh 没有目标版本目录存在校验",
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /ops\/rollback\.sh 缺少目标版本目录存在校验/);
+});
+
+test("scripts 门禁会拦住 rollback.sh 没有清理 stale compose replacement 容器", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    rollbackSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'target_version="${1:?missing target version}"',
+      'target_dir="/opt/koko/releases/${target_version}"',
+      'if [[ ! -d "${target_dir}" ]]; then exit 1; fi',
+      'ln -sfn "$target_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      'bash /opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/rollback\.sh 缺少 stale compose replacement 清理/);
 });
 
 test("scripts 门禁会拦住 rollback.sh 裸执行 healthcheck", () => {
