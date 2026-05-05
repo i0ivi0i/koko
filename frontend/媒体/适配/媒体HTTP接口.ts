@@ -242,9 +242,13 @@ export class 媒体HTTP接口 {
     return {
       ...asset,
       variants: {
-        canonical: asset.variants.canonical
-          ? this.解析Blob媒体变体(asset.variants.canonical)
-          : null,
+        /**
+         * 新代际单文件视频的正式主链已经收口到协作分发 runtime：
+         * 1. 即使后端旧响应一时还残留 canonical HTTP 地址，这里也先主动压平成 null；
+         * 2. 这样前端各壳层不会再把它误认成正式可播放视频源；
+         * 3. 冷备能力继续留在 origin 元数据里，和正式播放主链分层。
+         */
+        canonical: null,
       },
       distribution: this.解析媒体资产分发表面(asset.distribution),
       origin: this.解析媒体冷源描述(asset.origin),

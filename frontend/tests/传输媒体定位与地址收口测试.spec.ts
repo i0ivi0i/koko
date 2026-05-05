@@ -121,13 +121,7 @@ describe("传输 / 媒体定位与地址收口", () => {
         content_hash: "hash-att-locator-1",
         kind: "file_video",
         variants: {
-          canonical: {
-            id: "canonical",
-            mime_type: "video/mp4",
-            url: "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
-            width: 1280,
-            height: 720,
-          },
+          canonical: null,
         },
         distribution: {
           swarm_id: "swarm-hash-att-locator-1",
@@ -376,16 +370,12 @@ describe("传输 / 媒体定位与地址收口", () => {
       | undefined;
 
     expect(readyAsset?.kind).toBe("file_video");
-    expect(readyAsset?.variants?.canonical?.url).toBe(
-      "http://localhost:3000/api/attachments/att-ready-2/content?session_id=s-1&variant=original"
-    );
+    expect(readyAsset?.variants?.canonical ?? null).toBeNull();
     expect(readyAsset?.distribution.survival_mode).toBe("peer_only_after_expiry");
     expect(locator.distribution?.survival_mode).toBe("peer_only_after_expiry");
     expect(locator.distribution?.web_seed_url).toBeNull();
     expect(locatorAsset?.kind).toBe("file_video");
-    expect(locatorAsset?.variants?.canonical?.url).toBe(
-      "http://localhost:3000/api/attachments/att-ready-2/content?session_id=s-1&variant=original"
-    );
+    expect(locatorAsset?.variants?.canonical ?? null).toBeNull();
     expect(locatorAsset?.distribution.survival_mode).toBe("peer_only_after_expiry");
     expect(locatorAsset?.distribution.web_seed_url).toBeNull();
   });

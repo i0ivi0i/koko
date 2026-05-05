@@ -260,7 +260,10 @@ async fn 视频complete后不再返回hls_dash_manifest() {
     let variants = media_asset["variants"]
         .as_object()
         .expect("视频资产必须只暴露 variants.canonical");
-    assert!(variants["canonical"].is_object(), "{media_asset:?}");
+    assert!(
+        variants["canonical"].is_null(),
+        "新视频正式主链不应继续把受控 HTTP 内容地址投影成 canonical 视频源: {media_asset:?}"
+    );
 
     let pool = PgPoolOptions::new()
         .max_connections(1)

@@ -87,14 +87,14 @@ describe("媒体服务工作线程", () => {
     vi.unstubAllGlobals();
   });
 
-  it("仍会继续命中图片 canonical blob 资产缓存", async () => {
+  it("不再接管图片 canonical blob 资产缓存，避免它继续充当新图片正式主链", async () => {
     const url = "http://media.local/api/media/att-image-1/blob/canonical";
     const cache = 创建假缓存([[url, new Response("cached-image", { status: 200 })]]);
     const runtime = await 准备媒体服务工作线程({ 缓存: cache });
 
-    const response = await runtime.执行请求(new Request(url));
-
-    expect(await response.text()).toBe("cached-image");
+    await expect(runtime.执行请求(new Request(url))).rejects.toThrow(
+      "media-sw 未接管请求"
+    );
     expect(runtime.fetchMock).not.toHaveBeenCalled();
   });
 

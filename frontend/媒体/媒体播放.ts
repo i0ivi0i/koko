@@ -397,6 +397,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return mediaStateCode !== "MEDIA_DELETED" && mediaStateCode !== "MEDIA_NO_ONLINE_SEED";
     })();
 
+  /**
+   * 新附件图片只要已经声明进入协作分发表面，就不能再回到 blob canonical HTTP 锚点：
+   * 1. `distribution / blob_asset.distribution` 说明它已经属于正式 WebTorrent 平面；
+   * 2. swarm 暂不可得时，前端应展示稳定不可用/占位，而不是把受控 blob 地址抬回正式主链；
+   * 3. 没有协作分发表面的历史图片，仍允许继续走 legacy 冷源锚点。
+   */
+  const 图片应等待协作分发主链 = (locator: 媒体定位结果): boolean =>
+    locator.kind === "image" &&
+    Boolean(locator.distribution || locator.blob_asset?.distribution);
+
   const 尝试锚点 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
@@ -777,6 +787,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
      * 避免任何“自动播/全屏偷偷改走 original”的第二真相。
      */
     if (input.kind === "video") {
+      释放协作分发占用(input);
+      return 创建降级结果(input, locator, "anchor_unavailable");
+    }
+    if (图片应等待协作分发主链(locator)) {
       释放协作分发占用(input);
       return 创建降级结果(input, locator, "anchor_unavailable");
     }

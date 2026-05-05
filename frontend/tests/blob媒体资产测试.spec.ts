@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器 } from "../媒体/媒体播放";
 
 describe("Blob 媒体资产", () => {
-  it("图片定位结果返回 blob_asset 时，会以 canonical 锚点作为唯一主链", async () => {
+  it("新附件图片即使返回 blob_asset，也不能再把 canonical 锚点当正式主链", async () => {
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -51,25 +51,15 @@ describe("Blob 媒体资产", () => {
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "degraded",
       attachmentId: "att-image-blob-1",
       kind: "image",
-      src: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
+      src: "",
       thumbnailUrl: null,
-      contentHash: "hash-image-blob-1",
-      distribution: {
-        swarm_id: "swarm-hash-image-blob-1",
-        announce_urls: ["wss://tracker.koko.local/announce"],
-        web_seed_url: "http://media.local/blob/att-image-blob-1/original.png",
-        join_ticket: null,
-        ticket_expires_at: null,
-        survival_mode: "server_assisted" as const,
-      },
-      hint: null,
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
-    expect(probeAnchor).toHaveBeenCalledWith(
-      "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1"
-    );
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("图片进入 backfilling 时，会激活 blob_asset 绑定的协作分发 runtime", async () => {

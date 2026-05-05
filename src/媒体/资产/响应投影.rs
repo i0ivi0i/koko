@@ -26,9 +26,6 @@ struct 单文件视频资产响应参数<'a> {
     运行态分发: &'a serde_json::Value,
     分发快照: &'a crate::media::模型::协作分发元数据快照,
     canonical地址: String,
-    mime_type: &'a str,
-    宽: Option<i32>,
-    高: Option<i32>,
     原始冷源到期时间戳秒: Option<i64>,
     原始冷源删除时间戳秒: Option<i64>,
     当前时间戳秒: i64,
@@ -211,15 +208,6 @@ fn blob媒体资产描述转响应体(
 fn 构造单文件视频资产响应体(
     参数: 单文件视频资产响应参数<'_>
 ) -> serde_json::Value {
-    let canonical = contract::变体描述 {
-        标识: "canonical".to_string(),
-        // 单文件视频的 canonical 地址就是同一个受控 Range 读取入口；
-        // 分发、查看器、自动播和 web seed 都围绕这一份内容哈希协作，不能再分裂成 HLS/DASH 入口。
-        mime_type: 参数.mime_type.to_string(),
-        地址: 参数.canonical地址.clone(),
-        宽: 参数.宽,
-        高: 参数.高,
-    };
     let distribution =
         从运行态协作分发响应提取共享分发表面(参数.分发快照, 参数.运行态分发);
     serde_json::json!({
@@ -227,7 +215,11 @@ fn 构造单文件视频资产响应体(
         "content_hash": 参数.分发快照.content_hash.clone(),
         "kind": 媒体资产种类转标签(&contract::媒体资产种类::单文件视频),
         "variants": {
-            "canonical": 变体描述转响应体(&canonical),
+            // 新代际单文件视频的正式字节入口已经收口到 swarm source：
+            // 1. 这里不能继续把受控 HTTP 内容地址投影成 canonical 视频源；
+            // 2. 否则前端很容易把它重新消费成第二正式播放链；
+            // 3. cold backup 仍然通过 origin 元数据表达，不和正式主链混写。
+            "canonical": serde_json::Value::Null,
         },
         "distribution": 媒体分发描述转响应体(&distribution),
         "origin": 媒体冷源描述转响应体(&crate::media::模型::构造媒体冷源描述(
@@ -285,9 +277,6 @@ pub(crate) fn 构造媒体资产响应体(
                 运行态分发: 上下文.运行态分发?,
                 分发快照: 上下文.分发快照?,
                 canonical地址: 上下文.原始地址,
-                mime_type: snapshot.mime_type.as_str(),
-                宽: Some(snapshot.宽),
-                高: Some(snapshot.高),
                 原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
                 原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
                 当前时间戳秒: 上下文.当前时间戳秒,
@@ -323,9 +312,6 @@ pub(crate) fn 构造定位媒体资产响应体(
                 运行态分发: 上下文.运行态分发?,
                 分发快照: locator.协作分发.as_ref()?,
                 canonical地址: 上下文.原始地址,
-                mime_type: locator.mime_type.as_str(),
-                宽: locator.宽,
-                高: locator.高,
                 原始冷源到期时间戳秒: locator.原始冷源到期时间戳秒,
                 原始冷源删除时间戳秒: locator.原始冷源删除时间戳秒,
                 当前时间戳秒: 上下文.当前时间戳秒,
