@@ -213,6 +213,9 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "name: Initial Deploy",
         "on:",
         "  workflow_dispatch:",
+        "concurrency:",
+        "  group: koko-production",
+        "  cancel-in-progress: false",
         "jobs:",
         "  install:",
         "    runs-on: ubuntu-latest",
@@ -240,6 +243,9 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "  push:",
         "    branches: [main]",
         "  workflow_dispatch:",
+        "concurrency:",
+        "  group: koko-production",
+        "  cancel-in-progress: false",
         "jobs:",
         "  deploy:",
         "    runs-on: ubuntu-latest",
@@ -270,6 +276,9 @@ function 创建合法Workflow主链夹具(rootDir, extra = {}) {
         "        description: target version",
         "        required: true",
         "        type: string",
+        "concurrency:",
+        "  group: koko-production",
+        "  cancel-in-progress: false",
         "jobs:",
         "  rollback:",
         "    runs-on: ubuntu-latest",
@@ -625,6 +634,24 @@ test("scripts 门禁会拦住 install.sh 漏掉固定目录真相", () => {
   assert.match(result.output, /ops\/install\.sh 缺少固定目录: \/opt\/koko\/shared/);
 });
 
+test("scripts 门禁会拦住 install.sh 无条件把 current 重置回 bootstrap", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    installSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'readonly CURRENT_LINK="/opt/koko/current"',
+      'readonly BOOTSTRAP_RELEASE_DIR="/opt/koko/releases/__bootstrap__"',
+      'ln -sfn "${BOOTSTRAP_RELEASE_DIR}" "${CURRENT_LINK}"',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/install\.sh 禁止无条件重置 current 到 bootstrap 占位目录/);
+});
+
 test("scripts 门禁会拦住 deploy.sh 缺少 current 切换与健康检查", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -662,6 +689,26 @@ test("scripts 门禁会拦住 deploy.sh 裸执行 healthcheck", () => {
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /ops\/deploy\.sh 必须通过 bash 调用 healthcheck\.sh/);
+});
+
+test("scripts 门禁会放行 deploy.sh 使用 ln -sfnT 切换 current", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    deploySh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'release_dir="/opt/koko/releases/${version}"',
+      'ln -sfnT "$release_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml build',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      'bash /opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.equal(result.status, 0);
 });
 
 test("scripts 门禁会拦住 rollback.sh 没有目标版本参数", () => {
@@ -788,6 +835,38 @@ test("workflows 门禁会拦住 initial-deploy 缺少 workflow_dispatch", () => 
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /initial-deploy\.yml 缺少 workflow_dispatch/);
+});
+
+test("workflows 门禁会拦住缺少 production 并发组的部署工作流", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法Workflow主链夹具(fixtureDir, {
+    deployWorkflow: [
+      "name: Deploy",
+      "on:",
+      "  push:",
+      "    branches: [main]",
+      "  workflow_dispatch:",
+      "jobs:",
+      "  deploy:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: pnpm/action-setup@v6",
+      "        with:",
+      "          package_json_file: frontend/package.json",
+      "      - uses: actions/setup-node@v4",
+      "      - run: node scripts/check-deployment-architecture-fitness.mjs --enforce",
+      "      - run: pnpm --dir frontend install --frozen-lockfile",
+      "      - run: pnpm --dir frontend build",
+      "      - run: bash ops/package-release.sh v0.1.0",
+      "      - run: echo ${{ secrets.VPS_HOST }} ${{ secrets.VPS_USER }} ${{ secrets.VPS_SSH_KEY }}",
+      "      - run: ./ops/healthcheck.sh",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "workflows");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /deploy\.yml 缺少 production 并发组/);
 });
 
 test("workflows 门禁会拦住 deploy 缺少 push main 和 workflow_dispatch", () => {

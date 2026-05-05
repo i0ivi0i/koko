@@ -74,9 +74,23 @@ prepare_layout() {
   mkdir -p "${SHARED_CADDY_CONFIG_DIR}"
   mkdir -p "${SHARED_INCOMING_DIR}"
   mkdir -p "${BOOTSTRAP_RELEASE_DIR}"
+}
 
-  # 首次安装时还没有真正版本，先给 current 一个受控占位，避免后续脚本因为路径不存在而乱猜。
-  ln -sfn "${BOOTSTRAP_RELEASE_DIR}" "${CURRENT_LINK}"
+ensure_current_link() {
+  # install.sh 可以重复执行，但不能把已经在跑的正式版本重新拨回 bootstrap 占位目录。
+  # 这里只有两种合法情况：
+  # 1. current 还不存在：首次安装，创建受控占位；
+  # 2. current 已经是符号链接：说明正式链路已经接管，直接复用。
+  if [[ -L "${CURRENT_LINK}" ]]; then
+    return
+  fi
+
+  if [[ -e "${CURRENT_LINK}" ]]; then
+    echo "current 已存在且不是符号链接，拒绝覆盖: ${CURRENT_LINK}" >&2
+    exit 1
+  fi
+
+  ln -sfnT "${BOOTSTRAP_RELEASE_DIR}" "${CURRENT_LINK}"
 }
 
 prepare_env_template() {
@@ -90,6 +104,7 @@ main() {
   need_root
   ensure_docker
   prepare_layout
+  ensure_current_link
   prepare_env_template
   echo "Debian 12 首次安装准备完成。"
 }

@@ -65,7 +65,7 @@ build_release() {
 }
 
 switch_current() {
-  ln -sfn "${release_dir}" "${CURRENT_LINK}"
+  ln -sfnT "${release_dir}" "${CURRENT_LINK}"
 }
 
 start_release() {

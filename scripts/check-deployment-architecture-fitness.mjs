@@ -281,6 +281,15 @@ function 收集脚本主链内容问题(rootDir) {
         issues.push(`ops/install.sh 缺少固定目录: ${fixedDir}`);
       }
     }
+    const 存在bootstrap占位重置 =
+      /ln\s+-sfnT?\s+"\$\{BOOTSTRAP_RELEASE_DIR\}"\s+"\$\{CURRENT_LINK\}"/.test(source);
+    const 存在current保护 =
+      /\[\[\s+!\s+-e\s+"\$\{CURRENT_LINK\}"\s+\]\]/.test(source) ||
+      /\[\[\s+!\s+-L\s+"\$\{CURRENT_LINK\}"\s+\]\]/.test(source) ||
+      /ensure_current_link/.test(source);
+    if (存在bootstrap占位重置 && !存在current保护) {
+      issues.push("ops/install.sh 禁止无条件重置 current 到 bootstrap 占位目录");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/install.sh");
     }
@@ -289,7 +298,7 @@ function 收集脚本主链内容问题(rootDir) {
   const deployPath = join(rootDir, "ops", "deploy.sh");
   if (existsSync(deployPath)) {
     const source = 读取非注释文本("ops/deploy.sh", 读取文本文件(rootDir, "ops/deploy.sh"));
-    if (!source.includes("/opt/koko/releases") || !source.includes("/opt/koko/current") || !/ln\s+-sfn\b/.test(source)) {
+    if (!source.includes("/opt/koko/releases") || !source.includes("/opt/koko/current") || !/ln\s+-sfnT?\b/.test(source)) {
       issues.push("ops/deploy.sh 缺少版本目录与 current 切换");
     }
     if (!/healthcheck\.sh\b/.test(source)) {
@@ -346,6 +355,11 @@ function 收集脚本主链内容问题(rootDir) {
 
 function 收集Workflow主链内容问题(rootDir) {
   const issues = [];
+  const 检查production并发组 = (source, fileLabel) => {
+    if (!/^\s*concurrency:\s*$/m.test(source) || !/group:\s*koko-production\b/.test(source)) {
+      issues.push(`${fileLabel} 缺少 production 并发组`);
+    }
+  };
 
   const initialDeployPath = join(rootDir, ".github", "workflows", "initial-deploy.yml");
   if (existsSync(initialDeployPath)) {
@@ -356,6 +370,7 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/\bworkflow_dispatch\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 workflow_dispatch");
     }
+    检查production并发组(source, "initial-deploy.yml");
     for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY"]) {
       if (!source.includes(secretName)) {
         issues.push(`initial-deploy.yml 缺少 ${secretName} 引用`);
@@ -411,6 +426,7 @@ function 收集Workflow主链内容问题(rootDir) {
     ) {
       issues.push("deploy.yml 缺少 push 到 main");
     }
+    检查production并发组(source, "deploy.yml");
     for (const secretName of ["VPS_HOST", "VPS_USER", "VPS_SSH_KEY"]) {
       if (!source.includes(secretName)) {
         issues.push(`deploy.yml 缺少 ${secretName} 引用`);
@@ -457,6 +473,7 @@ function 收集Workflow主链内容问题(rootDir) {
     if (!/\bworkflow_dispatch\b/.test(source)) {
       issues.push("rollback.yml 缺少 workflow_dispatch");
     }
+    检查production并发组(source, "rollback.yml");
     if (!/^\s*target_version:\s*$/m.test(source)) {
       issues.push("rollback.yml 缺少 target_version 输入");
     }

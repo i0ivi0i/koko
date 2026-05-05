@@ -25,7 +25,7 @@ ensure_target_exists() {
 }
 
 switch_current() {
-  ln -sfn "${target_dir}" "${CURRENT_LINK}"
+  ln -sfnT "${target_dir}" "${CURRENT_LINK}"
 }
 
 restart_release() {
