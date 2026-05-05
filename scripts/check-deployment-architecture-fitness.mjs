@@ -355,6 +355,9 @@ function 收集Workflow主链内容问题(rootDir) {
         issues.push(`initial-deploy.yml 缺少 ${secretName} 引用`);
       }
     }
+    if (!/pnpm\/action-setup@v\d+/.test(source)) {
+      issues.push("initial-deploy.yml 缺少 pnpm/action-setup 安装步骤");
+    }
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("initial-deploy.yml 缺少 ops/healthcheck.sh 调用");
     }
@@ -400,6 +403,9 @@ function 收集Workflow主链内容问题(rootDir) {
       if (!source.includes(secretName)) {
         issues.push(`deploy.yml 缺少 ${secretName} 引用`);
       }
+    }
+    if (!/pnpm\/action-setup@v\d+/.test(source)) {
+      issues.push("deploy.yml 缺少 pnpm/action-setup 安装步骤");
     }
     if (!/ops\/healthcheck\.sh\b/.test(source)) {
       issues.push("deploy.yml 缺少 ops/healthcheck.sh 调用");
