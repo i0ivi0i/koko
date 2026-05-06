@@ -7,6 +7,8 @@ import {
 创建媒体消息窗,
 创建媒体消息项,
 安装消息窗直达全屏模拟,
+等待时间线唯一播放器挂载,
+驱动时间线Canonical就绪,
 } from "../common/房间消息窗媒体支架";
 
 describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
@@ -528,9 +530,11 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
     try {
       document.body.appendChild(pane);
       await pane.updateComplete;
+      await 等待时间线唯一播放器挂载(pane);
+      await 驱动时间线Canonical就绪(pane, "att-video-1");
 
       const preview = pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]'
+        'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
       );
       const trigger = pane.querySelector<HTMLButtonElement>(
         'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'

@@ -122,14 +122,9 @@ export const 渲染视频附件 = (
   );
   const savedTimelineFrame =
     context.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
-  /**
-   * owner 刚滑出视口时，上层可能先撤掉 autoplay playback 快照，下一轮可见性裁决才回灌。
-   * 这个短窗口只允许同源续帧承接画面，不新增另一条媒体读取路径。
-   */
+  /** owner 刚滑出视口时，保存续帧只准承接同源画面，不准长第二条读取链。 */
   const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-  const knownReadyTimelineFrameSrc = context.读取时间线视频已就绪首帧预览源(
-    attachment.attachmentId
-  );
+  const knownReadyTimelineFrameSrc = context.读取时间线视频已就绪首帧预览源(attachment.attachmentId);
   const shouldReuseSavedTimelineFrameAsPreview =
     context.读取保存续帧是否允许承接时间线预览底板({
       attachmentId: attachment.attachmentId,
@@ -141,16 +136,8 @@ export const 渲染视频附件 = (
     playbackTimelineVideoSrc ??
     (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
     knownReadyTimelineFrameSrc;
-  const videoBudget = context.读取时间线视频预算投影(
-    attachment,
-    timelinePreviewVideoSrcCandidate
-  );
-  /**
-   * 时间线真正消费的是“统一预算投影 + 本地连续性桥”：
-   * 1. canonical / preview 谁能露、谁该藏，先看编排层收口后的预算裁决；
-   * 2. 保存位置只在预算没有 preview src 时兜住刚退场 owner 的同源续帧；
-   * 3. 已就绪首帧只在高速虚拟回滑遇到冷快照时承接同源画面。
-   */
+  const videoBudget = context.读取时间线视频预算投影(attachment, timelinePreviewVideoSrcCandidate);
+  /** 时间线先吃统一预算，再用同源续帧/已就绪首帧做本地连续性桥。 */
   const timelinePreviewVideoSrc =
     videoBudget.previewVideoSrc ??
     (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
@@ -275,71 +262,57 @@ export const 渲染视频附件 = (
     !hasFrozenTimelineFrame;
   const shouldKeepExistingPreviewDomForRetiringOwner =
     shouldPreferRetiringOwnerPreviewSurface && hasExistingSameSourcePreviewFrame;
-  const shouldRenderPreviewVideoByBudget =
-    (Boolean(previewVideoSrc) &&
-      context.读取时间线预览视频是否允许渲染(videoBudget, {
-        hasExistingSameSourcePreviewFrame,
-        hasFrozenTimelineFrame,
-        hasKnownReadyPreviewFrame,
-        previewVideoSrc,
-        shouldReuseSavedTimelineFrameAsPreview,
-      }) &&
-      (input.可渲染真实预览视频附件.has(attachment.attachmentId) ||
-        hasExistingSameSourcePreviewFrame ||
-        hasFrozenTimelineFrame ||
-        hasKnownReadyPreviewFrame)) ||
-    shouldRenderReleasedOwnerPreviewVideo;
+  const shouldRenderPreviewVideoByBudget = (Boolean(previewVideoSrc) &&
+    context.读取时间线预览视频是否允许渲染(videoBudget, {
+      hasExistingSameSourcePreviewFrame,
+      hasFrozenTimelineFrame,
+      hasKnownReadyPreviewFrame,
+      previewVideoSrc,
+      shouldReuseSavedTimelineFrameAsPreview,
+    }) &&
+    (input.可渲染真实预览视频附件.has(attachment.attachmentId) ||
+      hasExistingSameSourcePreviewFrame ||
+      hasFrozenTimelineFrame ||
+      hasKnownReadyPreviewFrame)) || shouldRenderReleasedOwnerPreviewVideo;
   /** preview 还没追上续播点时，不能先把错误时间点露给用户。 */
-  const shouldSuppressWrongTimePreviewVideo =
-    shouldRenderInlineVideo &&
+  const shouldSuppressWrongTimePreviewVideo = shouldRenderInlineVideo &&
     playbackContinuityDecision.kind === "hidden_handoff" &&
     Boolean(restorableTimelineFrame) &&
     (Boolean(previewFrameEvidence) ||
       (!shouldReuseSavedTimelineFrameAsPreview && !shouldRenderReleasedOwnerPreviewVideo));
   const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
-  const shouldShowFirstFrameGuard =
-    shouldRenderPreviewVideoByBudget &&
-    !hasCurrentDomPreviewFrame &&
-    !hasFrozenTimelineFrame &&
-    !hasStablePreviewPosterSurface;
-  const hasReadyPreviewSurface =
-    hasStablePreviewPosterSurface || hasCurrentDomPreviewFrame || hasFrozenTimelineFrame;
-  const shouldUseHiddenStageCover =
-    shouldRenderInlineVideo &&
-    hasReadyPreviewSurface &&
+  const shouldShowFirstFrameGuard = shouldRenderPreviewVideoByBudget &&
+    !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame && !hasStablePreviewPosterSurface;
+  const hasReadyPreviewSurface = hasStablePreviewPosterSurface || hasCurrentDomPreviewFrame || hasFrozenTimelineFrame;
+  const shouldUseHiddenStageCover = shouldRenderInlineVideo &&
+    (hasReadyPreviewSurface || hasKnownReadyPreviewFrame) &&
     !shouldRevealCanonicalHost &&
-    (context.时间线隐藏接管附件Id === attachment.attachmentId ||
-      hasHistoricalCanonicalReveal);
-  const shouldStageWarmupColdInitialOwnerCanonical =
-    shouldRenderInlineVideo && !shouldRevealCanonicalHost && !playback &&
+    (context.inlineAutoplayOwnerAttachmentId === attachment.attachmentId ||
+      context.时间线隐藏接管附件Id === attachment.attachmentId ||
+      hasHistoricalCanonicalReveal || shouldReuseSavedTimelineFrameAsPreview);
+  const shouldStageWarmupGuardedOwnerCanonical = shouldRenderInlineVideo && !shouldRevealCanonicalHost && shouldShowFirstFrameGuard;
+  const shouldStageWarmupColdInitialOwnerCanonical = shouldRenderInlineVideo && !shouldRevealCanonicalHost && !playback &&
     context.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
     context.时间线隐藏接管附件Id !== attachment.attachmentId &&
     !hasHistoricalCanonicalReveal && !hasStablePreviewPosterSurface &&
     !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame &&
     !hasKnownReadyPreviewFrame && !shouldReuseSavedTimelineFrameAsPreview;
-  const shouldRenderStageHost =
-    !shouldRevealCanonicalHost &&
-    (shouldUseHiddenStageCover || shouldStageWarmupColdInitialOwnerCanonical);
-  const shouldRenderVisibleCanonicalHost =
-    shouldRenderInlineVideo &&
-    !shouldPreferRetiringOwnerPreviewSurface &&
-    !shouldUseHiddenStageCover &&
-    !shouldStageWarmupColdInitialOwnerCanonical;
-  const shouldRenderPreviewVideo =
-    shouldRenderPreviewVideoByBudget &&
+  const shouldRenderStageHost = !shouldRevealCanonicalHost &&
+    (shouldUseHiddenStageCover || shouldStageWarmupGuardedOwnerCanonical || shouldStageWarmupColdInitialOwnerCanonical);
+  const shouldRenderVisibleCanonicalHost = shouldRenderInlineVideo &&
+    !shouldPreferRetiringOwnerPreviewSurface && !shouldRenderStageHost && shouldRevealCanonicalHost;
+  const shouldSuppressPosterBackedWarmupPreviewVideo = shouldUseHiddenStageCover &&
+    hasStablePreviewPosterSurface && !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame && !hasKnownReadyPreviewFrame;
+  const shouldRenderPreviewVideo = shouldRenderPreviewVideoByBudget &&
+    !shouldSuppressPosterBackedWarmupPreviewVideo &&
     !shouldSuppressWrongTimePreviewVideo &&
     !shouldRenderVisibleCanonicalHost &&
-    (!isRecentOwnerContinuityBridge ||
-      shouldRenderReleasedOwnerPreviewVideo ||
-      shouldKeepExistingPreviewDomForRetiringOwner);
-  const shouldRenderFrozenTimelineFrame =
-    hasFrozenTimelineFrame &&
-    !hasCurrentDomPreviewFrame &&
-    (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
-  const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup =
-    shouldRenderInlineVideo && shouldRenderPreviewVideo && shouldRenderStageHost &&
-    shouldShowFirstFrameGuard && !hasStablePreviewPosterSurface &&
-    !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
+    (!isRecentOwnerContinuityBridge || shouldRenderReleasedOwnerPreviewVideo || shouldKeepExistingPreviewDomForRetiringOwner);
+  const shouldRenderFrozenTimelineFrame = hasFrozenTimelineFrame &&
+    !hasCurrentDomPreviewFrame && (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
+  const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup = shouldRenderInlineVideo &&
+    shouldRenderPreviewVideo && shouldRenderStageHost && shouldShowFirstFrameGuard &&
+    !hasStablePreviewPosterSurface && !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
   const shouldRenderCanonicalLoadingPosterCover =
     shouldRenderInlineVideo &&
     !shouldPreferRetiringOwnerPreviewSurface &&

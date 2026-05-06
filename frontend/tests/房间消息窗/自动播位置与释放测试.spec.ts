@@ -61,9 +61,11 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
     };
     document.body.appendChild(pane);
     await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const beforeRemountVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+      'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
     );
     expect(beforeRemountVideo).not.toBeNull();
     beforeRemountVideo!.currentTime = 18.25;
@@ -81,9 +83,11 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
 
     pane.items = [创建单视频消息("m-video-after")];
     await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const afterRemountVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+      'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
     );
     expect(afterRemountVideo).not.toBeNull();
     expect(afterRemountVideo).toBe(beforeRemountVideo);
@@ -441,9 +445,10 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
       pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
       await pane.updateComplete;
       await 等待时间线唯一播放器挂载(pane);
+      await 驱动时间线Canonical就绪(pane, "att-video-1");
 
       const ownerVideo = pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]'
+        'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
       );
       expect(ownerVideo).not.toBeNull();
       ownerVideo!.currentTime = 10;
@@ -504,9 +509,11 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
       pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
       document.body.appendChild(pane);
       await pane.updateComplete;
+      await 等待时间线唯一播放器挂载(pane);
+      await 驱动时间线Canonical就绪(pane, "att-video-1");
 
       const ownerVideo = pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]'
+        'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
       );
       expect(ownerVideo).not.toBeNull();
 
@@ -572,12 +579,14 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
       };
       document.body.appendChild(pane);
       await pane.updateComplete;
+      await 等待时间线唯一播放器挂载(pane);
+      await 驱动时间线Canonical就绪(pane, "att-video-1");
 
       const pauseSpy = vi
         .spyOn(HTMLMediaElement.prototype, "pause")
         .mockImplementation(() => undefined);
       const ownerVideo = pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]'
+        'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
       );
       expect(ownerVideo).not.toBeNull();
       ownerVideo!.currentTime = 42.5;
@@ -642,9 +651,11 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
 
     document.body.appendChild(pane);
     await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
 
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+      'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
     );
     expect(ownerVideo).not.toBeNull();
     Object.defineProperty(ownerVideo!, "currentSrc", {

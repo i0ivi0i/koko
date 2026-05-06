@@ -40,6 +40,9 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
     const visibleHost = pane.querySelector<HTMLElement>(
       '.message-video-canonical-host[data-attachment-id="att-video-initial-hidden"]'
     );
+    const hiddenStageHost = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-stage-host[data-attachment-id="att-video-initial-hidden"]'
+    );
     const poster = pane.querySelector<HTMLImageElement>(
       'img.message-video-poster[data-attachment-id="att-video-initial-hidden"]'
     );
@@ -47,7 +50,8 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
       'video.message-video-preview[data-attachment-id="att-video-initial-hidden"]:not([data-canonical-player="true"])'
     );
 
-    expect(visibleHost).not.toBeNull();
+    expect(visibleHost).toBeNull();
+    expect(hiddenStageHost).not.toBeNull();
     expect(extraPreviewVideo).toBeNull();
     expect(poster?.getAttribute("src")).toBe(playback.thumbnailUrl);
     expect(poster?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
@@ -255,7 +259,12 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
       'video.message-video-preview[data-attachment-id="att-video-2"]'
     );
     expect(切换前预览视频).not.toBeNull();
+    Object.defineProperty(切换前预览视频!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
     切换前预览视频!.dispatchEvent(new Event("loadedmetadata"));
+    切换前预览视频!.dispatchEvent(new Event("loadeddata"));
     const 切换前预览时间 = 切换前预览视频!.currentTime;
 
     同步时间线自动播Spy.mockClear();
@@ -470,7 +479,7 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
     ).toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       pane.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'

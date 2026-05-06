@@ -8,6 +8,8 @@ import {
   安装消息窗直达全屏模拟,
   创建媒体消息窗,
   创建媒体消息项,
+  等待时间线唯一播放器挂载,
+  驱动时间线Canonical就绪,
 } from "../common/房间消息窗媒体支架";
 
 describe("房间消息窗媒体查看器 - 媒体错误恢复信号", () => {
@@ -339,11 +341,13 @@ describe("房间消息窗媒体查看器 - 媒体错误恢复信号", () => {
     });
     document.body.appendChild(pane);
     await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
     // 自动播 owner 可能在挂载后立即回抛一次 PLAYER_PLAYING，这里清空只看 error 语义。
     信号记录.length = 0;
 
     const preview = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+      'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
     );
     expect(preview).not.toBeNull();
 

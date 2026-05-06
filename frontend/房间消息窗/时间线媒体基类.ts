@@ -44,6 +44,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     { src: string; currentTime: number; reportedAt: number }
   >();
   protected readonly 时间线唯一播放器可见接管就绪源 = new Map<string, string>();
+  protected readonly 时间线唯一播放器待提交接管源 = new Map<string, string>();
   protected 时间线隐藏接管附件Id: string | null = null;
   protected 最近退场Owner附件Id: string | null = null;
 
@@ -111,6 +112,11 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
       if (!当前视频附件.has(attachmentId)) {
         this.时间线唯一播放器可见接管就绪源.delete(attachmentId);
+      }
+    }
+    for (const attachmentId of this.时间线唯一播放器待提交接管源.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.时间线唯一播放器待提交接管源.delete(attachmentId);
       }
     }
     for (const attachmentId of this.自动播位置上报记录.keys()) {
@@ -242,9 +248,25 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     attachmentId: string,
     video: HTMLVideoElement
   ): void {
+    const 提交可见接管就绪 = (normalizedSrc: string): void => {
+      if (this.时间线唯一播放器可见接管就绪源.get(attachmentId) === normalizedSrc) {
+        return;
+      }
+      this.时间线唯一播放器可见接管就绪源.set(attachmentId, normalizedSrc);
+      this.requestUpdate();
+      /**
+       * reveal gate 打开后，真正的可见 canonical host 是在下一轮 Lit 更新里才会进入 DOM。
+       * 单靠 `requestUpdate()` 不会触发 `同步时间线自动播播放状态()` 的属性变更分支，
+       * 所以这里要在更新完成后显式再同步一次唯一播放器宿主，把同一颗壳从 hidden stage 迁回可见卡片。
+       */
+      void this.updateComplete.then(() => {
+        this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
+      });
+    };
     const currentSrc = this.读取视频当前播放源(video);
     const normalizedSrc = this.归一化时间线视频播放源(currentSrc);
     if (!normalizedSrc || video.seeking) {
+      this.时间线唯一播放器待提交接管源.delete(attachmentId);
       return;
     }
     const 最低可见接管就绪状态 =
@@ -256,6 +278,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
        * 2. `HAVE_FUTURE_DATA` 对应 `canplay` 语义，更接近“揭帘后用户不会先看到一次卡顿”；
        * 3. 这条门槛只影响 reveal，不影响后台 source/time 对齐，所以不会把播放真相拆成第二套。
        */
+      this.时间线唯一播放器待提交接管源.delete(attachmentId);
       return;
     }
     /**
@@ -266,21 +289,47 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
      */
     const position = this.读取自动播恢复位置(attachmentId, currentSrc);
     if (position && Math.abs(video.currentTime - position.currentTime) >= 0.25) {
+      this.时间线唯一播放器待提交接管源.delete(attachmentId);
       return;
     }
     if (this.时间线唯一播放器可见接管就绪源.get(attachmentId) === normalizedSrc) {
+      this.时间线唯一播放器待提交接管源.delete(attachmentId);
       return;
     }
-    this.时间线唯一播放器可见接管就绪源.set(attachmentId, normalizedSrc);
-    this.requestUpdate();
     /**
-     * reveal gate 打开后，真正的可见 canonical host 是在下一轮 Lit 更新里才会进入 DOM。
-     * 单靠 `requestUpdate()` 不会触发 `同步时间线自动播播放状态()` 的属性变更分支，
-     * 所以这里要在更新完成后显式再同步一次唯一播放器宿主，把同一颗壳从 hidden stage 迁回可见卡片。
+     * `canplay/seeked/playing` 仍只是“浏览器说这条 video 可以继续了”，
+     * 不是“这张卡已经真正拿到一帧可见像素”：
+     * 1. 进入自动播时，如果只凭 readyState 立刻揭帘，用户会先看到一拍黑壳；
+     * 2. `requestVideoFrameCallback()` 回来的时点更接近“这帧已经提交给合成器”，
+     *    也就是 reveal gate 真正应该吃的事实；
+     * 3. 这里继续保持单一真相：还是同一颗 canonical player，只是把“允许露出来”的裁决延后到首帧真正提交之后。
      */
-    void this.updateComplete.then(() => {
-      this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
-    });
+    if ("requestVideoFrameCallback" in video && typeof video.requestVideoFrameCallback === "function") {
+      if (this.时间线唯一播放器待提交接管源.get(attachmentId) === normalizedSrc) {
+        return;
+      }
+      this.时间线唯一播放器待提交接管源.set(attachmentId, normalizedSrc);
+      video.requestVideoFrameCallback(() => {
+        if (this.时间线唯一播放器待提交接管源.get(attachmentId) !== normalizedSrc) {
+          return;
+        }
+        this.时间线唯一播放器待提交接管源.delete(attachmentId);
+        if (!video.isConnected || video.seeking) {
+          return;
+        }
+        const 最新源 = this.归一化时间线视频播放源(this.读取视频当前播放源(video));
+        if (最新源 !== normalizedSrc) {
+          return;
+        }
+        const 最新位置 = this.读取自动播恢复位置(attachmentId, this.读取视频当前播放源(video));
+        if (最新位置 && Math.abs(video.currentTime - 最新位置.currentTime) >= 0.25) {
+          return;
+        }
+        提交可见接管就绪(normalizedSrc);
+      });
+      return;
+    }
+    提交可见接管就绪(normalizedSrc);
   }
 
   protected 揭开已就绪的时间线隐藏接管宿主(): void {

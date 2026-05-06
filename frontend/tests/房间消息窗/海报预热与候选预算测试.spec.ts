@@ -218,11 +218,57 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
       )
     ).not.toBeNull();
 
+    let 首帧提交回调:
+      | ((now: number, metadata: VideoFrameCallbackMetadata) => void)
+      | null = null;
+    Object.defineProperty(隐藏预热视频!, "requestVideoFrameCallback", {
+      configurable: true,
+      value: ((callback: (now: number, metadata: VideoFrameCallbackMetadata) => void) => {
+        首帧提交回调 = callback;
+        return 1;
+      }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
+    });
     Object.defineProperty(隐藏预热视频!, "readyState", {
       configurable: true,
       value: 3,
     });
     隐藏预热视频!.dispatchEvent(new Event("canplay"));
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    /**
+     * 进入自动播时真正需要的是“这帧已经提交给屏幕”，而不是只收到了 canplay：
+     * 1. hidden stage 的 canonical video 可能已经 readyState=3，但可见宿主上的第一帧还没真正贴出来；
+     * 2. 如果这时就把 stage host 切成 visible host，用户就会看到一拍黑壳；
+     * 3. 所以 RVFC 回来前仍必须继续藏在 stage host 里。
+     */
+    expect(首帧提交回调).not.toBeNull();
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
+    ).toBeNull();
+    expect(
+      pane.querySelector(
+        '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
+      )
+    ).not.toBeNull();
+
+    const 已登记首帧提交回调 =
+      首帧提交回调 as unknown as (
+        now: number,
+        metadata: VideoFrameCallbackMetadata
+      ) => void;
+    已登记首帧提交回调(0, {
+      presentedFrames: 1,
+      expectedDisplayTime: 0,
+      presentationTime: 0,
+      width: 320,
+      height: 180,
+      mediaTime: 22.5,
+      processingDuration: 0,
+      captureTime: 0,
+      receiveTime: 0,
+      rtpTimestamp: 0,
+    } as VideoFrameCallbackMetadata);
     await pane.updateComplete;
     await 等待时间线唯一播放器挂载(pane);
 
@@ -561,16 +607,26 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     };
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
 
-    const ownerVideo = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    const ownerWarmupVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
-    expect(ownerVideo).not.toBe(previewVideo);
-    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
-    expect(ownerVideo?.autoplay).toBe(true);
+    expect(ownerWarmupVideo).toBeNull();
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(
+      pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
+
+    const ownerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
+    expect(ownerVideo).not.toBe(previewVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
+    expect(ownerVideo?.autoplay).toBe(true);
 
     pane.remove();
   });
