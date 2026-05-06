@@ -9,6 +9,10 @@ export type 播放连续性阶段 =
   | "fullscreenHandoff"
   | "retired";
 
+export type 播放连续性帧证据 =
+  | { kind: "none" }
+  | { kind: "preview_dom" | "frozen_frame" | "canonical_frame"; src: string; currentTime: number };
+
 export interface 播放连续性输入 {
   attachmentId: string;
   ownerAttachmentId: string | null;
@@ -17,6 +21,7 @@ export interface 播放连续性输入 {
   savedPosition: { src: string; currentTime: number; updatedAt: number } | null;
   dom: { previewReadyState: number; canonicalReadyState: number; sourceMatches: boolean };
   host: { exists: boolean; hasStableFrame: boolean };
+  frameEvidence: 播放连续性帧证据;
   intent: { viewerOpen: boolean; fullscreen: boolean; retire?: boolean };
 }
 
@@ -26,12 +31,19 @@ export type 播放连续性决策 =
       kind: "cold_placeholder";
       reason: "no_source" | "no_position" | "host_missing";
     }
-  | { phase: "pausedFrame"; kind: "hold_frame"; src: string | null }
+  | {
+      phase: "pausedFrame";
+      kind: "hold_frame";
+      src: string | null;
+      targetCurrentTime: number;
+    }
   | { phase: "hiddenHandoff"; kind: "hidden_handoff"; targetCurrentTime: number }
   | { phase: "visible"; kind: "visible_canonical"; targetCurrentTime: number }
   | { phase: "viewerHandoff"; kind: "viewer_handoff"; targetCurrentTime: number }
   | { phase: "fullscreenHandoff"; kind: "fullscreen_handoff"; targetCurrentTime: number }
   | { phase: "retired"; kind: "retire" };
+
+const 暂停帧允许时间偏差秒 = 0.75;
 
 const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性输入["savedPosition"] => {
   if (!input.source.src || !input.savedPosition) {
@@ -53,6 +65,28 @@ const 读取同源保存位置 = (input: 播放连续性输入): 播放连续性
     return null;
   }
   return input.savedPosition;
+};
+
+const 读取可用帧证据 = (
+  input: 播放连续性输入,
+  savedPosition: 播放连续性输入["savedPosition"]
+): Exclude<播放连续性帧证据, { kind: "none" }> | null => {
+  if (!input.source.src || input.frameEvidence.kind === "none") {
+    return null;
+  }
+  const isSameSource =
+    input.frameEvidence.src === input.source.src || input.dom.sourceMatches;
+  if (!isSameSource || !Number.isFinite(input.frameEvidence.currentTime)) {
+    return null;
+  }
+  if (
+    savedPosition &&
+    Math.abs(input.frameEvidence.currentTime - savedPosition.currentTime) >
+      暂停帧允许时间偏差秒
+  ) {
+    return null;
+  }
+  return input.frameEvidence;
 };
 
 const 读取冷占位理由 = (
@@ -83,8 +117,11 @@ export const 播放连续性机 = Object.freeze({
 export const 判定播放连续性表面 = (input: 播放连续性输入): 播放连续性决策 => {
   const savedPosition = 读取同源保存位置(input);
   const targetCurrentTime = savedPosition?.currentTime ?? 0;
+  const frameEvidence = 读取可用帧证据(input, savedPosition);
   const hasContinuityEvidence =
-    Boolean(savedPosition) || (input.dom.sourceMatches && input.host.hasStableFrame);
+    Boolean(savedPosition) ||
+    Boolean(frameEvidence) ||
+    (input.dom.sourceMatches && input.host.hasStableFrame);
   if (input.intent.retire === true) {
     return { phase: "retired", kind: "retire" };
   }
@@ -105,11 +142,21 @@ export const 判定播放连续性表面 = (input: 播放连续性输入): 播�
     return { phase: "visible", kind: "visible_canonical", targetCurrentTime };
   }
   if (
+    Boolean(frameEvidence) &&
     input.host.hasStableFrame &&
     input.dom.sourceMatches &&
     input.dom.previewReadyState >= 2
   ) {
-    return { phase: "pausedFrame", kind: "hold_frame", src: input.source.src };
+    /**
+     * `hold_frame` 不是“随便有一帧就行”，而是“当前这张稳定帧是在为哪一个续播时间点兜底”。
+     * 后续渲染层和唯一播放器都要靠这个时间事实判断能不能无闪烁接回同一条会话。
+     */
+    return {
+      phase: "pausedFrame",
+      kind: "hold_frame",
+      src: input.source.src,
+      targetCurrentTime,
+    };
   }
   return { phase: "hiddenHandoff", kind: "hidden_handoff", targetCurrentTime };
 };

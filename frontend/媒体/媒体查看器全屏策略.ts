@@ -187,6 +187,14 @@ export const 启动同会话全屏策略 = (
         exists: container.isConnected,
         hasStableFrame: video.readyState >= 2 || Boolean(currentPosition),
       },
+      frameEvidence:
+        Boolean(currentSrc) && video.readyState >= 2 && Number.isFinite(video.currentTime)
+          ? {
+              kind: "canonical_frame",
+              src: currentSrc,
+              currentTime: video.currentTime,
+            }
+          : { kind: "none" },
       intent: { viewerOpen: false, fullscreen: true },
     });
     if (decision.kind === "cold_placeholder" || decision.kind === "retire") {

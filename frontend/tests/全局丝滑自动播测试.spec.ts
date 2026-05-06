@@ -16,6 +16,7 @@ const 基础输入: 播放连续性输入 = {
   savedPosition: { src: "blob:webtorrent/att-1", currentTime: 18, updatedAt: 1 },
   dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
   host: { exists: true, hasStableFrame: true },
+  frameEvidence: { kind: "none" },
   intent: { viewerOpen: false, fullscreen: false },
 };
 
@@ -47,12 +48,36 @@ describe("全局丝滑自动播", () => {
     const decision = 判定播放连续性表面({
       ...基础输入,
       dom: { previewReadyState: 2, canonicalReadyState: 0, sourceMatches: true },
+      frameEvidence: {
+        kind: "preview_dom",
+        src: "blob:webtorrent/att-1",
+        currentTime: 18,
+      },
     });
 
     expect(decision).toMatchObject({
       phase: "pausedFrame",
       kind: "hold_frame",
       src: "blob:webtorrent/att-1",
+      targetCurrentTime: 18,
+    });
+  });
+
+  it("preview DOM 虽已出首帧，但帧时间还没追上续播点时不能误判成暂停帧", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      dom: { previewReadyState: 2, canonicalReadyState: 0, sourceMatches: true },
+      frameEvidence: {
+        kind: "preview_dom",
+        src: "blob:webtorrent/att-1",
+        currentTime: 0,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "hiddenHandoff",
+      kind: "hidden_handoff",
+      targetCurrentTime: 18,
     });
   });
 

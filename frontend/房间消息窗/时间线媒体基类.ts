@@ -463,21 +463,28 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     attachmentId: string,
     src: string | null
   ): boolean {
+    return Boolean(this.读取时间线现有预览帧证据(attachmentId, src));
+  }
+
+  protected 读取时间线现有预览帧证据(
+    attachmentId: string,
+    src: string | null
+  ): { src: string; currentTime: number } | null {
     const normalizedExpectedSrc = this.归一化时间线视频播放源(src);
     if (!normalizedExpectedSrc) {
-      return false;
+      return null;
     }
     const previewVideo = this.querySelector<HTMLVideoElement>(
       `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
     );
     if (!previewVideo || !previewVideo.isConnected) {
-      return false;
+      return null;
     }
     const normalizedCurrentSrc = this.归一化时间线视频播放源(
       this.读取视频当前播放源(previewVideo)
     );
     if (normalizedCurrentSrc !== normalizedExpectedSrc) {
-      return false;
+      return null;
     }
     /**
      * 当前 DOM 自己回抛过首帧事件时，优先认这颗节点留下的 ready-src 证明：
@@ -490,7 +497,9 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       previewVideo.dataset.previewReadySrc === normalizedExpectedSrc &&
       previewVideo.dataset.previewSrc === normalizedExpectedSrc
     ) {
-      return true;
+      return Number.isFinite(previewVideo.currentTime)
+        ? { src: normalizedExpectedSrc, currentTime: previewVideo.currentTime }
+        : null;
     }
     /**
      * 真实浏览器里，非 owner 的 preview `<video>` 可能已经拿到首帧，
@@ -498,7 +507,9 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
      * 这里补看 DOM 现状，避免“明明已经有稳定可见帧，却因为缓存慢一拍而直接显露 canonical host”。
      * `currentTime > 0` 只能说明 seek 目标已写入，不能证明当前 DOM 已有可展示像素。
      */
-    return previewVideo.readyState >= 2;
+    return previewVideo.readyState >= 2 && Number.isFinite(previewVideo.currentTime)
+      ? { src: normalizedExpectedSrc, currentTime: previewVideo.currentTime }
+      : null;
   }
 
   protected 恢复时间线自动播播放位置(

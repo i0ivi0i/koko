@@ -135,6 +135,14 @@ const 应用查看器播放连续性 = (
       exists: video.isConnected,
       hasStableFrame: sourceMatches || video.readyState >= 2,
     },
+    frameEvidence:
+      sourceMatches && video.readyState >= 2 && Number.isFinite(video.currentTime)
+        ? {
+            kind: "canonical_frame",
+            src: currentSrc,
+            currentTime: video.currentTime,
+          }
+        : { kind: "none" },
     intent: { viewerOpen: true, fullscreen: false },
   });
   if (

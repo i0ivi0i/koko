@@ -6,6 +6,7 @@ import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 信息流视频预算投影 } from "../媒体/信息流视频预算.js";
+import { 默认视频清单占位Poster } from "./视频表面占位.js";
 import type { 消息展示项 } from "./视图.js";
 
 export type 时间线自动播冻结帧 = {
@@ -14,21 +15,6 @@ export type 时间线自动播冻结帧 = {
   dataUrl: string;
   updatedAt: number;
 };
-
-export const 默认视频清单占位Poster =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
-      <defs>
-        <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stop-color="#1f2937"/>
-          <stop offset="100%" stop-color="#111827"/>
-        </linearGradient>
-      </defs>
-      <rect width="320" height="180" fill="url(#bg)"/>
-      <circle cx="160" cy="90" r="34" fill="rgba(255,255,255,0.18)"/>
-    </svg>
-  `);
 
 export type 时间线视频附件 = Extract<
   消息展示项["attachments"][number],
@@ -62,6 +48,10 @@ export type 视频附件渲染宿主 = {
   读取时间线唯一播放器是否可见接管就绪(attachmentId: string, src: string | null): boolean;
   读取自动播恢复位置(attachmentId: string, src: string | null): 媒体播放位置 | null;
   读取时间线现有预览视频是否可继续显示(attachmentId: string, src: string | null): boolean;
+  读取时间线现有预览帧证据(
+    attachmentId: string,
+    src: string | null
+  ): { src: string; currentTime: number } | null;
   读取时间线自动播冻结帧(
     attachmentId: string,
     src: string | null,
@@ -181,6 +171,10 @@ export const 渲染视频附件 = (
   );
   const isRecentlyReleasedOwnerWithPosition =
     attachment.attachmentId === context.最近退场Owner附件Id;
+  const previewFrameEvidence = context.读取时间线现有预览帧证据(
+    attachment.attachmentId,
+    previewVideoSrc
+  );
   const hasExistingSameSourcePreviewFrame =
     context.读取时间线现有预览视频是否可继续显示(
       attachment.attachmentId,
@@ -235,10 +229,24 @@ export const 渲染视频附件 = (
         shouldReuseSavedTimelineFrameAsPreview ||
         hasHistoricalCanonicalReveal,
     },
+    frameEvidence: frozenTimelineFrame
+      ? {
+          kind: "frozen_frame",
+          src: frozenTimelineFrame.src,
+          currentTime: frozenTimelineFrame.currentTime,
+        }
+      : previewFrameEvidence
+        ? {
+            kind: "preview_dom",
+            src: previewFrameEvidence.src,
+            currentTime: previewFrameEvidence.currentTime,
+          }
+        : { kind: "none" },
     intent: { viewerOpen: false, fullscreen: false },
   });
   const shouldSuppressPosterForContinuity =
-    (shouldReuseSavedTimelineFrameAsPreview ||
+    (Boolean(restorableTimelineFrame) ||
+      shouldReuseSavedTimelineFrameAsPreview ||
       hasFrozenTimelineFrame ||
       hasHistoricalCanonicalReveal) &&
     (playbackContinuityDecision.kind === "hidden_handoff" ||
@@ -275,6 +283,16 @@ export const 渲染视频附件 = (
         hasFrozenTimelineFrame ||
         hasKnownReadyPreviewFrame)) ||
     shouldRenderReleasedOwnerPreviewVideo;
+  /**
+   * 有续播目标但当前 preview 帧还没追上时，继续把这颗 `<video>` 露出来只会让用户先看到错误时间点，
+   * 然后再突然跳到恢复位置。这里直接让它退到 hidden handoff，由同一颗 canonical player 在隐藏宿主里对齐。
+   */
+  const shouldSuppressWrongTimePreviewVideo =
+    shouldRenderInlineVideo &&
+    playbackContinuityDecision.kind === "hidden_handoff" &&
+    Boolean(restorableTimelineFrame) &&
+    (Boolean(previewFrameEvidence) ||
+      (!shouldReuseSavedTimelineFrameAsPreview && !shouldRenderReleasedOwnerPreviewVideo));
   const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
   const shouldShowFirstFrameGuard =
     shouldRenderPreviewVideoByBudget &&
@@ -310,6 +328,7 @@ export const 渲染视频附件 = (
     !shouldStageWarmupColdInitialOwnerCanonical;
   const shouldRenderPreviewVideo =
     shouldRenderPreviewVideoByBudget &&
+    !shouldSuppressWrongTimePreviewVideo &&
     !shouldRenderVisibleCanonicalHost &&
     (!isRecentlyReleasedOwnerWithPosition || shouldRenderReleasedOwnerPreviewVideo);
   const shouldRenderFrozenTimelineFrame =
@@ -326,6 +345,7 @@ export const 渲染视频附件 = (
     !hasFrozenTimelineFrame;
   const shouldRenderCanonicalLoadingPosterCover =
     shouldRenderInlineVideo &&
+    !(playbackContinuityDecision.kind === "hidden_handoff" && Boolean(restorableTimelineFrame)) &&
     !shouldRevealCanonicalHost &&
     !shouldRenderFrozenTimelineFrame &&
     !hasCurrentDomPreviewFrame &&

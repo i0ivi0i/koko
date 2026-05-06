@@ -363,6 +363,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
           this.读取自动播恢复位置(attachmentId, src),
         读取时间线现有预览视频是否可继续显示: (attachmentId, src) =>
           this.读取时间线现有预览视频是否可继续显示(attachmentId, src),
+        读取时间线现有预览帧证据: (attachmentId, src) =>
+          this.读取时间线现有预览帧证据(attachmentId, src),
         读取时间线自动播冻结帧: (attachmentId, src, position) =>
           this.时间线画面缓存Owner.读取自动播冻结帧(attachmentId, src, position),
         读取时间线视频首帧是否就绪: (attachmentId, src) =>
