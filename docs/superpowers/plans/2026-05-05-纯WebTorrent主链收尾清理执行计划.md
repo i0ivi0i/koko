@@ -1,53 +1,70 @@
-# 纯 WebTorrent 主链收尾清理 Implementation Plan
+# 纯 WebTorrent 主链最终收尾 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把新附件正式媒体字节彻底收口到唯一 WebTorrent 主链，删掉视频 `anchor/origin` 正式回退、把图片 `blob/canonical` 降成 legacy 面，并清理 streaming manifest 历史残留。
+**Goal:** 在不引入新 bug、不破坏现有业务的前提下，把新附件正式媒体字节彻底收口到唯一 WebTorrent 主链，并用新的 `1234b` 真实烟测证明收尾完成。
 
-**Architecture:** 这次改动不碰 `domain/application` 的业务真相，主刀落在 `contract / adapter / shell`。后端继续拥有 `complete_at / web_seed_until / availability / delete` 真相，前端只消费唯一 swarm source；所有 HTTP `content/blob/origin` 地址要么退出新附件正式面，要么明确降成 legacy/迁移壳。
+**Architecture:** 本轮只动 `contract / adapter / shell / migration / test`。后端继续拥有 `complete_at / web_seed_until / availability / delete` 这些权威事实，前端继续只围绕唯一 swarm source 组织正式播放和正式查看；任何 HTTP `origin / canonical / blob` 地址，若继续存在，只能是显式 legacy/迁移面，不能再被新附件正式消费者吃进去。
 
 **Tech Stack:** Rust, Axum, SQLx, TypeScript, Vitest, Playwright CLI, browser-trace, WebTorrent, Service Worker
 
 ---
 
+## Reality Check
+
+先把当前真相写死，避免 plan 继续追已经清掉的假残留。
+
+### 已经完成，不再当剩余 blocker
+
+- `frontend/媒体/媒体协作分发.ts` 现在只读 `distribution.web_seed_url`，不再混 `origin.original_url / canonical.url`。
+- `migrations/0001_当前数据库基线.sql` 已经不再声明 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key`。
+- `migrations/0002_删除streaming_manifest历史残留.sql` 已存在，`tests/启动与迁移测试.rs` 也已经钉死这组表不应出现在基线真相里。
+- `frontend/media-sw.ts` 已经明确不再接管 `/api/media/.../blob/canonical` 作为第二正式缓存链。
+- `originalSrc` 生产字段、空 `thumbnailSrc`、伪“contentUrl”命名、`mode: "anchor"` 伪正式语义，已经分别收口成当前状态。
+
+### 当前真正还剩的 2 道门
+
+1. **剩余 legacy 行为面收口**
+   - `frontend/媒体/媒体播放.ts` 仍保留 `legacy_anchor`、`读取锚点地址(...)`、`anchor_unavailable`
+   - `frontend/媒体/适配/媒体HTTP接口.ts` 仍保留 `variants.canonical` / `origin.original_url` 的 legacy 解析面
+   - `src/媒体/资产/外壳.rs` 仍暴露 `/api/media/{attachment}/blob/canonical`
+   - 一大批前端测试夹具和断言仍把 `legacy_anchor` 当现状
+
+2. **新鲜验证和真实烟测闭环**
+   - 前后端全量测试
+   - `graphify update .`
+   - 房间 `1234b` 的 sender / viewer 真实多媒体烟测
+
 ## Scope And Non-Goals
 
-- 只收口**新上传附件**的正式播放/查看主链。
-- legacy 历史附件允许短期保留兼容读取面，但必须被明确隔离，不能再被新附件正式链路消费。
-- 不在本轮顺手改消息、房间、身份等无关 bounded context。
-- 不把“暂时不消费”伪装成“已经清理完成”；没有删掉或隔离完成的残留，必须继续留在 plan 和门禁里。
+- 只收口**新上传附件**的正式播放/正式查看主链。
+- legacy 附件允许短期保留显式隔离读取面，但必须不能被新附件正式路径消费。
+- 不扩大到身份、房间、权限、消息治理等无关 bounded context。
+- 不再把已经解决的 manifest 基线残留重新当成剩余任务；本轮只保留“继续验证它没有回归”。
 
 ## File Map
 
-### Backend
+### Formal-vs-legacy split
 
-- Modify: `src/媒体/资产/响应投影.rs`
-  - 收口新视频 `file_asset.canonical` 投影，禁止继续指向 `/api/attachments/{attachment}/content?...`
-- Modify: `src/媒体/资产/外壳.rs`
-  - 收口 `load_media_locator`、`load_blob_asset_content`、`load_attachment_content` 的正式/legacy 边界
-- Modify: `src/媒体/协作分发/适配.rs`
-  - 隔离或删除 `attachment_streaming_manifests` 相关新主链残留
-- Modify: `src/外壳/mod.rs`
-  - 如有必要，调整 legacy 路由暴露边界
-
-### Frontend
-
-- Modify: `frontend/聊天共享/契约.ts`
-  - 把“正式主链”和“legacy 冷源描述”语义再钉死
 - Modify: `frontend/媒体/媒体播放.ts`
-  - 删除新视频 `anchor` 正式回退；收紧新图片正式读取
-- Modify: `frontend/媒体/媒体协作分发.ts`
-  - 删除对 `origin/canonical/blob` 的第二读取面依赖
+  - 收掉新附件 `legacy_anchor` 正式消费路径
 - Modify: `frontend/媒体/适配/媒体HTTP接口.ts`
-  - 调整 locator/asset 解析，避免继续默认生成第二正式读取面
-- Modify: `frontend/平台/传输.ts`
-  - 收口 `buildAttachmentContentUrl(...)` 的消费边界
+  - 隔离 `variants.canonical / origin.original_url` 的 legacy 解析面
+- Modify: `frontend/聊天共享/契约.ts`
+  - 如有必要，补清晰语义：正式分发表面 vs legacy 冷源描述
+- Modify: `src/媒体/资产/响应投影.rs`
+  - 如后端响应体仍把新视频 canonical/origin 暴露成正式可消费入口，这里要继续收口
+- Modify: `src/媒体/资产/外壳.rs`
+  - 保留或收窄 `/api/media/{attachment}/blob/canonical` 的 legacy 暴露边界
+
+### Presenter / preview / room-shell surfaces
+
 - Modify: `frontend/媒体/壳层/快照投影协作.ts`
-  - 删除新附件 `originalSrc / thumbnailSrc / posterSrc` 正式消费
 - Modify: `frontend/房间消息窗/视图.ts`
-  - 删除旧 fallback 字符串和新附件正式字节入口依赖
-- Modify: `frontend/media-sw.ts`
-  - 图片 blob 缓存面降级为 legacy-only 或直接移除
+- Modify: `frontend/房间消息窗/附件渲染.ts`
+- Modify: `frontend/房间消息窗/视频附件渲染.ts`
+- Modify: `frontend/房间消息窗/时间线媒体基类.ts`
+  - 这些地方只能继续保留 preview/poster/legacy 元数据，不能脑补正式字节入口
 
 ### Tests
 
@@ -56,17 +73,22 @@
 - Modify: `frontend/tests/blob媒体资产测试.spec.ts`
 - Modify: `frontend/tests/传输媒体定位与地址收口测试.spec.ts`
 - Modify: `frontend/tests/媒体服务工作线程测试.spec.ts`
+- Modify: `frontend/tests/媒体会话测试.spec.ts`
+- Modify: `frontend/tests/媒体运行时测试.spec.ts`
 - Modify: `frontend/tests/房间消息窗/*`
 - Modify: `tests/媒体上传测试/单文件主链.rs`
 - Modify: `tests/媒体上传测试/complete_视频与类型守卫.rs`
-- Modify: `tests/协作分发测试/*`
-- Modify: `tests/媒体后台测试/冷源清理.rs`
-- Modify: `tests/测试支撑/媒体/seed.rs`
+- Modify: `tests/媒体上传测试/complete_图片与回执竞争.rs`
 - Modify: `tests/启动与迁移测试.rs`
 
----
+### Verification-only guards
 
-### Task 1: 先把“禁止第二主链”的测试写死
+- Check only: `migrations/0001_当前数据库基线.sql`
+- Check only: `migrations/0002_删除streaming_manifest历史残留.sql`
+- Check only: `tests/启动器脚本检查.ps1`
+- Check only: `qingli.ps1`
+
+## Task 1: 先把当前剩余残留钉成会失败的测试
 
 **Files:**
 - Modify: `frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts`
@@ -74,268 +96,291 @@
 - Modify: `frontend/tests/blob媒体资产测试.spec.ts`
 - Modify: `frontend/tests/传输媒体定位与地址收口测试.spec.ts`
 - Modify: `tests/媒体上传测试/单文件主链.rs`
+- Modify: `tests/媒体上传测试/complete_图片与回执竞争.rs`
 
-- [ ] **Step 1: 为新视频写失败测试，要求 locator 不再把 canonical 指向受控 HTTP 内容地址**
-
-```ts
-expect(locator.file_asset?.variants.canonical?.url).toBeNull();
-```
-
-- [ ] **Step 2: 为新视频写失败测试，要求播放器不再返回 `mode: "anchor"`**
+- [ ] **Step 1: 给新视频写失败测试，要求正式播放结果不再落到 `mode: "legacy_anchor"`**
 
 ```ts
+expect(result.mode).not.toBe("legacy_anchor");
 expect(result.mode).toBe("degraded");
-expect(result.reason).toBe("anchor_unavailable");
 ```
 
-- [ ] **Step 3: 为新图片写失败测试，要求正式显示优先走 swarm，不再把 `blob/canonical` 当正式主链**
+- [ ] **Step 2: 给新视频写失败测试，要求 locator/asset 不再把正式可播放地址指向 `origin.original_url` 或 `variants.canonical.url`**
+
+```rust
+let canonical_url = file_asset["variants"]["canonical"]["url"]
+    .as_str()
+    .unwrap_or_default();
+let origin_url = file_asset["origin"]["original_url"]
+    .as_str()
+    .unwrap_or_default();
+assert!(
+    !canonical_url.contains("/api/attachments/") && !origin_url.contains("/api/attachments/")
+);
+```
+
+- [ ] **Step 3: 给新图片写失败测试，要求正式显示不再把 `/api/media/{attachment}/blob/canonical` 当正式源**
 
 ```ts
-expect(result).toMatchObject({
-  mode: "swarm",
-  formalByteSource: "webtorrent_official_stream",
-});
+expect(formalUrl).toBeNull();
+expect(result.mode).toBe("swarm");
 ```
 
-- [ ] **Step 4: 为 transport 写失败测试，要求新附件 locator 不再把 `/api/attachments/.../content` 绝对化成正式视频 canonical**
+- [ ] **Step 4: 给 transport/adapter 写失败测试，要求 `origin.original_url` 和 `variants.canonical` 只能进入 legacy 语义，不再自动变成正式入口**
 
 Run: `pnpm --dir frontend test -- frontend/tests/传输媒体定位与地址收口测试.spec.ts`
-Expected: FAIL，仍能看到 `content?variant=original` 断言或 fixture 不匹配
 
-- [ ] **Step 5: 跑前端定向测试，确认当前确实先红**
+Expected: FAIL，旧解析面仍把它们喂进正式播放/查看路径
+
+- [ ] **Step 5: 跑前端定向测试，确认当前真的是先红**
 
 Run: `pnpm --dir frontend test -- frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts frontend/tests/blob媒体资产测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts`
-Expected: FAIL，失败点集中在 `anchor/blob canonical/content` 旧口径
 
-- [ ] **Step 6: 跑后端定向测试，确认新视频 canonical 投影旧口径先红**
+Expected: FAIL，失败点集中在 `legacy_anchor / blob canonical / origin canonical` 旧口径
+
+- [ ] **Step 6: 跑后端定向测试，确认视频/图片合同旧口径先红**
 
 Run: `cargo test --test 媒体上传测试 单文件主链 -- --nocapture`
-Expected: FAIL，仍断言/产出 `/api/attachments/.../content`
+
+Expected: FAIL，仍有新附件资产把 HTTP 地址暴露成正式入口
 
 - [ ] **Step 7: 提交测试先红基线**
 
 ```bash
-git add frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts frontend/tests/blob媒体资产测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts tests/媒体上传测试/单文件主链.rs
-git commit -m "测试: 钉死纯WebTorrent主链收尾红线"
+git add frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts frontend/tests/blob媒体资产测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts tests/媒体上传测试/单文件主链.rs tests/媒体上传测试/complete_图片与回执竞争.rs
+git commit -m "测试: 钉死纯WebTorrent剩余legacy残留红线"
 ```
 
-### Task 2: 收掉新视频 `anchor/origin` 正式回退
+## Task 2: 收掉新视频 `legacy_anchor / origin.original_url` 正式回退
 
 **Files:**
-- Modify: `frontend/聊天共享/契约.ts`
 - Modify: `frontend/媒体/媒体播放.ts`
-- Modify: `frontend/媒体/媒体协作分发.ts`
 - Modify: `frontend/媒体/适配/媒体HTTP接口.ts`
+- Modify: `frontend/聊天共享/契约.ts`
 - Modify: `src/媒体/资产/响应投影.rs`
-- Modify: `src/媒体/资产/外壳.rs`
+- Modify: `tests/媒体上传测试/单文件主链.rs`
+- Modify: `tests/媒体上传测试/complete_视频与类型守卫.rs`
 
-- [ ] **Step 1: 调整共享契约，明确新视频正式资产不再依赖 HTTP canonical/origin 字节地址**
-
-```ts
-export interface 单文件视频资产描述 {
-  asset_id: string;
-  content_hash: string;
-  kind: "file_video";
-  variants: {
-    canonical: null;
-  };
-  distribution: 媒体资产分发表面;
-  origin: 媒体冷源描述;
-}
-```
-
-- [ ] **Step 2: 调整后端响应投影，让新视频 `file_asset.canonical` 不再回填受控 HTTP 地址；`origin` 只保留冷备元数据，不再被正式播放链消费**
-
-```rust
-"variants": {
-    "canonical": serde_json::Value::Null,
-},
-"origin": 媒体冷源描述转响应体(...)
-```
-
-- [ ] **Step 3: 调整 `load_media_locator`，不要再把 `原始地址` 当作新视频正式 canonical 输入**
-
-Run: `cargo test --test 媒体上传测试 complete_视频与类型守卫 -- --nocapture`
-Expected: PASS，新视频 locator 仍完整，但不再把 `content` 地址投进正式视频 asset
-
-- [ ] **Step 4: 调整前端 `媒体播放.ts`，让视频路径彻底不再走 `尝试锚点(...)`**
+- [ ] **Step 1: 先把 `读取锚点地址(...)` 拆成显式 legacy helper，不再伪装成统一播放入口**
 
 ```ts
-if (input.kind === "video") {
-  释放协作分发占用(input);
+const 读取Legacy锚点地址 = (locator: 媒体定位结果): string | null =>
+  locator.file_asset?.variants.canonical?.url ??
+  locator.file_asset?.origin.original_url ??
+  locator.blob_asset?.variants?.canonical?.url ??
+  null;
+```
+
+- [ ] **Step 2: 改 `媒体播放.ts`，让新视频路径不再返回 `legacy_anchor`**
+
+```ts
+if (input.kind === "video" && 是新附件(locator)) {
   return 创建降级结果(input, locator, "anchor_unavailable");
 }
 ```
 
-- [ ] **Step 5: 调整 `媒体协作分发.ts` 与 HTTP adapter，删掉对视频 `origin/canonical` 回读**
+- [ ] **Step 3: 保留 `anchor_unavailable` 作为统一降级 reason，不把它再当成第二播放模式**
 
-Run: `pnpm --dir frontend test -- frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts`
-Expected: PASS，视频只剩 swarm 或 degraded
+Run: `pnpm --dir frontend test -- frontend/tests/媒体播放/过期与锚点降级测试.spec.ts`
 
-- [ ] **Step 6: 运行视频主链相关前后端测试**
+Expected: PASS，reason 仍可保留，但 mode 不再回到 legacy 播放
 
-Run: `pnpm --dir frontend test -- frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts`
+- [ ] **Step 4: 调整 adapter/contract，如果新视频 `variants.canonical / origin.original_url` 仍会被默认投进正式合同，这里继续收口**
+
+Run: `pnpm --dir frontend test -- frontend/tests/传输媒体定位与地址收口测试.spec.ts`
+
+Expected: PASS，新视频只剩 swarm 或 degraded
+
+- [ ] **Step 5: 跑视频主链相关前后端测试**
+
+Run: `pnpm --dir frontend test -- frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/媒体播放/过期与锚点降级测试.spec.ts frontend/tests/媒体会话测试.spec.ts frontend/tests/媒体运行时测试.spec.ts`
+
 Expected: PASS
 
-Run: `cargo test --test 媒体上传测试 -- --nocapture`
+Run: `cargo test --test 媒体上传测试 complete_视频与类型守卫 -- --nocapture`
+
 Expected: PASS
 
-- [ ] **Step 7: 提交视频主链收口**
+- [ ] **Step 6: 提交视频正式回退收口**
 
 ```bash
-git add frontend/聊天共享/契约.ts frontend/媒体/媒体播放.ts frontend/媒体/媒体协作分发.ts frontend/媒体/适配/媒体HTTP接口.ts src/媒体/资产/响应投影.rs src/媒体/资产/外壳.rs
-git commit -m "重构: 收掉新视频anchor回退并只保留WebTorrent主链"
+git add frontend/媒体/媒体播放.ts frontend/媒体/适配/媒体HTTP接口.ts frontend/聊天共享/契约.ts src/媒体/资产/响应投影.rs tests/媒体上传测试/单文件主链.rs tests/媒体上传测试/complete_视频与类型守卫.rs
+git commit -m "重构: 收掉新视频legacy锚点正式回退"
 ```
 
-### Task 3: 把新图片正式主链从 `blob/canonical` 拉回 WebTorrent
+## Task 3: 把新图片正式面和 `blob/canonical` 彻底隔开
 
 **Files:**
 - Modify: `frontend/媒体/媒体播放.ts`
-- Modify: `frontend/media-sw.ts`
-- Modify: `frontend/平台/传输.ts`
+- Modify: `frontend/媒体/适配/媒体HTTP接口.ts`
 - Modify: `frontend/媒体/壳层/快照投影协作.ts`
 - Modify: `frontend/房间消息窗/视图.ts`
+- Modify: `src/媒体/资产/外壳.rs`
 - Modify: `frontend/tests/blob媒体资产测试.spec.ts`
 - Modify: `frontend/tests/媒体服务工作线程测试.spec.ts`
-- Modify: `frontend/tests/传输媒体定位与地址收口测试.spec.ts`
+- Modify: `tests/媒体上传测试/complete_图片与回执竞争.rs`
 
-- [ ] **Step 1: 为新图片把 `blob/canonical` 从正式播放结果中降级，保留为 legacy-only**
-
-```ts
-const 读取图片Blob主链 = () => null;
-```
-
-- [ ] **Step 2: 把房间消息窗/快照投影里的 `originalSrc / thumbnailSrc / posterSrc` 改成只服务 legacy 或 preview UI**
+- [ ] **Step 1: 给新图片路径加显式判断，正式显示只认 swarm 或稳定占位，不再退回 `blob/canonical`**
 
 ```ts
-const 正式媒体源 = null;
-const previewSrc = legacyOnly ? originalSrc : null;
+const swarmPlayback = await 尝试协作分发主链(input, locator);
+if (swarmPlayback) {
+  return swarmPlayback;
+}
+if (input.kind === "image" && 是新附件(locator)) {
+  return 创建稳定占位结果(input, locator);
+}
 ```
 
-- [ ] **Step 3: 调整 `buildAttachmentContentUrl(...)` 的消费边界，不再让新附件正式读取依赖它**
-
-Run: `pnpm --dir frontend test -- frontend/tests/传输媒体定位与地址收口测试.spec.ts frontend/tests/blob媒体资产测试.spec.ts`
-Expected: PASS，新图片主链只认 swarm 或稳定占位
-
-- [ ] **Step 4: 调整 `media-sw.ts`，图片 blob 缓存面只保留给 legacy 显式路径，或直接删除**
-
-Run: `pnpm --dir frontend test -- frontend/tests/媒体服务工作线程测试.spec.ts`
-Expected: PASS，service worker 不再把新图片 blob canonical 当正式主链缓存
-
-- [ ] **Step 5: 跑图片相关前端测试**
-
-Run: `pnpm --dir frontend test -- frontend/tests/blob媒体资产测试.spec.ts frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts frontend/tests/媒体服务工作线程测试.spec.ts`
-Expected: PASS
-
-- [ ] **Step 6: 提交图片主链收口**
-
-```bash
-git add frontend/媒体/媒体播放.ts frontend/media-sw.ts frontend/平台/传输.ts frontend/媒体/壳层/快照投影协作.ts frontend/房间消息窗/视图.ts
-git commit -m "重构: 收掉新图片blob canonical正式主链"
-```
-
-### Task 4: 清掉房间消息窗和传输层的第二入口垃圾
-
-**Files:**
-- Modify: `frontend/房间消息窗/视图.ts`
-- Modify: `frontend/媒体/壳层/快照投影协作.ts`
-- Modify: `frontend/平台/传输.ts`
-- Modify: `frontend/tests/房间消息窗/*`
-
-- [ ] **Step 1: 删除 `读取附件内容地址()` 里的旧 fallback 字符串**
-
-```ts
-return attachmentContentAddressMap.get(key) ?? null;
-```
-
-- [ ] **Step 2: 调整消息窗测试，要求新附件缺少正式 swarm source 时显示 degraded/占位，而不是偷偷补 HTTP 地址**
-
-Run: `pnpm --dir frontend test -- frontend/tests/房间消息窗`
-Expected: 先红后绿
-
-- [ ] **Step 3: 跑传输与消息窗相关测试**
-
-Run: `pnpm --dir frontend test -- frontend/tests/传输媒体定位与地址收口测试.spec.ts frontend/tests/房间消息窗`
-Expected: PASS
-
-- [ ] **Step 4: 提交第二入口清理**
-
-```bash
-git add frontend/房间消息窗/视图.ts frontend/媒体/壳层/快照投影协作.ts frontend/平台/传输.ts frontend/tests/房间消息窗
-git commit -m "清理: 删除消息窗与传输层第二媒体入口"
-```
-
-### Task 5: 删除或隔离 streaming manifest 历史残留
-
-**Files:**
-- Modify: `src/媒体/协作分发/适配.rs`
-- Modify: `tests/媒体后台测试/冷源清理.rs`
-- Modify: `tests/协作分发测试/*`
-- Modify: `tests/媒体上传测试/单文件主链.rs`
-- Modify: `tests/媒体上传测试/complete_视频与类型守卫.rs`
-- Modify: `tests/测试支撑/媒体/seed.rs`
-- Modify: `tests/启动与迁移测试.rs`
-- Modify: `migrations/0001_当前数据库基线.sql`
-
-- [ ] **Step 1: 写失败测试，要求新主链路径不再依赖 `attachment_streaming_manifests`**
+- [ ] **Step 2: 保留 `/api/media/{attachment}/blob/canonical`，但把它明确限定成 legacy/迁移读取面**
 
 ```rust
-assert!(!tables.contains(&"attachment_streaming_manifests".to_string()));
+if snapshot.distribution.is_some() {
+    return Err(err_resp(
+        StatusCode::GONE,
+        "legacy_surface_only",
+        "新附件正式图片已切到 WebTorrent 主链，blob canonical 仅保留给 legacy/迁移读取面",
+    ));
+}
 ```
 
-- [ ] **Step 2: 先从新主链 owner 删除读写，再把测试支撑迁到 legacy/显式兼容面或彻底删掉**
+- [ ] **Step 3: 调整 presenter/快照投影，`originalSrc / thumbnailSrc / posterSrc` 只剩 preview 或 legacy 含义**
 
-Run: `cargo test --test 媒体上传测试 -- --nocapture`
-Expected: 先红，表现为 manifest 相关断言/fixture 失配
+Run: `pnpm --dir frontend test -- frontend/tests/blob媒体资产测试.spec.ts frontend/tests/房间消息窗`
 
-- [ ] **Step 3: 更新迁移基线和启动测试，确保 schema 真删掉或已被明确隔离**
+Expected: PASS，消息窗不再把这些字段当正式字节入口
 
-Run: `cargo test --test 启动与迁移测试 -- --nocapture`
+- [ ] **Step 4: 验证 service worker 不再把新图片 blob canonical 当正式缓存面**
+
+Run: `pnpm --dir frontend test -- frontend/tests/媒体服务工作线程测试.spec.ts`
+
 Expected: PASS
 
-- [ ] **Step 4: 运行后端媒体与后台相关回归**
+- [ ] **Step 5: 跑图片相关前后端定向测试**
 
-Run: `cargo test --test 协作分发测试 -- --nocapture`
+Run: `pnpm --dir frontend test -- frontend/tests/blob媒体资产测试.spec.ts frontend/tests/媒体服务工作线程测试.spec.ts frontend/tests/传输媒体定位与地址收口测试.spec.ts frontend/tests/房间消息窗`
+
 Expected: PASS
 
-Run: `cargo test --test 媒体后台测试 -- --nocapture`
+Run: `cargo test --test 媒体上传测试 complete_图片与回执竞争 -- --nocapture`
+
 Expected: PASS
 
-- [ ] **Step 5: 提交 manifest 残留清理**
+- [ ] **Step 6: 提交图片正式面收口**
 
 ```bash
-git add src/媒体/协作分发/适配.rs tests/媒体后台测试/冷源清理.rs tests/协作分发测试 tests/媒体上传测试 tests/测试支撑/媒体/seed.rs tests/启动与迁移测试.rs migrations/0001_当前数据库基线.sql
-git commit -m "清理: 删除新主链streaming manifest历史残留"
+git add frontend/媒体/媒体播放.ts frontend/媒体/适配/媒体HTTP接口.ts frontend/媒体/壳层/快照投影协作.ts frontend/房间消息窗/视图.ts src/媒体/资产/外壳.rs frontend/tests/blob媒体资产测试.spec.ts frontend/tests/媒体服务工作线程测试.spec.ts tests/媒体上传测试/complete_图片与回执竞争.rs
+git commit -m "重构: 隔离新图片blob canonical正式消费"
 ```
 
-### Task 6: 全链路验证与真实烟测
+## Task 4: 把测试夹具和壳层旧假设同步收干净
+
+**Files:**
+- Modify: `frontend/tests/媒体会话测试.spec.ts`
+- Modify: `frontend/tests/媒体运行时测试.spec.ts`
+- Modify: `frontend/tests/common/聊天媒体编排支架.ts`
+- Modify: `frontend/tests/房间消息窗/*`
+- Modify: `frontend/tests/聊天壳/*`
+- Modify: `frontend/tests/聊天应用内核/*`
+
+- [ ] **Step 1: 先清掉“新附件默认会得到 `legacy_anchor`”这类夹具默认值**
+
+```ts
+mode: "degraded"
+```
+
+- [ ] **Step 2: 仅给 legacy 专项用例保留显式 legacy fixture，不再让普通播放/查看测试共享它**
+
+```ts
+const legacyOnlyPlayback = {
+  mode: "legacy_anchor" as const,
+  attachmentId: "att-legacy-video-1",
+  kind: "video" as const,
+  src: "https://legacy.example/media.mp4",
+  thumbnailUrl: null,
+  hint: null,
+};
+```
+
+- [ ] **Step 3: 跑媒体会话/运行时/消息窗相关回归**
+
+Run: `pnpm --dir frontend test -- frontend/tests/媒体会话测试.spec.ts frontend/tests/媒体运行时测试.spec.ts frontend/tests/房间消息窗`
+
+Expected: PASS
+
+- [ ] **Step 4: 提交测试夹具与壳层旧假设清理**
+
+```bash
+git add frontend/tests/媒体会话测试.spec.ts frontend/tests/媒体运行时测试.spec.ts frontend/tests/common/聊天媒体编排支架.ts frontend/tests/房间消息窗 frontend/tests/聊天壳 frontend/tests/聊天应用内核
+git commit -m "测试: 收掉新附件默认legacy锚点假设"
+```
+
+## Task 5: 只验证，不重开已经完成的 manifest 基线工作
+
+**Files:**
+- Check only: `migrations/0001_当前数据库基线.sql`
+- Check only: `migrations/0002_删除streaming_manifest历史残留.sql`
+- Check only: `tests/启动与迁移测试.rs`
+- Check only: `tests/启动器脚本检查.ps1`
+- Check only: `qingli.ps1`
+
+- [ ] **Step 1: 确认基线文件仍不包含 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key`**
+
+Run: `rg -n "attachment_streaming_manifests|hls_master_storage_key|dash_mpd_storage_key" migrations/0001_当前数据库基线.sql`
+
+Expected: no matches
+
+- [ ] **Step 2: 跑启动与迁移测试，确认已经完成的 manifest 清理没有回归**
+
+Run: `cargo test --test 启动与迁移测试 -- --nocapture`
+
+Expected: PASS
+
+- [ ] **Step 3: 跑脚本边界守卫**
+
+Run: `pwsh -File tests/启动器脚本检查.ps1`
+
+Expected: PASS
+
+Run: `pwsh -File qingli.ps1 -Apply -Force`
+
+Expected: PASS
+
+## Task 6: 全量验证与 `1234b` 真实烟测闭环
 
 **Files:**
 - Modify if needed: `docs/superpowers/specs/2026-04-23-WebTorrent满血协同分发要求.md`
 - Modify if needed: `graphify-out/*` via `graphify update .`
 
-- [ ] **Step 1: 运行前端全量测试、类型检查、构建**
+- [ ] **Step 1: 跑前端全量测试**
 
 Run: `pnpm --dir frontend test`
+
 Expected: PASS
 
+- [ ] **Step 2: 跑前端类型检查与构建**
+
 Run: `pnpm --dir frontend typecheck`
+
 Expected: PASS
 
 Run: `pnpm --dir frontend build`
+
 Expected: PASS
 
-- [ ] **Step 2: 运行后端全量测试**
+- [ ] **Step 3: 跑后端全量测试**
 
 Run: `cargo test -j 1`
+
 Expected: PASS
 
-- [ ] **Step 3: 更新知识图**
+- [ ] **Step 4: 更新 graph**
 
 Run: `graphify update .`
-Expected: PASS，无新主链 owner 继续指向 `anchor/blob canonical/manifest`
 
-- [ ] **Step 4: 跑真实浏览器烟测**
+Expected: PASS
+
+- [ ] **Step 5: 启服务并做真实浏览器烟测**
 
 Run:
 
@@ -343,38 +388,39 @@ Run:
 pwsh -File run.ps1
 ```
 
-然后用 `playwright-cli` + `browser-trace` 做以下烟测：
+然后用 `playwright-cli` + `browser-trace` 做以下验证：
 
 - 房间：`1234b`
-- 会话：`sender / A / B / C / D`
-- 新视频：验证时间线、查看器、全屏都命中 `/webtorrent/...`
-- 新图片：验证正式显示来自 WebTorrent 主链或稳定占位，不再读取 `blob/canonical`
-- 后 `24 小时`：验证无在线种子/删除态说真话
+- 会话：至少 `sender / viewer`
+- 新视频：
+  - 时间线自动播命中 `/webtorrent/...`
+  - 查看器继续命中 `/webtorrent/...`
+  - 不出现 `legacy_anchor` 正式消费
+- 新图片：
+  - 正式显示不请求 `/api/media/{attachment}/blob/canonical`
+  - 如尚未具备可解码字节，只出现稳定占位，不偷偷走 HTTP 第二主链
+- 回归面：
+  - 进房正常
+  - 发送图片/视频正常
+  - 查看器/全屏不回归
 
-- [ ] **Step 5: 清理启动残留并确认工作树干净**
+- [ ] **Step 6: 结束前确认工作树干净并提交最终验证**
 
-Run:
+Run: `git status --short`
 
-```powershell
-git status --short
-```
-
-Expected: 空
-
-- [ ] **Step 6: 提交最终验证与文档收口**
+Expected: empty
 
 ```bash
 git add -A
-git commit -m "验证: 收口纯WebTorrent主链并完成全链路烟测"
+git commit -m "验证: 完成纯WebTorrent最终收尾并通过1234b烟测"
 ```
-
----
 
 ## Done When
 
-- 新视频正式播放链不再出现 `mode = "anchor"`。
-- 新视频 `file_asset.canonical.url` 不再回指 `/api/attachments/{attachment}/content?...`。
-- 新图片正式显示不再依赖 `/api/media/{attachment}/blob/canonical` 或 `media-sw.ts` blob 缓存面。
-- `originalSrc / thumbnailSrc / posterSrc` 不再作为新附件正式字节入口。
-- `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 不再挂在新主链 owner 上。
-- 前后端测试、构建、`graphify update .`、真实浏览器烟测全部通过。
+- 新视频正式播放结果不再出现 `mode = "legacy_anchor"`。
+- 新视频正式播放不再把 `origin.original_url / variants.canonical.url` 当可消费正式字节入口。
+- 新图片正式显示不再依赖 `/api/media/{attachment}/blob/canonical`。
+- `originalSrc / thumbnailSrc / posterSrc` 在新附件生产代码里只剩 preview 或 legacy 语义。
+- `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key` 继续保持已完成退场状态，没有回归进基线和脚本。
+- `pnpm --dir frontend test`、`pnpm --dir frontend typecheck`、`pnpm --dir frontend build`、`cargo test -j 1`、`graphify update .`、`pwsh -File tests/启动器脚本检查.ps1`、`pwsh -File qingli.ps1 -Apply -Force` 全部通过。
+- `1234b` 真实烟测继续证明：新视频正式源命中 `/webtorrent/...`，新图片正式面不回 `blob/canonical`。
