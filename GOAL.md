@@ -28,9 +28,9 @@
 - `rg -n "attachment_streaming_manifests|hls_master_storage_key|dash_mpd_storage_key" src tests migrations docs`
 
 当前已确认的三类残留：
-1. 生产适配残留：`frontend/媒体/媒体协作分发.ts` 仍有 `读取协作分发基准地址(...)`，把 `origin.original_url / canonical.url / web_seed_url` 混成一个基准地址。
+1. legacy 播放行为残留：`frontend/媒体/媒体播放.ts` 仍保留 `legacy_anchor`、`读取锚点地址(...)`、`anchor_unavailable` 这组迁移壳；`frontend/媒体/适配/媒体HTTP接口.ts` 仍保留 `origin.original_url` 的 legacy 解析面。
 2. 基线 schema 残留：`migrations/0001_当前数据库基线.sql` 仍声明 `attachment_streaming_manifests / hls_master_storage_key / dash_mpd_storage_key`。
-3. 兼容壳命名残留：前端仍保留 `originalSrc / thumbnailSrc / posterSrc / anchor_unavailable` 等术语，但其中有些是 preview 元数据，有些只是 legacy/test 语义，不能按字符串一刀切。
+3. legacy 图片读取面残留：`src/媒体/资产/外壳.rs` 仍暴露 `/api/media/{attachment}/blob/canonical`；它只能继续作为明确隔离的 legacy/迁移读取面，不能再被新附件正式面消费。
 </context>
 
 <constraints>
@@ -52,10 +52,11 @@
 </constraints>
 
 <done_when>
-- `frontend/媒体/媒体协作分发.ts` 不再把 `origin.original_url / canonical.url / web_seed_url` 混成单一“基准地址”真相；新附件正式协作链路只认分发表面，legacy/冷备若保留必须显式隔离命名。
+- `frontend/媒体/媒体播放.ts` 的 `legacy_anchor` 行为面被删除或继续缩到明确 legacy 隔离层；新附件正式播放结果不再落到任何 `legacy_anchor / origin.original_url / canonical` 兼容路径。
 - `migrations/0001_当前数据库基线.sql` 不再创建 `attachment_streaming_manifests` 及其 `hls_master_storage_key / dash_mpd_storage_key`，并且新环境启动/迁移测试仍通过。
 - 新附件生产代码里，`originalSrc / thumbnailSrc` 只剩 preview/legacy 含义，不再有任何正式播放/正式查看消费者。
 - `posterSrc` 若保留，只能是显示元数据；不再被误写成“正式字节入口”。
+- `/api/media/{attachment}/blob/canonical` 若继续保留，只能被 legacy 附件或明确迁移测试消费；新附件正式图片显示不再走这条读取面。
 - 与本轮清理直接相关的定向测试先红后绿，再通过全量验证。
 - `pnpm --dir frontend test` 通过。
 - `pnpm --dir frontend typecheck` 通过。
@@ -72,9 +73,9 @@
 1. 先做残留分类审计：把每个旧词/旧路径判成“正式字节面 / 传输面 / 控制面 / 纯预览面 / legacy 面 / 测试支架”。
 2. RED 第一阶段：给基线 schema 与清理脚本补失败测试，要求 removed manifest 不再出现在基线真相和清理 SQL 中。
 3. GREEN 第一阶段：同步清掉基线 schema 残留，保持启动与迁移链路全绿。
-4. RED 第二阶段：给 `读取协作分发基准地址(...)` 补失败测试，要求新附件不会再从 `origin/canonical` 混出正式协作地址。
-5. GREEN 第二阶段：把该适配层拆成明确的 swarm/legacy/cold-backup 语义，避免第二真相重新长回来。
-6. RED 第三阶段：给消息窗 / viewer / autoplay 的 presenter 元数据补失败测试，要求 `originalSrc / thumbnailSrc` 只作为 preview/legacy 数据存在。
+4. RED 第二阶段：给 `legacy_anchor / 读取锚点地址 / anchor_unavailable` 补失败测试，要求新附件不再落入任何正式兼容锚点路径。
+5. GREEN 第二阶段：把前端 legacy 播放降级面继续删除或压缩到明确隔离层，避免第二真相重新长回来。
+6. RED 第三阶段：给图片 `blob/canonical` legacy 读取面和 presenter 元数据补失败测试，要求 `originalSrc / thumbnailSrc` 只作为 preview/legacy 数据存在，新附件正式图片不再消费 canonical 读取面。
 7. GREEN 第三阶段：删除或隔离仍会把它们当正式入口的生产消费者；保留必要的 `posterSrc` 视觉连续性用法。
 8. REFACTOR：删重复判断、误导性命名和已无消费者的 legacy 胶水；不碰无关 context。
 9. 跑全量验证与真实烟测；若失败，回到唯一 owner/唯一真相处修，不打表面补丁。
