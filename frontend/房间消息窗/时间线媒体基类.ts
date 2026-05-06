@@ -535,6 +535,23 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     if (!position || Math.abs(video.currentTime - position.currentTime) < 0.25) {
       return;
     }
+    /**
+     * 滚动 / resize 期间，当前 owner 仍可能在同一颗 live video 上继续自然前进，
+     * 而位置快照由于节流会短暂落后几十到几百毫秒。
+     * 这时如果继续拿旧快照回灌，就会把正在播放的画面硬拉回旧时间点，直接造成“边播边抽”。
+     *
+     * 允许的恢复只有两种：
+     * 1. 冷启动 / hidden handoff / DOM 重挂载时，把 0.x 或更早的位置拉到目标续播点；
+     * 2. `allowPreviewFrame` 的非 owner 续帧桥，只为静态预览帧对齐，不参与 live 回放。
+     */
+    if (
+      !options.allowPreviewFrame &&
+      !video.paused &&
+      Number.isFinite(video.currentTime) &&
+      video.currentTime > position.currentTime
+    ) {
+      return;
+    }
     try {
       video.currentTime = position.currentTime;
     } catch {

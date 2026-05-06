@@ -14,6 +14,61 @@ import {
 describe("媒体查看器适配器 - 全局播放器归位与时间线交接", () => {
   afterEach(清理媒体查看器测试环境);
 
+  it("同一时间线 owner 与 source 再次同步时，不会把活着的 canonical 视频回灌到旧位置", async () => {
+    const inlineMount = document.createElement("div");
+    document.body.append(inlineMount);
+    let 最新位置: 媒体播放位置 = {
+      src: "blob:http://media.local/inline-stable-1",
+      currentTime: 6.5,
+      updatedAt: 1_000,
+    };
+    const 恢复播放位置 = vi.fn((video: HTMLVideoElement) => {
+      video.currentTime = 最新位置.currentTime;
+    });
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+    const 时间线输入 = {
+      attachmentId: "att-inline-stable-1",
+      mountTarget: inlineMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-stable-1",
+        posterSrc: "http://media.local/poster-inline-stable-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置,
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    globalVideoPlayer.同步时间线自动播(时间线输入);
+    await 等待查看器任务完成(6);
+
+    const inlineVideo = inlineMount.querySelector<HTMLVideoElement>("video");
+    expect(inlineVideo).not.toBeNull();
+    expect(恢复播放位置).toHaveBeenCalledTimes(1);
+    inlineVideo!.currentTime = 6.9;
+    Object.defineProperty(inlineVideo!, "paused", {
+      configurable: true,
+      get: () => false,
+    });
+
+    globalVideoPlayer.同步时间线自动播({
+      ...时间线输入,
+    });
+    await 等待查看器任务完成(6);
+
+    expect(inlineVideo!.currentTime).toBeCloseTo(6.9, 2);
+    expect(恢复播放位置).toHaveBeenCalledTimes(1);
+
+    globalVideoPlayer.销毁();
+  });
+
   it("当前自动播视频退出真全屏后，会沿用 viewer 关闭瞬间的最新时间回到消息流", async () => {
     安装全屏DOM模拟();
     const inlineMount = document.createElement("div");

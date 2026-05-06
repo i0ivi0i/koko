@@ -94,6 +94,70 @@ describe("房间消息窗媒体查看器 - 自动播位置与释放", () => {
     pane.remove();
   });
 
+  it("同一 owner 与 source 仍在稳态播放时，几何更新不能把 currentTime 回写到旧位置", async () => {
+    const pane = 创建媒体消息窗();
+    const 创建单视频消息 = (id: string): 消息展示项 => ({
+      ...创建媒体消息项(),
+      id,
+      attachments: [
+        {
+          kind: "video",
+          attachmentId: "att-video-stable-1",
+          width: 1280,
+          height: 720,
+          displayWidth: 320,
+          displayHeight: 180,
+          posterSrc: null,
+        },
+      ],
+    });
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-stable-1",
+      kind: "video",
+      src: "http://media.local/swarm-stable-1",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建单视频消息("m-video-stable-before")];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-stable-1": autoplayPlayback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-stable-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-stable-1": autoplayPlayback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-stable-1": {
+        src: "http://media.local/swarm-stable-1",
+        currentTime: 6.5,
+        updatedAt: 1,
+      },
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-stable-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    previewVideo!.autoplay = true;
+    previewVideo!.currentTime = 6.9;
+    Object.defineProperty(previewVideo!, "paused", {
+      configurable: true,
+      get: () => false,
+    });
+
+    // 模拟一次虚拟列表 / 几何重算：owner、source、宿主都没变，只是 items 重新走了一轮更新。
+    pane.items = [创建单视频消息("m-video-stable-after")];
+    await pane.updateComplete;
+
+    expect(previewVideo!.currentTime).toBeCloseTo(6.9, 2);
+
+    pane.remove();
+  });
+
   it("同一消息行复用到新附件前，会先释放旧 preview video 源，避免退场 swarm 继续追旧请求", async () => {
     const pane = 创建媒体消息窗();
     const 创建复用单视频消息 = (messageId: string, attachmentId: string): 消息展示项 => ({

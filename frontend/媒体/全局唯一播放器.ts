@@ -487,6 +487,41 @@ export function 创建全局唯一播放器(
         return;
       }
       const 隐藏预热宿主 = 是时间线隐藏预热宿主(当前输入.mountTarget);
+      const 现有视频 = activeShell.读取视频元素();
+      const 当前宿主仍是同一条活时间线 =
+        当前表面 === "inline" &&
+        !隐藏预热宿主 &&
+        现有视频.isConnected &&
+        现有视频.dataset.attachmentId === 当前输入.attachmentId &&
+        当前输入.mountTarget.contains(现有视频) &&
+        是同一播放器播放源(
+          当前输入.source.src,
+          现有视频.currentSrc || 现有视频.getAttribute("src")
+        ) &&
+        !现有视频.paused;
+      if (当前宿主仍是同一条活时间线) {
+        /**
+         * 纯滚动 / resize 会不断把同一条时间线 owner 重新送进同步入口。
+         * 这类几何更新如果再走一遍 mount -> sync source -> restore currentTime，
+         * 就会把正在播放的 canonical 画面硬拉回旧时间点，形成“边播边抽”。
+         *
+         * 这里的 fast path 只覆盖最严格的一种情况：
+         * 1. 同一 attachmentId；
+         * 2. 同一 mountTarget；
+         * 3. 同一 source；
+         * 4. 同一颗 live video 仍在播放。
+         *
+         * 满足这四条时，只需要更新监听绑定和输入引用，不能再做任何播放动作。
+         */
+        解绑当前绑定();
+        配置时间线自动播视频(现有视频, 当前输入.attachmentId, {
+          stageOnly: false,
+        });
+        当前绑定清理 = 绑定时间线自动播信号(现有视频, 当前输入);
+        当前表面 = "inline";
+        待归位附件Id = null;
+        return;
+      }
       解绑当前绑定();
       activeShell.挂载到宿主(当前输入.mountTarget!);
       activeShell.同步(当前输入.source);
