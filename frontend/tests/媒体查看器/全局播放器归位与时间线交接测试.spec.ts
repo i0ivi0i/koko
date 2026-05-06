@@ -69,6 +69,81 @@ describe("媒体查看器适配器 - 全局播放器归位与时间线交接", (
     globalVideoPlayer.销毁();
   });
 
+  it("同一附件已经在可见宿主稳态播放时，短暂出现 hidden stage 宿主也不会把 live player 搬走", async () => {
+    const visibleMount = document.createElement("div");
+    const hiddenStageMount = document.createElement("div");
+    hiddenStageMount.className = "message-video-canonical-stage-host";
+    hiddenStageMount.dataset.stageHost = "true";
+    document.body.append(visibleMount, hiddenStageMount);
+
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const video = document.createElement("video");
+    Object.assign(video, { play, pause });
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => false,
+    });
+
+    const 恢复播放位置 = vi.fn((currentVideo: HTMLVideoElement) => {
+      currentVideo.currentTime = 6.5;
+    });
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn((source, deps = {}) =>
+        创建测试VideoJs播放器壳({
+          初始源: source,
+          mountTarget: deps.mountTarget ?? undefined,
+          video,
+        })
+      ),
+    });
+
+    const 时间线输入 = {
+      attachmentId: "att-inline-same-visible-owner",
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-same-visible-owner",
+        posterSrc: "http://media.local/poster-inline-same-visible-owner",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置,
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        标记可见接管已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    globalVideoPlayer.同步时间线自动播({
+      ...时间线输入,
+      mountTarget: visibleMount,
+    });
+    await 等待查看器任务完成(6);
+
+    expect(visibleMount.querySelector("video")).toBe(video);
+    video.currentTime = 6.9;
+    play.mockClear();
+    pause.mockClear();
+    恢复播放位置.mockClear();
+
+    globalVideoPlayer.同步时间线自动播({
+      ...时间线输入,
+      mountTarget: hiddenStageMount,
+    });
+    await 等待查看器任务完成(6);
+
+    expect(visibleMount.querySelector("video")).toBe(video);
+    expect(hiddenStageMount.querySelector("video")).toBeNull();
+    expect(video.currentTime).toBeCloseTo(6.9, 2);
+    expect(恢复播放位置).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+
+    globalVideoPlayer.销毁();
+  });
+
   it("当前自动播视频退出真全屏后，会沿用 viewer 关闭瞬间的最新时间回到消息流", async () => {
     安装全屏DOM模拟();
     const inlineMount = document.createElement("div");

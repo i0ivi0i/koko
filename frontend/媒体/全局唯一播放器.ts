@@ -437,14 +437,10 @@ export function 创建全局唯一播放器(
     mountTarget: HTMLElement
   ): VideoJs播放器壳实例 | Promise<VideoJs播放器壳实例> => {
     if (shell) {
-      shell.挂载到宿主(mountTarget);
       return shell;
     }
     if (shellPromise) {
-      return shellPromise.then((nextShell) => {
-        nextShell.挂载到宿主(mountTarget);
-        return nextShell;
-      });
+      return shellPromise;
     }
     const result = createVideoJsPlayerShell(source, { mountTarget });
     if (看起来像Promise(result)) {
@@ -452,13 +448,9 @@ export function 创建全局唯一播放器(
         shell = nextShell;
         return nextShell;
       });
-      return shellPromise.then((nextShell) => {
-        nextShell.挂载到宿主(mountTarget);
-        return nextShell;
-      });
+      return shellPromise;
     }
     shell = result;
-    result.挂载到宿主(mountTarget);
     return result;
   };
 
@@ -503,7 +495,18 @@ export function 创建全局唯一播放器(
           现有视频.currentSrc || 现有视频.getAttribute("src")
         ) &&
         !现有视频.paused;
-      if (当前宿主仍是同一条活时间线) {
+      const 当前可见宿主仍在稳态播放 =
+        当前表面 === "inline" &&
+        隐藏预热宿主 &&
+        现有视频.isConnected &&
+        现有视频.dataset.attachmentId === 当前输入.attachmentId &&
+        是同一播放器播放源(
+        当前输入.source.src,
+          现有视频.currentSrc || 现有视频.getAttribute("src")
+        ) &&
+        !现有视频.paused &&
+        !mountTarget.contains(现有视频);
+      if (当前宿主仍是同一条活时间线 || 当前可见宿主仍在稳态播放) {
         /**
          * 纯滚动 / resize 会不断把同一条时间线 owner 重新送进同步入口。
          * 这类几何更新如果再走一遍 mount -> sync source -> restore currentTime，
@@ -515,7 +518,10 @@ export function 创建全局唯一播放器(
          * 3. 同一 source；
          * 4. 同一颗 live video 仍在播放。
          *
-         * 满足这四条时，只需要更新监听绑定和输入引用，不能再做任何播放动作。
+         * 另外，若当前可见宿主已经在稳态播放，同附件的 hidden stage 只是瞬时预热壳，
+         * 也绝不能把这颗 live player 从用户眼前搬走。
+         *
+         * 满足这些条件时，只需要更新监听绑定和输入引用，不能再做任何播放动作。
          */
         解绑当前绑定();
         配置时间线自动播视频(现有视频, 当前输入.attachmentId, {
