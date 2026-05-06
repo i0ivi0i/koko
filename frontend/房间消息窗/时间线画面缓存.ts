@@ -7,6 +7,7 @@ import type { 聊天列表展示项 } from "./视图.js";
 
 const 时间线自动播冻结帧最大边长 = 480;
 const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
+const 时间线自动播冻结帧预热最小位移秒 = 1.5;
 
 interface 时间线画面缓存Owner依赖 {
   读取视频当前播放源: (video: HTMLVideoElement) => string | null;
@@ -133,90 +134,118 @@ export class 时间线画面缓存Owner {
     return frame;
   }
 
-  捕获自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void {
-    const src = this.依赖.读取视频当前播放源(video);
-    const currentTime = video.currentTime;
-    if (
-      !attachmentId ||
-      !src ||
-      !Number.isFinite(currentTime) ||
-      currentTime < 0 ||
-      video.readyState < video.HAVE_CURRENT_DATA ||
-      video.videoWidth <= 0 ||
-      video.videoHeight <= 0
-    ) {
-      return;
-    }
-    const previousFrame = this.时间线自动播冻结帧.get(attachmentId);
-    if (
-      previousFrame?.src === src &&
-      Math.abs(previousFrame.currentTime - currentTime) < 0.5
-    ) {
-      return;
-    }
-    const captureKey = `${src}\u0000${Math.round(currentTime * 2) / 2}`;
-    if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-      return;
-    }
-    try {
-      const scale = Math.min(
-        1,
-        时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
-      );
-      const width = Math.max(1, Math.round(video.videoWidth * scale));
-      const height = Math.max(1, Math.round(video.videoHeight * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) {
+  捕获自动播冻结帧(
+    attachmentId: string,
+    video: HTMLVideoElement,
+    options: { 预热已合成帧?: boolean } = {}
+  ): void {
+    const 执行捕获 = (): void => {
+      const src = this.依赖.读取视频当前播放源(video);
+      const currentTime = video.currentTime;
+      if (
+        !attachmentId ||
+        !src ||
+        !Number.isFinite(currentTime) ||
+        currentTime < 0 ||
+        video.readyState < video.HAVE_CURRENT_DATA ||
+        video.videoWidth <= 0 ||
+        video.videoHeight <= 0
+      ) {
         return;
       }
-      context.drawImage(video, 0, 0, width, height);
-      if (typeof canvas.toBlob !== "function") {
+      const previousFrame = this.时间线自动播冻结帧.get(attachmentId);
+      const 最小位移阈值 = options.预热已合成帧
+        ? 时间线自动播冻结帧预热最小位移秒
+        : 0.5;
+      if (
+        previousFrame?.src === src &&
+        Math.abs(previousFrame.currentTime - currentTime) < 最小位移阈值
+      ) {
         return;
       }
-      this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
-      canvas.toBlob((blob) => {
-        void (async () => {
-          try {
-            if (!blob || blob.type !== "image/webp") {
-              return;
-            }
-            const dataUrl = await 读取BlobDataUrl(blob);
-            if (!dataUrl?.startsWith("data:image/webp")) {
-              return;
-            }
-            if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
-              return;
-            }
-            const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
-            if (
-              latestFrame?.src === src &&
-              Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
-              latestFrame.dataUrl === dataUrl
-            ) {
-              return;
-            }
-            this.时间线自动播冻结帧.set(attachmentId, {
-              src,
-              currentTime,
-              dataUrl,
-              updatedAt: Date.now(),
-            });
-            this.依赖.请求刷新();
-          } finally {
-            if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-              this.时间线自动播冻结帧导出中.delete(attachmentId);
-            }
-          }
-        })();
-      }, "image/webp", 0.82);
-    } catch {
-      // Canvas 失败只影响暂停帧，不扩大成业务错误；播放链仍由唯一播放器继续承接。
+      const captureKey = `${src}\u0000${Math.round(currentTime * 2) / 2}`;
       if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-        this.时间线自动播冻结帧导出中.delete(attachmentId);
+        return;
       }
+      try {
+        const scale = Math.min(
+          1,
+          时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
+        );
+        const width = Math.max(1, Math.round(video.videoWidth * scale));
+        const height = Math.max(1, Math.round(video.videoHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          return;
+        }
+        context.drawImage(video, 0, 0, width, height);
+        if (typeof canvas.toBlob !== "function") {
+          return;
+        }
+        this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
+        canvas.toBlob((blob) => {
+          void (async () => {
+            try {
+              if (!blob || blob.type !== "image/webp") {
+                return;
+              }
+              const dataUrl = await 读取BlobDataUrl(blob);
+              if (!dataUrl?.startsWith("data:image/webp")) {
+                return;
+              }
+              if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
+                return;
+              }
+              const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
+              if (
+                latestFrame?.src === src &&
+                Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
+                latestFrame.dataUrl === dataUrl
+              ) {
+                return;
+              }
+              this.时间线自动播冻结帧.set(attachmentId, {
+                src,
+                currentTime,
+                dataUrl,
+                updatedAt: Date.now(),
+              });
+              this.依赖.请求刷新();
+            } finally {
+              if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+                this.时间线自动播冻结帧导出中.delete(attachmentId);
+              }
+            }
+          })();
+        }, "image/webp", 0.82);
+      } catch {
+        // Canvas 失败只影响暂停帧，不扩大成业务错误；播放链仍由唯一播放器继续承接。
+        if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+          this.时间线自动播冻结帧导出中.delete(attachmentId);
+        }
+      }
+    };
+
+    /**
+     * 预热路径不抓“可能还没真正显示出去的 currentTime”，而是尽量等 compositor 确认一帧已提交：
+     * 1. 这样旧 owner 退场时，缓存里的最后一眼更接近用户刚刚真的看到的画面；
+     * 2. `requestVideoFrameCallback()` 不可用时，再回退到当前同步抓帧路径；
+     * 3. 真正退场那次 force/released capture 仍保持立即执行，避免 paused 后等不到回调。
+     */
+    if (
+      options.预热已合成帧 &&
+      typeof video.requestVideoFrameCallback === "function" &&
+      !video.paused
+    ) {
+      video.requestVideoFrameCallback(() => {
+        执行捕获();
+      });
+      return;
     }
+
+    执行捕获();
   }
 }

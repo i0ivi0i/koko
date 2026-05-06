@@ -63,4 +63,77 @@ describe("时间线画面缓存Owner", () => {
     })).toBeNull();
     expect(owner.读取自动播冻结帧("att-1", "/swarm/other.mp4", position)).toBeNull();
   });
+
+  it("预热冻结帧会等到 requestVideoFrameCallback 确认已合成那一帧后再写入缓存", async () => {
+    const { owner } = 创建Owner();
+    const drawImage = vi.fn();
+    const toBlob = vi.fn((callback: BlobCallback) => {
+      callback(new Blob(["freeze"], { type: "image/webp" }));
+    });
+    const callbacks: Array<() => void> = [];
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob,
+    } as unknown as HTMLCanvasElement;
+    const 原始创建元素 = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      if (tagName === "canvas") {
+        return canvas;
+      }
+      return 原始创建元素(tagName);
+    });
+
+    class 假FileReader {
+      result: string | ArrayBuffer | null = null;
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
+
+      readAsDataURL(): void {
+        this.result = "data:image/webp;base64,warm-freeze";
+        queueMicrotask(() =>
+          this.onload?.(undefined as unknown as ProgressEvent<FileReader>)
+        );
+      }
+    }
+
+    const video = {
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+      videoWidth: 1280,
+      videoHeight: 720,
+      paused: false,
+      currentTime: 18.5,
+      currentSrc: "http://media.local/swarm/video.mp4",
+      getAttribute: (name: string) => (name === "src" ? "http://media.local/swarm/video.mp4" : null),
+      requestVideoFrameCallback: ((callback: () => void) => {
+        callbacks.push(callback);
+        return callbacks.length;
+      }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
+    } as unknown as HTMLVideoElement;
+
+    vi.stubGlobal("FileReader", 假FileReader);
+
+    try {
+      owner.捕获自动播冻结帧("att-1", video, { 预热已合成帧: true });
+      expect(drawImage).not.toHaveBeenCalled();
+      expect(callbacks).toHaveLength(1);
+
+      callbacks[0]!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(drawImage).toHaveBeenCalledTimes(1);
+      expect(
+        owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
+          src: "http://media.local/swarm/video.mp4",
+          currentTime: 18.5,
+          updatedAt: 1,
+        })
+      ).toMatchObject({
+        dataUrl: "data:image/webp;base64,warm-freeze",
+      });
+    } finally {
+      createElement.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 });

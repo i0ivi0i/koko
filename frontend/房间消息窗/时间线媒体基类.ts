@@ -597,9 +597,11 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
      * 消息窗只读取真实 video 的当前时间，并把事实上报给媒体运行时。
      * 这里的 Map 只做高频事件节流，不作为续播真相；真正恢复来源仍是外层回灌的 snapshot。
      */
-    if (force || allowReleasedOwner) {
-      this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video);
-    }
+    this.时间线画面缓存Owner.捕获自动播冻结帧(
+      attachmentId,
+      video,
+      force || allowReleasedOwner ? {} : { 预热已合成帧: true }
+    );
     this.自动播位置上报记录.set(attachmentId, {
       src,
       currentTime: video.currentTime,
