@@ -290,24 +290,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator.preview_asset?.still_url ?? (locator.kind === "video" ? locator.thumbnail_url : null);
 
   /**
-   * 图片资产不再默认回到原始附件直链：
-   * 1. canonical 是唯一正式图片对象，列表卡片和查看器共用同一份真相；
-   * 2. 缩略图只允许退回 message/locator 明确给出的 preview_asset；
-   * 3. 只有 blob 资产根本不存在时，才退回旧冷源锚点。
+   * 这里判断的不是“正式主链”，而是 legacy 图片 canonical 兼容壳是否还存在：
+   * 1. 新图片正式字节真相已经收口到 swarm，不允许再把 canonical HTTP 地址叫成主链；
+   * 2. 但历史图片若仍没有分发表面，前端还要知道它有没有可探测的 legacy canonical 锚点；
+   * 3. 因而这里只保留一个布尔判断，避免 helper 本身继续伪装成正式播放结果。
    */
-  const 读取图片Blob主链 = (locator: 媒体定位结果) => {
-    if (locator.kind !== "image" || !locator.blob_asset) {
-      return null;
-    }
-    const canonicalSrc = locator.blob_asset.variants?.canonical?.url ?? null;
-    if (!canonicalSrc) {
-      return null;
-    }
-    return {
-      src: canonicalSrc,
-      thumbnailUrl: 读取预览缩略图地址(locator) ?? canonicalSrc,
-    };
-  };
+  const 图片具备LegacyCanonical锚点 = (locator: 媒体定位结果): boolean =>
+    locator.kind === "image" && Boolean(locator.blob_asset?.variants?.canonical?.url);
 
   const 读取媒体状态码 = (locator: 媒体定位结果): string | null =>
     读取协作分发定位片段(locator)?.media_state?.code ?? null;
@@ -710,7 +699,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (!distribution) {
       return;
     }
-    if (locator.kind === "image" && (!读取图片Blob主链(locator) || !locator.blob_asset?.distribution)) {
+    if (locator.kind === "image" && (!图片具备LegacyCanonical锚点(locator) || !locator.blob_asset?.distribution)) {
       return;
     }
     const mediaStateCode = distribution?.media_state?.code ?? null;
