@@ -81,7 +81,6 @@ export const 创建媒体消息项 = (): 消息展示项 => ({
       height: 800,
       displayWidth: 320,
       displayHeight: 213,
-      thumbnailSrc: "http://media.local/thumb-image-1",
     },
     {
       kind: "video",
@@ -125,7 +124,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowSpan: 2,
       displayWidth: 188,
       displayHeight: 488,
-      thumbnailSrc: "http://media.local/thumb-hero",
     },
     {
       kind: "video",
@@ -151,7 +149,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowSpan: 1,
       displayWidth: 188,
       displayHeight: 240,
-      thumbnailSrc: "http://media.local/thumb-image-3",
     },
     {
       kind: "video",
@@ -177,7 +174,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowSpan: 1,
       displayWidth: 188,
       displayHeight: 240,
-      thumbnailSrc: "http://media.local/thumb-image-5",
     },
   ],
 });

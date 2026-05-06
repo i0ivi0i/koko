@@ -214,8 +214,8 @@ describe("视图 / 消息展示项派生", () => {
     expect(item.attachments[0]).toMatchObject({
       kind: "image",
       attachmentId: "att-image-plain",
-      thumbnailSrc: "",
     });
     expect("originalSrc" in (item.attachments[0] ?? {})).toBe(false);
+    expect("thumbnailSrc" in (item.attachments[0] ?? {})).toBe(false);
   });
 });

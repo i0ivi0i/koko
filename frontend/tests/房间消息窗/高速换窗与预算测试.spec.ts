@@ -633,7 +633,6 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
           height: 800,
           displayWidth: 320,
           displayHeight: 213,
-          thumbnailSrc: `http://media.local/thumb-image-window-budget-${index + 1}`,
         },
         {
           kind: "video" as const,

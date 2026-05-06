@@ -101,10 +101,10 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].attachments).toEqual([
       expect.objectContaining({
         attachmentId: "att-1",
-        thumbnailSrc: "",
       }),
     ]);
     expect("originalSrc" in (items[0].attachments[0] ?? {})).toBe(false);
+    expect("thumbnailSrc" in (items[0].attachments[0] ?? {})).toBe(false);
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
   });
 

@@ -75,7 +75,6 @@ export interface 图片附件展示项 {
   gridRowSpan?: number;
   displayWidth: number;
   displayHeight: number;
-  thumbnailSrc: string;
 }
 
 export interface 视频附件展示项 {
@@ -359,7 +358,6 @@ function 派生媒体附件展示结果(
          * 2. 冷启动阶段只允许稳定占位，不允许这里先偷塞 original/blob canonical；
          * 3. 图片消息项现在只保留缩略/占位表面，不再挂旧 original 字段。
          */
-        thumbnailSrc: "",
       };
     });
 
