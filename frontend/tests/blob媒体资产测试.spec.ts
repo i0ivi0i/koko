@@ -137,4 +137,77 @@ describe("Blob 媒体资产", () => {
       locator,
     });
   });
+
+  it("新图片即使已经去掉 legacy canonical 锚点，只要 blob_asset.distribution 存在也要继续激活 swarm 补齐", async () => {
+    const locator = {
+      attachment_id: "att-image-blob-3",
+      kind: "image" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/legacy-original-image-blob-3",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-image-blob-3",
+        content_hash: "hash-image-blob-3",
+        swarm_id: "swarm-hash-image-blob-3",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-image-blob-3",
+        torrent_info_hash: "torrent-info-hash-image-blob-3",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/blob/att-image-blob-3/original.webp",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      blob_asset: {
+        asset_id: "att-image-blob-3",
+        content_hash: "hash-image-blob-3",
+        kind: "blob_image" as const,
+        variants: {
+          canonical: null,
+        },
+        distribution: {
+          swarm_id: "swarm-hash-image-blob-3",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-blob-3/original.webp",
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "peer_only_after_expiry" as const,
+        },
+        origin: {
+          original_url: "http://media.local/legacy-original-image-blob-3",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+      },
+      preview_asset: null,
+    };
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-att-image-blob-3",
+      hint: "正在协作分发" as const,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate: async () => locator,
+      resolveSwarmSource,
+      probeAnchor: vi.fn(async () => undefined),
+    });
+
+    await 播放器.激活协作补齐({
+      attachmentId: "att-image-blob-3",
+      kind: "image",
+      consumerId: "session:att-image-blob-3",
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledWith({
+      attachmentId: "att-image-blob-3",
+      consumerId: "session:att-image-blob-3",
+      eagerCompleting: true,
+      kind: "image",
+      locator,
+    });
+  });
 });

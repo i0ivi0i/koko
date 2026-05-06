@@ -1,5 +1,8 @@
 use serial_test::serial;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{Arc, Barrier},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[path = "测试支撑/mod.rs"]
 mod test_support;
@@ -314,6 +317,79 @@ fn 同房并发发送时事件位置仍然连续单调() {
     assert_eq!(latest, 8, "房间最新位置应推进到最后一条");
     assert_eq!(events, 8, "room_events 条数应与发送数一致");
     assert_eq!(messages, 8, "messages 条数应与发送数一致");
+}
+
+#[test]
+#[serial]
+fn 同短码并发进房时不会把唯一约束竞态漏成系统错误() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("应能创建测试运行时");
+    rt.block_on(async {
+        koko::assembly::自动追平迁移(&cfg.database_url)
+            .await
+            .expect("应先追平迁移");
+    });
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("JR{:010}", uniq % 10_000_000_000);
+    let database_url = cfg.database_url.clone();
+
+    // 先顺序引导好多个会话，再用 Barrier 把“进房或建房”动作压到同一时刻，
+    // 这样测试才能稳定逼出 `先查 rooms，再 insert rooms` 的竞态窗口。
+    let session_ids = std::thread::spawn(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        (0..8)
+            .map(|index| {
+                koko::identity::application::引导匿名身份(
+                    &mut repo,
+                    &format!("join-race-device-{uniq}-{index}"),
+                )
+                .expect("应能引导匿名身份")
+                .会话标识
+            })
+            .collect::<Vec<_>>()
+    })
+    .join()
+    .expect("会话准备线程应完成");
+
+    let barrier = Arc::new(Barrier::new(session_ids.len()));
+    let mut tasks = Vec::new();
+    for session_id in session_ids {
+        let database_url = cfg.database_url.clone();
+        let room_code = room_code.clone();
+        let barrier = barrier.clone();
+        tasks.push(std::thread::spawn(move || {
+            let mut repo =
+                koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+            barrier.wait();
+            koko::room::application::按短码进房或建房(&mut repo, &session_id, &room_code)
+        }));
+    }
+
+    let mut room_ids = Vec::new();
+    for task in tasks {
+        let snapshot = task
+            .join()
+            .expect("并发进房线程应完成")
+            .expect("同短码并发进房不应漏成系统错误");
+        match snapshot {
+            koko::shared::contract::快照::房间 { 房间标识, .. } => room_ids.push(房间标识),
+            _ => panic!("进房应返回房间快照"),
+        }
+    }
+
+    assert!(!room_ids.is_empty(), "至少要拿到一个房间标识");
+    let first_room_id = room_ids[0].clone();
+    assert!(
+        room_ids.iter().all(|room_id| room_id == &first_room_id),
+        "同一短码并发进房必须全部收口到同一个房间"
+    );
 }
 
 #[test]

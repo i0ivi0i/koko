@@ -575,7 +575,7 @@ async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
     .await;
     assert_eq!(
         blob_canonical_status,
-        StatusCode::NOT_FOUND,
-        "canonical 图片只有一份正式对象；24 小时冷源退场后不能继续让 blob 路由伪造长期可读资产"
+        StatusCode::GONE,
+        "新图片正式面已经切到 WebTorrent 后，blob canonical 只剩 legacy/迁移壳；24 小时后继续访问也应显式拒绝，而不是伪装成可长期读取对象"
     );
 }

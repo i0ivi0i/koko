@@ -485,6 +485,48 @@ pub(super) async fn load_blob_asset_content(
             );
         }
     };
+    /*
+     * `blob/canonical` 现在只允许继续留在 legacy/迁移读取面：
+     * 1. 新图片一旦已经进入协作分发表面，正式字节真相就只剩 WebTorrent swarm；
+     * 2. 这里如果继续对新附件返回 200，只会让旧 blob 别名重新变成第二正式读取面；
+     * 3. 我们先用当前会话可见的 locator 真相判一次“是不是新附件正式面”，命中时直接 410；
+     * 4. 没命中或 locator 查询失败时，不发明第二套鉴权/删除语义，继续复用下面原有受控读取链。
+     */
+    let state_for_locator = state.clone();
+    let attachment_id_for_locator = attachment_id.clone();
+    let session_id_for_locator = query.session_id.clone();
+    let locator_result = task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_locator);
+        let media_repo = repo.媒体仓储();
+        协作分发应用::查询媒体定位(
+            &media_repo,
+            &attachment_id_for_locator,
+            &session_id_for_locator,
+        )
+        .map_err(map_domain_err_tuple)
+    })
+    .await;
+    match locator_result {
+        Ok(Ok(locator))
+            if matches!(locator.种类, crate::media::模型::媒体附件类型::图片)
+                && locator.状态 == crate::media::模型::附件状态读取结果::就绪
+                && locator.协作分发.is_some() =>
+        {
+            return err_resp(
+                StatusCode::GONE,
+                "legacy_surface_only",
+                "新附件正式图片已切到 WebTorrent 主链，blob canonical 仅保留给 legacy/迁移读取面",
+            );
+        }
+        Ok(Ok(_)) | Ok(Err(_)) => {}
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("blob canonical legacy gate 任务执行失败: {err}"),
+            );
+        }
+    }
     读取受控附件内容响应(
         state,
         attachment_id,

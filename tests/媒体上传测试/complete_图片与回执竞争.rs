@@ -161,6 +161,18 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
         Some(legacy_original_url.as_str()),
         "旧附件内容地址只能退到冷备 origin 描述里，不能继续当正式图片主链"
     );
+    let (blob_canonical_status, _, _) = send_bytes(
+        app.clone(),
+        Method::GET,
+        canonical_url.as_str(),
+        &[],
+    )
+    .await;
+    assert_eq!(
+        blob_canonical_status,
+        StatusCode::GONE,
+        "新图片 complete 已切到纯 WebTorrent 主链后，blob canonical 只能继续作为 legacy/迁移读取面，不能再让新附件直接命中"
+    );
 
     let row = sqlx::query(
         "SELECT status,
@@ -242,16 +254,12 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
         "canonical 资产必须持有可复用 torrent info hash"
     );
 
-    let (canonical_status, canonical_headers, canonical_body) =
-        send_bytes(app, Method::GET, canonical_url.as_str(), &[]).await;
-    assert_eq!(canonical_status, StatusCode::OK);
+    let (canonical_status, _, _) = send_bytes(app, Method::GET, canonical_url.as_str(), &[]).await;
     assert_eq!(
-        canonical_headers
-            .get(header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok()),
-        Some("image/webp")
+        canonical_status,
+        StatusCode::GONE,
+        "新图片 canonical 物理对象虽然仍存在，但 blob canonical HTTP 别名已经退成 legacy 面，不应继续被新附件直接读到"
     );
-    assert_eq!(canonical_body, image_bytes);
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),
         "图片 complete 成功后必须同步删掉 Tus 临时原图，不能把 happy path 残留丢给后台慢慢积灰"

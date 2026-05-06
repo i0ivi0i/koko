@@ -417,38 +417,38 @@ async fn 按短码进房或建房_异步(
         .map_err(|_| contract::错误码::系统错误)?
         .ok_or(contract::错误码::会话无效)?;
 
-    let room_row =
-        sqlx::query("SELECT id, room_id, latest_event_position FROM rooms WHERE room_code = $1")
-            .bind(房间短码)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
+    /*
+     * 并发进房的唯一真相必须落在数据库这一条 SQL 上：
+     * 1. 旧实现先 `SELECT rooms WHERE room_code = $1`，再决定要不要 `INSERT rooms`；
+     * 2. 多个会话同时撞进同一个新短码时，会一起看到“房间还不存在”；
+     * 3. 后进入的事务随后在 `rooms.room_code` 唯一约束上炸成 `系统错误`，
+     *    最后被 HTTP 壳误投影成 500；
+     * 4. 这里改成单条 `INSERT ... ON CONFLICT (room_code) DO UPDATE ... RETURNING`，
+     *    把“创建新房间”和“复用已存在房间”收口成同一个权威写面。
+     *
+     * `DO UPDATE SET room_code = EXCLUDED.room_code` 是显式 no-op：
+     * - 不改标题、不改创建者、不改业务真相；
+     * - 只为了让 PostgreSQL 在唯一约束撞车时返回既有房间行，
+     *   不再把并发 join/create 漏成第二条错误路径。
+     */
+    let room_row = sqlx::query(
+        "INSERT INTO rooms (room_id, room_code, title, created_by_session_id) \
+         VALUES (concat('r-', substring(md5(random()::text) from 1 for 12)), $1, $2, $3) \
+         ON CONFLICT (room_code) DO UPDATE SET room_code = EXCLUDED.room_code \
+         RETURNING id, room_id, latest_event_position",
+    )
+    .bind(房间短码)
+    .bind(format!("房间-{房间短码}"))
+    .bind(session_db_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
 
-    let (room_db_id, room_id, latest_event_position): (i64, String, i64) =
-        if let Some(row) = room_row {
-            (
-                row.get("id"),
-                row.get("room_id"),
-                row.get("latest_event_position"),
-            )
-        } else {
-            let created = sqlx::query(
-                "INSERT INTO rooms (room_id, room_code, title, created_by_session_id) \
-             VALUES (concat('r-', substring(md5(random()::text) from 1 for 12)), $1, $2, $3) \
-             RETURNING id, room_id, latest_event_position",
-            )
-            .bind(房间短码)
-            .bind(format!("房间-{房间短码}"))
-            .bind(session_db_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-            (
-                created.get("id"),
-                created.get("room_id"),
-                created.get("latest_event_position"),
-            )
-        };
+    let (room_db_id, room_id, latest_event_position): (i64, String, i64) = (
+        room_row.get("id"),
+        room_row.get("room_id"),
+        room_row.get("latest_event_position"),
+    );
 
     sqlx::query(
         "INSERT INTO room_members (room_id, session_id, left_at) \
