@@ -82,7 +82,6 @@ export const 创建媒体消息项 = (): 消息展示项 => ({
       displayWidth: 320,
       displayHeight: 213,
       thumbnailSrc: "http://media.local/thumb-image-1",
-      originalSrc: "http://media.local/original-image-1",
     },
     {
       kind: "video",
@@ -91,7 +90,6 @@ export const 创建媒体消息项 = (): 消息展示项 => ({
       height: 720,
       displayWidth: 320,
       displayHeight: 180,
-      originalSrc: "http://media.local/original-video-1",
       posterSrc: "http://media.local/poster-video-1",
     },
   ],
@@ -128,7 +126,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       displayWidth: 188,
       displayHeight: 488,
       thumbnailSrc: "http://media.local/thumb-hero",
-      originalSrc: "http://media.local/original-hero",
     },
     {
       kind: "video",
@@ -141,7 +138,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowSpan: 1,
       displayWidth: 188,
       displayHeight: 240,
-      originalSrc: "http://media.local/original-video-2",
       posterSrc: "http://media.local/poster-video-2",
     },
     {
@@ -156,7 +152,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       displayWidth: 188,
       displayHeight: 240,
       thumbnailSrc: "http://media.local/thumb-image-3",
-      originalSrc: "http://media.local/original-image-3",
     },
     {
       kind: "video",
@@ -169,7 +164,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowSpan: 1,
       displayWidth: 188,
       displayHeight: 240,
-      originalSrc: "http://media.local/original-video-4",
       posterSrc: "http://media.local/poster-video-4",
     },
     {
@@ -184,7 +178,6 @@ export const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       displayWidth: 188,
       displayHeight: 240,
       thumbnailSrc: "http://media.local/thumb-image-5",
-      originalSrc: "http://media.local/original-image-5",
     },
   ],
 });
@@ -208,7 +201,6 @@ export const 创建单视频消息项 = (attachmentId: string, eventPosition: nu
       height: 720,
       displayWidth: 320,
       displayHeight: 180,
-      originalSrc: `http://media.local/original-${attachmentId}`,
       posterSrc: `http://media.local/poster-${attachmentId}`,
     },
   ],

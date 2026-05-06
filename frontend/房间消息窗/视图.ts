@@ -76,7 +76,6 @@ export interface 图片附件展示项 {
   displayWidth: number;
   displayHeight: number;
   thumbnailSrc: string;
-  originalSrc: string;
 }
 
 export interface 视频附件展示项 {
@@ -90,7 +89,6 @@ export interface 视频附件展示项 {
   gridRowSpan?: number;
   displayWidth: number;
   displayHeight: number;
-  originalSrc: string;
   posterSrc: string | null;
 }
 
@@ -330,13 +328,6 @@ function 派生媒体附件展示结果(
           displayWidth,
           displayHeight,
           /**
-           * 视频消息卡片不再从 presenter 预写任何 original 内容地址：
-           * 1. 正式播放源必须等待媒体 owner 后续投影 swarm 真相；
-           * 2. 这里继续塞 originalSrc，只会让时间线壳层保留第二入口幻觉；
-           * 3. 因而视频和图片一样，默认保持空壳等待正式会话同步。
-           */
-          originalSrc: "",
-          /**
            * 视频消息流默认态只吃后端权威封面：
            * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
            * 2. realtime room_event 在无逐连接 session 上下文时，不会直接带 still_url，
@@ -366,10 +357,9 @@ function 派生媒体附件展示结果(
          * 图片 presenter 现在不再预写任何受控内容地址：
          * 1. 时间线与查看器都等待运行时后续投影正式 swarm 源；
          * 2. 冷启动阶段只允许稳定占位，不允许这里先偷塞 original/blob canonical；
-         * 3. 因而 original/thumbnail 两个字段只剩兼容壳形状，本轮统一清成空串。
+         * 3. 图片消息项现在只保留缩略/占位表面，不再挂旧 original 字段。
          */
         thumbnailSrc: "",
-        originalSrc: "",
       };
     });
 

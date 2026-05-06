@@ -215,7 +215,7 @@ describe("视图 / 消息展示项派生", () => {
       kind: "image",
       attachmentId: "att-image-plain",
       thumbnailSrc: "",
-      originalSrc: "",
     });
+    expect("originalSrc" in (item.attachments[0] ?? {})).toBe(false);
   });
 });

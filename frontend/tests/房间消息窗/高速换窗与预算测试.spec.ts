@@ -634,7 +634,6 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
           displayWidth: 320,
           displayHeight: 213,
           thumbnailSrc: `http://media.local/thumb-image-window-budget-${index + 1}`,
-          originalSrc: `http://media.local/original-image-window-budget-${index + 1}`,
         },
         {
           kind: "video" as const,
@@ -643,7 +642,6 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
           height: 720,
           displayWidth: 320,
           displayHeight: 180,
-          originalSrc: `http://media.local/original-video-window-budget-${index + 1}`,
           posterSrc: `http://media.local/poster-video-window-budget-${index + 1}`,
         },
       ],
@@ -680,7 +678,6 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
           height: 720,
           displayWidth: 320,
           displayHeight: 180,
-          originalSrc: `http://media.local/original-video-window-range-${index + 1}`,
           posterSrc: `http://media.local/poster-video-window-range-${index + 1}`,
         },
       ],

@@ -102,9 +102,9 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       expect.objectContaining({
         attachmentId: "att-1",
         thumbnailSrc: "",
-        originalSrc: "",
       }),
     ]);
+    expect("originalSrc" in (items[0].attachments[0] ?? {})).toBe(false);
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
   });
 
@@ -150,10 +150,10 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].attachments).toEqual([
       expect.objectContaining({
         attachmentId: "att-video-1",
-        originalSrc: "",
         posterSrc: "/api/attachments/att-video-1/thumb",
       }),
     ]);
+    expect("originalSrc" in (items[0].attachments[0] ?? {})).toBe(false);
   });
 
   it("聊天壳实例不再把媒体查看器和播放结果表挂在壳层对象上", () => {

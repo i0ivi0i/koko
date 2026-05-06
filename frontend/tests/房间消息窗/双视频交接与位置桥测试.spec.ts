@@ -83,7 +83,6 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -99,7 +98,6 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -190,7 +188,6 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -206,7 +203,6 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -460,4 +456,3 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
     pane.remove();
   });
 });
-

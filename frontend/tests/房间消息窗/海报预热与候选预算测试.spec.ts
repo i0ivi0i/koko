@@ -42,7 +42,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -58,7 +57,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 1280,
             displayWidth: 320,
             displayHeight: 569,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -152,7 +150,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -168,7 +165,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -405,7 +401,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-att-video-1",
             posterSrc: "http://media.local/poster-att-video-1",
           },
           {
@@ -415,7 +410,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-att-video-2",
             posterSrc: "http://media.local/poster-att-video-2",
           },
           {
@@ -425,7 +419,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-att-video-3",
             posterSrc: "http://media.local/poster-att-video-3",
           },
         ],
@@ -627,4 +620,3 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     pane.remove();
   });
 });
-

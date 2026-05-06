@@ -35,7 +35,6 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -206,7 +205,6 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: "http://media.local/poster-video-1",
           },
         ],
@@ -222,7 +220,6 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -301,7 +298,6 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
             height: 1280,
             displayWidth: 180,
             displayHeight: 320,
-            originalSrc: "http://media.local/original-video-black-handoff",
             posterSrc: null,
           },
         ],
@@ -415,4 +411,3 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     pane.remove();
   });
 });
-

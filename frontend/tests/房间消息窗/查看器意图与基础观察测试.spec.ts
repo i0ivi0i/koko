@@ -240,7 +240,6 @@ describe("房间消息窗媒体查看器 / 查看器意图与基础观察", () =
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-2",
             posterSrc: "http://media.local/poster-video-2",
           },
         ],
@@ -375,4 +374,3 @@ describe("房间消息窗媒体查看器 / 查看器意图与基础观察", () =
     }
   });
 });
-

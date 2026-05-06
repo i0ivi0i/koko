@@ -492,7 +492,6 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
             height: 720,
             displayWidth: 320,
             displayHeight: 180,
-            originalSrc: "http://media.local/original-video-1",
             posterSrc: null,
           },
         ],
