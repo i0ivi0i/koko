@@ -11,7 +11,6 @@ import type { 媒体播放结果 } from "../媒体播放.js";
 import type { 媒体运行时上下文 } from "../运行时.js";
 
 export type 附件内容地址快照 = {
-  originalSrc: string;
   thumbnailSrc: string;
 };
 
@@ -80,13 +79,6 @@ export function 创建媒体快照投影协作(
       const urlsByAttachmentId: Record<string, 附件内容地址快照> = {};
       for (const attachment of deps.读取当前房间媒体附件()) {
         urlsByAttachmentId[attachment.attachmentId] = {
-          /**
-           * presenter 不再给新附件预写 original 内容地址：
-           * 1. 正式字节真相已经收口到运行时 owner / swarm source；
-           * 2. 这里继续塞 originalSrc，只会把消息窗快照层变回第二入口分发器；
-           * 3. 真要打开正式内容，必须等待播放/查看器会话后续投影出来。
-           */
-          originalSrc: "",
           /**
            * 这里只保留视频 poster 的静态封面地址：
            * 1. 视频消息卡片仍允许使用后端权威 still/poster 做非正式封面；

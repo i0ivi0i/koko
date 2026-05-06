@@ -110,7 +110,6 @@ interface 媒体附件展示结果 {
 export type 附件内容地址表 = Record<
   string,
   {
-    originalSrc: string;
     thumbnailSrc: string;
   }
 >;
@@ -330,7 +329,13 @@ function 派生媒体附件展示结果(
           gridRowSpan: slot.rowSpan,
           displayWidth,
           displayHeight,
-          originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
+          /**
+           * 视频消息卡片不再从 presenter 预写任何 original 内容地址：
+           * 1. 正式播放源必须等待媒体 owner 后续投影 swarm 真相；
+           * 2. 这里继续塞 originalSrc，只会让时间线壳层保留第二入口幻觉；
+           * 3. 因而视频和图片一样，默认保持空壳等待正式会话同步。
+           */
+          originalSrc: "",
           /**
            * 视频消息流默认态只吃后端权威封面：
            * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
@@ -342,7 +347,7 @@ function 派生媒体附件展示结果(
           posterSrc:
             attachment.preview_asset?.still_url ??
             (attachment.has_preview_asset
-              ? 读取附件内容地址(附件内容地址表, attachment.attachment_id, "thumbnail")
+              ? 读取附件缩略地址(附件内容地址表, attachment.attachment_id)
               : null),
         };
       }
@@ -527,14 +532,10 @@ function 计算拼贴槽位高度(
  * 2. 这样时间线/查看器缺少正式播放真相时，只会进入静态占位或 degraded，而不会偷偷长第二入口；
  * 3. 需要 legacy 地址的调用方，必须自己显式提供，不能把兜底责任塞回这里。
  */
-function 读取附件内容地址(
-  附件内容地址表: 附件内容地址表,
-  attachmentId: string,
-  variant: "original" | "thumbnail"
-): string {
+function 读取附件缩略地址(附件内容地址表: 附件内容地址表, attachmentId: string): string {
   const entry = 附件内容地址表[attachmentId];
   if (entry) {
-    return variant === "thumbnail" ? entry.thumbnailSrc : entry.originalSrc;
+    return entry.thumbnailSrc;
   }
   return "";
 }

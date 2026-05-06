@@ -57,7 +57,6 @@ export function 附件内容地址表相同(
     return (
       leftEntry !== undefined &&
       rightEntry !== undefined &&
-      leftEntry.originalSrc === rightEntry.originalSrc &&
       leftEntry.thumbnailSrc === rightEntry.thumbnailSrc
     );
   });

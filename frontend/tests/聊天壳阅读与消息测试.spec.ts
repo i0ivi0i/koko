@@ -88,7 +88,6 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       {
         "att-1": {
           thumbnailSrc: "/api/attachments/att-1/thumb",
-          originalSrc: "/api/attachments/att-1/origin",
         },
       }
     );
@@ -107,6 +106,54 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       }),
     ]);
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
+  });
+
+  it("视频附件即使给了旧 original 内容地址表，也只保留 poster 预览而不再派生正式 originalSrc", () => {
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-video-1",
+          client_message_id: "c-video-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          text: "",
+          attachments: [
+            {
+              kind: "video",
+              attachment_id: "att-video-1",
+              width: 1280,
+              height: 720,
+              has_preview_asset: true,
+            },
+          ],
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      默认消息文本布局环境,
+      {
+        "att-video-1": {
+          thumbnailSrc: "/api/attachments/att-video-1/thumb",
+        },
+      }
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("message");
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    expect(items[0].attachments).toEqual([
+      expect.objectContaining({
+        attachmentId: "att-video-1",
+        originalSrc: "",
+        posterSrc: "/api/attachments/att-video-1/thumb",
+      }),
+    ]);
   });
 
   it("聊天壳实例不再把媒体查看器和播放结果表挂在壳层对象上", () => {
