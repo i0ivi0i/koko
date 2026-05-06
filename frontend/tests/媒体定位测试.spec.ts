@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { 创建浏览器媒体定位缓存仓库, 创建媒体定位器 } from "../媒体/媒体定位";
 
 describe("媒体定位器", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("持久化 locator 只保留 nested asset 表面时，仍然可以恢复缓存", async () => {
     const storage = new Map<string, string>();
     const repo = 创建浏览器媒体定位缓存仓库({
@@ -470,5 +475,96 @@ describe("媒体定位器", () => {
     } as never);
 
     await expect(新会话定位器.获取定位("att-session-bound-1")).rejects.toThrow("offline");
+  });
+
+  it("同 session 的 WebTorrent join ticket 已过期时，不能继续命中旧 locator", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-06T12:00:00.000Z"));
+
+    const records = new Map<string, unknown>();
+    const repo = {
+      async 读取(attachmentId: string) {
+        return (
+          records.get(attachmentId) as
+            | {
+                attachmentId: string;
+                sessionId?: string;
+                value: unknown;
+                stale: boolean;
+              }
+            | null
+        ) ?? null;
+      },
+      async 保存(record: {
+        attachmentId: string;
+        sessionId?: string;
+        value: unknown;
+        stale: boolean;
+      }) {
+        records.set(record.attachmentId, record);
+      },
+    };
+    records.set("att-expired-ticket-1", {
+      attachmentId: "att-expired-ticket-1",
+      sessionId: "s-test",
+      stale: false,
+      value: {
+        attachment_id: "att-expired-ticket-1",
+        kind: "video",
+        status: "ready",
+        thumbnail_url: null,
+        distribution: {
+          content_id: "content_att-expired-ticket-1",
+          content_hash: "hash-expired",
+          swarm_id: "swarm-hash-expired",
+          web_seed_until: "1778150000",
+          torrent_url: "http://media.local/torrent-expired",
+          torrent_info_hash: "torrent-info-hash-expired",
+          announce_urls: ["wss://tracker.media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-expired",
+          join_ticket: "expired-ticket",
+          ticket_expires_at: "2026-05-06T11:59:00.000Z",
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
+          survival_mode: "peer_only_after_expiry" as const,
+        },
+      },
+    });
+    const loadMediaLocator = vi.fn(async () => ({
+      attachment_id: "att-expired-ticket-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-expired-ticket-1",
+        content_hash: "hash-fresh",
+        swarm_id: "swarm-hash-fresh",
+        web_seed_until: "1778150000",
+        torrent_url: "http://media.local/torrent-fresh",
+        torrent_info_hash: "torrent-info-hash-fresh",
+        announce_urls: ["wss://tracker.media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-fresh",
+        join_ticket: "fresh-ticket",
+        ticket_expires_at: "2026-05-06T12:02:00.000Z",
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const 定位器 = 创建媒体定位器({
+      getSessionId: () => "s-test",
+      loadMediaLocator,
+      repo,
+    } as never);
+
+    const locator = await 定位器.获取定位("att-expired-ticket-1");
+
+    expect(locator.distribution?.join_ticket).toBe("fresh-ticket");
+    expect(locator.distribution?.torrent_url).toBe("http://media.local/torrent-fresh");
+    expect(loadMediaLocator).toHaveBeenCalledTimes(1);
   });
 });

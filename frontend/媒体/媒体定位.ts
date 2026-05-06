@@ -33,6 +33,7 @@ type 进行中定位请求 = {
 };
 
 const 媒体定位缓存存储键 = "koko_media_locators";
+const JOIN_TICKET_CACHE_SAFETY_MS = 5_000;
 
 type 原始媒体定位缓存记录 = Partial<媒体定位缓存记录> & {
   attachmentId?: unknown;
@@ -97,6 +98,40 @@ const 规范化媒体定位缓存记录 = (
     stale: candidate.stale === true,
   };
 };
+
+const 读取定位结果分发片段 = (locator: 媒体定位结果): unknown[] => [
+  "distribution" in locator ? locator.distribution : null,
+  locator.file_asset?.distribution ?? null,
+  locator.blob_asset?.distribution ?? null,
+];
+
+const 分发片段票据仍可复用 = (distribution: unknown, nowMs: number): boolean => {
+  if (!distribution || typeof distribution !== "object") {
+    return true;
+  }
+  const candidate = distribution as {
+    join_ticket?: unknown;
+    ticket_expires_at?: unknown;
+  };
+  if (typeof candidate.join_ticket !== "string" || !candidate.join_ticket.trim()) {
+    return true;
+  }
+  if (
+    typeof candidate.ticket_expires_at !== "string" ||
+    !candidate.ticket_expires_at.trim()
+  ) {
+    return false;
+  }
+  const expiresAtMs = Date.parse(candidate.ticket_expires_at);
+  return Number.isFinite(expiresAtMs)
+    ? expiresAtMs > nowMs + JOIN_TICKET_CACHE_SAFETY_MS
+    : false;
+};
+
+const 定位缓存票据仍可复用 = (record: 定位缓存项, nowMs = Date.now()): boolean =>
+  读取定位结果分发片段(record.value).every((distribution) =>
+    分发片段票据仍可复用(distribution, nowMs)
+  );
 
 const 读取仓库快照 = (storage: 媒体定位缓存存储源): 媒体定位缓存快照 => {
   const raw = storage?.getItem?.(媒体定位缓存存储键);
@@ -282,7 +317,14 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
   ): Promise<媒体定位结果> => {
     const currentSessionId = deps.getSessionId();
     const cached = await 读取或恢复缓存(attachmentId, currentSessionId);
-    if (cached && !cached.stale && !options.forceRefresh) {
+    const cached可复用 = cached && 定位缓存票据仍可复用(cached);
+    if (cached && !cached可复用) {
+      // join ticket 是短时门禁票；过期缓存不能继续冒充可进 swarm 的 locator。
+      const next = { ...cached, stale: true };
+      cache.set(attachmentId, next);
+      void repo.保存(next);
+    }
+    if (cached && cached可复用 && !cached.stale && !options.forceRefresh) {
       return cached.value;
     }
     const inflightRequest = inflight.get(attachmentId);
@@ -322,7 +364,7 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
         ) {
           throw (是否定位中止错误(error) ? error : 创建定位中止错误());
         }
-        if (cached) {
+        if (cached && cached可复用) {
           return cached.value;
         }
         throw error;
