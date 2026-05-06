@@ -41,8 +41,28 @@ function 文件看起来是Mp4(file: File): boolean {
   return file.type.trim().toLowerCase() === "video/mp4" || file.name.toLowerCase().endsWith(".mp4");
 }
 
-async function 默认可直通(file: File): Promise<boolean> {
+async function 读取Mp4主Brand(file: File): Promise<string | null> {
+  const bytes = new Uint8Array(await file.slice(4, 12).arrayBuffer());
+  if (bytes.length < 8) {
+    return null;
+  }
+  const box = String.fromCharCode(...bytes.slice(0, 4));
+  if (box !== "ftyp") {
+    return null;
+  }
+  return String.fromCharCode(...bytes.slice(4, 8));
+}
+
+async function 文件可作为后端CanonicalMp4直通(file: File): Promise<boolean> {
   if (!文件看起来是Mp4(file)) {
+    return false;
+  }
+  // 后端 canonical 视频校验看真实容器，不看扩展名；QuickTime brand 必须先预制。
+  return (await 读取Mp4主Brand(file)) !== "qt  ";
+}
+
+async function 默认可直通(file: File): Promise<boolean> {
+  if (!(await 文件可作为后端CanonicalMp4直通(file))) {
     return false;
   }
   if (typeof document === "undefined") {
@@ -56,7 +76,7 @@ async function 默认可直通(file: File): Promise<boolean> {
 async function 默认Mediabunny可无损整理(file: File): Promise<boolean> {
   // Mediabunny 是 canonical 视频预制的主轮子；非直通视频先尝试只改容器/元数据位置，
   // 失败才进入真正转码，避免在客户端无意义地消耗 CPU/GPU 和电量。
-  return !文件看起来是Mp4(file);
+  return !(await 文件可作为后端CanonicalMp4直通(file));
 }
 
 async function 默认Mediabunny与WebCodecs可转码(): Promise<boolean> {

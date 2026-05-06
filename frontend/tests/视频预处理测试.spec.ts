@@ -1,7 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { 预处理待上传视频文件 } from "../媒体/视频预处理";
 
 describe("视频预处理", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const quickTimeBrandBytes = new Uint8Array([
+    0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
+    0x00, 0x00, 0x02, 0x00,
+  ]);
+
   it("已经可直通的视频会原样作为 canonical 上传文件", async () => {
     const file = new File([new Uint8Array([1, 2, 3])], "ready.mp4", {
       type: "video/mp4",
@@ -18,6 +28,39 @@ describe("视频预处理", () => {
 
     expect(result).toEqual({ file, strategy: "passthrough" });
     expect(deps.Mediabunny可无损整理).not.toHaveBeenCalled();
+  });
+
+  it("扩展名是 mp4 但实际是 QuickTime brand 时必须先预制成 canonical.mp4", async () => {
+    const source = new File([quickTimeBrandBytes], "ABC1.mp4", {
+      type: "video/mp4",
+    });
+    const canonical = new File([new Uint8Array([1, 2, 3])], "canonical.mp4", {
+      type: "video/mp4",
+    });
+    const canPlayType = vi.fn(() => "probably");
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName === "video") {
+          return { canPlayType } as unknown as HTMLVideoElement;
+        }
+        throw new Error(`unexpected element: ${tagName}`);
+      },
+    });
+    const deps = {
+      Mediabunny可无损整理: vi.fn(async () => true),
+      使用Mediabunny无损整理: vi.fn(async () => ({
+        file: canonical,
+        strategy: "mediabunny_remux" as const,
+      })),
+      Mediabunny与WebCodecs可转码: vi.fn(async () => true),
+      使用Mediabunny与WebCodecs转码: vi.fn(),
+    };
+
+    const result = await 预处理待上传视频文件(source, deps);
+
+    expect(result.file).toBe(canonical);
+    expect(result.strategy).toBe("mediabunny_remux");
+    expect(canPlayType).not.toHaveBeenCalled();
   });
 
   it("不可直通时优先用 Mediabunny 无损整理而不是直接落到 ffmpeg.wasm", async () => {
