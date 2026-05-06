@@ -3,7 +3,7 @@ import { 创建媒体会话 } from "../媒体/媒体会话";
 import type { 媒体播放结果 } from "../媒体/媒体播放";
 
 const 创建锚点播放结果 = (attachmentId: string): 媒体播放结果 => ({
-  mode: "anchor",
+  mode: "legacy_anchor",
   attachmentId,
   kind: "video",
   src: `http://media.local/original-${attachmentId}`,
@@ -12,7 +12,7 @@ const 创建锚点播放结果 = (attachmentId: string): 媒体播放结果 => (
 });
 
 const 创建旧清单锚点播放结果 = (attachmentId: string): 媒体播放结果 => ({
-  mode: "anchor",
+  mode: "legacy_anchor",
   attachmentId,
   kind: "video",
   src: `http://media.local/stream/${attachmentId}/master.m3u8`,
@@ -256,7 +256,7 @@ describe("媒体会话", () => {
       await Promise.resolve();
       expect(解析播放结果).toHaveBeenCalledTimes(2);
       expect(会话.snapshot().playback).toMatchObject({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId,
       });
     } finally {
@@ -352,7 +352,7 @@ describe("媒体会话", () => {
     expect(会话.snapshot()).toMatchObject({
       status: "playing",
       playback: {
-        mode: "anchor",
+        mode: "legacy_anchor",
         src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
       },
       sourceVersion: 稳定后快照.sourceVersion,
@@ -439,7 +439,7 @@ describe("媒体会话", () => {
     await Promise.resolve();
 
     expect(会话.snapshot().playback).toMatchObject({
-      mode: "anchor",
+      mode: "legacy_anchor",
       src: `http://media.local/stream/${attachmentId}/master.m3u8`,
     });
 
@@ -450,7 +450,7 @@ describe("媒体会话", () => {
     await Promise.resolve();
 
     expect(会话.snapshot().playback).toMatchObject({
-      mode: "anchor",
+      mode: "legacy_anchor",
       src: `http://media.local/stream/${attachmentId}/master.m3u8`,
     });
   });

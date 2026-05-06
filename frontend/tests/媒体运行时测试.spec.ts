@@ -620,7 +620,7 @@ describe("媒体运行时", () => {
   it("自动播候选出现单帧空观测时，不会立刻释放 owner，但 anchor 冷源也不会被缓存成正式播放结果", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
-      mode: "anchor",
+      mode: "legacy_anchor",
       attachmentId: "att-video-inline-jitter-1",
       kind: "video",
       src: "http://media.local/original-att-video-inline-jitter-1",
@@ -731,7 +731,7 @@ describe("媒体运行时", () => {
   it("自动播 owner 正在切到新 pending 候选时，单帧空观测不会把旧 owner 提前清空，但也不会留下 anchor 正式源缓存", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
-      mode: "anchor",
+      mode: "legacy_anchor",
       attachmentId: "att-video-inline-handoff-old",
       kind: "video",
       src: "http://media.local/original-att-video-inline-handoff-old",
@@ -800,7 +800,7 @@ describe("媒体运行时", () => {
   it("高竖视频交接落入 dead zone 时，会保持旧 owner 并挂起新的 pending，但不会把 anchor 冷源缓存成正式播放结果", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
-      mode: "anchor",
+      mode: "legacy_anchor",
       attachmentId: "att-video-dead-zone-old",
       kind: "video",
       src: "http://media.local/original-att-video-dead-zone-old",

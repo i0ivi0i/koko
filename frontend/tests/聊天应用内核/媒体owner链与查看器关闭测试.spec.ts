@@ -57,7 +57,7 @@ describe("聊天应用内核 - 媒体 owner 链与查看器关闭", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-viewer-1",
         kind: "video",
         src: "http://media.local/original-att-video-viewer-1",
@@ -164,7 +164,7 @@ describe("聊天应用内核 - 媒体 owner 链与查看器关闭", () => {
     读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId,
         kind,
         src: `http://media.local/original-${attachmentId}`,
@@ -302,7 +302,7 @@ describe("聊天应用内核 - 媒体 owner 链与查看器关闭", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-viewer-close-1",
         kind: "video",
         src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",

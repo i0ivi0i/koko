@@ -19,7 +19,7 @@ type 媒体播放输入 = {
 
 type 媒体播放结果 =
   | {
-      mode: "swarm" | "anchor";
+      mode: "swarm" | "legacy_anchor";
       attachmentId: string;
       kind: 媒体种类;
       src: string;
@@ -421,7 +421,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         const distribution =
           refreshedLocator.file_asset?.distribution ?? refreshedLocator.blob_asset?.distribution ?? null;
         return {
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: input.attachmentId,
           kind: input.kind,
           src: refreshedAnchorUrl,
@@ -439,7 +439,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       const contentHash = 读取播放内容哈希(locator);
       const distribution = locator.file_asset?.distribution ?? locator.blob_asset?.distribution ?? null;
       return {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: anchorUrl,
@@ -466,7 +466,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         const distribution =
           refreshedLocator.file_asset?.distribution ?? refreshedLocator.blob_asset?.distribution ?? null;
         return {
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: input.attachmentId,
           kind: input.kind,
           src: refreshedAnchorUrl,

@@ -8,6 +8,8 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
     const source = readFileSync(new URL("../../媒体/媒体播放.ts", import.meta.url), "utf-8");
     expect(source.includes("streaming_asset")).toBe(false);
     expect(source.includes("读取图片Blob主链")).toBe(false);
+    expect(source.includes('mode: "anchor"')).toBe(false);
+    expect(source.includes('mode: "legacy_anchor"')).toBe(true);
   });
 
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {

@@ -337,7 +337,7 @@ describe("聊天媒体编排 - 查看器释放与销毁", () => {
 
     适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-destroy-1",
         kind: "image",
         src: "http://media.local/blob/att-image-destroy-1/full.webp",

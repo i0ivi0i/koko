@@ -48,7 +48,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
       解析播放结果: vi
         .fn()
         .mockResolvedValueOnce({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-video-1",
           kind: "video",
           src: "http://media.local/original-att-video-1",
@@ -155,7 +155,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
       解析播放结果: vi
         .fn()
         .mockResolvedValueOnce({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-video-hls",
           kind: "video",
           src: "http://media.local/original-att-video-hls",
@@ -163,7 +163,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
           hint: null,
         })
         .mockResolvedValueOnce({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-video-hls",
           kind: "video",
           src: "http://media.local/stream/att-video-hls/master.m3u8",
@@ -260,7 +260,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
     读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-open-manifest",
         kind: "video",
         src: "http://media.local/stream/att-video-open-manifest/master.m3u8",
@@ -349,7 +349,7 @@ describe("聊天应用内核 - 查看器会话同步", () => {
     读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-open-anchor",
         kind: "image",
         src: "http://media.local/blob-canonical-image-open-anchor",

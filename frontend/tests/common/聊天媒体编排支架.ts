@@ -117,7 +117,7 @@ export const 生成连续视频消息 = (count: number): 消息事件[] =>
   );
 
 export const 生成锚点视频播放结果 = (attachmentId: string): 媒体播放结果 => ({
-  mode: "anchor",
+  mode: "legacy_anchor",
   attachmentId,
   kind: "video",
   src: `http://media.local/original-${attachmentId}`,

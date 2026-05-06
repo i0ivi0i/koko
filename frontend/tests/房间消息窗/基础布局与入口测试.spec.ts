@@ -311,7 +311,7 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
@@ -393,7 +393,7 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-image-1": {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-1",
         kind: "image",
         src: "http://media.local/blob-canonical-image-1",
@@ -450,7 +450,7 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/original-video-1",

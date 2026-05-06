@@ -263,7 +263,7 @@ describe("聊天壳集成 / 查看器与自动播", () => {
     el.setTransportForTest(transport);
     注入媒体播放器供测试(el, {
       解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId,
         kind,
         src: `http://media.local/original-${attachmentId}`,
@@ -383,7 +383,7 @@ describe("聊天壳集成 / 查看器与自动播", () => {
     el.setTransportForTest(transport);
     注入媒体播放器供测试(el, {
       解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId,
         kind,
         src: `http://media.local/original-${attachmentId}`,

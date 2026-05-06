@@ -366,7 +366,7 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
@@ -439,7 +439,7 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
     ];
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-1",
         kind: "video",
         src: "http://media.local/original-video-1",

@@ -42,7 +42,7 @@ describe("聊天应用内核 - 退出房间视图", () => {
     const 释放附件播放资源 = vi.fn();
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-video-inline-1",
         kind: "video",
         src: "http://media.local/original-att-video-inline-1",

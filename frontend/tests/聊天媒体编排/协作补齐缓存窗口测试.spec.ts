@@ -73,7 +73,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
 
     适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-current-room-1",
         kind: "image",
         src: "http://media.local/blob/att-image-current-room-1/full.webp",
@@ -162,7 +162,7 @@ describe("聊天媒体编排 - 协作补齐缓存窗口", () => {
 
     适配媒体编排供测试(编排).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-help-chain-1",
         kind: "image",
         src: "http://media.local/blob/att-image-help-chain-1/full.webp",

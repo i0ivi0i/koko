@@ -275,7 +275,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
     expect(locate).toHaveBeenNthCalledWith(1, "att-image-1");
     expect(locate).toHaveBeenNthCalledWith(2, "att-image-1", { forceRefresh: true });
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "legacy_anchor",
       attachmentId: "att-image-1",
       kind: "image",
       src: "http://media.local/canonical-refresh",

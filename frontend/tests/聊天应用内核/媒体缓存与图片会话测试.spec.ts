@@ -47,7 +47,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
       解析播放结果: vi
         .fn()
         .mockResolvedValueOnce({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-video-1",
           kind: "video",
           src: "http://media.local/original-att-video-1",
@@ -157,7 +157,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
       解析播放结果: vi
         .fn()
         .mockResolvedValueOnce({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-image-1",
           kind: "image",
           src: "http://media.local/original-att-image-1",
@@ -183,7 +183,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
 
     expect(kernel.snapshot().media.playbackByAttachmentId["att-image-1"]).toMatchObject({
       src: "http://media.local/original-att-image-1",
-      mode: "anchor",
+      mode: "legacy_anchor",
     });
 
     await kernel.dispatch({
@@ -242,7 +242,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
       销毁: vi.fn(),
     };
     const blob播放结果 = {
-      mode: "anchor" as const,
+      mode: "legacy_anchor" as const,
       attachmentId: "att-image-cache-1",
       kind: "image" as const,
       src: "http://media.local/blob/att-image-cache-1/full.webp",
@@ -567,7 +567,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-no-cache-1",
         kind: "image",
         src: "http://media.local/blob/att-image-no-cache-1/full.webp",
@@ -647,7 +647,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
       hint: null,
     };
     const manifest播放结果 = {
-      mode: "anchor" as const,
+      mode: "legacy_anchor" as const,
       attachmentId: "att-video-cache-manifest-1",
       kind: "video" as const,
       src: "http://media.local/stream/att-video-cache-manifest-1/master.m3u8",
@@ -792,7 +792,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-seeding-1",
         kind: "image",
         src: "http://media.local/blob/att-image-seeding-1/full.webp",
@@ -882,7 +882,7 @@ describe("聊天应用内核 - 媒体缓存与图片会话", () => {
     );
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "legacy_anchor",
         attachmentId: "att-image-backfill-1",
         kind: "image",
         src: "http://media.local/blob/att-image-backfill-1/full.webp",

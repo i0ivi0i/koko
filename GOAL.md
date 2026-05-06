@@ -113,6 +113,7 @@
   - 已继续删除图片展示模型里永远写空且无消费者的 `thumbnailSrc` 字段；图片时间线卡片现在只保留几何信息，正式源继续等待后续 swarm 投影。
   - 已把内部快照投影里的 `contentUrlByAttachmentId / 附件内容地址表` 收口成 `previewUrlByAttachmentId / 附件预览地址表`，避免壳层命名继续伪装成正式内容真相。
   - 已把 `媒体播放.ts` 中误导性的 `读取图片Blob主链` 改成 `图片具备LegacyCanonical锚点`，明确它只是历史 canonical 兼容壳存在性判断，不是正式主链。
+  - 已把播放结果里的 `mode: \"anchor\"` 收口成 `mode: \"legacy_anchor\"`，让迁移壳在类型系统和测试里显式带上 legacy 语义，不再伪装成正式播放模式。
 </progress_log>
 
 <execution_rules>

@@ -272,7 +272,7 @@ describe("聊天应用内核 - 平台通知与后台排空", () => {
       解析播放结果: vi
         .fn()
         .mockResolvedValue({
-          mode: "anchor",
+          mode: "legacy_anchor",
           attachmentId: "att-video-1",
           kind: "video",
           src: "http://media.local/original-att-video-1",
@@ -315,7 +315,7 @@ describe("聊天应用内核 - 平台通知与后台排空", () => {
 
     expect(kernel.snapshot().media.playbackByAttachmentId["att-video-1"]).toMatchObject({
       src: "http://media.local/original-att-video-1",
-      mode: "anchor",
+      mode: "legacy_anchor",
     });
   });
 
