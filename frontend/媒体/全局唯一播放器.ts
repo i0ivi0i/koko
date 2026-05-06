@@ -486,14 +486,18 @@ export function 创建全局唯一播放器(
       if (当前操作 !== 操作代次 || 当前时间线输入 !== 当前输入 || 当前查看器输入) {
         return;
       }
-      const 隐藏预热宿主 = 是时间线隐藏预热宿主(当前输入.mountTarget);
+      const mountTarget = 当前输入.mountTarget;
+      if (!mountTarget) {
+        return;
+      }
+      const 隐藏预热宿主 = 是时间线隐藏预热宿主(mountTarget);
       const 现有视频 = activeShell.读取视频元素();
       const 当前宿主仍是同一条活时间线 =
         当前表面 === "inline" &&
         !隐藏预热宿主 &&
         现有视频.isConnected &&
         现有视频.dataset.attachmentId === 当前输入.attachmentId &&
-        当前输入.mountTarget.contains(现有视频) &&
+        mountTarget.contains(现有视频) &&
         是同一播放器播放源(
           当前输入.source.src,
           现有视频.currentSrc || 现有视频.getAttribute("src")
@@ -523,7 +527,7 @@ export function 创建全局唯一播放器(
         return;
       }
       解绑当前绑定();
-      activeShell.挂载到宿主(当前输入.mountTarget!);
+      activeShell.挂载到宿主(mountTarget);
       activeShell.同步(当前输入.source);
       const video = activeShell.读取视频元素();
       配置时间线自动播视频(video, 当前输入.attachmentId, {
