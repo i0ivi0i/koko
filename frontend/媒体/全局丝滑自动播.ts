@@ -3,6 +3,7 @@ export type 播放连续性表面 = "timeline" | "viewer" | "fullscreen";
 export type 播放连续性阶段 =
   | "coldPlaceholder"
   | "hiddenHandoff"
+  | "retiringHoldFrame"
   | "visible"
   | "pausedFrame"
   | "viewerHandoff"
@@ -22,7 +23,12 @@ export interface 播放连续性输入 {
   dom: { previewReadyState: number; canonicalReadyState: number; sourceMatches: boolean };
   host: { exists: boolean; hasStableFrame: boolean };
   frameEvidence: 播放连续性帧证据;
-  intent: { viewerOpen: boolean; fullscreen: boolean; retire?: boolean };
+  intent: {
+    viewerOpen: boolean;
+    fullscreen: boolean;
+    retire?: boolean;
+    retiringOwner?: boolean;
+  };
 }
 
 export type 播放连续性决策 =
@@ -34,6 +40,12 @@ export type 播放连续性决策 =
   | {
       phase: "pausedFrame";
       kind: "hold_frame";
+      src: string | null;
+      targetCurrentTime: number;
+    }
+  | {
+      phase: "retiringHoldFrame";
+      kind: "retiring_hold_frame";
       src: string | null;
       targetCurrentTime: number;
     }
@@ -108,6 +120,7 @@ export const 播放连续性机 = Object.freeze({
     "coldPlaceholder",
     "fullscreenHandoff",
     "viewerHandoff",
+    "retiringHoldFrame",
     "visible",
     "pausedFrame",
     "hiddenHandoff",
@@ -137,6 +150,19 @@ export const 判定播放连续性表面 = (input: 播放连续性输入): 播�
   }
   if (input.intent.viewerOpen) {
     return { phase: "viewerHandoff", kind: "viewer_handoff", targetCurrentTime };
+  }
+  if (input.intent.retiringOwner === true) {
+    /**
+     * “刚离开自动播边界”不是冷启动，也不是直接宣告退场完成。
+     * 这条同源会话还握着最后一眼所需的 source / 位置 / 帧证据时，
+     * 渲染层必须先保住旧卡片自己的暂停帧，再允许下一条视频揭帘。
+     */
+    return {
+      phase: "retiringHoldFrame",
+      kind: "retiring_hold_frame",
+      src: input.source.src,
+      targetCurrentTime,
+    };
   }
   if (input.dom.sourceMatches && input.dom.canonicalReadyState >= 2) {
     return { phase: "visible", kind: "visible_canonical", targetCurrentTime };

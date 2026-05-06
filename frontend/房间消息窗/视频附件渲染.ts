@@ -169,8 +169,11 @@ export const 渲染视频附件 = (
     attachment.attachmentId,
     previewVideoSrc
   );
-  const isRecentlyReleasedOwnerWithPosition =
+  const isRecentOwnerContinuityBridge =
     attachment.attachmentId === context.最近退场Owner附件Id;
+  const isRetiringReleasedOwner =
+    isRecentOwnerContinuityBridge &&
+    context.inlineAutoplayOwnerAttachmentId !== attachment.attachmentId;
   const previewFrameEvidence = context.读取时间线现有预览帧证据(
     attachment.attachmentId,
     previewVideoSrc
@@ -241,34 +244,37 @@ export const 渲染视频附件 = (
             src: previewFrameEvidence.src,
             currentTime: previewFrameEvidence.currentTime,
           }
-        : { kind: "none" },
-    intent: { viewerOpen: false, fullscreen: false },
+      : { kind: "none" },
+    intent: {
+      viewerOpen: false,
+      fullscreen: false,
+      retiringOwner: isRetiringReleasedOwner,
+    },
   });
+  const shouldPreferRetiringOwnerPreviewSurface =
+    isRetiringReleasedOwner &&
+    playbackContinuityDecision.kind === "retiring_hold_frame";
   const shouldSuppressPosterForContinuity =
-    (Boolean(restorableTimelineFrame) ||
-      shouldReuseSavedTimelineFrameAsPreview ||
-      hasFrozenTimelineFrame ||
-      hasHistoricalCanonicalReveal) &&
+    (Boolean(restorableTimelineFrame) || shouldReuseSavedTimelineFrameAsPreview || hasFrozenTimelineFrame || hasHistoricalCanonicalReveal) &&
     (playbackContinuityDecision.kind === "hidden_handoff" ||
+      playbackContinuityDecision.kind === "retiring_hold_frame" ||
       playbackContinuityDecision.kind === "hold_frame" ||
       playbackContinuityDecision.kind === "visible_canonical");
   const shouldShowTimelinePlayIndicator =
     !shouldRenderInlineVideo &&
-    !isRecentlyReleasedOwnerWithPosition &&
-    !shouldReuseSavedTimelineFrameAsPreview &&
-    !hasSameSourceSavedTimelineFrame &&
-    !restorableTimelineFrame &&
-    !hasExistingSameSourcePreviewFrame &&
-    !hasFrozenTimelineFrame &&
-    !hasKnownReadyPreviewFrame;
+    !isRecentOwnerContinuityBridge &&
+    !shouldReuseSavedTimelineFrameAsPreview && !hasSameSourceSavedTimelineFrame && !restorableTimelineFrame &&
+    !hasExistingSameSourcePreviewFrame && !hasFrozenTimelineFrame && !hasKnownReadyPreviewFrame;
+  /** 旧 owner 退场时只允许在“无 playback + 无 formal source”的极窄兜底里短暂复用旧 preview bridge。 */
   const shouldRenderReleasedOwnerPreviewVideo =
     Boolean(previewVideoSrc) &&
-    isRecentlyReleasedOwnerWithPosition &&
+    isRetiringReleasedOwner &&
     !playback &&
     videoBudget.formalByteSource === "none" &&
     shouldReuseSavedTimelineFrameAsPreview &&
-    hasSameSourceSavedTimelineFrame &&
     !hasFrozenTimelineFrame;
+  const shouldKeepExistingPreviewDomForRetiringOwner =
+    shouldPreferRetiringOwnerPreviewSurface && hasExistingSameSourcePreviewFrame;
   const shouldRenderPreviewVideoByBudget =
     (Boolean(previewVideoSrc) &&
       context.读取时间线预览视频是否允许渲染(videoBudget, {
@@ -283,10 +289,7 @@ export const 渲染视频附件 = (
         hasFrozenTimelineFrame ||
         hasKnownReadyPreviewFrame)) ||
     shouldRenderReleasedOwnerPreviewVideo;
-  /**
-   * 有续播目标但当前 preview 帧还没追上时，继续把这颗 `<video>` 露出来只会让用户先看到错误时间点，
-   * 然后再突然跳到恢复位置。这里直接让它退到 hidden handoff，由同一颗 canonical player 在隐藏宿主里对齐。
-   */
+  /** preview 还没追上续播点时，不能先把错误时间点露给用户。 */
   const shouldSuppressWrongTimePreviewVideo =
     shouldRenderInlineVideo &&
     playbackContinuityDecision.kind === "hidden_handoff" &&
@@ -308,43 +311,38 @@ export const 渲染视频附件 = (
     (context.时间线隐藏接管附件Id === attachment.attachmentId ||
       hasHistoricalCanonicalReveal);
   const shouldStageWarmupColdInitialOwnerCanonical =
-    shouldRenderInlineVideo &&
-    !shouldRevealCanonicalHost &&
-    !playback &&
+    shouldRenderInlineVideo && !shouldRevealCanonicalHost && !playback &&
     context.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
     context.时间线隐藏接管附件Id !== attachment.attachmentId &&
-    !hasHistoricalCanonicalReveal &&
-    !hasStablePreviewPosterSurface &&
-    !hasCurrentDomPreviewFrame &&
-    !hasFrozenTimelineFrame &&
-    !hasKnownReadyPreviewFrame &&
-    !shouldReuseSavedTimelineFrameAsPreview;
+    !hasHistoricalCanonicalReveal && !hasStablePreviewPosterSurface &&
+    !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame &&
+    !hasKnownReadyPreviewFrame && !shouldReuseSavedTimelineFrameAsPreview;
   const shouldRenderStageHost =
     !shouldRevealCanonicalHost &&
     (shouldUseHiddenStageCover || shouldStageWarmupColdInitialOwnerCanonical);
   const shouldRenderVisibleCanonicalHost =
     shouldRenderInlineVideo &&
+    !shouldPreferRetiringOwnerPreviewSurface &&
     !shouldUseHiddenStageCover &&
     !shouldStageWarmupColdInitialOwnerCanonical;
   const shouldRenderPreviewVideo =
     shouldRenderPreviewVideoByBudget &&
     !shouldSuppressWrongTimePreviewVideo &&
     !shouldRenderVisibleCanonicalHost &&
-    (!isRecentlyReleasedOwnerWithPosition || shouldRenderReleasedOwnerPreviewVideo);
+    (!isRecentOwnerContinuityBridge ||
+      shouldRenderReleasedOwnerPreviewVideo ||
+      shouldKeepExistingPreviewDomForRetiringOwner);
   const shouldRenderFrozenTimelineFrame =
     hasFrozenTimelineFrame &&
     !hasCurrentDomPreviewFrame &&
     (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
   const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup =
-    shouldRenderInlineVideo &&
-    shouldRenderPreviewVideo &&
-    shouldRenderStageHost &&
-    shouldShowFirstFrameGuard &&
-    !hasStablePreviewPosterSurface &&
-    !hasCurrentDomPreviewFrame &&
-    !hasFrozenTimelineFrame;
+    shouldRenderInlineVideo && shouldRenderPreviewVideo && shouldRenderStageHost &&
+    shouldShowFirstFrameGuard && !hasStablePreviewPosterSurface &&
+    !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
   const shouldRenderCanonicalLoadingPosterCover =
     shouldRenderInlineVideo &&
+    !shouldPreferRetiringOwnerPreviewSurface &&
     !(playbackContinuityDecision.kind === "hidden_handoff" && Boolean(restorableTimelineFrame)) &&
     !shouldRevealCanonicalHost &&
     !shouldRenderFrozenTimelineFrame &&
@@ -355,7 +353,7 @@ export const 渲染视频附件 = (
   const shouldRenderPreviewPosterSurface =
     (hasStablePreviewPosterSurface &&
       !shouldSuppressPosterForContinuity &&
-      !isRecentlyReleasedOwnerWithPosition &&
+      !isRecentOwnerContinuityBridge &&
       !shouldReuseSavedTimelineFrameAsPreview &&
       !hasSameSourceSavedTimelineFrame &&
       !hasFrozenTimelineFrame &&
@@ -363,7 +361,10 @@ export const 渲染视频附件 = (
       (!shouldRenderInlineVideo || !shouldRevealCanonicalHost)) ||
     shouldRenderCanonicalLoadingPosterCover;
   const previewVideoPoster =
-    !hasFrozenTimelineFrame && !hasCurrentDomPreviewFrame && (hasSourcePoster || hasRuntimePreview)
+    !shouldPreferRetiringOwnerPreviewSurface &&
+    !hasFrozenTimelineFrame &&
+    !hasCurrentDomPreviewFrame &&
+    (hasSourcePoster || hasRuntimePreview)
       ? previewPosterSrc
       : undefined;
   const 时间线预览底板视频 = html`

@@ -410,4 +410,128 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     pane.remove();
   });
+
+  it("刚退场 owner 仍带着上一拍 swarm playback 快照时，也必须优先露冻结帧而不是 canonical loading poster", async () => {
+    const pane = 创建媒体消息窗();
+    const releasedAttachmentId = "att-video-released-owner-stale-playback";
+    const nextAttachmentId = "att-video-next-owner-stale-playback";
+    const releasedPlayback = {
+      mode: "swarm",
+      attachmentId: releasedAttachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-video-released-owner-stale-playback",
+      thumbnailUrl: "http://media.local/poster-video-released-owner-stale-playback",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const nextPlayback = {
+      mode: "swarm",
+      attachmentId: nextAttachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-video-next-owner-stale-playback",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      创建单视频消息项(releasedAttachmentId, 1),
+      创建单视频消息项(nextAttachmentId, 2),
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      [releasedAttachmentId]: releasedPlayback,
+      [nextAttachmentId]: nextPlayback,
+    };
+    pane.mediaVideoBudgetByAttachmentId = {
+      [releasedAttachmentId]: {
+        attachmentId: releasedAttachmentId,
+        tier: "heavy_playback",
+        reason: "inline_autoplay_owner",
+        canonicalVideoSrc: releasedPlayback.src,
+        previewVideoSrc: null,
+        allowInlineCanonical: true,
+        allowPreviewVideo: false,
+        formalByteSource: "webtorrent_official_stream",
+        webTorrentLifecycleState: "source_ready",
+        activeWebTorrentReaderCount: 1,
+      },
+    };
+    pane.inlineAutoplayOwnerAttachmentId = nextAttachmentId;
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      [nextAttachmentId]: nextPlayback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [releasedAttachmentId]: {
+        src: releasedPlayback.src,
+        currentTime: 12.5,
+        updatedAt: 1_777_500_000_100,
+      },
+    };
+    (
+      pane as unknown as {
+        最近退场Owner附件Id: string | null;
+        时间线隐藏接管附件Id: string | null;
+      }
+    ).最近退场Owner附件Id = releasedAttachmentId;
+    (
+      pane as unknown as {
+        最近退场Owner附件Id: string | null;
+        时间线隐藏接管附件Id: string | null;
+      }
+    ).时间线隐藏接管附件Id = nextAttachmentId;
+    const 画面缓存Owner = (
+      pane as unknown as {
+        时间线画面缓存Owner: {
+          时间线自动播冻结帧: Map<
+            string,
+            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+          >;
+        };
+      }
+    ).时间线画面缓存Owner;
+    Object.defineProperty(画面缓存Owner, "时间线自动播冻结帧", {
+      configurable: true,
+      value: new Map([
+        [
+          releasedAttachmentId,
+          {
+            src: releasedPlayback.src,
+            currentTime: 12.5,
+            dataUrl: "data:image/webp;base64,retiring-hold-frame",
+            updatedAt: 1_777_500_000_101,
+          },
+        ],
+      ]),
+    });
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const releasedCard = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${releasedAttachmentId}"]`
+    );
+    const releasedFrozenFrame = releasedCard?.querySelector<HTMLImageElement>(
+      `img.message-video-frozen-frame[data-attachment-id="${releasedAttachmentId}"]`
+    );
+    const releasedPreview = releasedCard?.querySelector<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+
+    /**
+     * 这是这次真实浏览器烟测抓到的那一拍：
+     * 1. 旧卡还带着上一拍 swarm/playback 快照；
+     * 2. 新卡已经开始 hidden stage 预热；
+     * 3. 旧卡首个可见表面仍必须是它自己的冻结帧，而不是 canonical loading poster，
+     *    更不能为了补救再重建第二颗 preview video。
+     */
+    expect(releasedCard).not.toBeNull();
+    expect(releasedFrozenFrame?.getAttribute("src")).toBe(
+      "data:image/webp;base64,retiring-hold-frame"
+    );
+    expect(releasedPreview).toBeNull();
+    expect(releasedCard?.querySelector("img.message-video-poster")).toBeNull();
+    expect(
+      releasedCard?.querySelector(".message-video-canonical-host[data-attachment-id]")
+    ).toBeNull();
+
+    pane.remove();
+  });
 });

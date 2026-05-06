@@ -164,6 +164,25 @@ describe("全局丝滑自动播", () => {
     expect(decision).toMatchObject({ phase: "retired", kind: "retire" });
   });
 
+  it("刚失去 owner 的同源时间线视频，必须先进入 retiring hold frame 而不是直接 hidden handoff", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      ownerAttachmentId: "att-next",
+      intent: {
+        viewerOpen: false,
+        fullscreen: false,
+        retiringOwner: true,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "retiringHoldFrame",
+      kind: "retiring_hold_frame",
+      src: "blob:webtorrent/att-1",
+      targetCurrentTime: 18,
+    });
+  });
+
   it("播放连续性裁决保留显式顺序，但不能把 XState runtime 放进滚动热路径", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "../媒体/全局丝滑自动播.ts"),
@@ -175,6 +194,7 @@ describe("全局丝滑自动播", () => {
       "coldPlaceholder",
       "fullscreenHandoff",
       "viewerHandoff",
+      "retiringHoldFrame",
       "visible",
       "pausedFrame",
       "hiddenHandoff",
