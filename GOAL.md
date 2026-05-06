@@ -111,6 +111,7 @@
   - `originalSrc` 现阶段仅允许留在测试文案、legacy 语义描述或历史检索词里，不再作为生产对象字面量字段存在。
   - `thumbnailSrc / posterSrc` 继续保留，但当前只承担 preview / poster 显示元数据语义。
   - 已继续删除图片展示模型里永远写空且无消费者的 `thumbnailSrc` 字段；图片时间线卡片现在只保留几何信息，正式源继续等待后续 swarm 投影。
+  - 已把内部快照投影里的 `contentUrlByAttachmentId / 附件内容地址表` 收口成 `previewUrlByAttachmentId / 附件预览地址表`，避免壳层命名继续伪装成正式内容真相。
 </progress_log>
 
 <execution_rules>

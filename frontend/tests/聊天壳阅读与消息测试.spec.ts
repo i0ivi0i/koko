@@ -87,7 +87,7 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       默认消息文本布局环境,
       {
         "att-1": {
-          thumbnailSrc: "/api/attachments/att-1/thumb",
+          previewSrc: "/api/attachments/att-1/thumb",
         },
       }
     );
@@ -136,7 +136,7 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       默认消息文本布局环境,
       {
         "att-video-1": {
-          thumbnailSrc: "/api/attachments/att-video-1/thumb",
+          previewSrc: "/api/attachments/att-video-1/thumb",
         },
       }
     );

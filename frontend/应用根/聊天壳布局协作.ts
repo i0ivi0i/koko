@@ -4,7 +4,7 @@ import {
   type 消息文本布局环境,
 } from "../房间消息窗/视图.js";
 
-type 聊天附件内容地址表 = 聊天应用快照["media"]["contentUrlByAttachmentId"];
+type 聊天附件预览地址表 = 聊天应用快照["media"]["previewUrlByAttachmentId"];
 
 type 聊天壳布局观测回调 = {
   同步房间宽度: (width: number) => void;
@@ -39,9 +39,9 @@ export function 按房间宽度派生消息文本布局环境(roomWidth: number)
   };
 }
 
-export function 附件内容地址表相同(
-  left: 聊天附件内容地址表,
-  right: 聊天附件内容地址表
+export function 附件预览地址表相同(
+  left: 聊天附件预览地址表,
+  right: 聊天附件预览地址表
 ): boolean {
   if (left === right) {
     return true;
@@ -57,7 +57,7 @@ export function 附件内容地址表相同(
     return (
       leftEntry !== undefined &&
       rightEntry !== undefined &&
-      leftEntry.thumbnailSrc === rightEntry.thumbnailSrc
+      leftEntry.previewSrc === rightEntry.previewSrc
     );
   });
 }

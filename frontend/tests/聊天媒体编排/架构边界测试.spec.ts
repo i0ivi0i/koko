@@ -151,6 +151,8 @@ describe("聊天媒体编排 - 架构边界", () => {
     expect(runtimeSource).toContain("export function 创建播放会话运行时副作用");
     expect(projectionSource).toContain("export function 投影媒体播放会话快照");
     expect(projectionSource).toContain("export function 投影媒体播放会话预算");
+    expect(projectionSource).toContain("previewUrlByAttachmentId");
+    expect(projectionSource).not.toContain("contentUrlByAttachmentId");
     expect(autoplayPreheatSource).toContain("export function 同步自动播候选预热");
     expect(viewerReleaseSource).toContain("export function 释放查看器正式播放占用");
     expect(source).not.toContain("function 创建聊天媒体编排");

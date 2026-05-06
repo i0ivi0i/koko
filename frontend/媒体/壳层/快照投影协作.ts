@@ -10,8 +10,8 @@ import type { 媒体会话快照, 媒体会话端口 } from "../媒体会话.js"
 import type { 媒体播放结果 } from "../媒体播放.js";
 import type { 媒体运行时上下文 } from "../运行时.js";
 
-export type 附件内容地址快照 = {
-  thumbnailSrc: string;
+export type 附件预览地址快照 = {
+  previewSrc: string;
 };
 
 type 媒体附件条目 = {
@@ -39,7 +39,7 @@ type 媒体快照投影协作依赖 = {
 };
 
 export interface 媒体快照投影协作端口 {
-  读取附件内容地址表(): Record<string, 附件内容地址快照>;
+  读取附件预览地址表(): Record<string, 附件预览地址快照>;
   读取媒体会话快照表(): Record<string, 媒体会话快照>;
   读取媒体播放结果表(): Record<string, 媒体播放结果>;
   读取信息流视频预算表(): Record<string, 信息流视频预算投影>;
@@ -75,8 +75,8 @@ export function 创建媒体快照投影协作(
     left.activeWebTorrentReaderCount === right.activeWebTorrentReaderCount;
 
   return {
-    读取附件内容地址表(): Record<string, 附件内容地址快照> {
-      const urlsByAttachmentId: Record<string, 附件内容地址快照> = {};
+    读取附件预览地址表(): Record<string, 附件预览地址快照> {
+      const urlsByAttachmentId: Record<string, 附件预览地址快照> = {};
       for (const attachment of deps.读取当前房间媒体附件()) {
         urlsByAttachmentId[attachment.attachmentId] = {
           /**
@@ -85,7 +85,7 @@ export function 创建媒体快照投影协作(
            * 2. 图片则不再额外生成 thumbnail/original 地址，避免 presenter 替它脑补 blob/canonical 第二面；
            * 3. 正式显示仍然统一等待 swarm source 或稳定占位。
            */
-          thumbnailSrc:
+          previewSrc:
             attachment.kind === "video"
               ? deps.构建附件内容地址(attachment.attachmentId, "thumbnail")
               : "",

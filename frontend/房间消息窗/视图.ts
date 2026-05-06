@@ -104,10 +104,10 @@ interface 媒体附件展示结果 {
   attachmentLayout: 媒体附件拼贴布局 | null;
 }
 
-export type 附件内容地址表 = Record<
+export type 附件预览地址表 = Record<
   string,
   {
-    thumbnailSrc: string;
+    previewSrc: string;
   }
 >;
 
@@ -167,7 +167,7 @@ export function 派生聊天列表展示项(
   currentSessionId: string,
   firstUnreadEventPosition: number | null,
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
-  附件内容地址表: 附件内容地址表 = {}
+  附件预览地址表: 附件预览地址表 = {}
 ): 聊天列表展示项[] {
   const items: 聊天列表展示项[] = [];
   let unreadDividerInserted = false;
@@ -185,7 +185,7 @@ export function 派生聊天列表展示项(
       });
       unreadDividerInserted = true;
     }
-    items.push(派生消息展示项(message, currentSessionId, layoutEnv, 附件内容地址表));
+    items.push(派生消息展示项(message, currentSessionId, layoutEnv, 附件预览地址表));
   }
 
   return items;
@@ -200,7 +200,7 @@ export function 派生消息展示项(
   event: 消息事件,
   currentSessionId: string,
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
-  附件内容地址表: 附件内容地址表 = {}
+  附件预览地址表: 附件预览地址表 = {}
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
   const body = 读取消息文本(event);
@@ -208,7 +208,7 @@ export function 派生消息展示项(
   const { attachments, attachmentLayout } = 派生媒体附件展示结果(
     event.attachments ?? [],
     layoutEnv,
-    附件内容地址表
+    附件预览地址表
   );
   const 多行紧凑候选 = 默认文本布局器.布局纯文本({
     text: hasText ? body : " ",
@@ -278,7 +278,7 @@ function 读取消息文本(event: 消息事件): string {
 function 派生媒体附件展示结果(
   attachments: 附件快照[],
   layoutEnv: 消息文本布局环境,
-  附件内容地址表: 附件内容地址表
+  附件预览地址表: 附件预览地址表
 ): 媒体附件展示结果 {
   if (attachments.length === 0) {
     return {
@@ -329,15 +329,15 @@ function 派生媒体附件展示结果(
           /**
            * 视频消息流默认态只吃后端权威封面：
            * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
-           * 2. realtime room_event 在无逐连接 session 上下文时，不会直接带 still_url，
-           *    这时只允许根据后端显式给出的 `has_preview_asset` 真相，回填当前会话的 thumbnail 地址；
+             * 2. realtime room_event 在无逐连接 session 上下文时，不会直接带 still_url，
+             *    这时只允许根据后端显式给出的 `has_preview_asset` 真相，回填当前会话的 preview 地址；
            * 3. 不再让壳层临时抠首帧、长第二套预览链；
            * 4. 正式播放仍然继续走唯一媒体主链。
            */
           posterSrc:
             attachment.preview_asset?.still_url ??
             (attachment.has_preview_asset
-              ? 读取附件缩略地址(附件内容地址表, attachment.attachment_id)
+              ? 读取附件预览地址(附件预览地址表, attachment.attachment_id)
               : null),
         };
       }
@@ -520,10 +520,10 @@ function 计算拼贴槽位高度(
  * 2. 这样时间线/查看器缺少正式播放真相时，只会进入静态占位或 degraded，而不会偷偷长第二入口；
  * 3. 需要 legacy 地址的调用方，必须自己显式提供，不能把兜底责任塞回这里。
  */
-function 读取附件缩略地址(附件内容地址表: 附件内容地址表, attachmentId: string): string {
-  const entry = 附件内容地址表[attachmentId];
+function 读取附件预览地址(附件预览地址表: 附件预览地址表, attachmentId: string): string {
+  const entry = 附件预览地址表[attachmentId];
   if (entry) {
-    return entry.thumbnailSrc;
+    return entry.previewSrc;
   }
   return "";
 }

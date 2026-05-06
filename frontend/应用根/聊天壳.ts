@@ -21,7 +21,7 @@ import {
 import {
   聊天壳布局观测器,
   按房间宽度派生消息文本布局环境,
-  附件内容地址表相同,
+  附件预览地址表相同,
 } from "./聊天壳布局协作.js";
 import { 渲染聊天壳操作台 } from "./聊天壳操作台视图.js";
 import { 聊天壳样式 } from "./聊天壳样式.js";
@@ -53,7 +53,7 @@ export class 聊天壳 extends LitElement {
     sessionId: 聊天应用快照["sessionId"];
     firstUnreadEventPosition: 聊天应用快照["firstUnreadEventPosition"];
     layoutEnv: 消息文本布局环境;
-    contentUrlByAttachmentId: 聊天应用快照["media"]["contentUrlByAttachmentId"];
+    previewUrlByAttachmentId: 聊天应用快照["media"]["previewUrlByAttachmentId"];
     items: ReturnType<typeof 派生聊天列表展示项>;
   } | null = null;
 
@@ -289,7 +289,7 @@ export class 聊天壳 extends LitElement {
       cache.sessionId === 聊天快照.sessionId &&
       cache.firstUnreadEventPosition === 聊天快照.firstUnreadEventPosition &&
       cache.layoutEnv === layoutEnv &&
-      附件内容地址表相同(cache.contentUrlByAttachmentId, 聊天快照.media.contentUrlByAttachmentId)
+      附件预览地址表相同(cache.previewUrlByAttachmentId, 聊天快照.media.previewUrlByAttachmentId)
     ) {
       return cache.items;
     }
@@ -298,14 +298,14 @@ export class 聊天壳 extends LitElement {
       聊天快照.sessionId,
       聊天快照.firstUnreadEventPosition,
       layoutEnv,
-      聊天快照.media.contentUrlByAttachmentId
+      聊天快照.media.previewUrlByAttachmentId
     );
     this.聊天列表展示项缓存 = {
       messages: 聊天快照.messages,
       sessionId: 聊天快照.sessionId,
       firstUnreadEventPosition: 聊天快照.firstUnreadEventPosition,
       layoutEnv,
-      contentUrlByAttachmentId: 聊天快照.media.contentUrlByAttachmentId,
+      previewUrlByAttachmentId: 聊天快照.media.previewUrlByAttachmentId,
       items,
     };
     return items;
