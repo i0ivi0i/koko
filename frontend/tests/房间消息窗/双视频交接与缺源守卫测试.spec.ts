@@ -256,7 +256,7 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
     );
     expect(切换前预览视频).not.toBeNull();
     切换前预览视频!.dispatchEvent(new Event("loadedmetadata"));
-    expect(切换前预览视频?.currentTime).toBeCloseTo(22.5, 2);
+    const 切换前预览时间 = 切换前预览视频!.currentTime;
 
     同步时间线自动播Spy.mockClear();
     /**
@@ -294,7 +294,13 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
     expect(新Owner预览视频).toBe(切换前预览视频);
     expect(新Owner预览视频?.autoplay).toBe(false);
     expect(新Owner预览视频?.getAttribute("src")).toBe(playback2.src);
-    expect(新Owner预览视频?.currentTime).toBeCloseTo(22.5, 2);
+    /**
+     * 目标卡片自己的 preview 只负责保住当前可见壳，不再跟着 hidden-stage canonical 一起 seek：
+     * 1. 真正的续播恢复只能落在隐藏接管宿主里的 canonical player；
+     * 2. 如果交接这一拍又对 preview 追加 seek，用户就会看到“时间戳抽一下”；
+     * 3. 因此 preview 允许保留，但 currentTime 必须保持切换前原样。
+     */
+    expect(新Owner预览视频?.currentTime).toBeCloseTo(切换前预览时间, 2);
     expect(新Owner播放指示器).toBeNull();
 
     pane.remove();

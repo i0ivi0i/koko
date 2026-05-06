@@ -667,6 +667,16 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
         }
         continue;
       }
+      if (this.inlineAutoplayOwnerAttachmentId === attachmentId) {
+        /**
+         * 当前 attachment 已经升格成新的 autoplay owner 时，
+         * 续播恢复只能发生在 hidden-stage canonical player 上：
+         * 1. 这张卡自己的 preview 只是当前可见壳，继续对它 seek 会把用户眼前的时间戳硬拉跳一下；
+         * 2. canonical player 会在隐藏宿主里恢复 source/currentTime，ready 后再揭帘；
+         * 3. 因此这里明确禁止“新 owner 的 preview video 跟着补位”。
+         */
+        continue;
+      }
       if (this.读取自动播恢复位置(attachmentId, this.读取视频当前播放源(video))) {
         this.恢复时间线自动播播放位置(attachmentId, video, {
           allowPreviewFrame: true,
