@@ -235,7 +235,15 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
         时间线画面缓存Owner: {
           时间线自动播冻结帧: Map<
             string,
-            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
           >;
         };
       }
@@ -248,8 +256,11 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
           {
             src: playback.src,
             currentTime: 9.5,
-            dataUrl: "data:image/webp;base64,freeze",
+            bitmap: document.createElement("canvas"),
+            width: 320,
+            height: 180,
             updatedAt: Date.now(),
+            dispose: vi.fn(),
           },
         ],
       ]),
@@ -349,6 +360,63 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
+
+    pane.remove();
+  });
+
+  it("无 poster 且接管瞬间只有 inline autoplay canonical 源时，也必须先长出同源 bridge，而不是先退成黑壳或 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const ownerPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-owner-only",
+      kind: "video",
+      src: "http://media.local/swarm-owner-only",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-owner-only",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {};
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    expect(
+      pane.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-owner-only"]'
+      )
+    ).toBeNull();
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-owner-only";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-owner-only": ownerPlayback,
+    };
+    await pane.updateComplete;
+
+    const previewBridge = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-owner-only"]:not([data-canonical-player="true"])'
+    );
+    const posterBridge = pane.querySelector(
+      'img.message-video-poster[data-attachment-id="att-video-owner-only"]'
+    );
+
+    expect(previewBridge?.getAttribute("src")).toBe(ownerPlayback.src);
+    expect(posterBridge).toBeNull();
 
     pane.remove();
   });

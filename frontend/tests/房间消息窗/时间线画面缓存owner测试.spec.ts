@@ -44,19 +44,28 @@ describe("时间线画面缓存Owner", () => {
       owner as unknown as {
         时间线自动播冻结帧: Map<
           string,
-          { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+          {
+            src: string;
+            currentTime: number;
+            bitmap: CanvasImageSource;
+            width: number;
+            height: number;
+            updatedAt: number;
+            dispose(): void;
+          }
         >;
       }
     ).时间线自动播冻结帧.set("att-1", {
       src: "/swarm/video.mp4",
       currentTime: 12.2,
-      dataUrl: "data:image/webp;base64,freeze",
+      bitmap: document.createElement("canvas"),
+      width: 320,
+      height: 180,
       updatedAt: 2,
+      dispose: vi.fn(),
     });
 
-    expect(
-      owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", position)?.dataUrl
-    ).toBe("data:image/webp;base64,freeze");
+    expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", position)?.width).toBe(320);
     expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
       ...position,
       currentTime: 20,
@@ -74,19 +83,28 @@ describe("时间线画面缓存Owner", () => {
         owner as unknown as {
           时间线自动播冻结帧: Map<
             string,
-            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
           >;
         }
       ).时间线自动播冻结帧.set("att-1", {
         src: "/swarm/video.mp4",
         currentTime: 12.2,
-        dataUrl: "data:image/webp;base64,freeze",
+        bitmap: document.createElement("canvas"),
+        width: 320,
+        height: 180,
         updatedAt: Date.now() - 1_000,
+        dispose: vi.fn(),
       });
 
-      expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", null)?.dataUrl).toBe(
-        "data:image/webp;base64,freeze"
-      );
+      expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", null)?.width).toBe(320);
 
       vi.setSystemTime(new Date("2026-05-07T12:00:06.000Z"));
       expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", null)).toBeNull();
@@ -98,15 +116,13 @@ describe("时间线画面缓存Owner", () => {
   it("预热冻结帧会等到 requestVideoFrameCallback 确认已合成那一帧后再写入缓存", async () => {
     const { owner } = 创建Owner();
     const drawImage = vi.fn();
-    const toBlob = vi.fn((callback: BlobCallback) => {
-      callback(new Blob(["freeze"], { type: "image/webp" }));
-    });
     const callbacks: Array<() => void> = [];
     const canvas = {
       width: 0,
       height: 0,
       getContext: vi.fn(() => ({ drawImage })),
-      toBlob,
+      toBlob: vi.fn(),
+      toDataURL: vi.fn(),
     } as unknown as HTMLCanvasElement;
     const 原始创建元素 = document.createElement.bind(document);
     const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
@@ -115,18 +131,6 @@ describe("时间线画面缓存Owner", () => {
       }
       return 原始创建元素(tagName);
     });
-
-    class 假FileReader {
-      result: string | ArrayBuffer | null = null;
-      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
-
-      readAsDataURL(): void {
-        this.result = "data:image/webp;base64,warm-freeze";
-        queueMicrotask(() =>
-          this.onload?.(undefined as unknown as ProgressEvent<FileReader>)
-        );
-      }
-    }
 
     const video = {
       readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
@@ -142,17 +146,16 @@ describe("时间线画面缓存Owner", () => {
       }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
     } as unknown as HTMLVideoElement;
 
-    vi.stubGlobal("FileReader", 假FileReader);
-
     try {
       owner.捕获自动播冻结帧("att-1", video, { 预热已合成帧: true });
       expect(drawImage).not.toHaveBeenCalled();
       expect(callbacks).toHaveLength(1);
 
       callbacks[0]!();
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(drawImage).toHaveBeenCalledTimes(1);
+      expect(canvas.toBlob).not.toHaveBeenCalled();
+      expect(canvas.toDataURL).not.toHaveBeenCalled();
       expect(
         owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
           src: "http://media.local/swarm/video.mp4",
@@ -160,25 +163,22 @@ describe("时间线画面缓存Owner", () => {
           updatedAt: 1,
         })
       ).toMatchObject({
-        dataUrl: "data:image/webp;base64,warm-freeze",
+        bitmap: canvas,
       });
     } finally {
       createElement.mockRestore();
-      vi.unstubAllGlobals();
     }
   });
 
-  it("退场即时冻结帧会同步写入当前帧，不能等异步 blob 慢一拍", () => {
+  it("退场即时冻结帧会同步写入内存桥接帧，不能再退回同步 dataUrl 编码", () => {
     const { owner, 请求刷新 } = 创建Owner();
     const drawImage = vi.fn();
-    const toDataURL = vi.fn(() => "data:image/webp;base64,instant-freeze");
-    const toBlob = vi.fn();
     const canvas = {
       width: 0,
       height: 0,
       getContext: vi.fn(() => ({ drawImage })),
-      toBlob,
-      toDataURL,
+      toBlob: vi.fn(),
+      toDataURL: vi.fn(),
     } as unknown as HTMLCanvasElement;
     const 原始创建元素 = document.createElement.bind(document);
     const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
@@ -201,8 +201,8 @@ describe("时间线画面缓存Owner", () => {
       owner.捕获自动播冻结帧("att-1", video, { 立即提交: true });
 
       expect(drawImage).toHaveBeenCalledTimes(1);
-      expect(toDataURL).toHaveBeenCalledTimes(1);
-      expect(toBlob).not.toHaveBeenCalled();
+      expect(canvas.toDataURL).not.toHaveBeenCalled();
+      expect(canvas.toBlob).not.toHaveBeenCalled();
       expect(请求刷新).toHaveBeenCalledOnce();
       expect(
         owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
@@ -211,7 +211,7 @@ describe("时间线画面缓存Owner", () => {
           updatedAt: 1,
         })
       ).toMatchObject({
-        dataUrl: "data:image/webp;base64,instant-freeze",
+        bitmap: canvas,
       });
     } finally {
       createElement.mockRestore();

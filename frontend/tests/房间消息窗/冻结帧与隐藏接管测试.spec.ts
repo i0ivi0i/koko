@@ -21,7 +21,7 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
       thumbnailUrl: "http://media.local/poster-video-1",
       hint: null,
     } satisfies 媒体播放结果;
-    const frozenFrameSrc = "data:image/webp;base64,ZmFrZQ==";
+    const frozenFrameBitmap = document.createElement("canvas");
 
     pane.items = [
       {
@@ -55,7 +55,15 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
         时间线画面缓存Owner: {
           时间线自动播冻结帧: Map<
             string,
-            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
           >;
         };
       }
@@ -68,8 +76,11 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
           {
             src: playback.src,
             currentTime: 18.6,
-            dataUrl: frozenFrameSrc,
+            bitmap: frozenFrameBitmap,
+            width: 320,
+            height: 180,
             updatedAt: 1_715_000_000_001,
+            dispose: vi.fn(),
           },
         ],
       ]),
@@ -78,14 +89,14 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const frozenFrame = pane.querySelector<HTMLImageElement>(
-      'img.message-video-frozen-frame[data-attachment-id="att-video-1"]'
+    const frozenFrame = pane.querySelector<HTMLCanvasElement>(
+      'canvas.message-video-frozen-frame[data-attachment-id="att-video-1"]'
     );
     const previewVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
 
-    expect(frozenFrame?.getAttribute("src")).toBe(frozenFrameSrc);
+    expect(frozenFrame).not.toBeNull();
     expect(previewVideo).toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
@@ -93,7 +104,7 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     pane.remove();
   });
-  it("时间线冻结帧导出走异步 toBlob，避免同步 toDataURL 卡住滚动热路径", async () => {
+  it("时间线冻结帧直接写入内存桥接帧，不能再回退成 webp dataUrl 编码", async () => {
     const pane = 创建媒体消息窗();
     const video = document.createElement("video");
     video.setAttribute("src", "http://media.local/freeze-video");
@@ -114,18 +125,12 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
       value: 720,
     });
     const drawImage = vi.fn();
-    const toDataURL = vi.fn(() => {
-      throw new Error("不应同步 toDataURL");
-    });
-    const toBlob = vi.fn((callback: BlobCallback) => {
-      callback(new Blob(["freeze"], { type: "image/webp" }));
-    });
     const canvas = {
       width: 0,
       height: 0,
       getContext: vi.fn(() => ({ drawImage })),
-      toBlob,
-      toDataURL,
+      toBlob: vi.fn(),
+      toDataURL: vi.fn(),
     } as unknown as HTMLCanvasElement;
     const 原始创建元素 = document.createElement.bind(document);
     const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
@@ -135,42 +140,23 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
       return 原始创建元素(tagName);
     });
 
-    class 假FileReader {
-      result: string | ArrayBuffer | null = null;
-      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
-      onerror: ((event: ProgressEvent<FileReader>) => void) | null = null;
-
-      readAsDataURL(): void {
-        this.result = "data:image/webp;base64,freeze";
-        queueMicrotask(() =>
-          this.onload?.(undefined as unknown as ProgressEvent<FileReader>)
-        );
-      }
-    }
-
-    vi.stubGlobal("FileReader", 假FileReader);
-
     try {
       const 画面缓存Owner = (
         pane as unknown as {
           时间线画面缓存Owner: {
             捕获自动播冻结帧(attachmentId: string, video: HTMLVideoElement): void;
-            时间线自动播冻结帧: Map<string, { dataUrl: string }>;
+            时间线自动播冻结帧: Map<string, { bitmap: CanvasImageSource }>;
           };
         }
       ).时间线画面缓存Owner;
       画面缓存Owner.捕获自动播冻结帧("att-freeze-async", video);
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(drawImage).toHaveBeenCalledTimes(1);
-      expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/webp", 0.82);
-      expect(toDataURL).not.toHaveBeenCalled();
-      expect(
-        画面缓存Owner.时间线自动播冻结帧.get("att-freeze-async")?.dataUrl
-      ).toBe("data:image/webp;base64,freeze");
+      expect(canvas.toBlob).not.toHaveBeenCalled();
+      expect(canvas.toDataURL).not.toHaveBeenCalled();
+      expect(画面缓存Owner.时间线自动播冻结帧.get("att-freeze-async")?.bitmap).toBe(canvas);
     } finally {
       createElement.mockRestore();
-      vi.unstubAllGlobals();
     }
   });
   it("双视频自动播 owner 交接时，只要目标卡片已经有同源预览视频，也必须先走隐藏预热宿主而不是直接显露 canonical host", async () => {
@@ -325,17 +311,15 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     const posterCover = card?.querySelector<HTMLImageElement>("img.message-video-poster");
 
     /**
-     * 这里只锁“冷 owner 且没有稳定像素底板”的特例：
-     * 1. 当时间线 playback 事实还没回灌，且没有真实海报、运行时预览、冻结帧和已 ready 首帧时，
-     *    默认占位图不足以证明 canonical 可以直接露给用户；
-     * 2. 这时唯一播放器必须先在隐藏宿主里完成首帧预热，卡片表面只保留冷态占位；
-     * 3. 一旦存在真实海报或既有连续性证据，仍然允许复用原有显露路径，不把正常交接一起误伤。
+     * 新收口后的不变量是：
+     * 1. 只要 owner 已经握有同源 canonical src，就必须先长出同源 preview bridge；
+     * 2. canonical 仍然要在 hidden stage 里预热，揭帘前不能直接露 live video；
+     * 3. 因而“冷 owner + 无 poster”不再允许退回默认占位图，这正是快滑黑闪的根因之一。
      */
     expect(visibleCanonicalHost).toBeNull();
     expect(hiddenStageHost).not.toBeNull();
-    expect(previewVideo).toBeNull();
-    expect(posterCover?.getAttribute("src")).toContain("data:image/svg+xml");
-    expect(posterCover?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
+    expect(previewVideo?.getAttribute("src")).toBe(playback.src);
+    expect(posterCover).toBeNull();
 
     pane.remove();
   });
@@ -457,7 +441,15 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
         时间线画面缓存Owner: {
           时间线自动播冻结帧: Map<
             string,
-            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
           >;
         };
       }
@@ -470,8 +462,11 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
           {
             src: playback.src,
             currentTime: 12.5,
-            dataUrl: "data:image/webp;base64,single-slot-freeze",
+            bitmap: document.createElement("canvas"),
+            width: 320,
+            height: 180,
             updatedAt: 1_777_500_000_401,
+            dispose: vi.fn(),
           },
         ],
       ]),
@@ -489,8 +484,8 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     const visibleHost = card?.querySelector<HTMLElement>(
       `.message-video-canonical-host[data-attachment-id="${attachmentId}"]`
     );
-    const frozenFrame = card?.querySelector<HTMLImageElement>(
-      `img.message-video-frozen-frame[data-attachment-id="${attachmentId}"]`
+    const frozenFrame = card?.querySelector<HTMLCanvasElement>(
+      `canvas.message-video-frozen-frame[data-attachment-id="${attachmentId}"]`
     );
     const warmupPreview = card?.querySelector<HTMLVideoElement>(
       `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
@@ -498,7 +493,7 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     expect(visibleHost).not.toBeNull();
     expect(visibleHost?.dataset.covered).toBe("true");
-    expect(frozenFrame?.getAttribute("src")).toBe("data:image/webp;base64,single-slot-freeze");
+    expect(frozenFrame?.getAttribute("data-bridge-src")).toBe(playback.src);
     expect(warmupPreview).toBeNull();
 
     pane.remove();
@@ -575,7 +570,15 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
         时间线画面缓存Owner: {
           时间线自动播冻结帧: Map<
             string,
-            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
           >;
         };
       }
@@ -588,8 +591,11 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
           {
             src: releasedPlayback.src,
             currentTime: 12.5,
-            dataUrl: "data:image/webp;base64,retiring-hold-frame",
+            bitmap: document.createElement("canvas"),
+            width: 320,
+            height: 180,
             updatedAt: 1_777_500_000_101,
+            dispose: vi.fn(),
           },
         ],
       ]),
@@ -601,8 +607,8 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     const releasedCard = pane.querySelector<HTMLElement>(
       `.message-video-card[data-attachment-id="${releasedAttachmentId}"]`
     );
-    const releasedFrozenFrame = releasedCard?.querySelector<HTMLImageElement>(
-      `img.message-video-frozen-frame[data-attachment-id="${releasedAttachmentId}"]`
+    const releasedFrozenFrame = releasedCard?.querySelector<HTMLCanvasElement>(
+      `canvas.message-video-frozen-frame[data-attachment-id="${releasedAttachmentId}"]`
     );
     const releasedPreview = releasedCard?.querySelector<HTMLVideoElement>(
       'video.message-video-preview:not([data-canonical-player="true"])'
@@ -616,9 +622,7 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
      *    更不能为了补救再重建第二颗 preview video。
      */
     expect(releasedCard).not.toBeNull();
-    expect(releasedFrozenFrame?.getAttribute("src")).toBe(
-      "data:image/webp;base64,retiring-hold-frame"
-    );
+    expect(releasedFrozenFrame?.getAttribute("data-bridge-src")).toBe(releasedPlayback.src);
     expect(releasedPreview).toBeNull();
     expect(releasedCard?.querySelector("img.message-video-poster")).toBeNull();
     expect(

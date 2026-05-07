@@ -24,6 +24,7 @@ type 时间线视频表面期望输入 = {
   自动播候选可见条目: Map<string, 消息视频自动播候选>;
   inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
   mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  读取时间线视频预览状态: (attachmentId: string) => 视频预览状态 | null;
   读取时间线视频已就绪首帧预览源: (attachmentId: string) => string | null;
   读取时间线视频首帧是否就绪: (attachmentId: string, src: string | null) => boolean;
   读取时间线视频运行时预览: (attachmentId: string) => 就绪时间线视频预览 | null;
@@ -135,6 +136,8 @@ export const 读取时间线视频表面期望 = (
     ),
   })) {
     const playback = input.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+    const previewState = input.读取时间线视频预览状态(attachment.attachmentId);
+    const isPreviewMissingSource = previewState?.phase === "missing_source";
     const runtimePreview = input.读取时间线视频运行时预览(attachment.attachmentId);
     const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
     const hasRuntimePreview = Boolean(runtimePreview);
@@ -165,6 +168,7 @@ export const 读取时间线视频表面期望 = (
     );
     const timelinePreviewVideoSrc =
       budget.previewVideoSrc ??
+      (!isPreviewMissingSource && budget.allowInlineCanonical ? budget.canonicalVideoSrc : null) ??
       (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
       knownReadyTimelineFrameSrc;
     const hasKnownReadyPreviewFrame = input.读取时间线视频首帧是否就绪(
@@ -185,11 +189,21 @@ export const 读取时间线视频表面期望 = (
       timelinePreviewVideoSrc &&
       (可渲染真实预览视频附件.has(attachment.attachmentId) ||
         hasExistingSameSourcePreviewFrame ||
-        hasKnownReadyPreviewFrame)
+        hasKnownReadyPreviewFrame ||
+        /**
+         * owner 刚接管时，即便普通 preview 预算还没来得及把这张卡列进可见预热集合，
+         * 只要 canonical src 已经成立，就必须先给它一条同源 bridge preview：
+         * 1. 否则下一拍只会剩下默认 poster / 黑壳；
+         * 2. 这里依然不长第二条媒体真相，preview 和 canonical 共享同一条正式 swarm src；
+         * 3. 后续 reveal 仍只认 canonical 自己的 committed frame。
+         */
+        (!isPreviewMissingSource &&
+          budget.allowInlineCanonical &&
+          timelinePreviewVideoSrc === budget.canonicalVideoSrc))
     ) {
       previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
     }
-    if (budget.allowInlineCanonical && budget.canonicalVideoSrc) {
+    if (!isPreviewMissingSource && budget.allowInlineCanonical && budget.canonicalVideoSrc) {
       canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, budget.canonicalVideoSrc);
     }
   }

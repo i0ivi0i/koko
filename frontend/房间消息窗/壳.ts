@@ -351,6 +351,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
         最近退场Owner附件Id: this.最近退场Owner附件Id,
         时间线隐藏接管附件Id: this.时间线隐藏接管附件Id,
         时间线唯一播放器可见接管就绪源: this.时间线唯一播放器可见接管就绪源,
+        读取时间线视频预览状态: (attachmentId) =>
+          this.mediaPreviewByAttachmentId[attachmentId] ?? null,
         读取时间线视频运行时预览: (attachmentId) =>
           this.读取时间线视频运行时预览(attachmentId),
         读取时间线视频封面地址: (attachment, playback) =>

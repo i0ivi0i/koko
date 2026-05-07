@@ -49,7 +49,7 @@ const 前端运行时Owner注册表 = [
   { path: "frontend/时间线/运行时.ts", symbol: "创建房间时间线Actor" },
   { path: "frontend/时间线/视口运行时.ts", symbol: "创建房间视口Actor" },
   { path: "frontend/媒体/运行时.ts", symbol: "创建媒体运行时Actor" },
-  { path: "frontend/媒体/全局丝滑自动播.ts", symbol: "判定播放连续性表面" },
+  { path: "frontend/媒体/视频可见槽位协议.ts", symbol: "判定播放连续性表面" },
   { path: "frontend/媒体/资产协作分发运行时.ts", symbol: "创建资产协作分发运行时" },
   { path: "frontend/媒体/资产协作分发状态机.ts", symbol: "资产协作分发机" },
   { path: "frontend/平台/缓存更新运行时.ts", symbol: "创建缓存更新运行时" },
@@ -271,7 +271,7 @@ const 前端禁回流片段规则 = [
   },
   {
     label: "global smooth autoplay must not own player or bytes",
-    path: "frontend/媒体/全局丝滑自动播.ts",
+    path: "frontend/媒体/视频可见槽位协议.ts",
     pattern: /\bnew\s+WebTorrent\b|\bcreateServer\s*\(|\bstreamURL\b|\bvideojs\b|\bdocument\.createElement\b/g,
   },
   {

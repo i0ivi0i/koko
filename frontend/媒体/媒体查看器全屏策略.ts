@@ -1,5 +1,5 @@
 import type { VideoJs全屏进入结果, VideoJs播放器源描述 } from "./videojs播放器壳.js";
-import { 判定播放连续性表面 } from "./全局丝滑自动播.js";
+import { 判定播放连续性表面 } from "./视频可见槽位协议.js";
 import type {
   PhotoSwipe数据源项目,
   PhotoSwipe查看器选项,

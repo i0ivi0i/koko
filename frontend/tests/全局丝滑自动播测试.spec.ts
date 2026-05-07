@@ -6,7 +6,7 @@ import {
   判定播放连续性表面,
   播放连续性机,
   type 播放连续性输入,
-} from "../媒体/全局丝滑自动播.js";
+} from "../媒体/视频可见槽位协议.js";
 
 const 基础输入: 播放连续性输入 = {
   attachmentId: "att-1",
@@ -265,7 +265,7 @@ describe("全局丝滑自动播", () => {
 
   it("播放连续性裁决保留显式顺序，但不能把 XState runtime 放进滚动热路径", () => {
     const source = readFileSync(
-      resolve(import.meta.dirname, "../媒体/全局丝滑自动播.ts"),
+      resolve(import.meta.dirname, "../媒体/视频可见槽位协议.ts"),
       "utf8"
     );
 

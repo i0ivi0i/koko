@@ -314,6 +314,98 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
 
     pane.remove();
   });
+
+  it("双视频自动播 owner 交接时，如果目标卡片已经有 runtime preview，揭帘前必须继续露 runtime preview 而不是回退旧 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    (
+      pane as 房间消息窗 & {
+        mediaPreviewByAttachmentId: Record<
+          string,
+          { phase: "ready"; src: string; source: "cache" | "embedded_hint" | "early_frame" | "rvfc" }
+        >;
+      }
+    ).mediaPreviewByAttachmentId = {
+      "att-video-2": {
+        phase: "ready",
+        src: "blob:preview-att-video-2",
+        source: "cache",
+      },
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    await pane.updateComplete;
+
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-2"]'
+    );
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toBe("blob:preview-att-video-2");
+    expect(previewPoster?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
+
+    pane.remove();
+  });
   it("自动播 owner 仍存在但当前虚拟窗口没有宿主时，不会把唯一播放器同步成 null", async () => {
     const pane = 创建媒体消息窗();
     const 全局唯一播放器 = 读取默认全局唯一播放器();

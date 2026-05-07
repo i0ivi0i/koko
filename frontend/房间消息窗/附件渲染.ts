@@ -15,7 +15,7 @@ import {
 } from "./视频附件渲染.js";
 import { 默认视频清单占位Poster } from "./视频表面占位.js";
 import type { 消息展示项 } from "./视图.js";
-export type { 时间线自动播冻结帧 } from "./视频附件渲染.js";
+export type { 时间线自动播冻结帧 } from "./视频桥接帧.js";
 
 /**
  * 本文件只保留共享投影和按附件种类分派：

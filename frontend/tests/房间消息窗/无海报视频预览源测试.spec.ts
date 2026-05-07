@@ -213,6 +213,61 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     pane.remove();
   });
 
+  it("有静态 poster 的视频一旦已经命中 runtime preview，时间线桥接也必须优先露 runtime preview，而不是继续露旧 poster", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    (
+      pane as 房间消息窗 & {
+        mediaPreviewByAttachmentId: Record<
+          string,
+          { phase: "ready"; src: string; source: "cache" | "embedded_hint" | "early_frame" | "rvfc" }
+        >;
+      }
+    ).mediaPreviewByAttachmentId = {
+      "att-video-1": {
+        phase: "ready",
+        src: "blob:preview-att-video-1",
+        source: "early_frame",
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toBe("blob:preview-att-video-1");
+
+    pane.remove();
+  });
+
   it("时间线 owner 复用 canonical player 时，会把统一壳标记成 inline 消息流表面", async () => {
     const pane = 创建媒体消息窗({
       createVideoJsPlayerShell: 创建VideoJs播放器壳,

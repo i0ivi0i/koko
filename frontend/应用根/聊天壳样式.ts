@@ -521,6 +521,12 @@ export const 聊天壳样式 = css`
       position: absolute;
       inset: 0;
       z-index: 2;
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      pointer-events: none;
+      background: transparent;
     }
 
     /*

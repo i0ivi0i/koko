@@ -47,7 +47,7 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
     ).not.toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
+    ).toBeNull();
     expect(restoredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')

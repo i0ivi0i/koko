@@ -1,21 +1,19 @@
 import { html } from "lit";
+import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
-import { 判定播放连续性表面 } from "../媒体/全局丝滑自动播.js";
+import { 判定播放连续性表面 } from "../媒体/视频可见槽位协议.js";
 import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js";
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放.js";
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 信息流视频预算投影 } from "../媒体/信息流视频预算.js";
 import { 标记当前预览视频已出首帧 } from "./视频首帧桥接.js";
+import {
+  绘制时间线冻结帧到画布,
+  type 时间线自动播冻结帧,
+} from "./视频桥接帧.js";
 import { 默认视频清单占位Poster } from "./视频表面占位.js";
 import type { 消息展示项 } from "./视图.js";
-
-export type 时间线自动播冻结帧 = {
-  src: string;
-  currentTime: number;
-  dataUrl: string;
-  updatedAt: number;
-};
 
 export type 时间线视频附件 = Extract<
   消息展示项["attachments"][number],
@@ -28,6 +26,7 @@ export type 视频附件渲染宿主 = {
   最近退场Owner附件Id: string | null;
   时间线隐藏接管附件Id: string | null;
   时间线唯一播放器可见接管就绪源: Map<string, string>;
+  读取时间线视频预览状态(attachmentId: string): 视频预览状态 | null;
   读取时间线视频运行时预览(attachmentId: string): Extract<视频预览状态, { phase: "ready" }> | null;
   读取时间线视频封面地址(attachment: 时间线视频附件, playback: 媒体播放结果 | null): string;
   读取时间线视频首帧预览源(
@@ -99,13 +98,23 @@ export const 渲染视频附件 = (
   }
 ) => {
   const { attachment, playback } = input;
+  const previewState = context.读取时间线视频预览状态(attachment.attachmentId);
+  const isPreviewMissingSource = previewState?.phase === "missing_source";
   const runtimePreview = context.读取时间线视频运行时预览(attachment.attachmentId);
   const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
   const hasRuntimePreview = Boolean(runtimePreview);
+  /**
+   * 可见槽位里的静态 bridge 必须优先吃“最新、最贴近真实画面”的投影：
+   * 1. runtime preview 来自同一附件字节已经真实解出的帧，比上传后长期不变的 poster/still 更新鲜；
+   * 2. 如果这里继续优先露旧 poster，用户快滑进入自动播时看到的就会是“旧封面 -> 黑一拍 -> 真视频”；
+   * 3. 因此只要 runtime preview 已经 ready，就让它盖过静态 poster，直到 canonical 自己提交可见帧。
+   *
+   * 注意这不是第二媒体真相：
+   * - runtime preview 只是唯一正式视频链导出的静态桥接帧；
+   * - 真正的 live owner 仍然只有同一颗 canonical Video.js player。
+   */
   const previewPosterSrc =
-    !hasSourcePoster && runtimePreview
-      ? runtimePreview.src
-      : context.读取时间线视频封面地址(attachment, playback);
+    runtimePreview?.src ?? context.读取时间线视频封面地址(attachment, playback);
   const playbackTimelineVideoSrc = context.读取时间线视频首帧预览源(
     attachment,
     playback,
@@ -131,14 +140,23 @@ export const 渲染视频附件 = (
     (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
     knownReadyTimelineFrameSrc;
   const videoBudget = context.读取时间线视频预算投影(attachment, timelinePreviewVideoSrcCandidate);
+  const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
+  const shouldRenderInlineVideo =
+    !isPreviewMissingSource &&
+    videoBudget.allowInlineCanonical &&
+    Boolean(ownerCanonicalVideoSrc);
   /** 时间线先吃统一预算，再用同源续帧/已就绪首帧做本地连续性桥。 */
   const timelinePreviewVideoSrc =
     videoBudget.previewVideoSrc ??
+    /**
+     * 新 owner 刚刚接管时，`inlineAutoplayPlayback` 往往比通用 playback 更早落到当前卡片：
+     * 1. 如果 preview 还坚持只等通用 playback，卡片会先退成默认 poster/黑壳；
+     * 2. 这里允许 preview bridge 直接复用同一条正式 canonical src，只承担揭帘前的同源连续性；
+     * 3. live player 仍然只有那颗全局唯一 canonical，preview 只是它的同源 bridge。
+     */
+    (shouldRenderInlineVideo ? ownerCanonicalVideoSrc : null) ??
     (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null) ??
     knownReadyTimelineFrameSrc;
-  const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
-  const shouldRenderInlineVideo =
-    videoBudget.allowInlineCanonical && Boolean(ownerCanonicalVideoSrc);
   const previewVideoSrc = timelinePreviewVideoSrc;
   const restorableTimelineFrame = context.读取自动播恢复位置(
     attachment.attachmentId,
@@ -248,6 +266,13 @@ export const 渲染视频附件 = (
     !hasFrozenTimelineFrame;
   const shouldKeepExistingPreviewDomForRetiringOwner =
     shouldPreferRetiringOwnerPreviewSurface && hasExistingSameSourcePreviewFrame;
+  const shouldForceOwnerBridgePreview =
+    shouldRenderInlineVideo &&
+    !isPreviewMissingSource &&
+    Boolean(previewVideoSrc) &&
+    previewVideoSrc === ownerCanonicalVideoSrc &&
+    !hasCurrentDomPreviewFrame &&
+    !hasFrozenTimelineFrame;
   const shouldRenderPreviewVideoByBudget = (Boolean(previewVideoSrc) && context.读取时间线预览视频是否允许渲染(videoBudget, {
     hasExistingSameSourcePreviewFrame,
     hasFrozenTimelineFrame,
@@ -256,6 +281,7 @@ export const 渲染视频附件 = (
     shouldReuseSavedTimelineFrameAsPreview,
   }) && (input.可渲染真实预览视频附件.has(attachment.attachmentId) ||
       hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame || hasKnownReadyPreviewFrame)) ||
+    shouldForceOwnerBridgePreview ||
     shouldRenderReleasedOwnerPreviewVideo;
   const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
   /** preview 还没追上续播点时，不能先把错误时间点露给用户。 */
@@ -324,6 +350,7 @@ export const 渲染视频附件 = (
     !hasStablePreviewPosterSurface && !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
   const shouldRenderCanonicalLoadingPosterCover =
     shouldRenderInlineVideo && !shouldPreferRetiringOwnerPreviewSurface &&
+    !shouldForceOwnerBridgePreview &&
     !(playbackContinuityDecision.kind === "hidden_handoff" && Boolean(restorableTimelineFrame)) &&
     !shouldRevealCanonicalHost && !shouldRenderFrozenTimelineFrame && !hasCurrentDomPreviewFrame &&
     Boolean(previewPosterSrc) && !(shouldRenderVisibleCanonicalHost && hasKnownReadyPreviewFrame) &&
@@ -398,16 +425,21 @@ export const 渲染视频附件 = (
   const 时间线视频预览内容 = html`
     ${shouldRenderFrozenTimelineFrame
       ? html`
-          <img
+          <canvas
             class="message-video-frozen-frame"
             data-attachment-id=${attachment.attachmentId}
-            src=${frozenTimelineFrame?.dataUrl ?? ""}
-            alt=""
+            data-bridge-src=${frozenTimelineFrame?.src ?? ""}
+            data-bridge-time=${frozenTimelineFrame?.currentTime ?? 0}
             width=${attachment.displayWidth}
             height=${attachment.displayHeight}
-            loading="eager"
             aria-hidden="true"
-          />
+            ${ref((canvas) => {
+              if (!(canvas instanceof HTMLCanvasElement) || !frozenTimelineFrame) {
+                return;
+              }
+              绘制时间线冻结帧到画布(frozenTimelineFrame, canvas);
+            })}
+          ></canvas>
         `
       : null}
     ${shouldRenderVisibleCanonicalHost

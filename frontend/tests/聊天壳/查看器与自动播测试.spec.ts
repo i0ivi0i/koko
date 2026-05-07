@@ -582,7 +582,7 @@ describe("聊天壳集成 / 查看器与自动播", () => {
         el.shadowRoot!.querySelector(
           'img.message-video-poster--canonical-cover[data-attachment-id="att-video-inline-shell"]'
         )
-      ).not.toBeNull();
+      ).toBeNull();
 
       Object.defineProperty(ownerVideo!, "readyState", {
         configurable: true,

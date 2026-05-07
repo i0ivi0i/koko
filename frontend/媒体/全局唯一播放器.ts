@@ -1,6 +1,6 @@
 import type { 媒体会话信号 } from "./媒体会话.js";
 import { 媒体是否默认循环播放, type 媒体播放位置 } from "./媒体播放.js";
-import { 判定播放连续性表面 } from "./全局丝滑自动播.js";
+import { 判定播放连续性表面 } from "./视频可见槽位协议.js";
 import {
   创建VideoJs播放器壳,
   type VideoJs全屏进入结果,

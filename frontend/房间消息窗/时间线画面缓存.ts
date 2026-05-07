@@ -1,8 +1,10 @@
 import type { 媒体播放位置 } from "../媒体/媒体播放.js";
 import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
-import { 读取BlobDataUrl } from "../媒体/视频元数据.js";
-import type { 时间线自动播冻结帧 } from "./附件渲染.js";
+import {
+  从视频捕获时间线冻结帧,
+  type 时间线自动播冻结帧,
+} from "./视频桥接帧.js";
 import type { 聊天列表展示项 } from "./视图.js";
 
 const 时间线自动播冻结帧最大边长 = 480;
@@ -32,9 +34,17 @@ const 读取当前视频附件标识 = (items: 聊天列表展示项[]): Set<str
   return attachmentIds;
 };
 
-const 删除已退场附件 = <T>(cache: Map<string, T>, 当前视频附件: Set<string>): void => {
+const 删除已退场附件 = <T>(
+  cache: Map<string, T>,
+  当前视频附件: Set<string>,
+  dispose?: (value: T) => void
+): void => {
   for (const attachmentId of cache.keys()) {
     if (!当前视频附件.has(attachmentId)) {
+      const value = cache.get(attachmentId);
+      if (value && dispose) {
+        dispose(value);
+      }
       cache.delete(attachmentId);
     }
   }
@@ -57,6 +67,9 @@ export class 时间线画面缓存Owner {
 
   清空(): void {
     this.时间线视频首帧就绪源.clear();
+    for (const frame of this.时间线自动播冻结帧.values()) {
+      frame.dispose();
+    }
     this.时间线自动播冻结帧.clear();
     this.时间线自动播冻结帧导出中.clear();
   }
@@ -64,7 +77,9 @@ export class 时间线画面缓存Owner {
   同步当前视频附件(items: 聊天列表展示项[]): Set<string> {
     const 当前视频附件 = 读取当前视频附件标识(items);
     删除已退场附件(this.时间线视频首帧就绪源, 当前视频附件);
-    删除已退场附件(this.时间线自动播冻结帧, 当前视频附件);
+    删除已退场附件(this.时间线自动播冻结帧, 当前视频附件, (frame) =>
+      frame.dispose()
+    );
     删除已退场附件(this.时间线自动播冻结帧导出中, 当前视频附件);
     return 当前视频附件;
   }
@@ -119,7 +134,7 @@ export class 时间线画面缓存Owner {
       !normalizedExpectedSrc ||
       !normalizedFrameSrc ||
       normalizedExpectedSrc !== normalizedFrameSrc ||
-      !frame.dataUrl.startsWith("data:image/")
+      !frame.bitmap
     ) {
       return null;
     }
@@ -149,6 +164,12 @@ export class 时间线画面缓存Owner {
     video: HTMLVideoElement,
     options: { 预热已合成帧?: boolean; 立即提交?: boolean } = {}
   ): void {
+    const 初始源 = this.依赖.读取视频当前播放源(video);
+    const 初始时间 = video.currentTime;
+    const captureKey =
+      初始源 && Number.isFinite(初始时间)
+        ? `${初始源}\u0000${Math.round(初始时间 * 2) / 2}\u0000${options.预热已合成帧 ? "warm" : "now"}`
+        : null;
     const 执行捕获 = (): void => {
       const src = this.依赖.读取视频当前播放源(video);
       const currentTime = video.currentTime;
@@ -173,80 +194,26 @@ export class 时间线画面缓存Owner {
       ) {
         return;
       }
-      const captureKey = `${src}\u0000${Math.round(currentTime * 2) / 2}`;
-      if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+      const nextFrame = 从视频捕获时间线冻结帧(video, 时间线自动播冻结帧最大边长);
+      if (!nextFrame) {
         return;
       }
-      const 写入冻结帧 = (dataUrl: string): void => {
-        if (!dataUrl.startsWith("data:image/")) {
-          return;
-        }
+      try {
         const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
         if (
           latestFrame?.src === src &&
           Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
-          latestFrame.dataUrl === dataUrl
+          latestFrame.width === nextFrame.width &&
+          latestFrame.height === nextFrame.height
         ) {
+          nextFrame.dispose();
           return;
         }
-        this.时间线自动播冻结帧.set(attachmentId, {
-          src,
-          currentTime,
-          dataUrl,
-          updatedAt: Date.now(),
-        });
+        latestFrame?.dispose();
+        this.时间线自动播冻结帧.set(attachmentId, nextFrame);
         this.依赖.请求刷新();
-      };
-      try {
-        const scale = Math.min(
-          1,
-          时间线自动播冻结帧最大边长 / Math.max(video.videoWidth, video.videoHeight)
-        );
-        const width = Math.max(1, Math.round(video.videoWidth * scale));
-        const height = Math.max(1, Math.round(video.videoHeight * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext("2d");
-        if (!context) {
-          return;
-        }
-        context.drawImage(video, 0, 0, width, height);
-        if (options.立即提交) {
-          if (typeof canvas.toDataURL !== "function") {
-            return;
-          }
-          写入冻结帧(canvas.toDataURL("image/webp", 0.82));
-          return;
-        }
-        if (typeof canvas.toBlob !== "function") {
-          return;
-        }
-        this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
-        canvas.toBlob((blob) => {
-          void (async () => {
-            try {
-              if (!blob || blob.type !== "image/webp") {
-                return;
-              }
-              const dataUrl = await 读取BlobDataUrl(blob);
-              if (!dataUrl?.startsWith("data:image/webp")) {
-                return;
-              }
-              if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
-                return;
-              }
-              写入冻结帧(dataUrl);
-            } finally {
-              if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
-                this.时间线自动播冻结帧导出中.delete(attachmentId);
-              }
-            }
-          })();
-        }, "image/webp", 0.82);
-      } catch {
-        // Canvas 失败只影响暂停帧，不扩大成业务错误；播放链仍由唯一播放器继续承接。
-        if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+      } finally {
+        if (captureKey && this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
           this.时间线自动播冻结帧导出中.delete(attachmentId);
         }
       }
@@ -260,9 +227,14 @@ export class 时间线画面缓存Owner {
      */
     if (
       options.预热已合成帧 &&
+      captureKey &&
       typeof video.requestVideoFrameCallback === "function" &&
       !video.paused
     ) {
+      if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+        return;
+      }
+      this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
       video.requestVideoFrameCallback(() => {
         执行捕获();
       });
