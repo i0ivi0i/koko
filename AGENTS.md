@@ -41,6 +41,7 @@ _项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 ## Execution
 - 编辑/修改代码必须按 TDD 顺序：RED 先写最小失败测试或 characterization 并确认按预期失败；GREEN 再写最小实现转绿；REFACTOR 最后清理且保持全绿。禁止先写生产代码再补测试；已经先写实现就删除实现，按 TDD 重来，除非主人明确豁免。
 - 执行 plan 或多步骤任务时，先把需求转成可验证成功标准与每步带验证的简短路径，再按依赖、风险和验证顺序推进到可烟测收口；不中途半停或早早收工，执行完后冒烟测试，并按测试结果继续修复到闭环；“让它能用”不是标准，标准太弱就先查清/澄清。
+- 修改完代码后，必须自己做与本次问题同链路的真实冒烟测试，确认“真的修好”后才能汇报；单测、typecheck、build 通过只算基础验证，不算真实体验闭环。
 - 编写或改写 spec/plan 文档时，必须先按命中的 Skill 规则组织内容；成稿后自己按同一 Skill 规则审核 3 遍，逐遍检查需求意图、架构边界、执行路径、验证闭环、遗漏冲突和废话，并在最终回复显式列出 3 遍自审结论和修正点；3 遍未过、只把自审藏在文档里或只说“已检查”都禁止交付。
 - 校验、修 bug、重构都必须落到可证明动作：无效输入先有测试再TDD转绿，bug 先复现再修到通过，重构前后测试都通过；完成声明必须基于新鲜验证，证明什么就跑能直接证明它的命令，读完整输出和退出码。
 - 修改前必须重新读目标文件、调用链、相邻模块、拥有层，以及受影响或声称不变的 contract/test/log/comment 表面；存在多种理解、前提不明或更简单路径时，先讲清假设/取舍，二次编辑前重新读当前内容。
@@ -50,7 +51,7 @@ _项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 - 执行任何任务前先看一眼 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用(多个)，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent(也能使用skill)，子任务必须有读搜清单、写入边界和上下文约束。
 - 默认在当前 `main` 上完成；除非主人明确要求，不另开分支、worktree 或平行线路。
 - 本地 git 用 git；GitHub 平台操作用 GitHub skill / `gh`；本项目默认 Win11 原生环境，禁止 WSL2 开发。
-- 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，必须按 `browser-trace` 与 `playwright-cli` 多个 skill 的 CLI 链路执行；禁止自造临时浏览器脚本或旁路乱测。
+- 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，默认必须联用这三个 CLI skill：`playwright-cli`、`chrome-devtools-cli`、`browser-trace`；禁止只跑其中一条就自称闭环，禁止自造临时浏览器脚本或旁路乱测。
 - 涉及架构或代码库问题，先读 `graphify-out/GRAPH_REPORT.md`；若有 `graphify-out/wiki/index.md`，优先按 wiki 导航；修改代码后运行 `graphify update .`，纯文档改动不强制。
 
 ## Discipline
@@ -85,3 +86,47 @@ Rules:
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
 - After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **koko** (13057 symbols, 24514 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/koko/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/koko/clusters` | All functional areas |
+| `gitnexus://repo/koko/processes` | All execution flows |
+| `gitnexus://repo/koko/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->
