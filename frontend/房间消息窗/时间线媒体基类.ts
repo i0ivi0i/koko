@@ -296,6 +296,9 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       this.时间线唯一播放器待提交接管源.delete(attachmentId);
       return;
     }
+    const 当前卡片已有稳定预览帧 = Boolean(
+      this.读取时间线现有预览帧证据(attachmentId, currentSrc)
+    );
     /**
      * `canplay/seeked/playing` 仍只是“浏览器说这条 video 可以继续了”，
      * 不是“这张卡已经真正拿到一帧可见像素”：
@@ -305,6 +308,16 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
      * 3. 这里继续保持单一真相：还是同一颗 canonical player，只是把“允许露出来”的裁决延后到首帧真正提交之后。
      */
     if ("requestVideoFrameCallback" in video && typeof video.requestVideoFrameCallback === "function") {
+      /**
+       * hidden stage 会主动 pause 同一颗 canonical player，防止揭帘前偷偷往前播；
+       * 但 paused video 在真实浏览器里不会再回 RVFC，这会把 reveal gate 永久卡死在黑卡/静态首帧。
+       * 当前卡自己已经有同源稳定预览帧时，用户眼前并不缺这一拍像素，此时不能再把 RVFC 当成唯一开门条件。
+       */
+      if (video.paused && 当前卡片已有稳定预览帧) {
+        this.时间线唯一播放器待提交接管源.delete(attachmentId);
+        提交可见接管就绪(normalizedSrc);
+        return;
+      }
       if (this.时间线唯一播放器待提交接管源.get(attachmentId) === normalizedSrc) {
         return;
       }

@@ -336,4 +336,95 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
     playSpy.mockRestore();
     pane.remove();
   });
+
+  it("无 poster 视频进入 hidden stage 后即使 paused canonical 的 RVFC 不回调，也不能永远卡在黑色预热态", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    Object.defineProperty(previewVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    previewVideo!.dispatchEvent(new Event("loadeddata"));
+    await Promise.resolve();
+    await pane.updateComplete;
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const canonicalWarmupVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
+    );
+    expect(canonicalWarmupVideo).not.toBeNull();
+    let rvfcRegistered = false;
+    Object.defineProperty(canonicalWarmupVideo!, "requestVideoFrameCallback", {
+      configurable: true,
+      value: (() => {
+        rvfcRegistered = true;
+        return 1;
+      }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
+    });
+    Object.defineProperty(canonicalWarmupVideo!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    canonicalWarmupVideo!.dispatchEvent(new Event("loadedmetadata"));
+    canonicalWarmupVideo!.dispatchEvent(new Event("seeked"));
+    canonicalWarmupVideo!.dispatchEvent(new Event("canplay"));
+    await Promise.resolve();
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    expect(rvfcRegistered).toBe(false);
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
+    expect(
+      pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    pane.remove();
+  });
 });
