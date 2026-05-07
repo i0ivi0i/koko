@@ -551,6 +551,17 @@ export const 聊天壳样式 = css`
       background: #000;
     }
 
+    /*
+     * canonical host 在 handoff 期间只负责后台追 source/time：
+     * - DOM 可以先挂上，避免唯一播放器失去目标宿主；
+     * - 但在真正 committed 之前，它不能和 frozen/preview 共同争可见槽位；
+     * - 因此 covered 态一律透明，由唯一 bridge surface 顶住。
+     */
+    .message-video-canonical-host[data-covered="true"] {
+      opacity: 0;
+      background: transparent;
+    }
+
     .message-video-first-frame-guard {
       position: absolute;
       inset: 0;
@@ -869,4 +880,3 @@ export const 聊天壳样式 = css`
       }
     }
   `;
-

@@ -6,6 +6,7 @@ import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 信息流视频预算投影 } from "../媒体/信息流视频预算.js";
+import { 标记当前预览视频已出首帧 } from "./视频首帧桥接.js";
 import { 默认视频清单占位Poster } from "./视频表面占位.js";
 import type { 消息展示项 } from "./视图.js";
 
@@ -58,6 +59,11 @@ export type 视频附件渲染宿主 = {
     src: string | null,
     position: 媒体播放位置 | null
   ): 时间线自动播冻结帧 | null;
+  捕获时间线自动播冻结帧(
+    attachmentId: string,
+    video: HTMLVideoElement,
+    options?: { 预热已合成帧?: boolean; 立即提交?: boolean }
+  ): void;
   读取时间线视频首帧是否就绪(attachmentId: string, src: string | null): boolean;
   归一化时间线视频播放源(src: string | null): string | null;
   读取时间线预览视频是否允许渲染(
@@ -81,46 +87,6 @@ export type 视频附件渲染宿主 = {
   阻止时间线媒体预览原生菜单(event: Event): void;
   打开媒体查看器(event: Event, startAttachmentId: string): void;
 };
-
-function 标记当前预览视频已出首帧(
-  context: 视频附件渲染宿主,
-  attachmentId: string,
-  target: HTMLVideoElement
-): void {
-  const currentSrc = target.currentSrc || target.getAttribute("src");
-  const readySrc = context.归一化时间线视频播放源(currentSrc);
-  if (readySrc) {
-    target.dataset.previewReadySrc = readySrc;
-    if (target.dataset.previewCommittedSrc && target.dataset.previewCommittedSrc !== readySrc) {
-      delete target.dataset.previewCommittedSrc;
-    }
-    if (
-      "requestVideoFrameCallback" in target &&
-      typeof target.requestVideoFrameCallback === "function"
-    ) {
-      if (target.dataset.previewCommitPendingSrc !== readySrc) {
-        target.dataset.previewCommitPendingSrc = readySrc;
-        target.requestVideoFrameCallback(() => {
-          if (!target.isConnected) {
-            return;
-          }
-          const latestSrc = context.归一化时间线视频播放源(
-            target.currentSrc || target.getAttribute("src")
-          );
-          if (!latestSrc || latestSrc !== readySrc || target.dataset.previewSrc !== readySrc) {
-            return;
-          }
-          delete target.dataset.previewCommitPendingSrc;
-          target.dataset.previewCommittedSrc = readySrc;
-          context.标记时间线视频首帧已就绪(attachmentId, latestSrc);
-        });
-      }
-    } else if (target.readyState >= 2) {
-      target.dataset.previewCommittedSrc = readySrc;
-    }
-  }
-  context.标记时间线视频首帧已就绪(attachmentId, currentSrc);
-}
 
 export const 渲染视频附件 = (
   context: 视频附件渲染宿主,
@@ -325,15 +291,34 @@ export const 渲染视频附件 = (
   const shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup =
     shouldRenderVisibleCanonicalHost && !hasVisibleCanonicalCommittedFrame &&
     (hasCurrentDomPreviewFrame || hasFrozenTimelineFrame || shouldReuseSavedTimelineFrameAsPreview || hasStablePreviewPosterSurface);
+  /**
+   * handoff 期间只允许一个 bridge surface 占着可见槽位：
+   * 1. 一旦已经有同源冻结帧，它比 live preview 更稳，因为不会再被 seek / readyState 波动拖着抖；
+   * 2. visible canonical 这时仍在后台追 source/time，不该和 preview/frozen 一起争可见位；
+   * 3. 因而过渡期固定优先 frozen frame，preview 退回“冷态/稳态预览”职责。
+   */
+  const shouldPreferFrozenBridgeOverPreview =
+    hasFrozenTimelineFrame &&
+    (playbackContinuityDecision.kind === "hidden_handoff" ||
+      playbackContinuityDecision.kind === "hold_frame" ||
+      playbackContinuityDecision.kind === "retiring_hold_frame" ||
+      isRetiringReleasedOwner ||
+      (shouldRenderInlineVideo && !shouldRevealCanonicalHost));
   const shouldSuppressPosterBackedWarmupPreviewVideo = shouldUseHiddenStageCover && hasStablePreviewPosterSurface &&
     !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame && !hasKnownReadyPreviewFrame;
   const shouldRenderPreviewVideo = shouldRenderPreviewVideoByBudget &&
+    !shouldPreferFrozenBridgeOverPreview &&
     !shouldSuppressPosterBackedWarmupPreviewVideo &&
     !shouldSuppressWrongTimePreviewVideo &&
     (!shouldRenderVisibleCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup) &&
     (!isRecentOwnerContinuityBridge || shouldRenderReleasedOwnerPreviewVideo || shouldKeepExistingPreviewDomForRetiringOwner);
-  const shouldRenderFrozenTimelineFrame = hasFrozenTimelineFrame && !hasCurrentDomPreviewFrame &&
-    (!shouldRenderInlineVideo || !shouldRevealCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup);
+  const shouldRenderFrozenTimelineFrame =
+    hasFrozenTimelineFrame &&
+    (shouldPreferFrozenBridgeOverPreview ||
+      (!hasCurrentDomPreviewFrame &&
+        (!shouldRenderInlineVideo ||
+          !shouldRevealCanonicalHost ||
+          shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup)));
   const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup = shouldRenderInlineVideo && shouldRenderPreviewVideo &&
     shouldRenderStageHost && shouldShowFirstFrameGuard &&
     !hasStablePreviewPosterSurface && !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
@@ -430,6 +415,7 @@ export const 渲染视频附件 = (
           <div
             class="message-video-canonical-host"
             data-attachment-id=${attachment.attachmentId}
+            data-covered=${shouldRevealCanonicalHost ? "false" : "true"}
             data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
               ? "archived_stream"
               : "file"}

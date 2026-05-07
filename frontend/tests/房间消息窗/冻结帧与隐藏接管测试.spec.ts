@@ -86,8 +86,7 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     );
 
     expect(frozenFrame?.getAttribute("src")).toBe(frozenFrameSrc);
-    expect(previewVideo?.getAttribute("src")).toBe(playback.src);
-    expect(previewVideo?.getAttribute("poster")).toBeNull();
+    expect(previewVideo).toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).toBeNull();
@@ -407,6 +406,100 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     releasedPreview?.dispatchEvent(new Event("loadedmetadata"));
     expect(releasedPreview?.currentTime).toBeCloseTo(12.5, 2);
+
+    pane.remove();
+  });
+
+  it("当前 owner 交接若已经握有同源冻结帧，必须只露冻结帧一个 bridge surface，不能再让 preview 跟 visible canonical 一起争位", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentId = "att-video-single-slot";
+    const playback = {
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-video-single-slot",
+      thumbnailUrl: "http://media.local/poster-video-single-slot",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建单视频消息项(attachmentId, 1)];
+    pane.mediaPlaybackByAttachmentId = {
+      [attachmentId]: playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [attachmentId]: {
+        src: playback.src,
+        currentTime: 12.5,
+        updatedAt: 1_777_500_000_400,
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
+    );
+    expect(previewVideo).not.toBeNull();
+    Object.defineProperty(previewVideo!, "readyState", {
+      configurable: true,
+      value: 2,
+    });
+    Object.defineProperty(previewVideo!, "currentTime", {
+      configurable: true,
+      value: 12.5,
+    });
+    previewVideo!.dataset.previewSrc = playback.src;
+    previewVideo!.dataset.previewCommittedSrc = playback.src;
+
+    const 画面缓存Owner = (
+      pane as unknown as {
+        时间线画面缓存Owner: {
+          时间线自动播冻结帧: Map<
+            string,
+            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+          >;
+        };
+      }
+    ).时间线画面缓存Owner;
+    Object.defineProperty(画面缓存Owner, "时间线自动播冻结帧", {
+      configurable: true,
+      value: new Map([
+        [
+          attachmentId,
+          {
+            src: playback.src,
+            currentTime: 12.5,
+            dataUrl: "data:image/webp;base64,single-slot-freeze",
+            updatedAt: 1_777_500_000_401,
+          },
+        ],
+      ]),
+    });
+
+    pane.inlineAutoplayOwnerAttachmentId = attachmentId;
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      [attachmentId]: playback,
+    };
+    await pane.updateComplete;
+
+    const card = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${attachmentId}"]`
+    );
+    const visibleHost = card?.querySelector<HTMLElement>(
+      `.message-video-canonical-host[data-attachment-id="${attachmentId}"]`
+    );
+    const frozenFrame = card?.querySelector<HTMLImageElement>(
+      `img.message-video-frozen-frame[data-attachment-id="${attachmentId}"]`
+    );
+    const warmupPreview = card?.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
+    );
+
+    expect(visibleHost).not.toBeNull();
+    expect(visibleHost?.dataset.covered).toBe("true");
+    expect(frozenFrame?.getAttribute("src")).toBe("data:image/webp;base64,single-slot-freeze");
+    expect(warmupPreview).toBeNull();
 
     pane.remove();
   });

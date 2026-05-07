@@ -375,6 +375,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
           this.读取时间线现有预览帧证据(attachmentId, src),
         读取时间线自动播冻结帧: (attachmentId, src, position) =>
           this.时间线画面缓存Owner.读取自动播冻结帧(attachmentId, src, position),
+        捕获时间线自动播冻结帧: (attachmentId, video, options) =>
+          this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video, options),
         读取时间线视频首帧是否就绪: (attachmentId, src) =>
           this.时间线画面缓存Owner.读取首帧是否就绪(attachmentId, src),
         归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
