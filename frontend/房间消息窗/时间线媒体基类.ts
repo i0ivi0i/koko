@@ -599,6 +599,9 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
         ? { src: normalizedExpectedSrc, currentTime: previewVideo.currentTime }
         : null;
     }
+    if (typeof previewVideo.requestVideoFrameCallback === "function") {
+      return null;
+    }
     /**
      * 真实浏览器里，非 owner 的 preview `<video>` 可能已经拿到首帧，
      * 但 `loadeddata/canplay` 还没来得及把缓存写回本轮 render。

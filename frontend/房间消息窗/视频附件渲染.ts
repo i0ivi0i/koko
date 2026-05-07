@@ -214,6 +214,10 @@ export const 渲染视频附件 = (
     context.归一化时间线视频播放源(savedTimelineFrameSrc);
   const normalizedOwnerCanonicalVideoSrc =
     context.归一化时间线视频播放源(ownerCanonicalVideoSrc);
+  const hasVisibleCanonicalCommittedFrame = context.读取时间线唯一播放器可见宿主是否已出帧(
+    attachment.attachmentId,
+    ownerCanonicalVideoSrc
+  );
   const hasHistoricalCanonicalReveal =
     Boolean(normalizedOwnerCanonicalVideoSrc) &&
     context.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
@@ -232,6 +236,8 @@ export const 渲染视频附件 = (
     dom: {
       previewReadyState: hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame ? 2 : 0,
       canonicalReadyState: shouldRevealCanonicalHost ? 3 : 0,
+      previewCommitted: hasExistingSameSourcePreviewFrame,
+      canonicalCommitted: hasVisibleCanonicalCommittedFrame,
       sourceMatches: hasSameSourceSavedTimelineFrame || hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame || hasHistoricalCanonicalReveal,
     },
     host: {
@@ -311,7 +317,6 @@ export const 渲染视频附件 = (
     !shouldReuseSavedTimelineFrameAsPreview;
   const shouldRenderStageHost = !shouldRevealCanonicalHost && (shouldUseHiddenStageCover || shouldStageWarmupGuardedOwnerCanonical || shouldStageWarmupColdInitialOwnerCanonical);
   const shouldRenderVisibleCanonicalHost = shouldRenderInlineVideo && !shouldPreferRetiringOwnerPreviewSurface && !shouldRenderStageHost && shouldRevealCanonicalHost;
-  const hasVisibleCanonicalCommittedFrame = shouldRenderVisibleCanonicalHost && context.读取时间线唯一播放器可见宿主是否已出帧(attachment.attachmentId, ownerCanonicalVideoSrc);
   const shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup =
     shouldRenderVisibleCanonicalHost && !hasVisibleCanonicalCommittedFrame &&
     (hasCurrentDomPreviewFrame || hasFrozenTimelineFrame || shouldReuseSavedTimelineFrameAsPreview || hasStablePreviewPosterSurface);

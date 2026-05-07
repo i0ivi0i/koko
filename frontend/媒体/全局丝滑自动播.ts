@@ -20,7 +20,13 @@ export interface 播放连续性输入 {
   surface: 播放连续性表面;
   source: { src: string | null };
   savedPosition: { src: string; currentTime: number; updatedAt: number } | null;
-  dom: { previewReadyState: number; canonicalReadyState: number; sourceMatches: boolean };
+  dom: {
+    previewReadyState: number;
+    canonicalReadyState: number;
+    sourceMatches: boolean;
+    previewCommitted: boolean;
+    canonicalCommitted: boolean;
+  };
   host: { exists: boolean; hasStableFrame: boolean };
   frameEvidence: 播放连续性帧证据;
   intent: {
@@ -164,14 +170,14 @@ export const 判定播放连续性表面 = (input: 播放连续性输入): 播�
       targetCurrentTime,
     };
   }
-  if (input.dom.sourceMatches && input.dom.canonicalReadyState >= 2) {
+  if (input.dom.sourceMatches && input.dom.canonicalCommitted) {
     return { phase: "visible", kind: "visible_canonical", targetCurrentTime };
   }
   if (
     Boolean(frameEvidence) &&
     input.host.hasStableFrame &&
     input.dom.sourceMatches &&
-    input.dom.previewReadyState >= 2
+    input.dom.previewCommitted
   ) {
     /**
      * `hold_frame` 不是“随便有一帧就行”，而是“当前这张稳定帧是在为哪一个续播时间点兜底”。

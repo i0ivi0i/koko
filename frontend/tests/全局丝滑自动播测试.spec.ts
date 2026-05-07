@@ -14,7 +14,13 @@ const 基础输入: 播放连续性输入 = {
   surface: "timeline",
   source: { src: "blob:webtorrent/att-1" },
   savedPosition: { src: "blob:webtorrent/att-1", currentTime: 18, updatedAt: 1 },
-  dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
+  dom: {
+    previewReadyState: 0,
+    canonicalReadyState: 0,
+    sourceMatches: true,
+    previewCommitted: false,
+    canonicalCommitted: false,
+  },
   host: { exists: true, hasStableFrame: true },
   frameEvidence: { kind: "none" },
   intent: { viewerOpen: false, fullscreen: false },
@@ -34,7 +40,13 @@ describe("全局丝滑自动播", () => {
   it("当前 canonical DOM 已可显示且位置同源时才允许 visible canonical", () => {
     const decision = 判定播放连续性表面({
       ...基础输入,
-      dom: { previewReadyState: 2, canonicalReadyState: 3, sourceMatches: true },
+      dom: {
+        previewReadyState: 2,
+        canonicalReadyState: 3,
+        sourceMatches: true,
+        previewCommitted: true,
+        canonicalCommitted: true,
+      },
     });
 
     expect(decision).toMatchObject({
@@ -47,7 +59,13 @@ describe("全局丝滑自动播", () => {
   it("当前只有同源 preview 首帧可显示时保持暂停帧，不抢露 canonical", () => {
     const decision = 判定播放连续性表面({
       ...基础输入,
-      dom: { previewReadyState: 2, canonicalReadyState: 0, sourceMatches: true },
+      dom: {
+        previewReadyState: 2,
+        canonicalReadyState: 0,
+        sourceMatches: true,
+        previewCommitted: true,
+        canonicalCommitted: false,
+      },
       frameEvidence: {
         kind: "preview_dom",
         src: "blob:webtorrent/att-1",
@@ -66,7 +84,13 @@ describe("全局丝滑自动播", () => {
   it("preview DOM 虽已出首帧，但帧时间还没追上续播点时不能误判成暂停帧", () => {
     const decision = 判定播放连续性表面({
       ...基础输入,
-      dom: { previewReadyState: 2, canonicalReadyState: 0, sourceMatches: true },
+      dom: {
+        previewReadyState: 2,
+        canonicalReadyState: 0,
+        sourceMatches: true,
+        previewCommitted: true,
+        canonicalCommitted: false,
+      },
       frameEvidence: {
         kind: "preview_dom",
         src: "blob:webtorrent/att-1",
@@ -90,7 +114,13 @@ describe("全局丝滑自动播", () => {
         currentTime: 19.75,
         updatedAt: 2,
       },
-      dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
+      dom: {
+        previewReadyState: 0,
+        canonicalReadyState: 0,
+        sourceMatches: true,
+        previewCommitted: false,
+        canonicalCommitted: false,
+      },
     });
 
     expect(decision).toMatchObject({
@@ -104,7 +134,13 @@ describe("全局丝滑自动播", () => {
     const decision = 判定播放连续性表面({
       ...基础输入,
       savedPosition: null,
-      dom: { previewReadyState: 0, canonicalReadyState: 0, sourceMatches: true },
+      dom: {
+        previewReadyState: 0,
+        canonicalReadyState: 0,
+        sourceMatches: true,
+        previewCommitted: false,
+        canonicalCommitted: false,
+      },
       host: { exists: true, hasStableFrame: true },
     });
 
@@ -179,6 +215,50 @@ describe("全局丝滑自动播", () => {
       phase: "retiringHoldFrame",
       kind: "retiring_hold_frame",
       src: "blob:webtorrent/att-1",
+      targetCurrentTime: 18,
+    });
+  });
+
+  it("canonical 只有 readyState 还不够，未确认可见帧提交前不能提早进入 visible", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      dom: {
+        previewReadyState: 2,
+        canonicalReadyState: 3,
+        sourceMatches: true,
+        previewCommitted: true,
+        canonicalCommitted: false,
+      },
+      frameEvidence: {
+        kind: "preview_dom",
+        src: "blob:webtorrent/att-1",
+        currentTime: 18,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "pausedFrame",
+      kind: "hold_frame",
+      src: "blob:webtorrent/att-1",
+      targetCurrentTime: 18,
+    });
+  });
+
+  it("preview 只有 readyState 还不够，未确认当前 DOM 已提交可见帧时不能冒充暂停帧", () => {
+    const decision = 判定播放连续性表面({
+      ...基础输入,
+      dom: {
+        previewReadyState: 2,
+        canonicalReadyState: 0,
+        sourceMatches: true,
+        previewCommitted: false,
+        canonicalCommitted: false,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      phase: "hiddenHandoff",
+      kind: "hidden_handoff",
       targetCurrentTime: 18,
     });
   });

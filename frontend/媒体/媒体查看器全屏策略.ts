@@ -181,6 +181,8 @@ export const 启动同会话全屏策略 = (
       dom: {
         previewReadyState: video.readyState,
         canonicalReadyState: video.readyState,
+        previewCommitted: video.readyState >= 2,
+        canonicalCommitted: video.readyState >= 2,
         sourceMatches: Boolean(currentSrc),
       },
       host: {

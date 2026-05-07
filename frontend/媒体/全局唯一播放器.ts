@@ -130,6 +130,8 @@ const 应用查看器播放连续性 = (
     dom: {
       previewReadyState: video.readyState,
       canonicalReadyState: video.readyState,
+      previewCommitted: video.readyState >= 2,
+      canonicalCommitted: video.readyState >= 2,
       sourceMatches,
     },
     host: {
