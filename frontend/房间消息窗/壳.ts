@@ -183,6 +183,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
             ),
         });
         this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
+        this.时间线唯一播放器可见宿主已出帧源.delete(previousOwnerAttachmentId);
         this.最近退场Owner附件Id = previousOwnerAttachmentId;
       } else if (!currentOwnerAttachmentId) {
         this.最近退场Owner附件Id = null;
@@ -202,6 +203,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
          * 4. 因此 owner 每次进入需要承接旧可见帧的交接时，都必须清掉历史 ready 结论，重新走 hidden stage 校验。
          */
         this.时间线唯一播放器可见接管就绪源.delete(currentOwnerAttachmentId);
+        this.时间线唯一播放器可见宿主已出帧源.delete(currentOwnerAttachmentId);
         this.时间线隐藏接管附件Id = currentOwnerAttachmentId;
       } else if (currentOwnerAttachmentId !== this.时间线隐藏接管附件Id) {
         this.时间线隐藏接管附件Id = null;
@@ -359,6 +361,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
           this.读取时间线视频预算投影(attachment, previewVideoSrcCandidate),
         读取时间线唯一播放器是否可见接管就绪: (attachmentId, src) =>
           this.读取时间线唯一播放器是否可见接管就绪(attachmentId, src),
+        读取时间线唯一播放器可见宿主是否已出帧: (attachmentId, src) =>
+          this.读取时间线唯一播放器可见宿主是否已出帧(attachmentId, src),
         读取自动播恢复位置: (attachmentId, src) =>
           this.读取自动播恢复位置(attachmentId, src),
         读取时间线现有预览视频是否可继续显示: (attachmentId, src) =>

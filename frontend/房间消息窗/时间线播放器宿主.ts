@@ -7,6 +7,7 @@ interface 时间线播放器宿主Owner依赖 {
   恢复播放位置: (attachmentId: string, video: HTMLVideoElement) => void;
   标记首帧已就绪: (attachmentId: string, currentSrc: string | null) => void;
   标记可见接管已就绪: (attachmentId: string, video: HTMLVideoElement) => void;
+  标记可见宿主已出帧: (attachmentId: string, video: HTMLVideoElement) => void;
   广播播放位置: (
     attachmentId: string,
     video: HTMLVideoElement,
@@ -80,6 +81,9 @@ export class 时间线播放器宿主Owner {
         },
         标记可见接管已就绪: (video) => {
           this.依赖.标记可见接管已就绪(ownerAttachmentId, video);
+        },
+        标记可见宿主已出帧: (video) => {
+          this.依赖.标记可见宿主已出帧(ownerAttachmentId, video);
         },
         广播播放位置: (video, force = false, allowReleasedOwner = false) => {
           this.依赖.广播播放位置(ownerAttachmentId, video, force, allowReleasedOwner);

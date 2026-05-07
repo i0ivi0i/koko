@@ -34,6 +34,7 @@ const 创建Owner = (root: ParentNode) => {
     恢复播放位置: vi.fn(),
     标记首帧已就绪: vi.fn(),
     标记可见接管已就绪: vi.fn(),
+    标记可见宿主已出帧: vi.fn(),
     广播播放位置: vi.fn(),
     广播媒体会话信号: vi.fn(),
   };
@@ -87,12 +88,14 @@ describe("时间线播放器宿主Owner", () => {
     input.回调.恢复播放位置(video);
     input.回调.标记首帧已就绪("/media/visible.mp4");
     input.回调.标记可见接管已就绪?.(video);
+    input.回调.标记可见宿主已出帧?.(video);
     input.回调.广播播放位置(video, true, true);
     input.回调.广播媒体会话信号({ type: "PLAYER_WAITING" });
 
     expect(deps.恢复播放位置).toHaveBeenCalledWith("video-1", video);
     expect(deps.标记首帧已就绪).toHaveBeenCalledWith("video-1", "/media/visible.mp4");
     expect(deps.标记可见接管已就绪).toHaveBeenCalledWith("video-1", video);
+    expect(deps.标记可见宿主已出帧).toHaveBeenCalledWith("video-1", video);
     expect(deps.广播播放位置).toHaveBeenCalledWith("video-1", video, true, true);
     expect(deps.广播媒体会话信号).toHaveBeenCalledWith("video-1", {
       type: "PLAYER_WAITING",

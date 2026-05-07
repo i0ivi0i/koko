@@ -44,6 +44,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     { src: string; currentTime: number; reportedAt: number }
   >();
   protected readonly 时间线唯一播放器可见接管就绪源 = new Map<string, string>();
+  protected readonly 时间线唯一播放器可见宿主已出帧源 = new Map<string, string>();
   protected readonly 时间线唯一播放器待提交接管源 = new Map<string, string>();
   protected 时间线隐藏接管附件Id: string | null = null;
   protected 最近退场Owner附件Id: string | null = null;
@@ -90,6 +91,8 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
         this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, currentSrc),
       标记可见接管已就绪: (attachmentId, video) =>
         this.标记时间线唯一播放器可见接管已就绪(attachmentId, video),
+      标记可见宿主已出帧: (attachmentId, video) =>
+        this.标记时间线唯一播放器可见宿主已出帧(attachmentId, video),
       广播播放位置: (attachmentId, video, force = false, allowReleasedOwner = false) =>
         this.广播自动播播放位置(attachmentId, video, force, allowReleasedOwner),
       广播媒体会话信号: (attachmentId, signal) =>
@@ -112,6 +115,11 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
       if (!当前视频附件.has(attachmentId)) {
         this.时间线唯一播放器可见接管就绪源.delete(attachmentId);
+      }
+    }
+    for (const attachmentId of this.时间线唯一播放器可见宿主已出帧源.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.时间线唯一播放器可见宿主已出帧源.delete(attachmentId);
       }
     }
     for (const attachmentId of this.时间线唯一播放器待提交接管源.keys()) {
@@ -244,6 +252,17 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     return canonicalVideo.readyState >= 最低可见接管就绪状态;
   }
 
+  protected 读取时间线唯一播放器可见宿主是否已出帧(
+    attachmentId: string,
+    src: string | null
+  ): boolean {
+    const normalizedSrc = this.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
+      return false;
+    }
+    return this.时间线唯一播放器可见宿主已出帧源.get(attachmentId) === normalizedSrc;
+  }
+
   protected 标记时间线唯一播放器可见接管已就绪(
     attachmentId: string,
     video: HTMLVideoElement
@@ -343,6 +362,22 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       return;
     }
     提交可见接管就绪(normalizedSrc);
+  }
+
+  protected 标记时间线唯一播放器可见宿主已出帧(
+    attachmentId: string,
+    video: HTMLVideoElement
+  ): void {
+    const currentSrc = this.读取视频当前播放源(video);
+    const normalizedSrc = this.归一化时间线视频播放源(currentSrc);
+    if (!normalizedSrc || video.seeking) {
+      return;
+    }
+    if (this.时间线唯一播放器可见宿主已出帧源.get(attachmentId) === normalizedSrc) {
+      return;
+    }
+    this.时间线唯一播放器可见宿主已出帧源.set(attachmentId, normalizedSrc);
+    this.requestUpdate();
   }
 
   protected 揭开已就绪的时间线隐藏接管宿主(): void {
@@ -549,14 +584,15 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       return null;
     }
     /**
-     * 当前 DOM 自己回抛过首帧事件时，优先认这颗节点留下的 ready-src 证明：
-     * 1. 这仍然是同一颗 `<video>` 的本地事实，不会把旧 DOM 或别的 attachment 的缓存冒充成当前表面；
-     * 2. 某些测试/浏览器环境会先发 `loadeddata/canplay`，再慢一拍更新 `readyState`，不能让 cover 因此多挂一拍；
-     * 3. 一旦 src 改变，`data-preview-src` 会同步变化，旧 ready-src 立刻失效，不会污染新源。
+     * `data-preview-ready-src` 只说明“这条源曾经 ready 过”，不能直接证明
+     * “这颗当前 DOM preview 已经把像素交给屏幕”：
+     * 1. 从上往下滑入 owner 时，preview `<video>` 可能刚被重新插回 DOM，`ready-src` 仍是旧事实；
+     * 2. 如果把它误当成当前可见帧，冻结底板会先被撤掉，用户就会看到一拍黑闪；
+     * 3. 只有这颗节点自己回过可见帧提交标记，才允许把它当成 continuity surface。
      */
     if (
-      previewVideo.dataset.previewReadySrc &&
-      previewVideo.dataset.previewReadySrc === normalizedExpectedSrc &&
+      previewVideo.dataset.previewCommittedSrc &&
+      previewVideo.dataset.previewCommittedSrc === normalizedExpectedSrc &&
       previewVideo.dataset.previewSrc === normalizedExpectedSrc
     ) {
       return Number.isFinite(previewVideo.currentTime)

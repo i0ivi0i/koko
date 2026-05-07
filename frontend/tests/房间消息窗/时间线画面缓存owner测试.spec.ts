@@ -64,6 +64,37 @@ describe("时间线画面缓存Owner", () => {
     expect(owner.读取自动播冻结帧("att-1", "/swarm/other.mp4", position)).toBeNull();
   });
 
+  it("无续播位置时，最近同源冻结帧仍可短暂承接进入 owner 的连续表面", () => {
+    const { owner } = 创建Owner();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-07T12:00:00.000Z"));
+
+      (
+        owner as unknown as {
+          时间线自动播冻结帧: Map<
+            string,
+            { src: string; currentTime: number; dataUrl: string; updatedAt: number }
+          >;
+        }
+      ).时间线自动播冻结帧.set("att-1", {
+        src: "/swarm/video.mp4",
+        currentTime: 12.2,
+        dataUrl: "data:image/webp;base64,freeze",
+        updatedAt: Date.now() - 1_000,
+      });
+
+      expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", null)?.dataUrl).toBe(
+        "data:image/webp;base64,freeze"
+      );
+
+      vi.setSystemTime(new Date("2026-05-07T12:00:06.000Z"));
+      expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", null)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("预热冻结帧会等到 requestVideoFrameCallback 确认已合成那一帧后再写入缓存", async () => {
     const { owner } = 创建Owner();
     const drawImage = vi.fn();

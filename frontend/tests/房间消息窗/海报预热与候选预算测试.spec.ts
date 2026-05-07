@@ -290,7 +290,37 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     expect(揭帘后Canonical视频).toBe(隐藏预热视频);
     expect(揭帘后Canonical视频?.autoplay).toBe(true);
     expect(揭帘后Canonical视频?.currentTime).toBeCloseTo(22.5, 2);
-    expect(揭帘后预览视频).toBeNull();
+    expect(揭帘后预览视频).not.toBeNull();
+
+    揭帘后Canonical视频?.dispatchEvent(new Event("playing"));
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    const 可见宿主首帧提交回调 =
+      首帧提交回调 as unknown as (
+        now: number,
+        metadata: VideoFrameCallbackMetadata
+      ) => void;
+    可见宿主首帧提交回调(1, {
+      presentedFrames: 2,
+      expectedDisplayTime: 0,
+      presentationTime: 0,
+      width: 320,
+      height: 180,
+      mediaTime: 22.5,
+      processingDuration: 0,
+      captureTime: 0,
+      receiveTime: 0,
+      rtpTimestamp: 1,
+    } as VideoFrameCallbackMetadata);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    expect(
+      pane.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'
+      )
+    ).toBeNull();
 
       pane.remove();
     },

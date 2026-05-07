@@ -13,6 +13,7 @@ type 时间线自动播回调 = {
   恢复播放位置(video: HTMLVideoElement): void;
   标记首帧已就绪(src: string | null): void;
   标记可见接管已就绪?(video: HTMLVideoElement): void;
+  标记可见宿主已出帧?(video: HTMLVideoElement): void;
   广播播放位置(
     video: HTMLVideoElement,
     force?: boolean,
@@ -219,8 +220,35 @@ const 绑定时间线自动播信号 = (
   input: 全局唯一播放器时间线输入
 ): (() => void) => {
   const 读取当前源 = (): string | null => video.currentSrc || video.getAttribute("src");
+  const 挂载时是否隐藏预热 = 是时间线隐藏预热宿主(input.mountTarget);
   const 广播可见接管已就绪 = (): void => {
+    if (!挂载时是否隐藏预热) {
+      return;
+    }
     input.回调.标记可见接管已就绪?.(video);
+  };
+  let 可见宿主首帧已确认 = false;
+  let 可见宿主首帧确认已挂起 = false;
+  const 广播可见宿主已出帧 = (): void => {
+    if (挂载时是否隐藏预热 || 可见宿主首帧已确认 || 可见宿主首帧确认已挂起) {
+      return;
+    }
+    const 提交已出帧 = (): void => {
+      可见宿主首帧确认已挂起 = false;
+      if (可见宿主首帧已确认) {
+        return;
+      }
+      可见宿主首帧已确认 = true;
+      input.回调.标记可见宿主已出帧?.(video);
+    };
+    if ("requestVideoFrameCallback" in video && typeof video.requestVideoFrameCallback === "function") {
+      可见宿主首帧确认已挂起 = true;
+      video.requestVideoFrameCallback(() => {
+        提交已出帧();
+      });
+      return;
+    }
+    提交已出帧();
   };
   const listeners: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [
     [
@@ -234,6 +262,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -241,6 +270,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -248,6 +278,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -255,6 +286,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
+        广播可见宿主已出帧();
         input.回调.广播媒体会话信号({ type: "PLAYER_PLAYING" });
       },
     ],

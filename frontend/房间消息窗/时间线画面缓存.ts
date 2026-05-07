@@ -8,6 +8,7 @@ import type { 聊天列表展示项 } from "./视图.js";
 const 时间线自动播冻结帧最大边长 = 480;
 const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
 const 时间线自动播冻结帧预热最小位移秒 = 1.5;
+const 时间线自动播冻结帧无续播位置保活毫秒 = 4_000;
 
 interface 时间线画面缓存Owner依赖 {
   读取视频当前播放源: (video: HTMLVideoElement) => string | null;
@@ -110,9 +111,6 @@ export class 时间线画面缓存Owner {
     src: string | null,
     position: 媒体播放位置 | null
   ): 时间线自动播冻结帧 | null {
-    if (!position) {
-      return null;
-    }
     const frame = this.时间线自动播冻结帧.get(attachmentId) ?? null;
     const normalizedExpectedSrc = this.依赖.归一化时间线视频播放源(src);
     const normalizedFrameSrc = this.依赖.归一化时间线视频播放源(frame?.src ?? null);
@@ -124,6 +122,18 @@ export class 时间线画面缓存Owner {
       !frame.dataUrl.startsWith("data:image/")
     ) {
       return null;
+    }
+    if (!position) {
+      /**
+       * 顶部向下滑入自动播 owner 时，业务上常常还没有稳定的续播位置快照：
+       * 1. 但同源、刚刚捕获过的冻结帧本身已经是可信的“上一张真实像素”；
+       * 2. 这时若强行要求 position 才给读，底板会先被判空，新的 preview/canonical 又还没真正出帧；
+       * 3. 这里允许最近一次同源冻结帧短暂续命，只承担 continuity surface，不冒充真实播放位置。
+       */
+      return Number.isFinite(frame.updatedAt) &&
+          Date.now() - frame.updatedAt <= 时间线自动播冻结帧无续播位置保活毫秒
+        ? frame
+        : null;
     }
     if (
       Math.abs(frame.currentTime - position.currentTime) >
