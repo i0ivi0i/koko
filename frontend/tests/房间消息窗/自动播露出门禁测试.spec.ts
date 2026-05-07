@@ -6,6 +6,86 @@ import type { 媒体播放结果 } from "../../媒体/媒体播放.js";
 import { 创建媒体消息窗, 创建单视频消息项 } from "../common/房间消息窗媒体支架.js";
 
 describe("房间消息窗 / 自动播露出门禁", () => {
+  it("可见宿主先提交了错位帧时，不能提前记成已出可见帧", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentId = "att-video-visible-misaligned-frame";
+    const playback = {
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-visible-misaligned-frame",
+      thumbnailUrl: "http://media.local/poster-visible-misaligned-frame",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建单视频消息项(attachmentId, 1)];
+    pane.mediaPlaybackByAttachmentId = {
+      [attachmentId]: playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = attachmentId;
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      [attachmentId]: playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [attachmentId]: {
+        src: playback.src,
+        currentTime: 18,
+        updatedAt: 1_715_000_000_002,
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const visibleCanonical = pane.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
+    );
+    expect(visibleCanonical).not.toBeNull();
+    Object.defineProperty(visibleCanonical!, "readyState", {
+      configurable: true,
+      value: 4,
+    });
+    Object.defineProperty(visibleCanonical!, "currentTime", {
+      configurable: true,
+      value: 0.16,
+    });
+
+    (
+      pane as unknown as {
+        时间线唯一播放器可见宿主已出帧源: Map<string, string>;
+        标记时间线唯一播放器可见宿主已出帧: (
+          attachmentId: string,
+          video: HTMLVideoElement
+        ) => void;
+        读取时间线唯一播放器可见宿主是否已出帧: (
+          attachmentId: string,
+          src: string | null
+        ) => boolean;
+      }
+    ).时间线唯一播放器可见宿主已出帧源.delete(attachmentId);
+    (
+      pane as unknown as {
+        标记时间线唯一播放器可见宿主已出帧: (
+          attachmentId: string,
+          video: HTMLVideoElement
+        ) => void;
+      }
+    ).标记时间线唯一播放器可见宿主已出帧(attachmentId, visibleCanonical!);
+
+    expect(
+      (
+        pane as unknown as {
+          读取时间线唯一播放器可见宿主是否已出帧: (
+            attachmentId: string,
+            src: string | null
+          ) => boolean;
+        }
+      ).读取时间线唯一播放器可见宿主是否已出帧(attachmentId, playback.src)
+    ).toBe(false);
+
+    pane.remove();
+  });
+
   it("只有保存续播点但还没出可见帧时，不能先露出 poster", async () => {
     const pane = 创建媒体消息窗();
     const attachmentId = "att-video-hidden-handoff";

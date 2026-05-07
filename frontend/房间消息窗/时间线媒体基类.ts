@@ -373,6 +373,16 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     if (!normalizedSrc || video.seeking) {
       return;
     }
+    const position = this.读取自动播恢复位置(attachmentId, currentSrc);
+    if (position && Math.abs(video.currentTime - position.currentTime) >= 0.25) {
+      /**
+       * 快速滚动/大跳转时，浏览器可能先把 source 起点附近的第一帧提交到可见宿主：
+       * 1. 这时“已经出帧”并不等于“已经回到正确续播点”；
+       * 2. 如果把这张错位帧直接记成 reveal 事实，用户会先看到 0.x 的错帧，再看到 seek 追上；
+       * 3. 因此可见宿主只接受“已经对齐目标续播点后的 committed frame”。
+       */
+      return;
+    }
     if (this.时间线唯一播放器可见宿主已出帧源.get(attachmentId) === normalizedSrc) {
       return;
     }
