@@ -67,7 +67,7 @@ describe("消息视频自动播编排", () => {
     expect(选择消息视频自动播Owner(candidates)).toBeNull();
   });
 
-  it("高竖视频交接落入 0.6 死区时，也必须继续裁决出连续 owner 候选而不是返回 null", () => {
+  it("高竖视频交接落入 0.6 死区时，轻微领先的新卡不会立刻抢走旧 owner", () => {
     const candidates: 消息视频自动播候选[] = [
       {
         attachmentId: "att-video-old",
@@ -83,11 +83,33 @@ describe("消息视频自动播编排", () => {
 
     /**
      * 真实房间里的高竖视频交接区会天然出现“两边都低于 0.6”的窗口。
-     * 这里如果返回 null，runtime 就会把 owner 清空，消息窗随即撤掉 canonical host，
-     * 用户肉眼看到的就是“闪一下、抽一下、再接着播”。
+     * 这里如果因为“新卡只多露一点点”就立刻把 pending/owner 切走，
+     * 旧卡还接近半屏可见时就会先被冻住，肉眼看到的就是退场抽一下、新卡再接上。
      */
     expect(选择消息视频自动播Owner(candidates)).toBeNull();
-    expect(选择消息视频自动播连续Owner候选(candidates)).toBe("att-video-new");
+    expect(选择消息视频自动播连续Owner候选(candidates, "att-video-old")).toBe(
+      "att-video-old"
+    );
+  });
+
+  it("高竖视频交接落入 0.6 死区时，明显领先的新卡可以接过连续 owner", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-old",
+        visibilityRatio: 0.39,
+        distanceToViewportCenter: 338,
+      },
+      {
+        attachmentId: "att-video-new",
+        visibilityRatio: 0.57,
+        distanceToViewportCenter: 236,
+      },
+    ];
+
+    expect(选择消息视频自动播Owner(candidates)).toBeNull();
+    expect(选择消息视频自动播连续Owner候选(candidates, "att-video-old")).toBe(
+      "att-video-new"
+    );
   });
 
   it("当前 owner 仍在可见阈值内时，会保持粘性而不是在相邻视频间来回切换", () => {

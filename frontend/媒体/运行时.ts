@@ -284,7 +284,10 @@ const 重算自动播候选补丁 = (
     context.inlineAutoplayPendingAttachmentId ?? context.inlineAutoplayOwnerAttachmentId
   );
   if (!nextOwnerAttachmentId) {
-    const continuityOwnerAttachmentId = 选择消息视频自动播连续Owner候选(candidates);
+    const continuityOwnerAttachmentId = 选择消息视频自动播连续Owner候选(
+      candidates,
+      context.inlineAutoplayOwnerAttachmentId
+    );
     if (continuityOwnerAttachmentId) {
       /**
        * 高竖视频在滚动交接区会天然掉进 `0.6` dead zone：

@@ -797,7 +797,7 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
   });
 
-  it("高竖视频交接落入 dead zone 时，会保持旧 owner 并挂起新的 pending，但不会把 anchor 冷源缓存成正式播放结果", () => {
+  it("高竖视频交接落入 dead zone 时，轻微领先的新卡不会立刻挂成 pending", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {
       mode: "legacy_anchor",
@@ -843,8 +843,68 @@ describe("媒体运行时", () => {
 
     /**
      * 这不是观察器抖动，而是高竖视频天然会落入“所有候选都低于 0.6”的数学死区。
-     * runtime 这里不能把 owner 清空；正确语义是旧 owner 继续保活，同时挂起更接近视口中心的新 pending。
+     * 但如果新卡只比旧卡多露一点点，就不能立刻把 pending 切过去；
+     * 否则旧卡还接近半屏可见时就会先被冻住，肉眼看到的就是退场抽一下。
      */
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-dead-zone-old"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-dead-zone-old"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+  });
+
+  it("高竖视频交接落入 dead zone 时，明显领先的新卡会被挂成 pending 并在 settle 后接管", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "legacy_anchor",
+      attachmentId: "att-video-dead-zone-old",
+      kind: "video",
+      src: "http://media.local/original-att-video-dead-zone-old",
+      thumbnailUrl: "http://media.local/poster-att-video-dead-zone-old",
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-dead-zone-old",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-dead-zone-old",
+      playback,
+    });
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-dead-zone-old",
+          visibilityRatio: 0.39,
+          distanceToViewportCenter: 338,
+        },
+        {
+          attachmentId: "att-video-dead-zone-new",
+          visibilityRatio: 0.57,
+          distanceToViewportCenter: 236,
+        },
+      ],
+    });
+
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
       "att-video-dead-zone-old"
     );

@@ -7,6 +7,7 @@ export type 消息视频自动播候选 = {
 const 默认自动播可见阈值 = 0.6;
 const 默认自动播连续性可见阈值 = 0.35;
 const 默认完整可见阈值 = 0.98;
+const 默认自动播连续性交接最小可见优势 = 0.08;
 
 const 排序自动播候选 = (
   candidates: 消息视频自动播候选[],
@@ -91,11 +92,35 @@ export function 选择消息视频自动播Owner(
  */
 export function 选择消息视频自动播连续Owner候选(
   candidates: 消息视频自动播候选[],
+  currentOwnerAttachmentId: string | null = null,
   minVisibilityRatio = 默认自动播连续性可见阈值
 ): string | null {
-  return 排序自动播候选(
-    读取自动播竞争候选(candidates, minVisibilityRatio),
-    null,
-    { allowPreferredStickiness: false }
-  )[0]?.attachmentId ?? null;
+  const continuityCandidates = 读取自动播竞争候选(candidates, minVisibilityRatio);
+  const nextCandidate =
+    排序自动播候选(continuityCandidates, null, {
+      allowPreferredStickiness: false,
+    })[0] ?? null;
+  if (!nextCandidate) {
+    return null;
+  }
+  if (!currentOwnerAttachmentId) {
+    return nextCandidate.attachmentId;
+  }
+  const currentOwnerCandidate =
+    continuityCandidates.find(
+      (candidate) => candidate.attachmentId === currentOwnerAttachmentId
+    ) ?? null;
+  if (!currentOwnerCandidate || nextCandidate.attachmentId === currentOwnerAttachmentId) {
+    return nextCandidate.attachmentId;
+  }
+  /**
+   * dead zone 连续性交接不能只看“谁更靠近中心”：
+   * 1. 旧 owner 还接近半屏可见时，如果新卡只多露一点点就切走，旧卡会先被冻成静帧；
+   * 2. 用户肉眼看到的就是旧卡抽一下，新卡再接上；
+   * 3. 因此这里增加一条最小可见优势迟滞，只有新卡明显更完整进入视口后才允许接管。
+   */
+  return nextCandidate.visibilityRatio - currentOwnerCandidate.visibilityRatio >=
+    默认自动播连续性交接最小可见优势
+    ? nextCandidate.attachmentId
+    : currentOwnerAttachmentId;
 }
