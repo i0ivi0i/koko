@@ -231,9 +231,7 @@ const 绑定时间线自动播信号 = (
   };
   let 可见宿主首帧已确认 = false;
   let 可见宿主首帧确认已挂起 = false;
-  const 广播可见宿主已出帧 = (
-    sourceEvent: "loadeddata" | "canplay" | "seeked" | "playing"
-  ): void => {
+  const 广播可见宿主已出帧 = (): void => {
     if (挂载时是否隐藏预热 || 可见宿主首帧已确认 || 可见宿主首帧确认已挂起) {
       return;
     }
@@ -245,6 +243,10 @@ const 绑定时间线自动播信号 = (
       可见宿主首帧已确认 = true;
       input.回调.标记可见宿主已出帧?.(video);
     };
+    const 当前帧就绪阈值 =
+      typeof video.HAVE_CURRENT_DATA === "number"
+        ? video.HAVE_CURRENT_DATA
+        : HTMLMediaElement.HAVE_CURRENT_DATA;
     if ("requestVideoFrameCallback" in video && typeof video.requestVideoFrameCallback === "function") {
       可见宿主首帧确认已挂起 = true;
       video.requestVideoFrameCallback(() => {
@@ -252,7 +254,16 @@ const 绑定时间线自动播信号 = (
       });
       return;
     }
-    if (sourceEvent === "playing") {
+    if (
+      video.readyState >= 当前帧就绪阈值 &&
+      Number.isFinite(video.currentTime)
+    ) {
+      /**
+       * 没有 rVFC 的宿主环境里，fallback 仍要分清“事件到了”和“像素真的可见”：
+       * 1. happy-dom / 某些测试替身会很早抛出 `playing`，但 `readyState` 仍可能是 0；
+       * 2. 反过来，测试里也常通过 `seeked/canplay` 直接把 readyState 拉到可见阈值，这时不该再死等 `playing`；
+       * 3. 因而 fallback 统一收口成“事件来源不限，但至少要确认这颗 video 已经握有当前帧数据”。
+       */
       提交已出帧();
     }
   };
@@ -268,7 +279,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧("loadeddata");
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -276,7 +287,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧("canplay");
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -284,7 +295,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧("seeked");
+        广播可见宿主已出帧();
       },
     ],
     [
@@ -292,7 +303,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧("playing");
+        广播可见宿主已出帧();
         input.回调.广播媒体会话信号({ type: "PLAYER_PLAYING" });
       },
     ],

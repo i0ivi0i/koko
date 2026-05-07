@@ -1,18 +1,11 @@
-import { html } from "lit";
-import { ref } from "lit/directives/ref.js";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { 判定播放连续性表面 } from "../媒体/视频可见槽位协议.js";
-import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js";
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放.js";
 import type { 媒体会话信号 } from "../媒体/媒体会话.js";
 import type { 视频预览状态 } from "../媒体/视频预览.js";
 import type { 信息流视频预算投影 } from "../媒体/信息流视频预算.js";
+import type { 时间线自动播冻结帧 } from "./视频桥接帧.js";
 import { 标记当前预览视频已出首帧 } from "./视频首帧桥接.js";
-import {
-  绘制时间线冻结帧到画布,
-  type 时间线自动播冻结帧,
-} from "./视频桥接帧.js";
-import { 默认视频清单占位Poster } from "./视频表面占位.js";
+import { 渲染时间线视频表面卡片 } from "./视频附件表面渲染.js";
 import type { 消息展示项 } from "./视图.js";
 
 export type 时间线视频附件 = Extract<
@@ -198,6 +191,14 @@ export const 渲染视频附件 = (
   );
   const shouldRevealCanonicalHost =
     shouldRenderInlineVideo && hasVisibleCanonicalCommittedFrame;
+  const coldPathStableSurface =
+    hasFrozenTimelineFrame
+      ? "frozen_frame"
+      : hasCurrentDomPreviewFrame
+        ? "preview_frame"
+        : hasSourcePoster || hasRuntimePreview
+          ? "placeholder"
+          : "none";
   const hasHistoricalCanonicalReveal =
     Boolean(normalizedOwnerCanonicalVideoSrc) &&
     context.时间线唯一播放器可见接管就绪源.get(attachment.attachmentId) ===
@@ -242,6 +243,13 @@ export const 渲染视频附件 = (
       fullscreen: false,
       retiringOwner: isRetiringReleasedOwner,
     },
+    coldPath: {
+      coldFirstExposure:
+        shouldRenderInlineVideo &&
+        context.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
+        !hasVisibleCanonicalCommittedFrame,
+      stableSurface: coldPathStableSurface,
+    },
   });
   const shouldPreferRetiringOwnerPreviewSurface =
     isRetiringReleasedOwner &&
@@ -284,6 +292,32 @@ export const 渲染视频附件 = (
     shouldForceOwnerBridgePreview ||
     shouldRenderReleasedOwnerPreviewVideo;
   const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
+  /**
+   * 冷路径首轮曝光时，如果协议已经裁决“当前可见槽位应该继续是 placeholder”，
+   * 就绝不能先长一颗尚未 committed 的 preview `<video>`：
+   * 1. 否则会出现 `preview + canonical` 同时挂着，但 preview `readyState=0` 的黑底壳；
+   * 2. 真实浏览器里这一拍正是用户看到“黑一下再开始播”的来源；
+   * 3. 因而 placeholder 只能让给已提交帧，不让给还没出像素的 `<video>` 节点。
+   */
+  const shouldSuppressColdPlaceholderPreviewVideo =
+    playbackContinuityDecision.visibleSurface === "placeholder" &&
+    playbackContinuityDecision.kind === "hidden_handoff" &&
+    hasStablePreviewPosterSurface &&
+    !hasHistoricalCanonicalReveal &&
+    !shouldReuseSavedTimelineFrameAsPreview &&
+    !hasCurrentDomPreviewFrame &&
+    !hasFrozenTimelineFrame &&
+    !shouldRenderReleasedOwnerPreviewVideo;
+  const shouldSuppressPosterBackedOwnerWarmupPreview =
+    shouldRenderInlineVideo &&
+    hasStablePreviewPosterSurface &&
+    !hasHistoricalCanonicalReveal &&
+    !shouldRevealCanonicalHost &&
+    !shouldReuseSavedTimelineFrameAsPreview &&
+    !hasCurrentDomPreviewFrame &&
+    !hasFrozenTimelineFrame &&
+    !shouldRenderReleasedOwnerPreviewVideo &&
+    !isRetiringReleasedOwner;
   /** preview 还没追上续播点时，不能先把错误时间点露给用户。 */
   const shouldSuppressWrongTimePreviewVideo = shouldRenderInlineVideo &&
     playbackContinuityDecision.kind === "hidden_handoff" &&
@@ -293,7 +327,7 @@ export const 渲染视频附件 = (
     !hasStablePreviewPosterSurface &&
     !shouldReuseSavedTimelineFrameAsPreview &&
     !shouldRenderReleasedOwnerPreviewVideo;
-  const shouldShowFirstFrameGuard = shouldRenderPreviewVideoByBudget &&
+  const shouldShowFirstFrameGuard = (shouldRenderPreviewVideoByBudget || shouldSuppressColdPlaceholderPreviewVideo) &&
     !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame && !hasStablePreviewPosterSurface;
   const hasReadyPreviewSurface = hasStablePreviewPosterSurface || hasCurrentDomPreviewFrame || hasFrozenTimelineFrame;
   const shouldUseHiddenStageCover = shouldRenderInlineVideo && (hasReadyPreviewSurface || hasKnownReadyPreviewFrame) &&
@@ -334,6 +368,8 @@ export const 渲染视频附件 = (
     !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame && !hasKnownReadyPreviewFrame;
   const shouldRenderPreviewVideo = shouldRenderPreviewVideoByBudget &&
     !shouldPreferFrozenBridgeOverPreview &&
+    !shouldSuppressColdPlaceholderPreviewVideo &&
+    !shouldSuppressPosterBackedOwnerWarmupPreview &&
     !shouldSuppressPosterBackedWarmupPreviewVideo &&
     !shouldSuppressWrongTimePreviewVideo &&
     (!shouldRenderVisibleCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup) &&
@@ -356,14 +392,19 @@ export const 渲染视频附件 = (
     Boolean(previewPosterSrc) && !(shouldRenderVisibleCanonicalHost && hasKnownReadyPreviewFrame) &&
     (!shouldRenderPreviewVideo || shouldKeepCanonicalCoverDuringGuardedPreviewWarmup);
   const shouldRenderPreviewPosterSurface =
-    (hasStablePreviewPosterSurface &&
+    ((playbackContinuityDecision.visibleSurface === "placeholder" &&
+      hasStablePreviewPosterSurface &&
+      !hasHistoricalCanonicalReveal &&
+      !shouldReuseSavedTimelineFrameAsPreview &&
+      !shouldRevealCanonicalHost) ||
+      (hasStablePreviewPosterSurface &&
       !shouldSuppressPosterForContinuity &&
       !isRecentOwnerContinuityBridge &&
       !shouldReuseSavedTimelineFrameAsPreview &&
       !hasSameSourceSavedTimelineFrame &&
       !hasFrozenTimelineFrame &&
       !hasCurrentDomPreviewFrame &&
-      (!shouldRenderInlineVideo || !shouldRevealCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup)) ||
+      (!shouldRenderInlineVideo || !shouldRevealCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup))) ||
     shouldRenderCanonicalLoadingPosterCover;
   const previewVideoPoster =
     !shouldPreferRetiringOwnerPreviewSurface &&
@@ -372,198 +413,46 @@ export const 渲染视频附件 = (
     (hasSourcePoster || hasRuntimePreview)
       ? previewPosterSrc
       : undefined;
-  const 时间线预览底板视频 = html`
-    <video
-      class=${`message-video-preview${
-        shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
-      }`}
-      data-attachment-id=${attachment.attachmentId}
-      data-preview-src=${normalizedPreviewVideoSrc ?? ""}
-      src=${previewVideoSrc ?? ""}
-      width=${attachment.displayWidth}
-      height=${attachment.displayHeight}
-      muted
-      playsinline
-      preload="metadata"
-      disablepictureinpicture
-      disableremoteplayback
-      controlslist="nodownload nofullscreen noremoteplayback"
-      tabindex="-1"
-      aria-hidden="true"
-      poster=${ifDefined(previewVideoPoster)}
-      @loadedmetadata=${(event: Event) => {
-        const target = event.currentTarget;
-        if (target instanceof HTMLVideoElement) {
-          context.恢复时间线自动播播放位置(attachment.attachmentId, target, {
-            allowPreviewFrame: Boolean(restorableTimelineFrame),
-          });
-        }
-      }}
-      @loadeddata=${(event: Event) => {
-        const target = event.currentTarget;
-        if (target instanceof HTMLVideoElement) {
-          标记当前预览视频已出首帧(context, attachment.attachmentId, target);
-        }
-      }}
-      @canplay=${(event: Event) => {
-        const target = event.currentTarget;
-        if (target instanceof HTMLVideoElement) {
-          标记当前预览视频已出首帧(context, attachment.attachmentId, target);
-        }
-      }}
-      @playing=${(event: Event) => {
-        const target = event.currentTarget;
-        if (target instanceof HTMLVideoElement) {
-          标记当前预览视频已出首帧(context, attachment.attachmentId, target);
-        }
-      }}
-      @error=${() => {
-        // 预览壳失败不代表活跃播放会话失败；错误只由 canonical owner 上抛。
-      }}
-    ></video>
-  `;
-  const 时间线视频预览内容 = html`
-    ${shouldRenderFrozenTimelineFrame
-      ? html`
-          <canvas
-            class="message-video-frozen-frame"
-            data-attachment-id=${attachment.attachmentId}
-            data-bridge-src=${frozenTimelineFrame?.src ?? ""}
-            data-bridge-time=${frozenTimelineFrame?.currentTime ?? 0}
-            width=${attachment.displayWidth}
-            height=${attachment.displayHeight}
-            aria-hidden="true"
-            ${ref((canvas) => {
-              if (!(canvas instanceof HTMLCanvasElement) || !frozenTimelineFrame) {
-                return;
-              }
-              绘制时间线冻结帧到画布(frozenTimelineFrame, canvas);
-            })}
-          ></canvas>
-        `
-      : null}
-    ${shouldRenderVisibleCanonicalHost
-      ? html`
-          <div
-            class="message-video-canonical-host"
-            data-attachment-id=${attachment.attachmentId}
-            data-covered=${shouldRevealCanonicalHost ? "false" : "true"}
-            data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
-              ? "archived_stream"
-              : "file"}
-            data-video-src=${ownerCanonicalVideoSrc ?? ""}
-            data-video-poster=${previewVideoPoster ?? ""}
-            data-video-width=${attachment.width}
-            data-video-height=${attachment.height}
-            aria-hidden="true"
-          ></div>
-        `
-      : null}
-    ${shouldRenderPreviewVideo ? 时间线预览底板视频 : null}
-    ${shouldRenderPreviewPosterSurface
-      ? html`
-          <img
-            class=${`message-video-poster${
-              shouldRenderInlineVideo && !shouldRevealCanonicalHost
-                ? " message-video-poster--canonical-cover"
-                : ""
-            }`}
-            data-attachment-id=${attachment.attachmentId}
-            src=${previewPosterSrc}
-            alt="视频封面"
-            width=${attachment.displayWidth}
-            height=${attachment.displayHeight}
-            loading="lazy"
-            aria-hidden="true"
-            @error=${(event: Event) =>
-              context.标记视频封面加载失败(attachment.attachmentId, event)}
-          />
-        `
-      : null}
-    ${shouldRenderStageHost
-      ? html`
-          <div
-            class="message-video-canonical-stage-host"
-            data-stage-host="true"
-            data-attachment-id=${attachment.attachmentId}
-            data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
-              ? "archived_stream"
-              : "file"}
-            data-video-src=${ownerCanonicalVideoSrc ?? ""}
-            data-video-poster=${previewVideoPoster ?? ""}
-            data-video-width=${attachment.width}
-            data-video-height=${attachment.height}
-            style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"
-            aria-hidden="true"
-          ></div>
-        `
-      : null}
-  `;
-
-  return html`
-    <div
-      class="message-attachment-card message-video-card"
-      data-attachment-id=${attachment.attachmentId}
-      data-budget-tier=${videoBudget.tier}
-      data-budget-reason=${videoBudget.reason}
-      data-formal-byte-source=${videoBudget.formalByteSource}
-      data-grid-column-start=${attachment.gridColumnStart ?? ""}
-      data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-      data-grid-row-start=${attachment.gridRowStart ?? ""}
-      data-grid-row-span=${attachment.gridRowSpan ?? ""}
-      style=${input.attachmentCardStyle}
-    >
-      <button
-        class="message-video-preview-trigger"
-        type="button"
-        data-attachment-id=${attachment.attachmentId}
-        aria-label="观看视频"
-        @contextmenu=${context.阻止时间线媒体预览原生菜单}
-        @click=${(event: Event) => context.打开媒体查看器(event, attachment.attachmentId)}
-      >
-        ${shouldRenderPreviewVideo ||
-        shouldRenderFrozenTimelineFrame ||
-        shouldRenderPreviewPosterSurface ||
-        shouldRenderInlineVideo
-          ? html`
-              ${时间线视频预览内容}
-              ${shouldRenderPreviewVideo && shouldShowFirstFrameGuard
-                ? html`
-                    <img
-                      class="message-video-first-frame-guard"
-                      data-attachment-id=${attachment.attachmentId}
-                      src=${默认视频清单占位Poster}
-                      alt=""
-                      width=${attachment.displayWidth}
-                      height=${attachment.displayHeight}
-                      loading="lazy"
-                      aria-hidden="true"
-                    />
-                  `
-                : null}
-              ${shouldRenderInlineVideo
-                ? null
-                : shouldShowTimelinePlayIndicator
-                  ? html`<span class="message-video-play-indicator" aria-hidden="true">▶</span>`
-                  : null}
-            `
-          : html`
-              <img
-                class="message-video-poster"
-                data-attachment-id=${attachment.attachmentId}
-                src=${previewPosterSrc}
-                alt="视频封面"
-                width=${attachment.displayWidth}
-                height=${attachment.displayHeight}
-                loading="lazy"
-                aria-hidden="true"
-                @error=${(event: Event) =>
-                  context.标记视频封面加载失败(attachment.attachmentId, event)}
-              />
-              <span class="message-video-play-indicator" aria-hidden="true">▶</span>
-            `}
-      </button>
-      ${input.渲染媒体提示(attachment.attachmentId, playback)}
-    </div>
-  `;
+  return 渲染时间线视频表面卡片({
+    attachment,
+    attachmentCardStyle: input.attachmentCardStyle,
+    budgetTier: videoBudget.tier,
+    budgetReason: videoBudget.reason,
+    formalByteSource: videoBudget.formalByteSource,
+    previewPosterSrc,
+    previewVideoSrc,
+    normalizedPreviewVideoSrc,
+    ownerCanonicalVideoSrc,
+    previewVideoPoster,
+    frozenTimelineFrame,
+    shouldRenderPreviewVideo,
+    shouldRenderPreviewPosterSurface,
+    shouldRenderFrozenTimelineFrame,
+    shouldRenderVisibleCanonicalHost,
+    shouldRevealCanonicalHost,
+    shouldRenderStageHost,
+    shouldRenderInlineVideo,
+    shouldShowFirstFrameGuard,
+    shouldShowTimelinePlayIndicator,
+    renderMediaHint: input.渲染媒体提示(attachment.attachmentId, playback),
+    操作: {
+      恢复预览位置(video) {
+        context.恢复时间线自动播播放位置(attachment.attachmentId, video, {
+          allowPreviewFrame: Boolean(restorableTimelineFrame),
+        });
+      },
+      标记预览视频已出首帧(video) {
+        标记当前预览视频已出首帧(context, attachment.attachmentId, video);
+      },
+      处理封面加载失败(event) {
+        context.标记视频封面加载失败(attachment.attachmentId, event);
+      },
+      阻止原生菜单(event) {
+        context.阻止时间线媒体预览原生菜单(event);
+      },
+      打开查看器(event) {
+        context.打开媒体查看器(event, attachment.attachmentId);
+      },
+    },
+  });
 };

@@ -402,6 +402,85 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
 
     pane.remove();
   });
+
+  it("历史首帧就绪源不能单独把有 poster 的冷 owner 提前揭帘", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    (
+      pane as unknown as {
+        时间线画面缓存Owner: {
+          标记首帧已就绪(attachmentId: string, src: string | null): void;
+        };
+        时间线隐藏接管附件Id: string | null;
+      }
+    ).时间线画面缓存Owner.标记首帧已就绪("att-video-1", playback.src);
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    (
+      pane as unknown as {
+        时间线隐藏接管附件Id: string | null;
+      }
+    ).时间线隐藏接管附件Id = "att-video-1";
+    await pane.updateComplete;
+
+    /**
+     * 这里只给“历史 ready 过这条 src”这一个事实，不给当前 DOM committed frame：
+     * 1. 旧 ready 结论只能说明这条源曾经可播过；
+     * 2. 不能因此把新 owner 直接揭成 `covered=false`；
+     * 3. 也不能提前长一颗黑底 preview video 去顶掉 poster。
+     */
+    const 冷首轮状态 = {
+      posterPresent: Boolean(
+        pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+      ),
+      previewPresent: Boolean(
+        pane.querySelector(
+          'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+        )
+      ),
+      canonicalPresent: Boolean(
+        pane.querySelector(
+          'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
+        )
+      ),
+      canonicalPoster:
+        pane
+          .querySelector<HTMLVideoElement>(
+            'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
+          )
+          ?.getAttribute("poster") ?? null,
+      canonicalHostCovered:
+        pane
+          .querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+          ?.getAttribute("data-covered") ?? null,
+      stageHostPresent: Boolean(
+        pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
+      ),
+    };
+    expect(冷首轮状态).toMatchObject({
+      posterPresent: true,
+      previewPresent: false,
+      canonicalHostCovered: "true",
+    });
+
+    pane.remove();
+  });
   it("有 poster 的 swarm 视频进入自动播预热窗口时，会把同一颗 video 提前提升到 auto preload", async () => {
     const pane = 创建媒体消息窗();
     const playback = {

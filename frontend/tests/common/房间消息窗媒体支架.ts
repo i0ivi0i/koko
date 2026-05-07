@@ -282,11 +282,31 @@ export const 驱动时间线Canonical就绪 = async (
   }
   Object.defineProperty(canonicalVideo, "readyState", {
     configurable: true,
-    value: 3,
+    value: 4,
+  });
+  Object.defineProperty(canonicalVideo, "paused", {
+    configurable: true,
+    value: false,
+  });
+  Object.defineProperty(canonicalVideo, "requestVideoFrameCallback", {
+    configurable: true,
+    value: ((callback: VideoFrameRequestCallback) => {
+      callback(0, {
+        mediaTime: canonicalVideo.currentTime,
+        presentedFrames: 1,
+        expectedDisplayTime: 0,
+        width: canonicalVideo.videoWidth || 320,
+        height: canonicalVideo.videoHeight || 180,
+        presentationTime: 0,
+        processingDuration: 0,
+      } as VideoFrameCallbackMetadata);
+      return 1;
+    }) satisfies HTMLVideoElement["requestVideoFrameCallback"],
   });
   canonicalVideo.dispatchEvent(new Event("loadedmetadata"));
   canonicalVideo.dispatchEvent(new Event("seeked"));
   canonicalVideo.dispatchEvent(new Event("canplay"));
+  canonicalVideo.dispatchEvent(new Event("playing"));
   await pane.updateComplete;
   await 等待时间线唯一播放器挂载(pane);
   return pane.querySelector<HTMLVideoElement>(
