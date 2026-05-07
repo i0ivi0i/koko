@@ -196,14 +196,11 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     await 等待时间线唯一播放器挂载(pane);
 
     expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
-    expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
+    ).toBeNull();
 
     const ownerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
@@ -742,10 +739,10 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     expect(previewSurface).toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-2"]')
-    ).not.toBeNull();
+    ).toBeNull();
     expect(canonicalVideo?.loop).toBe(true);
     expect(canonicalVideo?.hasAttribute("disablepictureinpicture")).toBe(true);
     expect(canonicalVideo?.hasAttribute("disableremoteplayback")).toBe(true);
@@ -755,10 +752,7 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     expect(canonicalVideo?.getAttribute("tabindex")).toBe("-1");
     expect(canonicalVideo?.getAttribute("aria-hidden")).toBe("true");
     expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
-    expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-2"]')
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
     ).not.toBeNull();
 
     pane.remove();

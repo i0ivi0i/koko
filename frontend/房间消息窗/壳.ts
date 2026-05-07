@@ -167,8 +167,12 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
           归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
           标记时间线视频首帧已就绪: (attachmentId, src) =>
             this.时间线画面缓存Owner.标记首帧已就绪(attachmentId, src),
-          捕获时间线自动播冻结帧: (attachmentId, video) =>
-            this.时间线画面缓存Owner.捕获自动播冻结帧(attachmentId, video),
+          捕获时间线自动播冻结帧: (attachmentId, video, options) =>
+            this.时间线画面缓存Owner.捕获自动播冻结帧(
+              attachmentId,
+              video,
+              options
+            ),
           广播自动播播放位置: (
             attachmentId,
             video,

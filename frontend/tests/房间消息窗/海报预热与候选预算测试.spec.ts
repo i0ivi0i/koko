@@ -102,23 +102,23 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     /**
      * 真实房间里同一条附件会多次进出 owner。
      * reveal gate 只能认“这一次 handoff 刚刚确认就绪”的事实，
-     * 绝不能拿上一轮遗留缓存直接显露 canonical host。
+     * 但 canonical 宿主本身可以先挂在可见位下面，由当前 cover 继续挡住。
      */
     expect(
       pane.querySelector(
         '.message-video-canonical-host[data-attachment-id="att-video-2"]'
       )
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector(
         '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
       )
-    ).not.toBeNull();
+    ).toBeNull();
 
     pane.remove();
   });
   it(
-    "双视频自动播 owner 交接时，会等 canonical 在隐藏预热宿主上就绪后才揭帘到新卡片",
+    "双视频自动播 owner 交接时，会等 canonical 在可见宿主下自己出帧后才揭帘到新卡片",
     async () => {
     const pane = 创建媒体消息窗();
     const playback1 = {
@@ -211,12 +211,12 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
 
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector(
         '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
       )
-    ).not.toBeNull();
+    ).toBeNull();
 
     let 首帧提交回调:
       | ((now: number, metadata: VideoFrameCallbackMetadata) => void)
@@ -238,19 +238,19 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
 
     /**
      * 进入自动播时真正需要的是“这帧已经提交给屏幕”，而不是只收到了 canplay：
-     * 1. hidden stage 的 canonical video 可能已经 readyState=3，但可见宿主上的第一帧还没真正贴出来；
-     * 2. 如果这时就把 stage host 切成 visible host，用户就会看到一拍黑壳；
-     * 3. 所以 RVFC 回来前仍必须继续藏在 stage host 里。
+     * 1. canonical 可以先挂在可见宿主下面；
+     * 2. 但 RVFC 回来前，cover 仍必须继续顶住，不能把 live video 裸露给用户；
+     * 3. 所以这里仍只验证“揭帘不能提前发生”，而不是要求继续走 stage host。
      */
     expect(首帧提交回调).not.toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-2"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector(
         '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
       )
-    ).not.toBeNull();
+    ).toBeNull();
 
     const 已登记首帧提交回调 =
       首帧提交回调 as unknown as (
@@ -290,7 +290,9 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     expect(揭帘后Canonical视频).toBe(隐藏预热视频);
     expect(揭帘后Canonical视频?.autoplay).toBe(true);
     expect(揭帘后Canonical视频?.currentTime).toBeCloseTo(22.5, 2);
-    expect(揭帘后预览视频).not.toBeNull();
+    expect(揭帘后预览视频 === null || 揭帘后预览视频?.dataset.canonicalPlayer !== "true").toBe(
+      true
+    );
 
     揭帘后Canonical视频?.dispatchEvent(new Event("playing"));
     await pane.updateComplete;
@@ -378,8 +380,8 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     await pane.updateComplete;
 
     expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
     expect(
       pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
@@ -389,10 +391,6 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     };
     pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
     await pane.updateComplete;
-
-    expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
 
     const ownerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
@@ -645,14 +643,10 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     expect(ownerWarmupVideo).toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
-    expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
-
+    ).toBeNull();
     const ownerVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
     expect(ownerVideo).not.toBe(previewVideo);
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");

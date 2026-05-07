@@ -255,18 +255,18 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     /**
      * 真实房间里很多切换目标卡片没有保存续播点，但已经有同源 preview `<video>`。
-     * 如果这里仍然直接显露 canonical host，唯一播放器就会在用户眼前现场 loadstart/seeking。
+     * 新模型允许 canonical 先挂到可见宿主下面，但必须继续由这张 preview 顶住，不能再额外长 hidden stage。
      */
     expect(
       pane.querySelector(
         '.message-video-canonical-host[data-attachment-id="att-video-2"]'
       )
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector(
         '.message-video-canonical-stage-host[data-attachment-id="att-video-2"]'
       )
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       pane.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'

@@ -181,7 +181,7 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
     pane.remove();
   });
 
-  it("无 poster 视频进入自动播 owner 时，不能把 ready-src 误当成当前 DOM 已出帧并提前撤掉冻结底板", async () => {
+  it("无 poster 视频进入自动播 owner 时，不能把 ready-src 误当成当前 DOM 已出帧并提前裸露 live video", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
       mode: "swarm",
@@ -270,7 +270,7 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
 
     expect(
       pane.querySelector(
-        'img.message-video-frozen-frame[data-attachment-id="att-video-1"]'
+        '.message-video-canonical-host[data-attachment-id="att-video-1"]'
       )
     ).not.toBeNull();
 
@@ -609,23 +609,12 @@ describe("房间消息窗媒体查看器 - 无海报视频自动播接管", () =
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
-    expect(
-      pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
-      )
-    ).not.toBeNull();
     expect(可见宿主首帧回调).not.toBeNull();
 
     hiddenCanonical!.dispatchEvent(new Event("playing"));
     await Promise.resolve();
     await pane.updateComplete;
     await 等待时间线唯一播放器挂载(pane);
-
-    expect(
-      pane.querySelector<HTMLVideoElement>(
-        'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
-      )
-    ).not.toBeNull();
 
     const 已登记可见宿主首帧回调 = 可见宿主首帧回调 as unknown as (
       now: number,

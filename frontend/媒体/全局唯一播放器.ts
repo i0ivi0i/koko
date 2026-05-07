@@ -231,7 +231,9 @@ const 绑定时间线自动播信号 = (
   };
   let 可见宿主首帧已确认 = false;
   let 可见宿主首帧确认已挂起 = false;
-  const 广播可见宿主已出帧 = (): void => {
+  const 广播可见宿主已出帧 = (
+    sourceEvent: "loadeddata" | "canplay" | "seeked" | "playing"
+  ): void => {
     if (挂载时是否隐藏预热 || 可见宿主首帧已确认 || 可见宿主首帧确认已挂起) {
       return;
     }
@@ -250,7 +252,9 @@ const 绑定时间线自动播信号 = (
       });
       return;
     }
-    提交已出帧();
+    if (sourceEvent === "playing") {
+      提交已出帧();
+    }
   };
   const listeners: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [
     [
@@ -264,7 +268,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧();
+        广播可见宿主已出帧("loadeddata");
       },
     ],
     [
@@ -272,7 +276,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧();
+        广播可见宿主已出帧("canplay");
       },
     ],
     [
@@ -280,7 +284,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧();
+        广播可见宿主已出帧("seeked");
       },
     ],
     [
@@ -288,7 +292,7 @@ const 绑定时间线自动播信号 = (
       () => {
         input.回调.标记首帧已就绪(读取当前源());
         广播可见接管已就绪();
-        广播可见宿主已出帧();
+        广播可见宿主已出帧("playing");
         input.回调.广播媒体会话信号({ type: "PLAYER_PLAYING" });
       },
     ],

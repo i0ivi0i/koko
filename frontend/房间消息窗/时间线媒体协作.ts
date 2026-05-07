@@ -67,7 +67,11 @@ type 时间线退场底板同步输入 = {
   读取视频当前播放源: (video: HTMLVideoElement) => string | null;
   归一化时间线视频播放源: (src: string | null) => string | null;
   标记时间线视频首帧已就绪: (attachmentId: string, src: string | null) => void;
-  捕获时间线自动播冻结帧: (attachmentId: string, video: HTMLVideoElement) => void;
+  捕获时间线自动播冻结帧: (
+    attachmentId: string,
+    video: HTMLVideoElement,
+    options?: { 预热已合成帧?: boolean; 立即提交?: boolean }
+  ) => void;
   广播自动播播放位置: (
     attachmentId: string,
     video: HTMLVideoElement,
@@ -230,7 +234,9 @@ export const 同步时间线退场Owner底板预览 = (input: 时间线退场底
     : canonicalVideo.currentTime;
 
   input.标记时间线视频首帧已就绪(input.attachmentId, canonicalSrc);
-  input.捕获时间线自动播冻结帧(input.attachmentId, canonicalVideo);
+  input.捕获时间线自动播冻结帧(input.attachmentId, canonicalVideo, {
+    立即提交: true,
+  });
   if (!hasNewerLocalBridge) {
     input.广播自动播播放位置(input.attachmentId, canonicalVideo, true, true);
   }

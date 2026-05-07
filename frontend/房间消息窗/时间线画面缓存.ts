@@ -147,7 +147,7 @@ export class 时间线画面缓存Owner {
   捕获自动播冻结帧(
     attachmentId: string,
     video: HTMLVideoElement,
-    options: { 预热已合成帧?: boolean } = {}
+    options: { 预热已合成帧?: boolean; 立即提交?: boolean } = {}
   ): void {
     const 执行捕获 = (): void => {
       const src = this.依赖.读取视频当前播放源(video);
@@ -177,6 +177,26 @@ export class 时间线画面缓存Owner {
       if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
         return;
       }
+      const 写入冻结帧 = (dataUrl: string): void => {
+        if (!dataUrl.startsWith("data:image/")) {
+          return;
+        }
+        const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
+        if (
+          latestFrame?.src === src &&
+          Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
+          latestFrame.dataUrl === dataUrl
+        ) {
+          return;
+        }
+        this.时间线自动播冻结帧.set(attachmentId, {
+          src,
+          currentTime,
+          dataUrl,
+          updatedAt: Date.now(),
+        });
+        this.依赖.请求刷新();
+      };
       try {
         const scale = Math.min(
           1,
@@ -192,6 +212,13 @@ export class 时间线画面缓存Owner {
           return;
         }
         context.drawImage(video, 0, 0, width, height);
+        if (options.立即提交) {
+          if (typeof canvas.toDataURL !== "function") {
+            return;
+          }
+          写入冻结帧(canvas.toDataURL("image/webp", 0.82));
+          return;
+        }
         if (typeof canvas.toBlob !== "function") {
           return;
         }
@@ -209,21 +236,7 @@ export class 时间线画面缓存Owner {
               if (this.时间线自动播冻结帧导出中.get(attachmentId) !== captureKey) {
                 return;
               }
-              const latestFrame = this.时间线自动播冻结帧.get(attachmentId);
-              if (
-                latestFrame?.src === src &&
-                Math.abs(latestFrame.currentTime - currentTime) < 0.5 &&
-                latestFrame.dataUrl === dataUrl
-              ) {
-                return;
-              }
-              this.时间线自动播冻结帧.set(attachmentId, {
-                src,
-                currentTime,
-                dataUrl,
-                updatedAt: Date.now(),
-              });
-              this.依赖.请求刷新();
+              写入冻结帧(dataUrl);
             } finally {
               if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
                 this.时间线自动播冻结帧导出中.delete(attachmentId);

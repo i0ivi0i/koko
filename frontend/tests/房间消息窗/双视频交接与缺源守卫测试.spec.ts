@@ -50,8 +50,9 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
       'video.message-video-preview[data-attachment-id="att-video-initial-hidden"]:not([data-canonical-player="true"])'
     );
 
-    expect(visibleHost).toBeNull();
-    expect(hiddenStageHost).not.toBeNull();
+    expect(visibleHost).not.toBeNull();
+    expect(visibleHost?.dataset.videoSrc).toBe(playback.src);
+    expect(hiddenStageHost).toBeNull();
     expect(extraPreviewVideo).toBeNull();
     expect(poster?.getAttribute("src")).toBe(playback.thumbnailUrl);
     expect(poster?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
@@ -296,18 +297,17 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
 
     expect(交接调用序列).not.toContain(null);
     expect(交接调用序列.at(-1)).toBe("att-video-2");
-    expect(新Owner可见宿主).toBeNull();
-    expect(新Owner隐藏预热宿主).not.toBeNull();
-    expect(新Owner隐藏预热宿主?.dataset.videoSrc).toBe(playback2.src);
-    expect(新Owner隐藏预热宿主?.dataset.stageHost).toBe("true");
+    expect(新Owner可见宿主).not.toBeNull();
+    expect(新Owner可见宿主?.dataset.videoSrc).toBe(playback2.src);
+    expect(新Owner隐藏预热宿主).toBeNull();
     expect(新Owner预览视频).toBe(切换前预览视频);
     expect(新Owner预览视频?.autoplay).toBe(false);
     expect(新Owner预览视频?.getAttribute("src")).toBe(playback2.src);
     /**
-     * 目标卡片自己的 preview 只负责保住当前可见壳，不再跟着 hidden-stage canonical 一起 seek：
-     * 1. 真正的续播恢复只能落在隐藏接管宿主里的 canonical player；
-     * 2. 如果交接这一拍又对 preview 追加 seek，用户就会看到“时间戳抽一下”；
-     * 3. 因此 preview 允许保留，但 currentTime 必须保持切换前原样。
+     * 新 owner 已经有稳定 preview 底板时，不再额外长 hidden stage：
+     * 1. canonical 直接挂到可见宿主下面，由当前 preview 顶住 reveal 前的 load/seek；
+     * 2. 如果还先搬去 hidden stage，旧卡 canonical 会先被挪走，用户就会看到“旧卡抽一下 / 新卡黑一下”；
+     * 3. preview 允许保留，但 currentTime 必须保持切换前原样，不能跟着 canonical 再 seek 一次。
      */
     expect(新Owner预览视频?.currentTime).toBeCloseTo(切换前预览时间, 2);
     expect(新Owner播放指示器).toBeNull();

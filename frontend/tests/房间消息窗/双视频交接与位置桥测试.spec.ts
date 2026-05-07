@@ -11,7 +11,7 @@ import {
 
 describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
 
-  it("canonical 历史接管缓存不能让未 ready 的当前 DOM 直接可见", async () => {
+  it("canonical 历史接管缓存不能跳过当前 DOM 的 cover 门禁", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
       mode: "swarm",
@@ -44,14 +44,14 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
     );
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
     expect(restoredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
-    ).not.toBeNull();
+    ).toBeNull();
 
     pane.remove();
   });
@@ -434,15 +434,14 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
     );
     /**
-     * 同一条视频因滚动离屏释放 owner 后再回到 owner，也必须先走隐藏预热：
-     * 1. 用户可见面继续由暂停预览帧承接；
-     * 2. 唯一播放器在隐藏宿主里恢复 source/time；
-     * 3. 等 canonical 真正 canplay 后才揭帘，不能在可见卡片上现场 load/seek/play。
+     * 同一条视频因滚动离屏释放 owner 后再回到 owner 时：
+     * 1. canonical 直接回到可见宿主下面；
+     * 2. 用户可见面仍由暂停预览帧承接；
+     * 3. 真正露出 live video 仍要等可见宿主自己出帧，不能靠历史 reveal 直接裸切。
      */
-    expect(reacquireVisibleHost).toBeNull();
-    expect(reacquireStageHost).not.toBeNull();
-    expect(reacquireStageHost?.dataset.stageHost).toBe("true");
-    expect(reacquireStageHost?.dataset.videoSrc).toBe(playback.src);
+    expect(reacquireVisibleHost).not.toBeNull();
+    expect(reacquireVisibleHost?.dataset.videoSrc).toBe(playback.src);
+    expect(reacquireStageHost).toBeNull();
     expect(reacquirePreviewVideo).toBeNull();
 
     const reacquiredVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");

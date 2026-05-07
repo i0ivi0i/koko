@@ -167,4 +167,54 @@ describe("时间线画面缓存Owner", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("退场即时冻结帧会同步写入当前帧，不能等异步 blob 慢一拍", () => {
+    const { owner, 请求刷新 } = 创建Owner();
+    const drawImage = vi.fn();
+    const toDataURL = vi.fn(() => "data:image/webp;base64,instant-freeze");
+    const toBlob = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob,
+      toDataURL,
+    } as unknown as HTMLCanvasElement;
+    const 原始创建元素 = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      if (tagName === "canvas") {
+        return canvas;
+      }
+      return 原始创建元素(tagName);
+    });
+    const video = {
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+      videoWidth: 1280,
+      videoHeight: 720,
+      paused: false,
+      currentTime: 22.25,
+      currentSrc: "http://media.local/swarm/video.mp4",
+      getAttribute: (name: string) => (name === "src" ? "http://media.local/swarm/video.mp4" : null),
+    } as unknown as HTMLVideoElement;
+
+    try {
+      owner.捕获自动播冻结帧("att-1", video, { 立即提交: true });
+
+      expect(drawImage).toHaveBeenCalledTimes(1);
+      expect(toDataURL).toHaveBeenCalledTimes(1);
+      expect(toBlob).not.toHaveBeenCalled();
+      expect(请求刷新).toHaveBeenCalledOnce();
+      expect(
+        owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
+          src: "http://media.local/swarm/video.mp4",
+          currentTime: 22.25,
+          updatedAt: 1,
+        })
+      ).toMatchObject({
+        dataUrl: "data:image/webp;base64,instant-freeze",
+      });
+    } finally {
+      createElement.mockRestore();
+    }
+  });
 });
