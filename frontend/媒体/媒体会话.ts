@@ -82,6 +82,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
     sourceVersion: 0,
     lastSignal: null,
   };
+  let 最近播放源版本键 = "none";
 
   const 发布快照 = (): void => {
     deps.onSnapshotChange?.({ ...current });
@@ -194,13 +195,14 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
      * 2. mode/src/contentHash 任一变化时才递增，保证预览重试与真实来源变更对齐；
      * 3. 这样既保留恢复能力，也避免会话抖动造成的无意义重解析。
      */
-    const 当前版本键 = 读取播放源版本键(current.playback);
     const 下一个版本键 = 读取播放源版本键(playback);
+    const 是否发生真实播放源变化 = 最近播放源版本键 !== 下一个版本键;
+    最近播放源版本键 = 下一个版本键;
     写入快照({
       playback,
       status: 下一状态,
       sourceVersion:
-        当前版本键 === 下一个版本键 ? current.sourceVersion : current.sourceVersion + 1,
+        是否发生真实播放源变化 ? current.sourceVersion + 1 : current.sourceVersion,
     });
     安排降级恢复重试(playback);
   };
@@ -298,11 +300,16 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
            * 关闭 viewer 只释放“前台正式播放源”，不等于附件业务退场：
            * 会话壳和 locallyComplete 仍可保留，但 playback 必须清空，
            * 否则时间线会把看过的视频继续渲染成真实 `<video>`。
+           *
+           * 这里不能顺手把 sourceVersion 也抬高：
+           * 1. PLAYBACK_RELEASED 只是生命周期释放，不是播放源真相变化；
+           * 2. 若把版本号抬高，再次解析回同一 swarm/src 也会被误判成“新版本”，
+           *    直接打死短时暖状态、bridge 复用和同版缺源重试门禁；
+           * 3. 因此会话只清掉前台 playback，真正的 sourceVersion 仍由下一次解析结果决定。
            */
           写入快照({
             playback: null,
             status: current.locallyComplete ? "locally_complete" : "bootstrapping",
-            sourceVersion: current.sourceVersion + 1,
           });
           return;
         case "PLAYER_PLAYING":

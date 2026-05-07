@@ -4,13 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放位置 } from "../../媒体/媒体播放";
 import { 时间线画面缓存Owner } from "../../房间消息窗/时间线画面缓存";
 
-const 创建Owner = () => {
+const 创建Owner = (input: { scopeKey?: string } = {}) => {
   const 请求刷新 = vi.fn();
   const owner = new 时间线画面缓存Owner({
     读取视频当前播放源: (video) => video.currentSrc || video.getAttribute("src"),
     归一化时间线视频播放源: (src) =>
       src ? new URL(src, "http://media.local/room/").href : null,
     读取预览状态: () => null,
+    读取暖状态范围键: () => input.scopeKey ?? null,
     请求刷新,
   });
   return { owner, 请求刷新 };
@@ -215,6 +216,109 @@ describe("时间线画面缓存Owner", () => {
       });
     } finally {
       createElement.mockRestore();
+    }
+  });
+
+  it("同源短时重进时，新实例仍能读到旧实例导出的首帧与冻结帧", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-07T12:00:00.000Z"));
+      const { owner: oldOwner } = 创建Owner({ scopeKey: "room-retained-1" });
+      const retainedBitmap = document.createElement("canvas");
+      oldOwner.标记首帧已就绪("att-retained-1", "/swarm/retained.mp4");
+      (
+        oldOwner as unknown as {
+          时间线自动播冻结帧: Map<
+            string,
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
+          >;
+        }
+      ).时间线自动播冻结帧.set("att-retained-1", {
+        src: "/swarm/retained.mp4",
+        currentTime: 8.5,
+        bitmap: retainedBitmap,
+        width: 320,
+        height: 180,
+        updatedAt: Date.now(),
+        dispose: vi.fn(),
+      });
+
+      oldOwner.清空();
+
+      const { owner: newOwner } = 创建Owner({ scopeKey: "room-retained-1" });
+      expect(
+        newOwner.读取首帧是否就绪("att-retained-1", "http://media.local/swarm/retained.mp4")
+      ).toBe(true);
+      expect(newOwner.读取已就绪首帧预览源("att-retained-1")).toBeNull();
+      expect(
+        newOwner.读取自动播冻结帧("att-retained-1", "/swarm/retained.mp4", {
+          src: "http://media.local/swarm/retained.mp4",
+          currentTime: 8.6,
+          updatedAt: Date.now(),
+        })
+      ).toMatchObject({
+        bitmap: retainedBitmap,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("导出的短时冻结帧过期后会释放资源，新实例也不能继续复用", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-07T12:00:00.000Z"));
+      const dispose = vi.fn();
+      const { owner: oldOwner } = 创建Owner({ scopeKey: "room-retained-expired-1" });
+      (
+        oldOwner as unknown as {
+          时间线自动播冻结帧: Map<
+            string,
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
+          >;
+        }
+      ).时间线自动播冻结帧.set("att-retained-expired-1", {
+        src: "/swarm/retained-expired.mp4",
+        currentTime: 5.5,
+        bitmap: document.createElement("canvas"),
+        width: 320,
+        height: 180,
+        updatedAt: Date.now(),
+        dispose,
+      });
+
+      oldOwner.清空();
+      vi.setSystemTime(new Date("2026-05-07T12:00:03.000Z"));
+      const { owner: newOwner } = 创建Owner({ scopeKey: "room-retained-expired-1" });
+
+      expect(
+        newOwner.读取自动播冻结帧("att-retained-expired-1", "/swarm/retained-expired.mp4", null)
+      ).toBeNull();
+      expect(
+        newOwner.读取首帧是否就绪(
+          "att-retained-expired-1",
+          "http://media.local/swarm/retained-expired.mp4"
+        )
+      ).toBe(false);
+      expect(dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

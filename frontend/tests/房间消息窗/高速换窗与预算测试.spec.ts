@@ -28,6 +28,69 @@ const 读取自动播候选观察Owner = (pane: 房间消息窗): 自动播候�
   ).自动播候选观察Owner;
 
 describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
+  it("近距离交接时，虚拟范围会额外 pin 当前 owner 与 hidden handoff 所在消息行", () => {
+    const pane = 创建媒体消息窗();
+    pane.items = Array.from({ length: 12 }, (_, index) =>
+      创建单视频消息项(`att-pin-${index + 1}`, index + 1)
+    );
+    pane.inlineAutoplayOwnerAttachmentId = "att-pin-2";
+    (
+      pane as unknown as {
+        时间线隐藏接管附件Id: string | null;
+      }
+    ).时间线隐藏接管附件Id = "att-pin-7";
+
+    const indexes = (
+      pane as unknown as {
+        提取消息虚拟范围(range: {
+          startIndex: number;
+          endIndex: number;
+          overscan: number;
+          count: number;
+        }): number[];
+      }
+    ).提取消息虚拟范围({
+      startIndex: 4,
+      endIndex: 8,
+      overscan: 0,
+      count: pane.items.length,
+    });
+
+    expect(indexes).toContain(1);
+    expect(indexes).toContain(6);
+  });
+
+  it("远距离跳转时，不会继续 pin 已离开视口很远的旧 owner 行", () => {
+    const pane = 创建媒体消息窗();
+    pane.items = Array.from({ length: 24 }, (_, index) =>
+      创建单视频消息项(`att-far-pin-${index + 1}`, index + 1)
+    );
+    pane.inlineAutoplayOwnerAttachmentId = "att-far-pin-2";
+    (
+      pane as unknown as {
+        最近退场Owner附件Id: string | null;
+      }
+    ).最近退场Owner附件Id = "att-far-pin-2";
+
+    const indexes = (
+      pane as unknown as {
+        提取消息虚拟范围(range: {
+          startIndex: number;
+          endIndex: number;
+          overscan: number;
+          count: number;
+        }): number[];
+      }
+    ).提取消息虚拟范围({
+      startIndex: 16,
+      endIndex: 20,
+      overscan: 0,
+      count: pane.items.length,
+    });
+
+    expect(indexes).not.toContain(1);
+  });
+
   it("近视口预算收紧后，非 owner 历史视频最多只保留两颗真实 preview video", async () => {
     const pane = 创建媒体消息窗();
     const attachmentIds = Array.from({ length: 8 }, (_, index) => `att-budget-${index + 1}`);

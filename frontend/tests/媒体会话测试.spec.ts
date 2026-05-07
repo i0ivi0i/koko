@@ -406,6 +406,49 @@ describe("媒体会话", () => {
     expect(解析播放结果).toHaveBeenCalledTimes(2);
   });
 
+  it("PLAYBACK_RELEASED 只释放前台播放源，不会把同源生命周期释放误判成新 sourceVersion", async () => {
+    const attachmentId = "att-video-release-source-version-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建协作分发播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    const 释放前版本 = 会话.snapshot().sourceVersion;
+
+    会话.send({ type: "PLAYBACK_RELEASED" });
+
+    expect(会话.snapshot()).toMatchObject({
+      playback: null,
+      status: "bootstrapping",
+      sourceVersion: 释放前版本,
+      lastSignal: "PLAYBACK_RELEASED",
+    });
+  });
+
+  it("PLAYBACK_RELEASED 后重新解析回同一播放源时，也不会把 sourceVersion 错判成新版本", async () => {
+    const attachmentId = "att-video-release-source-version-2";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建协作分发播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    const 首次解析版本 = 会话.snapshot().sourceVersion;
+
+    会话.send({ type: "PLAYBACK_RELEASED" });
+    await 会话.启动();
+
+    expect(会话.snapshot()).toMatchObject({
+      playback: 创建协作分发播放结果(attachmentId),
+      sourceVersion: 首次解析版本,
+    });
+  });
+
   it("启动解析晚到时不会覆盖更晚代次的恢复结果", async () => {
     const attachmentId = "att-video-startup-race-1";
     let 第一次解析完成: ((value: 媒体播放结果) => void) | null = null;

@@ -250,6 +250,7 @@ export const 创建媒体消息窗 = (
   }
   // 阶段 0 的保护测试共用同一条“图片 + 视频”消息，防止两条入口的 fixture 漂移。
   const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
+  pane.roomId = "";
   pane.items = [创建媒体消息项()];
   return pane;
 };

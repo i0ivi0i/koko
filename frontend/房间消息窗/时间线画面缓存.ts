@@ -11,13 +11,119 @@ const 时间线自动播冻结帧最大边长 = 480;
 const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
 const 时间线自动播冻结帧预热最小位移秒 = 1.5;
 const 时间线自动播冻结帧无续播位置保活毫秒 = 4_000;
+const 时间线短时重进暖状态保活毫秒 = 2_500;
 
 interface 时间线画面缓存Owner依赖 {
   读取视频当前播放源: (video: HTMLVideoElement) => string | null;
   归一化时间线视频播放源: (src: string | null) => string | null;
   读取预览状态: (attachmentId: string) => 视频预览状态 | null;
+  读取暖状态范围键?: () => string | null;
   请求刷新: () => void;
 }
+
+interface 时间线短时首帧暖状态 {
+  readonly src: string;
+  readonly expiresAt: number;
+}
+
+interface 时间线短时冻结帧暖状态 {
+  readonly frame: 时间线自动播冻结帧;
+  readonly expiresAt: number;
+}
+
+/**
+ * 这里的短 TTL 暖状态是“同一页面里，旧消息窗刚销毁、新消息窗立刻重建”时的过桥层：
+ * 1. 它只保存已经由真实视频确认过的同源首帧和冻结帧；
+ * 2. 生命周期极短，只为重进房/首页历史恢复这类重新挂壳时避免重新退回纯 poster 冷态；
+ * 3. 它不落盘、不跨页面，也不拥有业务真相，只是把刚刚已经确认过的像素事实续一口气。
+ */
+const 时间线短时首帧暖状态缓存 = new Map<string, 时间线短时首帧暖状态>();
+const 时间线短时冻结帧暖状态缓存 = new Map<string, 时间线短时冻结帧暖状态>();
+
+const 读取时间线暖状态范围键 = (scopeKey: string | null | undefined): string | null => {
+  const normalized = scopeKey?.trim() ?? "";
+  return normalized.length > 0 ? normalized : null;
+};
+
+const 构造时间线暖状态缓存键 = (
+  scopeKey: string | null | undefined,
+  attachmentId: string
+): string | null => {
+  const normalizedScopeKey = 读取时间线暖状态范围键(scopeKey);
+  if (!normalizedScopeKey) {
+    return null;
+  }
+  return `${normalizedScopeKey}\u0000${attachmentId}`;
+};
+
+const 清理时间线短时暖状态缓存 = (now = Date.now()): void => {
+  for (const [attachmentId, retained] of 时间线短时首帧暖状态缓存.entries()) {
+    if (retained.expiresAt <= now) {
+      时间线短时首帧暖状态缓存.delete(attachmentId);
+    }
+  }
+  for (const [attachmentId, retained] of 时间线短时冻结帧暖状态缓存.entries()) {
+    if (retained.expiresAt > now) {
+      continue;
+    }
+    retained.frame.dispose();
+    时间线短时冻结帧暖状态缓存.delete(attachmentId);
+  }
+};
+
+const 写入时间线短时首帧暖状态 = (
+  scopeKey: string | null | undefined,
+  attachmentId: string,
+  src: string,
+  now = Date.now()
+): void => {
+  const cacheKey = 构造时间线暖状态缓存键(scopeKey, attachmentId);
+  if (!cacheKey) {
+    return;
+  }
+  时间线短时首帧暖状态缓存.set(cacheKey, {
+    src,
+    expiresAt: now + 时间线短时重进暖状态保活毫秒,
+  });
+};
+
+const 写入时间线短时冻结帧暖状态 = (
+  scopeKey: string | null | undefined,
+  attachmentId: string,
+  frame: 时间线自动播冻结帧,
+  now = Date.now()
+): void => {
+  const cacheKey = 构造时间线暖状态缓存键(scopeKey, attachmentId);
+  if (!cacheKey) {
+    return;
+  }
+  const previous = 时间线短时冻结帧暖状态缓存.get(cacheKey);
+  if (previous && previous.frame !== frame) {
+    previous.frame.dispose();
+  }
+  时间线短时冻结帧暖状态缓存.set(cacheKey, {
+    frame,
+    expiresAt: now + 时间线短时重进暖状态保活毫秒,
+  });
+};
+
+const 读取时间线短时首帧暖状态 = (
+  scopeKey: string | null | undefined,
+  attachmentId: string
+): string | null => {
+  清理时间线短时暖状态缓存();
+  const cacheKey = 构造时间线暖状态缓存键(scopeKey, attachmentId);
+  return cacheKey ? 时间线短时首帧暖状态缓存.get(cacheKey)?.src ?? null : null;
+};
+
+const 读取时间线短时冻结帧暖状态 = (
+  scopeKey: string | null | undefined,
+  attachmentId: string
+): 时间线自动播冻结帧 | null => {
+  清理时间线短时暖状态缓存();
+  const cacheKey = 构造时间线暖状态缓存键(scopeKey, attachmentId);
+  return cacheKey ? 时间线短时冻结帧暖状态缓存.get(cacheKey)?.frame ?? null : null;
+};
 
 const 读取当前视频附件标识 = (items: 聊天列表展示项[]): Set<string> => {
   const attachmentIds = new Set<string>();
@@ -63,18 +169,37 @@ export class 时间线画面缓存Owner {
   private readonly 时间线自动播冻结帧 = new Map<string, 时间线自动播冻结帧>();
   private readonly 时间线自动播冻结帧导出中 = new Map<string, string>();
 
-  constructor(private readonly 依赖: 时间线画面缓存Owner依赖) {}
+  constructor(private readonly 依赖: 时间线画面缓存Owner依赖) {
+    清理时间线短时暖状态缓存();
+  }
 
   清空(): void {
-    this.时间线视频首帧就绪源.clear();
-    for (const frame of this.时间线自动播冻结帧.values()) {
+    /**
+     * 房间组件退场时，不要把“刚刚已经确认过的真实像素”立刻全扔掉：
+     * 1. 新实例通常会在同一个页面里马上重建；
+     * 2. 这里把同源首帧和冻结帧短暂提升到模块级暖状态，给新实例一个极短的复用窗口；
+     * 3. TTL 一到就会自动清理，避免暖状态变成第二真相或长期缓存。
+     */
+    const now = Date.now();
+    const 暖状态范围键 = this.依赖.读取暖状态范围键?.() ?? null;
+    清理时间线短时暖状态缓存(now);
+    for (const [attachmentId, src] of this.时间线视频首帧就绪源.entries()) {
+      写入时间线短时首帧暖状态(暖状态范围键, attachmentId, src, now);
+    }
+    for (const [attachmentId, frame] of this.时间线自动播冻结帧.entries()) {
+      if (构造时间线暖状态缓存键(暖状态范围键, attachmentId)) {
+        写入时间线短时冻结帧暖状态(暖状态范围键, attachmentId, frame, now);
+        continue;
+      }
       frame.dispose();
     }
+    this.时间线视频首帧就绪源.clear();
     this.时间线自动播冻结帧.clear();
     this.时间线自动播冻结帧导出中.clear();
   }
 
   同步当前视频附件(items: 聊天列表展示项[]): Set<string> {
+    清理时间线短时暖状态缓存();
     const 当前视频附件 = 读取当前视频附件标识(items);
     删除已退场附件(this.时间线视频首帧就绪源, 当前视频附件);
     删除已退场附件(this.时间线自动播冻结帧, 当前视频附件, (frame) =>
@@ -85,18 +210,31 @@ export class 时间线画面缓存Owner {
   }
 
   读取首帧是否就绪(attachmentId: string, src: string | null): boolean {
+    清理时间线短时暖状态缓存();
     const normalizedSrc = this.依赖.归一化时间线视频播放源(src);
     if (!normalizedSrc) {
       return false;
     }
-    return this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc;
+    return (
+      (this.时间线视频首帧就绪源.get(attachmentId) ??
+        读取时间线短时首帧暖状态(this.依赖.读取暖状态范围键?.() ?? null, attachmentId)) ===
+      normalizedSrc
+    );
   }
 
   读取已就绪首帧预览源(attachmentId: string): string | null {
+    清理时间线短时暖状态缓存();
     const previewState = this.依赖.读取预览状态(attachmentId);
     if (previewState?.phase === "missing_source") {
       return null;
     }
+    /**
+     * 模块级短 TTL 暖状态只应该回答“这条已知同源 src 还能不能复用”，
+     * 不能在没有当前 source 上下文时直接吐回一个裸 preview src：
+     * 1. 否则别的房间/别的测试里只要 attachmentId 恰好复用，就会把旧 preview 误投到新卡片；
+     * 2. 读取已就绪首帧预览源的调用方并不一定握着当前正式 src，因此这里必须坚持实例内已确认的本地事实；
+     * 3. 跨实例短时重进仍靠 `读取首帧是否就绪(attachmentId, src)` 和冻结帧桥接承接，不在这里偷开第二入口。
+     */
     const src = this.时间线视频首帧就绪源.get(attachmentId) ?? null;
     if (!src || 视频地址属于旧流媒体清单(src)) {
       return null;
@@ -126,7 +264,10 @@ export class 时间线画面缓存Owner {
     src: string | null,
     position: 媒体播放位置 | null
   ): 时间线自动播冻结帧 | null {
-    const frame = this.时间线自动播冻结帧.get(attachmentId) ?? null;
+    清理时间线短时暖状态缓存();
+    const frame =
+      this.时间线自动播冻结帧.get(attachmentId) ??
+      读取时间线短时冻结帧暖状态(this.依赖.读取暖状态范围键?.() ?? null, attachmentId);
     const normalizedExpectedSrc = this.依赖.归一化时间线视频播放源(src);
     const normalizedFrameSrc = this.依赖.归一化时间线视频播放源(frame?.src ?? null);
     if (

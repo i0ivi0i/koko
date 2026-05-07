@@ -441,6 +441,7 @@ export class 聊天壳 extends LitElement {
             </div>
           </header>
           <koko-room-message-pane
+             .roomId=${聊天快照.roomId}
              .items=${聊天列表展示项}
              .mediaPlaybackByAttachmentId=${聊天快照.media.playbackByAttachmentId}
              .mediaPreviewByAttachmentId=${聊天快照.media.previewByAttachmentId}

@@ -14,6 +14,7 @@ export type 消息虚拟范围 = {
 };
 
 export const 消息虚拟列表overscan消息数 = 4;
+const 自动播交接保活最大索引距离 = 3;
 
 const 首帧兜底消息预算上限 = 12;
 const 首帧兜底最小消息数量 = 6;
@@ -67,7 +68,10 @@ export const 估算消息行高度 = (
 
 export const 提取消息虚拟范围 = (
   items: readonly 聊天列表展示项[],
-  range: 消息虚拟范围
+  range: 消息虚拟范围,
+  options: {
+    pinnedIndexes?: Iterable<number>;
+  } = {}
 ): number[] => {
   const indexes = new Set<number>();
   const start = Math.max(range.startIndex - range.overscan, 0);
@@ -80,6 +84,38 @@ export const 提取消息虚拟范围 = (
     indexes.add(unreadDividerIndex);
     if (unreadDividerIndex + 1 < items.length) {
       indexes.add(unreadDividerIndex + 1);
+    }
+  }
+  /**
+   * 自动播交接区需要一个极小的“消息行保活”窗口：
+   * 1. 快速滑动时，候选观察、媒体窗口和虚拟列表的时钟并不完全同步；
+   * 2. 如果 owner / hidden handoff 所在消息行在这一拍被直接卸载，
+   *    runtime 很容易把它误判成“真的已经退场”，随后把 live 退回 poster；
+   * 3. 这里只保留离当前可见范围很近的少量行，避免把整个长列表 overscan 粗暴放大。
+   */
+  for (const pinnedIndex of options.pinnedIndexes ?? []) {
+    if (!Number.isInteger(pinnedIndex) || pinnedIndex < 0 || pinnedIndex >= range.count) {
+      continue;
+    }
+    if (
+      pinnedIndex >= start &&
+      pinnedIndex <= end
+    ) {
+      indexes.add(pinnedIndex);
+      continue;
+    }
+    if (
+      pinnedIndex < start &&
+      start - pinnedIndex <= 自动播交接保活最大索引距离
+    ) {
+      indexes.add(pinnedIndex);
+      continue;
+    }
+    if (
+      pinnedIndex > end &&
+      pinnedIndex - end <= 自动播交接保活最大索引距离
+    ) {
+      indexes.add(pinnedIndex);
     }
   }
   return Array.from(indexes).sort((left, right) => left - right);

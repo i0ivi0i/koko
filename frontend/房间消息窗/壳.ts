@@ -44,6 +44,7 @@ import {
  */
 export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
   static override properties = {
+    roomId: { type: String },
     items: { attribute: false },
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
@@ -55,6 +56,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
     inlineAutoplayPositionByAttachmentId: { attribute: false },
   };
 
+  declare roomId: string;
   declare items: 聊天列表展示项[];
   declare historyHint: string;
   declare jumpToLatestLabel: string;
@@ -83,6 +85,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
 
   constructor() {
     super();
+    this.roomId = "";
     this.items = [];
     this.historyHint = "";
     this.jumpToLatestLabel = "";
@@ -297,7 +300,29 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
   }
 
   private 提取消息虚拟范围(range: 消息虚拟范围): number[] {
-    return 提取消息虚拟范围(this.items, range);
+    const pinnedAttachmentIds = [
+      this.inlineAutoplayOwnerAttachmentId,
+      this.时间线隐藏接管附件Id,
+      this.最近退场Owner附件Id,
+    ].filter((attachmentId): attachmentId is string => Boolean(attachmentId));
+    const pinnedIndexes = new Set<number>();
+    for (const [index, item] of this.items.entries()) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      if (
+        item.attachments.some(
+          (attachment) =>
+            attachment.kind === "video" &&
+            pinnedAttachmentIds.includes(attachment.attachmentId)
+        )
+      ) {
+        pinnedIndexes.add(index);
+      }
+    }
+    return 提取消息虚拟范围(this.items, range, {
+      pinnedIndexes,
+    });
   }
 
   private 补齐首帧消息虚拟项(virtualItems: 消息虚拟项[]): 消息虚拟项[] {

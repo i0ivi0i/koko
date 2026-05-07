@@ -26,6 +26,7 @@ import {
 } from "./时间线媒体协作.js";
 
 export abstract class 房间消息窗时间线媒体基类 extends LitElement {
+  declare roomId: string;
   declare items: 聊天列表展示项[];
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
   declare mediaPreviewByAttachmentId: Record<string, 视频预览状态>;
@@ -107,6 +108,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
       归一化时间线视频播放源: (src) => this.归一化时间线视频播放源(src),
       读取预览状态: (attachmentId) =>
         this.mediaPreviewByAttachmentId[attachmentId] ?? null,
+      读取暖状态范围键: () => this.roomId,
       请求刷新: () => this.requestUpdate(),
     });
   }
