@@ -86,7 +86,7 @@ describe("房间消息窗 / 自动播露出门禁", () => {
     pane.remove();
   });
 
-  it("只有保存续播点但还没出可见帧时，不能先露出 poster", async () => {
+  it("只有保存续播点但还没出可见帧时，poster 必须继续挡住 covered canonical", async () => {
     const pane = 创建媒体消息窗();
     const attachmentId = "att-video-hidden-handoff";
     const playback = {
@@ -134,7 +134,7 @@ describe("房间消息窗 / 自动播露出门禁", () => {
     ).toBeNull();
     expect(
       pane.querySelector(`img.message-video-poster[data-attachment-id="${attachmentId}"]`)
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });

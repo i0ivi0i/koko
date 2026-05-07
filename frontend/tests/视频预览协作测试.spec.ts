@@ -218,6 +218,46 @@ describe("视频预览协作", () => {
     });
   });
 
+  it("视频预览协作拿到稳定预览后，会回抛自动播稳定表面 ready 事实给媒体运行时", async () => {
+    const 接收媒体运行时事实 = vi.fn();
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (attachmentId) => ({ attachmentId, kind: "video" }),
+      读取会话播放源版本: () => 5,
+      读取当前视频预览播放源: () => ({
+        src: "http://127.0.0.1:8080/webtorrent/ready-surface/content.mp4",
+        contentHash: "content-hash-ready-surface",
+      }),
+      获取媒体定位: vi.fn(async () => {
+        throw new Error("当前测试已有会话播放源，不应再请求 locator");
+      }),
+      解析协作分发预览源: vi.fn(async () => {
+        throw new Error("当前测试已有会话播放源，不应再解析 swarm source");
+      }),
+      释放协作分发消费者: vi.fn(),
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: "blob:preview-ready-surface",
+        source: "early_frame" as const,
+        width: 1280,
+        height: 720,
+      })),
+      接收媒体运行时事实,
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (attachmentId) => `preview:${attachmentId}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+    协作.解析视频预览("att-video-ready-surface", { trigger: "visible_candidate" });
+    await 刷新异步队列();
+
+    expect(接收媒体运行时事实).toHaveBeenCalledWith({
+      type: "INLINE_AUTOPLAY_STABLE_SURFACE_READY",
+      attachmentId: "att-video-ready-surface",
+      surface: "bridge",
+    });
+  });
+
   it("同版 missing_source 视频进入可见候选后，也必须允许受控重试 locator/swarm 预览", async () => {
     const attachmentId = "att-video-visible-retry";
     const 构造定位结果 = (
@@ -614,5 +654,47 @@ describe("视频预览协作", () => {
       consumerId: `preview:${attachmentId}`,
     });
     expect(协作.读取视频预览状态(attachmentId)).toBeNull();
+  });
+
+  it("视频预览状态删除时，会回抛自动播稳定表面失效事实给媒体运行时", async () => {
+    const 接收媒体运行时事实 = vi.fn();
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (attachmentId) => ({ attachmentId, kind: "video" }),
+      读取会话播放源版本: () => 12,
+      读取当前视频预览播放源: () => ({
+        src: "http://127.0.0.1:8080/webtorrent/delete-surface/content.mp4",
+        contentHash: "content-hash-delete-surface",
+      }),
+      获取媒体定位: vi.fn(async () => {
+        throw new Error("当前测试已有会话播放源，不应再请求 locator");
+      }),
+      解析协作分发预览源: vi.fn(async () => {
+        throw new Error("当前测试已有会话播放源，不应再解析 swarm source");
+      }),
+      释放协作分发消费者: vi.fn(),
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: "blob:preview-delete-surface",
+        source: "early_frame" as const,
+        width: 1280,
+        height: 720,
+      })),
+      接收媒体运行时事实,
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (attachmentId) => `preview:${attachmentId}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+    协作.解析视频预览("att-video-delete-surface");
+    await 刷新异步队列();
+    接收媒体运行时事实.mockClear();
+
+    协作.删除视频预览状态("att-video-delete-surface");
+
+    expect(接收媒体运行时事实).toHaveBeenCalledWith({
+      type: "INLINE_AUTOPLAY_STABLE_SURFACE_INVALIDATED",
+      attachmentId: "att-video-delete-surface",
+    });
   });
 });

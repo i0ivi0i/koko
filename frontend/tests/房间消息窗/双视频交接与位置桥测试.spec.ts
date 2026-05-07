@@ -11,7 +11,7 @@ import {
 
 describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
 
-  it("canonical 历史接管缓存不能跳过当前 DOM 的 cover 门禁", async () => {
+  it("canonical 历史接管缓存存在时，当前 DOM 还没 ready 就不能撤掉 poster cover", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
       mode: "swarm",
@@ -42,16 +42,28 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
     const restoredVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
+    const poster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    const canonicalHost = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-host[data-attachment-id="att-video-1"]'
+    );
     expect(
-      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+      canonicalHost
     ).not.toBeNull();
-    expect(
-      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
-    expect(restoredVideo?.dataset.canonicalPlayer).toBe("true");
+    /**
+     * 真实房间里这一拍最危险：
+     * 1. 历史 reveal cache 说明“这条附件以前曾经就绪过”，不代表当前这颗 DOM video 已经 ready；
+     * 2. 只要当前可见宿主还在 cover 之下，poster 就必须继续占住可见槽位；
+     * 3. 否则用户肉眼看到的就是 covered canonical 黑壳先露一拍，再等真正首帧出来。
+     */
+    expect(canonicalHost?.dataset.covered).toBe("true");
+    expect(poster).not.toBeNull();
+    expect(poster?.classList.contains("message-video-poster--canonical-cover")).toBe(true);
     expect(
       pane.querySelector('.message-video-canonical-stage-host[data-attachment-id="att-video-1"]')
     ).toBeNull();
+    expect(restoredVideo?.dataset.canonicalPlayer).toBe("true");
 
     pane.remove();
   });

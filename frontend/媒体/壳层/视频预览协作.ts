@@ -194,6 +194,21 @@ export function 创建视频预览协作(
     deps.同步当前查看器请求();
   };
 
+  const 广播自动播稳定表面已就绪 = (attachmentId: string): void => {
+    deps.接收媒体运行时事实({
+      type: "INLINE_AUTOPLAY_STABLE_SURFACE_READY",
+      attachmentId,
+      surface: "bridge",
+    });
+  };
+
+  const 广播自动播稳定表面已失效 = (attachmentId: string): void => {
+    deps.接收媒体运行时事实({
+      type: "INLINE_AUTOPLAY_STABLE_SURFACE_INVALIDATED",
+      attachmentId,
+    });
+  };
+
   const 清除视频预览缺源阻断 = (attachmentId: string): void => {
     视频预览缺源阻断版本表.delete(attachmentId);
     视频预览缺源可见重试记录表.delete(attachmentId);
@@ -205,6 +220,13 @@ export function 创建视频预览协作(
       attachmentId,
       deps.读取会话播放源版本(attachmentId)
     );
+    /**
+     * 一旦当前附件重新落回 `missing_source`，runtime 侧就不能再沿用旧 bridge-ready 结论：
+     * 1. 这通常意味着这轮 sourceVersion 下已经没有可承接的稳定帧；
+     * 2. 如果不清掉，pending owner 可能会误以为自己仍然握有 bridge，提前切走旧 owner；
+     * 3. 因而缺源本身就是一条显式失效事实，而不是纯 UI 状态。
+     */
+    广播自动播稳定表面已失效(attachmentId);
     写入视频预览状态(attachmentId, { phase: "missing_source" });
   };
 
@@ -305,6 +327,7 @@ export function 创建视频预览协作(
                 src: cachedPreview.objectUrl,
                 source: "cache",
               });
+              广播自动播稳定表面已就绪(attachmentId);
               return;
             }
           }
@@ -350,6 +373,7 @@ export function 创建视频预览协作(
                   src: cachedPreview.objectUrl,
                   source: "cache",
                 });
+                广播自动播稳定表面已就绪(attachmentId);
                 return;
               }
             }
@@ -420,6 +444,13 @@ export function 创建视频预览协作(
             src: preview.objectUrl,
             source: preview.source,
           });
+          /**
+           * preview 协作拿到的不是第二条视频真相，而是“这张卡已经至少握有一张同源稳定 bridge”：
+           * 1. runtime 只用它决定 pending 是否可以平滑接管；
+           * 2. 真正的 live reveal 仍然只认 canonical player 自己后续的 committed frame；
+           * 3. 这样状态机和渲染层终于吃到同一条稳定表面事实。
+           */
+          广播自动播稳定表面已就绪(attachmentId);
         } catch {
           if (shouldReleasePreviewConsumer) {
             deps.释放协作分发消费者({
@@ -448,6 +479,7 @@ export function 创建视频预览协作(
        * 3. 因此这里要显式剪断 attachment 级解析真相，确保退场就是退场。
        */
       视频预览解析代次表.delete(attachmentId);
+      广播自动播稳定表面已失效(attachmentId);
       if (!视频预览状态表.delete(attachmentId)) {
         return;
       }
@@ -458,6 +490,9 @@ export function 创建视频预览协作(
     清空(): void {
       for (const task of 视频预览抓帧任务表.values()) {
         task.abortController.abort();
+      }
+      for (const attachmentId of 视频预览状态表.keys()) {
+        广播自动播稳定表面已失效(attachmentId);
       }
       视频预览状态表.clear();
       视频预览解析代次表.clear();
