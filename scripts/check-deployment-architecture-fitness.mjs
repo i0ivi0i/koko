@@ -406,6 +406,13 @@ function 收集脚本主链内容问题(rootDir) {
         issues.push(`ops/healthcheck.sh 缺少检查目标: ${probeRule.label}`);
       }
     }
+    const 有公网重试 =
+      /--retry-all-errors/.test(source) &&
+      /--retry\s+[0-9]+/.test(source) &&
+      /--retry-delay\s+[0-9]+/.test(source);
+    if (!有公网重试) {
+      issues.push("ops/healthcheck.sh 缺少公网入口重试");
+    }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/healthcheck.sh");
     }

@@ -40,7 +40,11 @@ probe_with_seeder_node() {
 }
 
 check_public_domain() {
-  curl -fsS "https://${KOKO_DOMAIN}/" >/dev/null
+  curl -fsS \
+    --retry 20 \
+    --retry-delay 2 \
+    --retry-all-errors \
+    "https://${KOKO_DOMAIN}/" >/dev/null
 }
 
 check_app_internal() {

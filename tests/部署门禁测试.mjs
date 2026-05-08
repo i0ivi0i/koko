@@ -214,7 +214,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
       [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
-        'curl -fsS \"https://${KOKO_DOMAIN}/\" >/dev/null',
+        'curl -fsS --retry 20 --retry-delay 2 --retry-all-errors \"https://${KOKO_DOMAIN}/\" >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml ps app >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml exec -T postgres pg_isready >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml exec -T tusd sh -lc \'test -w /data/tus\'',
@@ -974,6 +974,26 @@ test("scripts 门禁会拦住 healthcheck.sh 漏掉关键探针", () => {
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd 存储可写/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tracker/);
+});
+
+test("scripts 门禁会拦住 healthcheck.sh 没有公网入口重试", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    healthcheckSh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'curl -fsS "https://${KOKO_DOMAIN}/" >/dev/null',
+      'docker compose -f /opt/koko/current/ops/compose.yaml ps app >/dev/null',
+      'docker compose -f /opt/koko/current/ops/compose.yaml exec -T postgres pg_isready >/dev/null',
+      'docker compose -f /opt/koko/current/ops/compose.yaml exec -T tusd sh -lc \'test -w /data/tus\'',
+      'curl -fsS http://tracker:7072/stats >/dev/null',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/healthcheck\.sh 缺少公网入口重试/);
 });
 
 test("scripts 门禁会拦住回头改写已上线的 0001 基线迁移", () => {
