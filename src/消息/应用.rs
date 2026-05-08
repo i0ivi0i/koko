@@ -207,6 +207,7 @@ pub fn 创建消息(
 /// 与同步版 `创建消息` 共享同一套领域校验和附件裁决规则，区别只在 IO 方式：
 /// - 会话 + 房间 + 成员资格 + 匿名身份合并为一次 SQL roundtrip
 /// - N 条附件快照合并为一次 SQL roundtrip
+///
 /// 成功后返回权威领域事件，由 handler 决定如何广播成 `room_event`。
 pub async fn 创建消息_异步(
     仓储: &mut impl Realtime消息仓储端口,

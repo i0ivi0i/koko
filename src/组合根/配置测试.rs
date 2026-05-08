@@ -115,6 +115,37 @@ fn 构建迁移数据库连接选项会关闭_statement_日志() {
 }
 
 #[test]
+fn 数据库连接池默认值应为50最大5最小() {
+    // 不设置任何环境变量，模拟全部走默认值。
+    let config = 数据库连接池配置::from_env_with(|_| None).expect("默认连接池配置应可构建");
+    assert_eq!(config.app_max_connections, 50, "默认最大连接数应为 50");
+    assert_eq!(config.app_min_connections, 5, "默认最小连接数应为 5");
+    assert_eq!(config.migration_max_connections, 1, "迁移连接数固定为 1");
+}
+
+#[test]
+fn 数据库连接池环境变量可覆盖默认值() {
+    let config = 数据库连接池配置::from_env_with(|key| match key {
+        "KOKO_DATABASE_MAX_CONNECTIONS" => Some("30".to_string()),
+        "KOKO_DATABASE_MIN_CONNECTIONS" => Some("2".to_string()),
+        _ => None,
+    })
+    .expect("自定义连接池配置应可构建");
+    assert_eq!(config.app_max_connections, 30);
+    assert_eq!(config.app_min_connections, 2);
+}
+
+#[test]
+fn 数据库连接池最小不能超过最大() {
+    let result = 数据库连接池配置::from_env_with(|key| match key {
+        "KOKO_DATABASE_MAX_CONNECTIONS" => Some("10".to_string()),
+        "KOKO_DATABASE_MIN_CONNECTIONS" => Some("20".to_string()),
+        _ => None,
+    });
+    assert!(result.is_err(), "min > max 时应返回错误");
+}
+
+#[test]
 #[serial]
 fn 协作分发配置会为sidecar生成私有tracker地址() {
     let old_app_port = 读并清空环境变量("APP_PORT");
