@@ -146,6 +146,11 @@ pub(crate) fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'
             "attachment_count_exceeded",
             "附件数量超限".to_string(),
         ),
+        contract::错误码::消息文本过长 => (
+            StatusCode::BAD_REQUEST,
+            "message_text_too_long",
+            "消息文本过长".to_string(),
+        ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",

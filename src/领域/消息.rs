@@ -56,6 +56,9 @@ pub struct 已校验消息 {
 }
 
 const 单条消息最大附件数: usize = 9;
+/// 单条消息文本上限：按 Unicode 字符计数，不是字节数。
+/// 中文、emoji、英文字母各算 1 个字符。
+const 单条消息文本最大字符数: usize = 2000;
 
 /// 发送文本消息的核心不变量：先校验成员，再校验文本。
 ///
@@ -64,11 +67,15 @@ const 单条消息最大附件数: usize = 9;
 /// - 落库与事件位置推进由用例 + 适配层事务保证。
 pub fn 创建文本消息(是否成员: bool, 文本: &str) -> Result<文本消息, 领域错误> {
     校验成员可发言(是否成员)?;
-    if 文本.trim().is_empty() {
+    let trimmed = 文本.trim();
+    if trimmed.is_empty() {
         return Err(领域错误::消息文本为空);
     }
+    if trimmed.chars().count() > 单条消息文本最大字符数 {
+        return Err(领域错误::消息文本过长);
+    }
     Ok(文本消息 {
-        文本: 文本.trim().to_string(),
+        文本: trimmed.to_string(),
     })
 }
 
@@ -86,6 +93,11 @@ pub fn 创建消息(
     let trimmed_text = 文本.trim();
     if trimmed_text.is_empty() && 附件.is_empty() {
         return Err(领域错误::消息内容为空);
+    }
+    // 文本长度校验必须在「内容为空」之后：空文本 + 有附件的消息允许通过，
+    // 但非空文本超过字符上限时无论有没有附件都必须拒绝。
+    if trimmed_text.chars().count() > 单条消息文本最大字符数 {
+        return Err(领域错误::消息文本过长);
     }
     if 附件.len() > 单条消息最大附件数 {
         return Err(领域错误::附件数量超限);
@@ -116,4 +128,51 @@ pub fn 创建消息(
         文本: trimmed_text.to_string(),
         附件: refs,
     })
+}
+
+#[cfg(test)]
+mod 消息领域测试 {
+    use super::*;
+
+    #[test]
+    fn 创建文本消息_2000字符以内应成功() {
+        let text = "a".repeat(2000);
+        let result = 创建文本消息(true, &text);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn 创建文本消息_超过2000字符应拒绝() {
+        let text = "a".repeat(2001);
+        let result = 创建文本消息(true, &text);
+        assert_eq!(result, Err(领域错误::消息文本过长));
+    }
+
+    #[test]
+    fn 创建消息_超过2000字符即使有附件也应拒绝() {
+        let text = "a".repeat(2001);
+        let attachment = 待发送附件 {
+            附件标识: "att-1".to_string(),
+            种类: 附件种类::图片,
+            宽: 100,
+            高: 100,
+            有预览图: false,
+        };
+        let result = 创建消息(true, &text, &[attachment]);
+        assert_eq!(result, Err(领域错误::消息文本过长));
+    }
+
+    #[test]
+    fn 创建消息_2000个中文字符应成功() {
+        let text = "啊".repeat(2000);
+        let result = 创建消息(true, &text, &[]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn 创建消息_2001个中文字符应拒绝() {
+        let text = "啊".repeat(2001);
+        let result = 创建消息(true, &text, &[]);
+        assert_eq!(result, Err(领域错误::消息文本过长));
+    }
 }

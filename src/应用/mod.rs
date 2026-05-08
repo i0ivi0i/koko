@@ -17,5 +17,6 @@ pub(crate) fn 映射领域错误(err: domain::领域错误) -> contract::错误�
         | domain::领域错误::房间短码非法 => contract::错误码::参数非法,
         domain::领域错误::附件类型不支持 => contract::错误码::附件类型不支持,
         domain::领域错误::附件数量超限 => contract::错误码::附件数量超限,
+        domain::领域错误::消息文本过长 => contract::错误码::消息文本过长,
     }
 }
