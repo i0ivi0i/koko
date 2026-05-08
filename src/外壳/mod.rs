@@ -363,6 +363,11 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
             let state_for_subscribe = state.clone();
             let state_for_send = state.clone();
             async move {
+                // 每连接限流令牌桶：随 socket 创建，随 socket 销毁，无需定时清理。
+                socket
+                    .extensions
+                    .insert(std::sync::Arc::new(std::sync::Mutex::new(实时外壳::连接消息令牌桶::new())));
+
                 socket.on_disconnect(|s: SocketRef, reason| async move {
                     实时外壳::记录realtime断开(s, reason);
                 });

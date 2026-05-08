@@ -23,6 +23,59 @@ pub(crate) struct 已认证会话 {
     pub(crate) session_id: String,
 }
 
+/// 每连接令牌桶容量：允许短时间连发的消息上限。
+const 令牌桶容量: f64 = 10.0;
+/// 令牌补充速率：每秒恢复的令牌数。
+const 令牌补充速率: f64 = 5.0;
+
+/// 每连接消息发送令牌桶，存放在 socket extension 中。
+/// 纯运行态值对象，不依赖外部计时器：每次 `try_consume` 时按实际流逝时间补充令牌。
+/// 线程安全由外层 `std::sync::Mutex` 保证（socketioxide 的 handler 可能跨线程调度）。
+pub(crate) struct 连接消息令牌桶 {
+    /// 当前可用令牌数。
+    tokens: f64,
+    /// 上次补充时间戳。
+    last_refill: std::time::Instant,
+}
+
+impl 连接消息令牌桶 {
+    /// 生产环境入口：以当前时刻为起点，满桶开始。
+    pub fn new() -> Self {
+        Self {
+            tokens: 令牌桶容量,
+            last_refill: std::time::Instant::now(),
+        }
+    }
+
+    /// 测试专用入口：允许注入确定性时间戳，避免测试依赖 wall-clock。
+    #[cfg(test)]
+    pub fn new_with_instant(now: std::time::Instant) -> Self {
+        Self {
+            tokens: 令牌桶容量,
+            last_refill: now,
+        }
+    }
+
+    /// 尝试消费一个令牌（生产环境用）。
+    pub fn try_consume(&mut self) -> bool {
+        self.try_consume_at(std::time::Instant::now())
+    }
+
+    /// 在指定时刻尝试消费一个令牌。
+    /// 先按流逝时间补充令牌（封顶为桶容量），再判断是否可扣减。
+    pub fn try_consume_at(&mut self, now: std::time::Instant) -> bool {
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * 令牌补充速率).min(令牌桶容量);
+        self.last_refill = now;
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Realtime 订阅命令负载。
 #[derive(Deserialize, Clone)]
 pub(crate) struct RealtimeSubscribeBody {
@@ -615,6 +668,28 @@ pub(crate) async fn handle_realtime_create_message(
     payload: RealtimeCreateMessageBody,
     state: 应用状态,
 ) {
+    // ── 限流门禁：在任何 DB 查询之前拦截超限请求，保护连接池 ──
+    {
+        let bucket = socket
+            .extensions
+            .get::<std::sync::Arc<std::sync::Mutex<连接消息令牌桶>>>()
+            .expect("令牌桶应在连接建立时注入");
+        // Mutex::lock 只在持有者 panic 时中毒，此处用 into_inner 恢复而非传播 panic。
+        let mut guard = bucket.lock().unwrap_or_else(|e| e.into_inner());
+        if !guard.try_consume() {
+            tracing::info!(
+                application = "创建消息",
+                adapter = "socketioxide",
+                outcome = "rate_limited",
+                session_id = auth.session_id.as_str(),
+                "消息发送被限流"
+            );
+            let payload = 构造拒绝控制面("rate_limited", "消息发送过于频繁");
+            let _ = socket.emit("control_result", &payload);
+            return;
+        }
+    }
+
     tracing::info!(
         application = "创建消息",
         adapter = "socketioxide",
@@ -855,5 +930,58 @@ mod 实时外壳测试 {
             payload["attachments"][0].get("preview_asset").is_none(),
             "没有逐连接会话上下文时，不应在 room_event 里伪造 still_url"
         );
+    }
+
+    // ── 令牌桶限流测试 ──────────────────────────────────────────────
+
+    use super::连接消息令牌桶;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn 令牌桶_突发容量内全部通过() {
+        let base = Instant::now();
+        let mut bucket = 连接消息令牌桶::new_with_instant(base);
+        for _ in 0..10 {
+            assert!(bucket.try_consume_at(base));
+        }
+    }
+
+    #[test]
+    fn 令牌桶_突发容量耗尽后拒绝() {
+        let base = Instant::now();
+        let mut bucket = 连接消息令牌桶::new_with_instant(base);
+        for _ in 0..10 {
+            bucket.try_consume_at(base);
+        }
+        assert!(!bucket.try_consume_at(base));
+    }
+
+    #[test]
+    fn 令牌桶_等待1秒后补充5个令牌() {
+        let base = Instant::now();
+        let mut bucket = 连接消息令牌桶::new_with_instant(base);
+        // 耗尽全部 10 个
+        for _ in 0..10 {
+            bucket.try_consume_at(base);
+        }
+        // 1 秒后补充 5 个
+        let after_1s = base + Duration::from_secs(1);
+        for _ in 0..5 {
+            assert!(bucket.try_consume_at(after_1s));
+        }
+        assert!(!bucket.try_consume_at(after_1s));
+    }
+
+    #[test]
+    fn 令牌桶_补充不超过容量上限() {
+        let base = Instant::now();
+        let mut bucket = 连接消息令牌桶::new_with_instant(base);
+        // 不消耗任何令牌，等 10 秒
+        let after_10s = base + Duration::from_secs(10);
+        // 最多也只有 10 个令牌（不会膨胀到 60 个）
+        for _ in 0..10 {
+            assert!(bucket.try_consume_at(after_10s));
+        }
+        assert!(!bucket.try_consume_at(after_10s));
     }
 }
