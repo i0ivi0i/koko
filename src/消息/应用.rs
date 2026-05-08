@@ -27,8 +27,23 @@ pub trait 消息仓储端口:
     ) -> Result<contract::领域事件, contract::错误码>;
 }
 
+/// 热路径合并校验结果：一次 SQL 把会话存在、房间存在、成员资格、匿名身份全部取回。
+/// 只在 realtime 异步创建消息时使用，同步冷路径不走这条链。
+pub struct 消息发送资格校验结果 {
+    pub session_exists: bool,
+    pub room_exists: bool,
+    pub is_member: bool,
+    /// 当 session 存在时解析出的内部匿名身份标识（identity_uuid）。
+    /// 纯文本消息可以不用它，但有附件时需要它来校验 owner。
+    pub 匿名身份标识: Option<String>,
+}
+
 /// realtime 热路径专属消息仓储口。
-/// 它只补齐同步消息主链在 async 热链真正需要的三条额外能力。
+/// 它补齐同步消息主链在 async 热链真正需要的额外能力：
+/// - 合并校验（会话 + 房间 + 成员 + 身份，一次 roundtrip）
+/// - 批量附件快照查询（N 条附件一次 roundtrip）
+/// - 单条附件快照查询（向后兼容，已有调用方仍可使用）
+/// - 消息事件提交
 #[allow(async_fn_in_trait)]
 pub trait Realtime消息仓储端口: 实时应用::实时会话房间校验仓储端口 {
     async fn 查询会话所属匿名身份(
@@ -40,6 +55,20 @@ pub trait Realtime消息仓储端口: 实时应用::实时会话房间校验仓�
         &self,
         附件标识: &str,
     ) -> Result<Option<附件读取结果>, contract::错误码>;
+
+    /// 一次 SQL 批量读取多条附件快照，消除逐条查询的 N 次 roundtrip。
+    async fn 批量查询附件快照(
+        &self,
+        附件标识列表: &[String],
+    ) -> Result<Vec<附件读取结果>, contract::错误码>;
+
+    /// 一次 SQL 合并校验会话存在、房间存在、成员资格，并顺带取回匿名身份。
+    /// 替代原先 `检查会话存在 + 检查房间存在 + 检查成员资格 + 查询会话所属匿名身份` 的 4 次 roundtrip。
+    async fn 校验并读取消息发送资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<消息发送资格校验结果, contract::错误码>;
 
     async fn 创建统一消息事件(
         &mut self,
@@ -140,32 +169,6 @@ fn 读取待发送附件(
     按统一消息规则校验附件快照列表(发送者身份.as_deref(), 附件快照列表)
 }
 
-async fn 读取待发送附件_异步(
-    仓储: &impl Realtime消息仓储端口,
-    会话标识: &str,
-    附件标识列表: &[String],
-) -> Result<Vec<domain::message::待发送附件>, contract::错误码> {
-    let mut 附件快照列表 = Vec::with_capacity(附件标识列表.len());
-    for attachment_id in 附件标识列表 {
-        let snapshot = 仓储
-            .查询附件快照(attachment_id)
-            .await?
-            .ok_or(contract::错误码::附件不存在)?;
-        附件快照列表.push(snapshot);
-    }
-    let 发送者身份 = if 附件快照列表.is_empty() {
-        None
-    } else {
-        Some(
-            仓储
-                .查询会话所属匿名身份(会话标识)
-                .await?
-                .ok_or(contract::错误码::会话无效)?,
-        )
-    };
-    按统一消息规则校验附件快照列表(发送者身份.as_deref(), 附件快照列表)
-}
-
 /// 发送文本消息主链：
 /// 这里只是“纯文本消息”的语义别名，真正消息成立仍统一走 `创建消息`。
 pub fn 发送文本消息(
@@ -200,9 +203,11 @@ pub fn 创建消息(
     仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
 }
 
-/// realtime 创建消息的异步版。
-/// 这里只负责把 command 落成同一条权威消息成立主链；
-/// 成功后返回的仍然只能是领域事件，由 handler 决定如何广播成 `room_event`。
+/// realtime 创建消息的异步版（热路径优化版）。
+/// 与同步版 `创建消息` 共享同一套领域校验和附件裁决规则，区别只在 IO 方式：
+/// - 会话 + 房间 + 成员资格 + 匿名身份合并为一次 SQL roundtrip
+/// - N 条附件快照合并为一次 SQL roundtrip
+/// 成功后返回权威领域事件，由 handler 决定如何广播成 `room_event`。
 pub async fn 创建消息_异步(
     仓储: &mut impl Realtime消息仓储端口,
     房间标识: &str,
@@ -212,11 +217,36 @@ pub async fn 创建消息_异步(
     附件标识列表: &[String],
 ) -> Result<contract::领域事件, contract::错误码> {
     校验客户端消息标识(客户端消息标识)?;
-    实时应用::校验房间订阅资格_异步(仓储, 房间标识, 会话标识).await?;
-    let attachments = 读取待发送附件_异步(仓储, 会话标识, 附件标识列表).await?;
 
+    // ── 第 1 次 roundtrip：合并校验会话 + 房间 + 成员 + 身份（替代原先 4 次独立查询）──
+    let 资格 = 仓储.校验并读取消息发送资格(房间标识, 会话标识).await?;
+    if !资格.session_exists {
+        return Err(contract::错误码::会话无效);
+    }
+    if !资格.room_exists {
+        return Err(contract::错误码::房间不存在);
+    }
+    if !资格.is_member {
+        return Err(contract::错误码::成员资格不足);
+    }
+
+    // ── 第 2 次 roundtrip（仅当有附件时）：批量读取附件快照（替代原先 N 次逐条查询）──
+    let attachments = if 附件标识列表.is_empty() {
+        Vec::new()
+    } else {
+        let 快照列表 = 仓储.批量查询附件快照(附件标识列表).await?;
+        // 批量查询可能返回数量少于请求数（有附件不存在），必须检查。
+        if 快照列表.len() != 附件标识列表.len() {
+            return Err(contract::错误码::附件不存在);
+        }
+        按统一消息规则校验附件快照列表(资格.匿名身份标识.as_deref(), 快照列表)?
+    };
+
+    // ── 领域校验（纯内存，零 IO）──
     let msg =
         domain::message::创建消息(true, 文本, &attachments).map_err(application::映射领域错误)?;
+
+    // ── 第 3 次 roundtrip：提交消息事件 ──
     仓储
         .创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
         .await

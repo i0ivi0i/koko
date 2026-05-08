@@ -124,6 +124,69 @@ pub(super) fn 查询附件快照(
     repo.在运行时执行(查询附件快照_异步(&repo.pool, 附件标识))
 }
 
+/// 批量查询多条附件快照：一次 SQL 替代 N 次逐条查询。
+/// SQL 与单条版 `查询附件快照_异步` 共用同一份字段列表和行解析逻辑，
+/// 唯一差异是 WHERE 条件改用 `= ANY($1)` 并用 `fetch_all` 收集。
+pub(super) async fn 批量查询附件快照_异步(
+    pool: &PgPool,
+    附件标识列表: &[String],
+) -> Result<Vec<crate::media::模型::附件读取结果>, contract::错误码> {
+    let rows = sqlx::query(
+        "SELECT a.attachment_id,
+                ai.identity_uuid::text AS owner_identity_text,
+                a.kind,
+                a.mime_type,
+                a.status,
+                a.width,
+                a.height,
+                a.thumbnail_storage_key IS NOT NULL AS has_thumbnail,
+                a.asset_original_storage_key,
+                a.full_storage_key,
+                COALESCE(
+                    EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT,
+                    EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT
+                ) AS origin_expires_at_epoch,
+                EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch \
+         FROM attachments a \
+         JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
+         LEFT JOIN attachment_distribution_metadata dm
+           ON dm.attachment_id = a.attachment_id \
+         WHERE a.attachment_id = ANY($1)",
+    )
+    .bind(附件标识列表)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    rows.into_iter()
+        .map(|row| {
+            let kind = match row.get::<String, _>("kind").as_str() {
+                "image" => crate::media::模型::附件种类读取结果::图片,
+                "video" => crate::media::模型::附件种类读取结果::视频,
+                "audio" => crate::media::模型::附件种类读取结果::语音,
+                "gif" => crate::media::模型::附件种类读取结果::GIF,
+                "file" => crate::media::模型::附件种类读取结果::文件,
+                _ => return Err(contract::错误码::系统错误),
+            };
+            let status = 解析附件状态(row.get::<String, _>("status").as_str())?;
+            Ok(crate::media::模型::附件读取结果 {
+                附件标识: row.get("attachment_id"),
+                所属匿名身份标识: row.get("owner_identity_text"),
+                种类: kind,
+                mime_type: row.get("mime_type"),
+                状态: status,
+                宽: row.get("width"),
+                高: row.get("height"),
+                允许缩略图: row.get("has_thumbnail"),
+                资产原图存储键: row.get("asset_original_storage_key"),
+                完整图存储键: row.get("full_storage_key"),
+                原始冷源到期时间戳秒: row.get("origin_expires_at_epoch"),
+                原始冷源删除时间戳秒: row.get("origin_deleted_at_epoch"),
+            })
+        })
+        .collect()
+}
+
 /// prepared 附件仍然是媒体 owner 真相的一部分。
 /// complete 链路只允许从这里读取它，而不是自己拼表字段。
 async fn 查询待完成媒体附件_异步(

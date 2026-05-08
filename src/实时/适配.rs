@@ -47,6 +47,21 @@ impl message::application::Realtime消息仓储端口 for PgRealtime仓储 {
         媒体附件适配::查询附件快照_异步(&self.repo.pool, 附件标识).await
     }
 
+    async fn 批量查询附件快照(
+        &self,
+        附件标识列表: &[String],
+    ) -> Result<Vec<crate::media::模型::附件读取结果>, contract::错误码> {
+        媒体附件适配::批量查询附件快照_异步(&self.repo.pool, 附件标识列表).await
+    }
+
+    async fn 校验并读取消息发送资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<message::application::消息发送资格校验结果, contract::错误码> {
+        房间阅读适配::校验消息发送资格_异步(&self.repo.pool, 房间标识, 会话标识).await
+    }
+
     async fn 创建统一消息事件(
         &mut self,
         房间标识: &str,

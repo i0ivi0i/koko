@@ -100,6 +100,48 @@ pub(super) fn 检查成员资格(
     repo.在运行时执行(检查成员资格_异步(&repo.pool, 房间标识, 会话标识))
 }
 
+/// 热路径合并校验 SQL：一次 roundtrip 把会话、房间、成员资格、匿名身份全部取回。
+/// 使用 3 个独立子查询（不做 JOIN）确保任一实体缺失时仍能返回其余列。
+///
+/// 字段语义：
+/// - session_exists: 会话标识是否存在
+/// - room_exists:    房间标识是否存在
+/// - is_member:      当前会话是否为房间活跃成员（left_at IS NULL）
+/// - identity_uuid:  会话对应的内部匿名身份标识（NULL 当 session 不存在）
+pub(super) async fn 校验消息发送资格_异步(
+    pool: &PgPool,
+    房间标识: &str,
+    会话标识: &str,
+) -> Result<crate::message::application::消息发送资格校验结果, contract::错误码> {
+    let row = sqlx::query(
+        "SELECT \
+           (SELECT 1 FROM sessions WHERE session_id = $2) IS NOT NULL AS session_exists, \
+           (SELECT 1 FROM rooms WHERE room_id = $1) IS NOT NULL AS room_exists, \
+           (SELECT 1 FROM room_members rm \
+              JOIN rooms r ON r.id = rm.room_id \
+              JOIN sessions s ON s.id = rm.session_id \
+              WHERE r.room_id = $1 AND s.session_id = $2 AND rm.left_at IS NULL \
+           ) IS NOT NULL AS is_member, \
+           (SELECT ai.identity_uuid::text \
+              FROM sessions s2 \
+              JOIN anonymous_identities ai ON ai.id = s2.anonymous_identity_id \
+              WHERE s2.session_id = $2 \
+           ) AS identity_uuid",
+    )
+    .bind(房间标识)
+    .bind(会话标识)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    Ok(crate::message::application::消息发送资格校验结果 {
+        session_exists: row.get("session_exists"),
+        room_exists: row.get("room_exists"),
+        is_member: row.get("is_member"),
+        匿名身份标识: row.get("identity_uuid"),
+    })
+}
+
 async fn 查询房间最新事件位置_异步(
     pool: &PgPool,
     房间标识: &str,

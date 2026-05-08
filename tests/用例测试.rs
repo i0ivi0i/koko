@@ -538,6 +538,46 @@ impl koko::message::application::Realtime消息仓储端口 for 假仓储 {
         <Self as koko::message::application::消息仓储端口>::查询附件快照(self, 附件标识)
     }
 
+    async fn 批量查询附件快照(
+        &self,
+        附件标识列表: &[String],
+    ) -> Result<Vec<koko::media::模型::附件读取结果>, koko::shared::contract::错误码> {
+        // 假仓储：逐条委托给同步版查询附件快照，保持与单条查询同一真相。
+        let mut results = Vec::with_capacity(附件标识列表.len());
+        for id in 附件标识列表 {
+            if let Some(snapshot) =
+                <Self as koko::message::application::消息仓储端口>::查询附件快照(self, id)?
+            {
+                results.push(snapshot);
+            }
+        }
+        Ok(results)
+    }
+
+    async fn 校验并读取消息发送资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<koko::message::application::消息发送资格校验结果, koko::shared::contract::错误码> {
+        // 假仓储：组合已有同步校验方法，模拟合并查询的语义。
+        let session_exists =
+            <Self as koko::room::application::会话房间校验仓储端口>::检查会话存在(self, 会话标识)?;
+        let room_exists =
+            <Self as koko::room::application::会话房间校验仓储端口>::检查房间存在(self, 房间标识)?;
+        let is_member =
+            <Self as koko::room::application::会话房间校验仓储端口>::检查成员资格(self, 房间标识, 会话标识)?;
+        let 匿名身份标识 =
+            <Self as koko::identity::application::会话身份读取端口>::查询会话所属匿名身份(
+                self, 会话标识,
+            )?;
+        Ok(koko::message::application::消息发送资格校验结果 {
+            session_exists,
+            room_exists,
+            is_member,
+            匿名身份标识,
+        })
+    }
+
     async fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
