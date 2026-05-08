@@ -121,6 +121,7 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
 }
 
 function 创建合法脚本主链夹具(rootDir, extra = {}) {
+  写文件(rootDir, ".gitattributes", extra.gitattributes ?? "migrations/*.sql text eol=lf\n");
   写文件(rootDir, "ops/README.md", extra.readme ?? "# ops\n");
   写文件(
     rootDir,
@@ -973,6 +974,44 @@ test("scripts 门禁会拦住 healthcheck.sh 漏掉关键探针", () => {
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd 存储可写/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tracker/);
+});
+
+test("scripts 门禁会拦住回头改写已上线的 0001 基线迁移", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir);
+  写文件(
+    fixtureDir,
+    "migrations/0001_当前数据库基线.sql",
+    [
+      "-- 当前数据库基线",
+      "CREATE TABLE IF NOT EXISTS sessions (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+      "",
+    ].join("\n"),
+  );
+  写文件(
+    fixtureDir,
+    "migrations/0002_删除streaming_manifest历史残留.sql",
+    [
+      "-- 退场历史表",
+      "DROP TABLE IF EXISTS attachment_streaming_manifests;",
+      "",
+    ].join("\n"),
+  );
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /0001_当前数据库基线\.sql 已被回头改写/);
+});
+
+test("scripts 门禁会拦住 migrations 没有锁成 LF 行尾", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    gitattributes: "*.rs text=auto\n",
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /\.gitattributes 缺少 migrations\/\*\.sql text eol=lf/);
 });
 
 test("scripts 门禁会拦住 git pull 和 cloudflared 旁路", () => {

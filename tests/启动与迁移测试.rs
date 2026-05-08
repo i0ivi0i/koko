@@ -240,9 +240,12 @@ fn 当前数据库基线保留媒体上传和协作分发热路径索引() {
     assert!(sql.contains("idx_attachment_distribution_metadata_content_hash"));
     assert!(sql.contains("idx_attachments_origin_cleanup"));
     assert!(sql.contains("idx_attachments_mezzanine_cleanup"));
-    assert!(!sql.contains("attachment_streaming_manifests"));
-    assert!(!sql.contains("hls_master_storage_key"));
-    assert!(!sql.contains("dash_mpd_storage_key"));
+
+    // 0001 已经在正式库落过账，不能为了表达“最终 schema”再偷偷改写它；
+    // 当前阶段要靠 0002 显式删除 streaming manifest 历史残留，而不是回头改 0001 本体。
+    assert!(sql.contains("attachment_streaming_manifests"));
+    assert!(sql.contains("hls_master_storage_key"));
+    assert!(sql.contains("dash_mpd_storage_key"));
 }
 
 #[test]

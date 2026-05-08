@@ -13,6 +13,7 @@ const 运行主链必需文件 = [
 ];
 
 const 脚本主链必需文件 = [
+  ".gitattributes",
   "ops/README.md",
   "ops/env.production.example",
   "ops/package-release.sh",
@@ -407,6 +408,29 @@ function 收集脚本主链内容问题(rootDir) {
     }
     if (/git\s+pull\b/.test(source)) {
       issues.push("禁止出现 git pull: ops/healthcheck.sh");
+    }
+  }
+
+  const 当前数据库基线迁移路径 = join(rootDir, "migrations", "0001_当前数据库基线.sql");
+  const streamingManifest退场迁移路径 = join(rootDir, "migrations", "0002_删除streaming_manifest历史残留.sql");
+  if (existsSync(当前数据库基线迁移路径) && existsSync(streamingManifest退场迁移路径)) {
+    const 基线迁移源码 = 读取文本文件(rootDir, "migrations/0001_当前数据库基线.sql");
+    const 已保留历史表 =
+      基线迁移源码.includes("CREATE TABLE IF NOT EXISTS attachment_streaming_manifests") &&
+      基线迁移源码.includes("hls_master_storage_key") &&
+      基线迁移源码.includes("dash_mpd_storage_key");
+    if (!已保留历史表) {
+      issues.push(
+        "migrations/0001_当前数据库基线.sql 已被回头改写；已上线的 streaming manifest 历史表必须继续留在 0001，由 0002 显式删除"
+      );
+    }
+  }
+
+  const gitattributesPath = join(rootDir, ".gitattributes");
+  if (existsSync(gitattributesPath)) {
+    const source = 读取文本文件(rootDir, ".gitattributes");
+    if (!/migrations\/\*\.sql\s+text\s+eol=lf/.test(source)) {
+      issues.push(".gitattributes 缺少 migrations/*.sql text eol=lf");
     }
   }
 
