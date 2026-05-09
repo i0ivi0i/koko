@@ -632,10 +632,108 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     expect(releasedCard).not.toBeNull();
     expect(releasedFrozenFrame?.getAttribute("data-bridge-src")).toBe(releasedPlayback.src);
     expect(releasedPreview).toBeNull();
-    expect(releasedCard?.querySelector("img.message-video-poster")).toBeNull();
+    /**
+     * poster 现在作为冻结帧 canvas 的安全网保留在 DOM 里（z-index: 0，被 canvas 覆盖），
+     * 但卡片的首要可见表面仍然必须是冻结帧，不是 poster。
+     */
+    expect(releasedCard?.querySelector("img.message-video-poster")).not.toBeNull();
     expect(
       releasedCard?.querySelector(".message-video-canonical-host[data-attachment-id]")
     ).toBeNull();
+
+    pane.remove();
+  });
+
+  it("退场 owner 有冻结帧时，必须同时渲染 poster 安全网兜底，防止 canvas 绘制失败后卡片全黑", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentId = "att-video-poster-safety-net";
+    const playback = {
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: "http://media.local/swarm-video-poster-safety",
+      thumbnailUrl: "http://media.local/poster-video-poster-safety",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      创建单视频消息项(attachmentId, 1),
+      创建单视频消息项("att-video-next-owner-safety", 2),
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      [attachmentId]: playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-next-owner-safety";
+    pane.inlineAutoplayPositionByAttachmentId = {
+      [attachmentId]: {
+        src: playback.src,
+        currentTime: 5.2,
+        updatedAt: 1_800_000_000_000,
+      },
+    };
+    (
+      pane as unknown as {
+        最近退场Owner附件Id: string | null;
+      }
+    ).最近退场Owner附件Id = attachmentId;
+    const 画面缓存Owner = (
+      pane as unknown as {
+        时间线画面缓存Owner: {
+          时间线自动播冻结帧: Map<
+            string,
+            {
+              src: string;
+              currentTime: number;
+              bitmap: CanvasImageSource;
+              width: number;
+              height: number;
+              updatedAt: number;
+              dispose(): void;
+            }
+          >;
+        };
+      }
+    ).时间线画面缓存Owner;
+    Object.defineProperty(画面缓存Owner, "时间线自动播冻结帧", {
+      configurable: true,
+      value: new Map([
+        [
+          attachmentId,
+          {
+            src: playback.src,
+            currentTime: 5.2,
+            bitmap: document.createElement("canvas"),
+            width: 320,
+            height: 180,
+            updatedAt: 1_800_000_000_001,
+            dispose: vi.fn(),
+          },
+        ],
+      ]),
+    });
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const card = pane.querySelector<HTMLElement>(
+      `.message-video-card[data-attachment-id="${attachmentId}"]`
+    );
+    const frozenFrame = card?.querySelector<HTMLCanvasElement>(
+      `canvas.message-video-frozen-frame[data-attachment-id="${attachmentId}"]`
+    );
+    const poster = card?.querySelector<HTMLImageElement>(
+      `img.message-video-poster[data-attachment-id="${attachmentId}"]`
+    );
+
+    /**
+     * 冻结帧仍是首要可见表面（z-index: 2，position: absolute 覆盖在上）；
+     * 但 poster 必须同时存在于 DOM 里作为安全网（z-index: 0，position: relative）：
+     * 如果 canvas drawImage 因 bitmap disposed / context lost 失败，
+     * poster 透过透明 canvas 底部兜住整张卡片，避免用户看到纯黑背景。
+     */
+    expect(frozenFrame).not.toBeNull();
+    expect(poster).not.toBeNull();
+    expect(poster?.src).toContain("poster-video-poster-safety");
 
     pane.remove();
   });

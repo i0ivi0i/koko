@@ -427,6 +427,17 @@ export const 渲染视频附件 = (
     !shouldRevealCanonicalHost && !shouldRenderFrozenTimelineFrame && !hasCurrentDomPreviewFrame &&
     Boolean(previewPosterSrc) && !(shouldRenderVisibleCanonicalHost && hasKnownReadyPreviewFrame) &&
     (!shouldRenderPreviewVideo || shouldKeepCanonicalCoverDuringGuardedPreviewWarmup);
+  /**
+   * 退场 owner 有冻结帧时，poster 必须作为安全网同时存在于 DOM：
+   * 冻结帧 canvas 在 z-index: 2 / position: absolute 覆盖 poster，
+   * 如果 drawImage 因 bitmap disposed / context lost 失败导致 canvas 透明，
+   * poster (z-index: 0 / position: relative) 仍能兜住卡片，避免纯黑背景。
+   */
+  const shouldRenderRetiringOwnerFrozenFramePosterSafetyNet =
+    isRetiringReleasedOwner &&
+    hasFrozenTimelineFrame &&
+    hasStablePreviewPosterSurface &&
+    !hasCurrentDomPreviewFrame;
   const shouldRenderPreviewPosterSurface =
     ((playbackContinuityDecision.visibleSurface === "placeholder" &&
       hasStablePreviewPosterSurface &&
@@ -441,7 +452,8 @@ export const 渲染视频附件 = (
       !hasFrozenTimelineFrame &&
       !hasCurrentDomPreviewFrame &&
       (!shouldRenderInlineVideo || !shouldRevealCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup))) ||
-    shouldRenderCanonicalLoadingPosterCover;
+    shouldRenderCanonicalLoadingPosterCover ||
+    shouldRenderRetiringOwnerFrozenFramePosterSafetyNet;
   const previewVideoPoster =
     !shouldPreferRetiringOwnerPreviewSurface &&
     !hasFrozenTimelineFrame &&

@@ -115,5 +115,10 @@ export const 绘制时间线冻结帧到画布 = (
     return;
   }
   context.clearRect(0, 0, frame.width, frame.height);
-  context.drawImage(frame.bitmap, 0, 0, frame.width, frame.height);
+  try {
+    context.drawImage(frame.bitmap, 0, 0, frame.width, frame.height);
+  } catch {
+    // bitmap 可能已被 dispose（ImageBitmap.close）或 context lost；
+    // 此时 canvas 保持透明，底层 poster 安全网会兜住卡片视觉。
+  }
 };
