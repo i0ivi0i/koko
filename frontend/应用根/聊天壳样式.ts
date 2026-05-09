@@ -524,7 +524,8 @@ export const 聊天壳样式 = css`
       background: transparent;
       opacity: 0;
     }
-    .message-video-preview--has-frame {
+    .message-video-preview--has-frame,
+    .message-video-preview[data-canonical-player="true"] {
       opacity: 1;
     }
 

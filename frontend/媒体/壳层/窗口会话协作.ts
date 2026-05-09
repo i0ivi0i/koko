@@ -63,7 +63,7 @@ export function 创建窗口会话协作(
         deps.释放媒体附件会话(attachmentId, {
           丢弃未完成预览补齐: true,
           清理协作补齐: deps.读取附件条目(attachmentId) === null,
-          清理视频预览: true,
+          清理视频预览: false,
         })
       ) {
         hasSessionSetChanged = true;
