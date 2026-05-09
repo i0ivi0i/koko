@@ -78,6 +78,9 @@ const KokoVideoSkinTemplate = `
     :host([data-presentation="inline"]) media-buffering-indicator {
       display: none !important;
     }
+    :host([data-presentation="inline"]) ::slotted(video[slot="media"]) {
+      object-fit: cover;
+    }
     media-controls-group {
       display: flex;
       align-items: center;

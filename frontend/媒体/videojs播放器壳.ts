@@ -112,6 +112,14 @@ const 同步播放器挂载布局 = (
   const 使用沉浸挂载布局 = mountTarget?.dataset.mediaViewerImmersive === "true";
   const 使用应用内沉浸适配布局 =
     使用沉浸挂载布局 && mountTarget?.dataset.mediaViewerSystemFullscreen !== "true";
+  /**
+   * 时间线 inline 模式下，卡片尺寸已由拼贴几何算法裁定：
+   * 1. provider/container 必须铺满宿主卡片（width:100%; height:100%）；
+   * 2. 禁止用 aspect-ratio 把容器限死在视频原始比例，否则横屏视频在较高的拼贴卡片里
+   *    会缩成一条，露出 canonical-host 的黑色背景，并在 poster(cover) → canonical(contain) 切换时闪烁；
+   * 3. video 元素的 object-fit:cover（由 配置时间线自动播视频 设置）负责裁切超出部分。
+   */
+  const 使用时间线内联布局 = root.provider.dataset.presentation === "inline";
   const 沉浸盒尺寸 = 使用应用内沉浸适配布局
     ? 计算沉浸媒体盒尺寸(source, mountTarget)
     : null;
@@ -123,27 +131,31 @@ const 同步播放器挂载布局 = (
   /**
    * provider/container 的尺寸真相必须跟着当前宿主走：
    * 1. 同一颗 canonical player 会在时间线宿主和查看器宿主之间迁移；
-   * 2. 不能把“第一次挂载时的布局样式”偷偷残留到下一次宿主，否则时间线和沉浸层会互相污染；
+   * 2. 不能把"第一次挂载时的布局样式"偷偷残留到下一次宿主，否则时间线和沉浸层会互相污染；
    * 3. 因此每次迁移宿主后，都要按新宿主重新同步 provider/container 的唯一尺寸语义。
    *
    * 移动端应用内沉浸全屏不能再依赖浏览器原生 fullscreen 帮忙适配尺寸。
    * 这里按宿主盒和视频自然比例先算出唯一播放器盒，避免横屏视频被 `height:100%`
    * 反推出超宽容器，也避免竖屏视频为了铺满高度而横向溢出。
    */
-  root.provider.style.cssText = 使用沉浸挂载布局
-    ? 使用应用内沉浸适配布局
-      ? 沉浸播放器盒样式
-      : "display:block;width:100%;height:100%;max-width:100%;background:#000;"
-    : "display:block;width:100%;max-width:100%;background:#000;";
-  root.container.style.cssText = 使用沉浸挂载布局
-    ? 使用应用内沉浸适配布局
-      ? `${沉浸播放器盒样式}aspect-ratio:${读取纵横比(source)};`
-      : `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
-          source
-        )};`
-    : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
-        source
-      )};`;
+  root.provider.style.cssText = 使用时间线内联布局
+    ? "display:block;width:100%;height:100%;background:#000;"
+    : 使用沉浸挂载布局
+      ? 使用应用内沉浸适配布局
+        ? 沉浸播放器盒样式
+        : "display:block;width:100%;height:100%;max-width:100%;background:#000;"
+      : "display:block;width:100%;max-width:100%;background:#000;";
+  root.container.style.cssText = 使用时间线内联布局
+    ? "display:block;width:100%;height:100%;background:#000;"
+    : 使用沉浸挂载布局
+      ? 使用应用内沉浸适配布局
+        ? `${沉浸播放器盒样式}aspect-ratio:${读取纵横比(source)};`
+        : `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
+            source
+          )};`
+      : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
+            source
+          )};`;
 };
 
 const 看起来像Promise = (value: unknown): value is PromiseLike<unknown> =>

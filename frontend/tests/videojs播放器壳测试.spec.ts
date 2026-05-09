@@ -447,4 +447,47 @@ describe("Video.js 播放器壳", () => {
     expect(root.video.hasAttribute("src")).toBe(false);
     expect(load).toHaveBeenCalledTimes(1);
   });
+
+  it("时间线 inline 模式挂载时，provider/container 铺满卡片高度且不用 aspect-ratio 约束", async () => {
+    const mount = document.createElement("div");
+    mount.classList.add("message-video-canonical-host");
+    mount.style.cssText = "position:absolute;width:188px;height:300px;";
+    document.body.append(mount);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-inline-fill-1",
+        posterSrc: null,
+        width: 1920,
+        height: 1080,
+      },
+      {
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    /**
+     * 模拟全局唯一播放器切到 inline 模式的操作：
+     * 先在 provider/skin 上标记 data-presentation="inline"，再挂到时间线宿主。
+     * 这复现了 配置时间线自动播视频 → shell.挂载到宿主 的真实调用顺序。
+     */
+    const provider = document.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    const skin = provider?.querySelector<HTMLElement>("koko-video-skin");
+    provider?.setAttribute("data-presentation", "inline");
+    skin?.setAttribute("data-presentation", "inline");
+
+    shell.挂载到宿主(mount);
+
+    const container = shell.读取容器元素();
+
+    // provider 必须铺满宿主卡片高度
+    expect(provider?.style.height).toBe("100%");
+    // container 不能用 aspect-ratio 把自己限死在视频原始比例
+    expect(container.style.aspectRatio).toBe("");
+    // container 也必须铺满
+    expect(container.style.height).toBe("100%");
+
+    shell.destroy();
+  });
 });
