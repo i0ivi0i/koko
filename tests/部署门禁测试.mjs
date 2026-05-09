@@ -66,6 +66,7 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
         "FROM node:24-bookworm AS frontend-builder",
         "WORKDIR /app",
         "RUN corepack enable",
+        'RUN corepack prepare "pnpm@10.33.0" --activate',
         "RUN pnpm --dir frontend build",
         "",
         "FROM rust:1.92-bookworm AS builder",
@@ -488,7 +489,7 @@ test("runtime 门禁会拦住 Dockerfile 漏掉 frontend/index.html 运行时拷
   assert.match(result.output, /Dockerfile 缺少 frontend\/index\.html 运行时拷贝/);
 });
 
-test("runtime 门禁会拦住 tracker sidecar 只安装 prod 依赖", () => {
+test("runtime 门禁会拦住 Dockerfile 没有锁定 frontend pnpm 版本", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法运行主链夹具(fixtureDir, {
     Dockerfile: [
@@ -497,11 +498,49 @@ test("runtime 门禁会拦住 tracker sidecar 只安装 prod 依赖", () => {
       "RUN corepack enable",
       "COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/",
       "RUN pnpm --dir frontend install --frozen-lockfile",
+      "COPY scripts ./scripts",
+      "COPY frontend ./frontend",
+      "RUN cd frontend \\",
+      "    && node ../scripts/check-frontend-browser-app-constitution.mjs \\",
+      "    && node ../scripts/check-frontend-architecture-fitness.mjs \\",
+      "    && pnpm typecheck \\",
+      "    && node build.mjs",
+      "",
+      "FROM rust:1.92-bookworm AS builder",
+      "WORKDIR /app",
+      "COPY assets ./assets",
+      "RUN cargo build --release",
+      "",
+      "FROM debian:12-slim AS runtime",
+      "WORKDIR /app",
+      "COPY --from=builder /app/target/release/koko /app/koko",
+      "COPY --from=frontend-builder /app/frontend/index.html /app/frontend/index.html",
+      "COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /Dockerfile 缺少 frontend pnpm 版本锁定/);
+});
+
+test("runtime 门禁会拦住 tracker sidecar 只安装 prod 依赖", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法运行主链夹具(fixtureDir, {
+    Dockerfile: [
+      "FROM node:24-bookworm AS frontend-builder",
+      "WORKDIR /app",
+      "RUN corepack enable",
+      'RUN corepack prepare "pnpm@10.33.0" --activate',
+      "COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/",
+      "RUN pnpm --dir frontend install --frozen-lockfile",
       "RUN pnpm --dir frontend build",
       "",
       "FROM node:24-bookworm AS sidecar-builder",
       "WORKDIR /app",
       "RUN corepack enable",
+      'RUN corepack prepare "pnpm@10.33.0" --activate',
       "COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/",
       "RUN pnpm --dir frontend install --frozen-lockfile --prod",
       "",
@@ -543,6 +582,7 @@ test("runtime 门禁会放行显式 cd frontend 的拆分前端构建主链", ()
       "FROM node:24-bookworm AS frontend-builder",
       "WORKDIR /app",
       "RUN corepack enable",
+      'RUN corepack prepare "pnpm@10.33.0" --activate',
       "COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/",
       "RUN pnpm --dir frontend install --frozen-lockfile",
       "COPY scripts ./scripts",

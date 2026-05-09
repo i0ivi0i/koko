@@ -168,6 +168,15 @@ function 收集运行主链内容问题(rootDir) {
     if (!/^FROM\s+.+\s+AS\s+builder\b/im.test(source)) {
       issues.push("Dockerfile 必须包含多阶段 builder 阶段");
     }
+    const 使用前端Pnpm主链 =
+      /pnpm\s+--dir\s+frontend\s+install\s+--frozen-lockfile\b/.test(source) ||
+      /pnpm\s+--dir\s+frontend\s+build\b/.test(source) ||
+      /pnpm\s+typecheck\b/.test(source);
+    const 已锁定前端Pnpm版本 =
+      /corepack\s+(?:prepare|use)\s+["']?pnpm@.+?["']?(?:\s+--activate)?/s.test(source);
+    if (使用前端Pnpm主链 && !已锁定前端Pnpm版本) {
+      issues.push("Dockerfile 缺少 frontend pnpm 版本锁定");
+    }
     const 使用统一前端构建命令 = /pnpm\s+--dir\s+frontend\s+build\b/.test(source);
     const 使用拆分前端构建主链 =
       /(?:cd\s+frontend\s+&&\s+)?node\s+(?:\.\.\/)?scripts\/check-frontend-browser-app-constitution\.mjs\b/.test(source) &&

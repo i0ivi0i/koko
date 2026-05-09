@@ -8,7 +8,9 @@ WORKDIR /app
 RUN corepack enable
 
 COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/
-RUN pnpm --dir frontend install --frozen-lockfile
+RUN export PNPM_VERSION="$(node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('./frontend/package.json', 'utf8')); if (!pkg.packageManager || !pkg.packageManager.startsWith('pnpm@')) { throw new Error('frontend/package.json 缺少 pnpm packageManager'); } process.stdout.write(pkg.packageManager.slice('pnpm@'.length));")" \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    && pnpm --dir frontend install --frozen-lockfile
 
 COPY scripts ./scripts
 COPY frontend ./frontend
