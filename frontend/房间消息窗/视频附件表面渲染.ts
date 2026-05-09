@@ -33,6 +33,7 @@ export type 时间线视频表面渲染输入 = {
   shouldRevealCanonicalHost: boolean;
   shouldRenderStageHost: boolean;
   shouldRenderInlineVideo: boolean;
+  shouldGatePreviewVideo: boolean;
   shouldShowFirstFrameGuard: boolean;
   shouldShowTimelinePlayIndicator: boolean;
   renderMediaHint: unknown;
@@ -69,6 +70,7 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
     shouldRevealCanonicalHost,
     shouldRenderStageHost,
     shouldRenderInlineVideo,
+    shouldGatePreviewVideo,
     shouldShowFirstFrameGuard,
     shouldShowTimelinePlayIndicator,
     renderMediaHint,
@@ -78,7 +80,7 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
   const 时间线预览底板视频 = html`
     <video
       class=${`message-video-preview${
-        shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
+        shouldGatePreviewVideo ? " message-video-preview--gated" : ""
       }`}
       data-attachment-id=${attachment.attachmentId}
       data-preview-src=${normalizedPreviewVideoSrc ?? ""}

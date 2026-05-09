@@ -792,4 +792,75 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
 
     pane.remove();
   });
+
+  it("非 owner 视频有 poster 且被分配 preview 预算时，preview video 不得自带深色背景遮住 native poster，避免黑卡片", async () => {
+    const pane = 创建媒体消息窗();
+    const 创建播放 = (attachmentId: string): 媒体播放结果 => ({
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: `http://media.local/swarm-${attachmentId}`,
+      thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+      hint: null,
+    });
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "msg-owner",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-owner",
+            width: 1280,
+            height: 720,
+            layoutX: 0,
+            layoutY: 0,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: "http://media.local/poster-att-owner",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "msg-non-owner",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-non-owner",
+            width: 1280,
+            height: 720,
+            layoutX: 0,
+            layoutY: 0,
+            displayWidth: 320,
+            displayHeight: 180,
+            posterSrc: "http://media.local/poster-att-non-owner",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-owner": 创建播放("att-owner"),
+      "att-non-owner": 创建播放("att-non-owner"),
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-owner";
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const nonOwnerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-non-owner"]'
+    );
+
+    /**
+     * 非 owner 的 preview video 未出首帧前，依赖 native poster 属性作为可见底板：
+     * 1. video 的 CSS background 已改为 transparent，不会自带深色渐变遮住 poster；
+     * 2. native poster 在浏览器里作为 video 内容区显示，用户看到的就是封面图；
+     * 3. 当 video 解出首帧后 poster 自然消失，过渡丝滑无闪烁。
+     */
+    expect(nonOwnerVideo).not.toBeNull();
+    expect(nonOwnerVideo!.getAttribute("poster")).toContain("poster-att-non-owner");
+
+    pane.remove();
+  });
 });

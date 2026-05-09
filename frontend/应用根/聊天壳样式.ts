@@ -523,6 +523,16 @@ export const 聊天壳样式 = css`
     }
 
     /*
+     * preview video 在未出首帧前不能自带深色背景：
+     * - 有 poster 的视频依赖 <video poster="..."> 原生属性作为可见底板；
+     * - 如果 video 自带不透明背景，native poster 在部分浏览器里会被背景遮住；
+     * - 保持 transparent 让 native poster / 下层 <img> poster / 卡片渐变依次透出。
+     */
+    .message-video-preview {
+      background: transparent;
+    }
+
+    /*
      * 无 poster 的视频首帧尚未就绪时，先把 video 像素压到透明：
      * - 避免浏览器在 decoder 尚未产出首帧前短暂闪出黑底；
      * - 仍保留同一颗 video 节点持续预热，不重建节点。

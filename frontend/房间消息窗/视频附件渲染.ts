@@ -480,6 +480,7 @@ export const 渲染视频附件 = (
     shouldRevealCanonicalHost,
     shouldRenderStageHost,
     shouldRenderInlineVideo,
+    shouldGatePreviewVideo: shouldShowFirstFrameGuard,
     shouldShowFirstFrameGuard,
     shouldShowTimelinePlayIndicator,
     renderMediaHint: input.渲染媒体提示(attachment.attachmentId, playback),
