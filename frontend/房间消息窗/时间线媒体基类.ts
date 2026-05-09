@@ -760,12 +760,27 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
      * 因此这里显式补一次 `play()`，并在 owner 退场时显式 `pause()`，
      * 让自动播行为稳定且可预期，避免“看起来是自动播 owner 但画面不动”的回归。
      */
+    const previousAutoplayOwnerAttachmentId =
+      changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
+    if (
+      previousAutoplayOwnerAttachmentId &&
+      previousAutoplayOwnerAttachmentId !== this.inlineAutoplayOwnerAttachmentId
+    ) {
+      const canonicalVideo = this.时间线播放器宿主Owner.读取当前视频元素();
+      if (
+        canonicalVideo &&
+        canonicalVideo.readyState >= canonicalVideo.HAVE_CURRENT_DATA
+      ) {
+        this.时间线画面缓存Owner.捕获自动播冻结帧(
+          previousAutoplayOwnerAttachmentId,
+          canonicalVideo
+        );
+      }
+    }
     this.时间线播放器宿主Owner.同步(this.inlineAutoplayOwnerAttachmentId);
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       "video.message-video-preview[data-attachment-id]"
     );
-    const previousAutoplayOwnerAttachmentId =
-      changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
     for (const video of previewVideos) {
       if (video.dataset.canonicalPlayer === "true") {
         continue;

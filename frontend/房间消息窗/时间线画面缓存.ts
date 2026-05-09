@@ -295,7 +295,14 @@ export class 时间线画面缓存Owner {
       Math.abs(frame.currentTime - position.currentTime) >
       时间线自动播冻结帧允许时间偏差秒
     ) {
-      return null;
+      /**
+       * 位置偏差过大但同源 bitmap 仍有效时，冻结帧仍可做桥接面：
+       * 典型场景是 canonical 重挂载后 timeupdate 先报 currentTime≈0 污染了 position，
+       * 而冻结帧记录的是退场前最后真实帧，显示它比回退到 poster 首帧连续性更好。
+       * 只要帧还在实例 Map 里（source 已校验），不额外加 TTL——
+       * canonical reveal 后模板会自然移除 frozen surface。
+       */
+      return frame;
     }
     return frame;
   }

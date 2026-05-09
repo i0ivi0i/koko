@@ -170,7 +170,7 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
       ? html`
           <img
             class=${`message-video-poster${
-              shouldRenderInlineVideo && !shouldRevealCanonicalHost
+              shouldRenderInlineVideo && !shouldRevealCanonicalHost && !shouldRenderFrozenTimelineFrame
                 ? " message-video-poster--canonical-cover"
                 : ""
             }`}

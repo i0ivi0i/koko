@@ -96,6 +96,9 @@ export const 渲染视频附件 = (
   const runtimePreview = context.读取时间线视频运行时预览(attachment.attachmentId);
   const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
   const hasRuntimePreview = Boolean(runtimePreview);
+  const hasStablePreviewPosterSurface =
+    hasSourcePoster || hasRuntimePreview ||
+    Boolean(context.读取时间线视频已知封面源(attachment.attachmentId));
   /**
    * 可见槽位里的静态 bridge 必须优先吃“最新、最贴近真实画面”的投影：
    * 1. runtime preview 来自同一附件字节已经真实解出的帧，比上传后长期不变的 poster/still 更新鲜；
@@ -196,7 +199,7 @@ export const 渲染视频附件 = (
       ? "frozen_frame"
       : hasCurrentDomPreviewFrame
         ? "preview_frame"
-        : hasSourcePoster || hasRuntimePreview
+        : hasStablePreviewPosterSurface
           ? "placeholder"
           : "none";
   const hasCurrentCanonicalRevealReady =
@@ -319,7 +322,6 @@ export const 渲染视频附件 = (
       hasExistingSameSourcePreviewFrame || hasFrozenTimelineFrame || hasKnownReadyPreviewFrame)) ||
     shouldForceOwnerBridgePreview ||
     shouldRenderReleasedOwnerPreviewVideo;
-  const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
   /**
    * 冷路径首轮曝光时，如果协议已经裁决“当前可见槽位应该继续是 placeholder”，
    * 就绝不能先长一颗尚未 committed 的 preview `<video>`：
@@ -421,7 +423,7 @@ export const 渲染视频附件 = (
     !shouldPreferRetiringOwnerPreviewSurface &&
     !hasFrozenTimelineFrame &&
     !hasCurrentDomPreviewFrame &&
-    (hasSourcePoster || hasRuntimePreview)
+    hasStablePreviewPosterSurface
       ? previewPosterSrc
       : undefined;
   return 渲染时间线视频表面卡片({
