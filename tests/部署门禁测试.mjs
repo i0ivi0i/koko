@@ -148,7 +148,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'version="${1:?missing version}"',
         'archive_path="${2:-koko-${version}.tar.gz}"',
         'git archive --format=tar.gz --output "${archive_path}" HEAD \\',
-        "  Dockerfile .dockerignore Cargo.toml Cargo.lock build.rs src migrations assets frontend scripts ops -- \\",
+        "  Dockerfile .dockerignore Cargo.toml Cargo.lock build.rs src koko-torrent-core migrations assets frontend scripts ops -- \\",
         "  ':(exclude)frontend/tests/**' \\",
         "  ':(exclude)frontend/vitest.config.ts'",
         "",
