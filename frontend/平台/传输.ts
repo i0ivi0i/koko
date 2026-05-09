@@ -28,6 +28,7 @@ import type {
 import { 创建房间HTTP接口 } from "../聊天恢复/适配/房间HTTP接口.js";
 import { 媒体HTTP接口 } from "../媒体/适配/媒体HTTP接口.js";
 import { 后台HTTP接口 } from "../后台/适配/后台HTTP接口.js";
+import { 创建PoW门禁 } from "../连接门禁/pow门禁.js";
 
 type 接口错误响应 = {
   code?: string;
@@ -282,7 +283,8 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
     adminLogin: (username, password) => 后台传输.adminLogin(username, password),
     adminRooms: (token) => 后台传输.adminRooms(token),
     adminRoomDetail: (token, roomId) => 后台传输.adminRoomDetail(token, roomId),
-    createSocket: (sessionId: string): Socket => 实时连接.createSocket(sessionId),
+    createSocket: (sessionId: string, powToken?: string): Socket =>
+      实时连接.createSocket(sessionId, powToken),
     接收运行时策略: (policy) => {
       实时连接.接收运行时策略(policy);
     },
@@ -290,5 +292,29 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
     释放Socket: (socket) => {
       实时连接.释放Socket(socket);
     },
+    // PoW 门禁：服务端防御启用时，获取 challenge 并解题的 /api/pow/challenge 404 说明服务端没启用防御。
+    // 本地开发无 KOKO_POW_SECRET 时服务端不注册 PoW 路由，前端正常走无 token 连接路径。
+    获取PowToken: (() => {
+      const pow = 创建PoW门禁(baseUrl);
+      // 先探测服务端是否启用了 PoW 防御，404 则跳过。
+      let 服务端已启用: boolean | null = null;
+      return async (): Promise<string> => {
+        if (服务端已启用 === false) {
+          return "";
+        }
+        try {
+          const token = await pow.获取token();
+          服务端已启用 = true;
+          return token;
+        } catch (err) {
+          // challenge 请求 404 说明服务端没启用防御（开发模式），跳过。
+          if (服务端已启用 === null) {
+            服务端已启用 = false;
+            return "";
+          }
+          throw err;
+        }
+      };
+    })(),
   };
 }

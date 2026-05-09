@@ -29,6 +29,8 @@ services:
       SWARM_TRACKER_UPSTREAM_URL: "ws://tracker:7072"
       SWARM_SEEDER_CONTROL_BASE_URL: "http://seeder:7073"
       SWARM_SEEDER_TRACKER_URL: "ws://app:8080/api/swarm/announce"
+      # PoW 防御：production.env 必须设 KOKO_POW_SECRET（≥32 字节随机字符串）
+      # 和 KOKO_TRUSTED_PROXY=true（Caddy 反代场景），否则防御自动禁用。
     volumes:
       - /opt/koko/shared/attachments:/app/data/attachments
       - /opt/koko/shared/tus:/app/data/tus

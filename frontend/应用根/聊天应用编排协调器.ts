@@ -50,8 +50,8 @@ export class 聊天应用编排协调器 {
     await this.读取实时编排().sendMessage();
   }
 
-  ensureRealtimeSocket(sessionId: string): void {
-    this.读取实时编排().ensureRealtimeSocket(sessionId);
+  async ensureRealtimeSocket(sessionId: string): Promise<void> {
+    await this.读取实时编排().ensureRealtimeSocket(sessionId);
   }
 
   subscribeRoom(from: number): void {
@@ -123,7 +123,7 @@ export class 聊天应用编排协调器 {
       nextContext.roomId &&
       nextContext.sessionId
     ) {
-      this.ensureRealtimeSocket(nextContext.sessionId);
+      await this.ensureRealtimeSocket(nextContext.sessionId);
       this.subscribeRoom(nextContext.latestEventPosition);
     }
 

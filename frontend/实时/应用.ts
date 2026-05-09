@@ -53,7 +53,7 @@ export interface 实时应用依赖 {
 }
 
 export interface 实时应用端口 {
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   disconnect(): void;
   subscribeRoom(from: number): void;
   sendMessage(): Promise<void>;
@@ -89,11 +89,25 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
     }
   }
 
-  function ensureRealtimeSocket(sessionId: string): void {
+  async function ensureRealtimeSocket(sessionId: string): Promise<void> {
     if (realtimeSocket) {
       return;
     }
-    const socket = deps.transport.createSocket(sessionId);
+    // PoW 门禁：防御启用时先获取 token，再建连。
+    // 正常用户首次 ~20-100ms（Worker 解题），后续复用缓存 token 零开销。
+    let powToken: string | undefined;
+    if (deps.transport.获取PowToken) {
+      try {
+        powToken = await deps.transport.获取PowToken();
+      } catch (err) {
+        deps.接收实时会话事实({
+          type: "SOCKET_DISCONNECTED",
+          code: "pow_failed",
+        });
+        return;
+      }
+    }
+    const socket = deps.transport.createSocket(sessionId, powToken);
     socket.on("connect", () => {
       const state = deps.读取实时状态();
       if (state.roomId) {

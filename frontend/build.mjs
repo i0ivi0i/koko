@@ -15,6 +15,10 @@ const sourceHashWorkerOutputFiles = [
   path.join(distDir, 'source-hash-worker.js'),
   path.join(distDir, 'source-hash-worker.js.map'),
 ]
+const powWorkerOutputFiles = [
+  path.join(distDir, 'pow-solver.worker.js'),
+  path.join(distDir, 'pow-solver.worker.js.map'),
+]
 const appShellHtmlPath = path.join(distDir, 'app-shell.html')
 const appShellServiceWorkerOutputFiles = [
   path.join(distDir, 'app-sw.js'),
@@ -93,6 +97,7 @@ function 生成静态资源清单插件() {
           appShellHtmlPath,
           ...mediaServiceWorkerOutputFiles,
           ...sourceHashWorkerOutputFiles,
+          ...powWorkerOutputFiles,
           ...appShellServiceWorkerOutputFiles,
           ...appShellServiceWorkerRawOutputFiles,
         ]))
@@ -233,6 +238,17 @@ const sourceHashWorkerBuildOptions = {
   sourcemap: true,
 }
 
+const powWorkerBuildOptions = {
+  entryPoints: ['连接门禁/pow解题器.worker.ts'],
+  bundle: true,
+  outfile: 'dist/pow-solver.worker.js',
+  format: 'esm',
+  platform: 'browser',
+  target: 浏览器构建目标,
+  supported: 浏览器构建能力覆盖,
+  sourcemap: true,
+}
+
 const appShellServiceWorkerBuildOptions = {
   entryPoints: ['app-sw.ts'],
   bundle: true,
@@ -250,20 +266,24 @@ if (watchMode) {
   await esbuild.build(appBuildOptions)
   await esbuild.build(mediaServiceWorkerBuildOptions)
   await esbuild.build(sourceHashWorkerBuildOptions)
+  await esbuild.build(powWorkerBuildOptions)
   await esbuild.build(appShellServiceWorkerBuildOptions)
   const appContext = await esbuild.context(appBuildOptions)
   const mediaSwContext = await esbuild.context(mediaServiceWorkerBuildOptions)
   const sourceHashWorkerContext = await esbuild.context(sourceHashWorkerBuildOptions)
+  const powWorkerContext = await esbuild.context(powWorkerBuildOptions)
   const appShellSwContext = await esbuild.context(appShellServiceWorkerBuildOptions)
   await appContext.watch()
   await mediaSwContext.watch()
   await sourceHashWorkerContext.watch()
+  await powWorkerContext.watch()
   await appShellSwContext.watch()
   console.log('[koko-build] watch mode started')
 } else {
   await esbuild.build(appBuildOptions)
   await esbuild.build(mediaServiceWorkerBuildOptions)
   await esbuild.build(sourceHashWorkerBuildOptions)
+  await esbuild.build(powWorkerBuildOptions)
   await esbuild.build(appShellServiceWorkerBuildOptions)
   console.log('[koko-build] build completed')
 }

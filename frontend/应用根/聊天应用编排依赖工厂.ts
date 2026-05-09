@@ -24,7 +24,7 @@ export interface 聊天应用编排依赖工厂输入 {
     send(event: 房间内核事件): void;
   };
   roomScroller: 房间滚动器;
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   subscribeRoom(from: number): void;
   取消待刷新已读锚点(): void;
   取消待跟随最新采样(): void;

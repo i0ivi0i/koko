@@ -17,7 +17,7 @@ export interface 会话失效恢复协作依赖 {
     identity: 匿名身份引导结果
   ): void;
   广播会话已刷新(identity: 匿名身份引导结果): void;
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   从房间快照恢复(roomId: string): Promise<void>;
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;
   读取恢复失败代码(error: unknown): string | undefined;
@@ -45,7 +45,7 @@ export function 创建会话失效恢复协作(
     deps.disconnectRealtime();
     deps.应用引导身份(deviceAnonymousToken, identity);
     deps.广播会话已刷新(identity);
-    deps.ensureRealtimeSocket(identity.session_id);
+    await deps.ensureRealtimeSocket(identity.session_id);
     return identity.session_id;
   }
 

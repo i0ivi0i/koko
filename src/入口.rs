@@ -134,7 +134,12 @@ where
             }
         }
     });
-    let serve_result = axum::serve(listener, app)
+    // into_make_service_with_connect_info 让每个请求携带 SocketAddr，
+    // 供 tower-governor 的 PeerIpKeyExtractor 提取客户端 IP 做限流。
+    let serve_result = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
         .with_graceful_shutdown(async move {
             shutdown_signal.await;
             tracing::info!(

@@ -780,6 +780,51 @@ fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> 
     }
 }
 
+// ─── PoW 防御配置 ───
+
+/// PoW 防御配置只描述"门禁如何读取密钥和信任代理"。
+/// 自适应难度参数是运行态值对象，归 adapter 层（连接门禁）own，不混在这里。
+#[derive(Debug, Clone)]
+pub struct PoW配置 {
+    /// HMAC-SHA256 签名密钥，至少 32 字节。
+    pub secret: Vec<u8>,
+    /// 是否信任反代的 X-Forwarded-For（Caddy 部署场景为 true）。
+    pub trusted_proxy: bool,
+}
+
+/// 从环境变量读取 PoW 防御配置（生产入口）。
+#[allow(non_snake_case)]
+pub fn 读取PoW配置() -> io::Result<PoW配置> {
+    读取PoW配置_with(|key| env::var(key).ok())
+}
+
+/// 可注入读取函数的 PoW 配置构建器，方便测试时不污染进程级环境变量。
+#[allow(non_snake_case)]
+pub fn 读取PoW配置_with<F>(mut read: F) -> io::Result<PoW配置>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let secret_str = read("KOKO_POW_SECRET").ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "缺少 KOKO_POW_SECRET 环境变量（至少 32 字节随机字符串，用于 HMAC 签名）",
+        )
+    })?;
+    if secret_str.len() < 32 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "KOKO_POW_SECRET 至少需要 32 字节",
+        ));
+    }
+    let trusted_proxy = read("KOKO_TRUSTED_PROXY")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    Ok(PoW配置 {
+        secret: secret_str.into_bytes(),
+        trusted_proxy,
+    })
+}
+
 #[cfg(test)]
 #[path = "组合根/配置测试.rs"]
 mod tests;

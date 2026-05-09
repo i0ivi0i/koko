@@ -1173,6 +1173,8 @@ try {
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_UPSTREAM_URL", $trackerUpstreamUrl)
     [Environment]::SetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL", $seederTrackerUrl)
     [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
+    # PoW 防御密钥：开发态不设置则防御功能自动禁用，前端走无 token 连接路径。
+    # 若想在本地测试防御，手动设 KOKO_POW_SECRET 环境变量（≥32 字节随机字符串）即可。
     $script:LauncherServiceSweepContext = [pscustomobject]@{
         Ports            = @([int]$appPort, [int]$trackerPort, [int]$seederPort, [int]$tusdPort)
         BackendTargetDir = $backendTargetDir

@@ -29,7 +29,7 @@ describe("传输 / 组合根与边界", () => {
 
     expect(source).toContain('from "../聊天实时/适配/实时连接适配.js"');
     expect(source).toContain("const 实时连接 = new 实时连接适配(baseUrl);");
-    expect(source).toContain("createSocket: (sessionId: string): Socket => 实时连接.createSocket(sessionId),");
+    expect(source).toContain("实时连接.createSocket(sessionId, powToken)");
     expect(source).toContain("实时连接.接收运行时策略(policy);");
     expect(source).toContain("读取运行时策略: () => 实时连接.读取运行时策略(),");
     expect(source).toContain("实时连接.释放Socket(socket);");
@@ -92,7 +92,7 @@ describe("传输 / 组合根与边界", () => {
     const adminQuerySource = readFileSync(resolve(process.cwd(), "后台/查询编排.ts"), "utf8");
     const adminSessionSource = readFileSync(resolve(process.cwd(), "后台/会话编排.ts"), "utf8");
 
-    expect(realtimeSource).toContain("deps.transport.createSocket(sessionId)");
+    expect(realtimeSource).toContain("deps.transport.createSocket(sessionId, powToken)");
     expect(realtimeSource).toContain("deps.transport.释放Socket?.(realtimeSocket);");
     expect(realtimeSource).not.toContain("deps.transport.loadRoomSnapshot");
     expect(realtimeSource).not.toContain("deps.transport.adminLogin");

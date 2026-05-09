@@ -22,7 +22,7 @@ export class 实时连接适配 {
 
   constructor(private readonly baseUrl: string) {}
 
-  createSocket(sessionId: string): Socket {
+  createSocket(sessionId: string, powToken?: string): Socket {
     // 这里只显式启用当前主链可安全承受的 Socket.IO 选项。
     // `retries / ackTimeout` 仍不能开，因为服务端还没有成功 ack 协议；
     // 可靠性继续由 snapshot + 增量补洞主链保证，而不是让客户端私自重放命令。
@@ -30,7 +30,7 @@ export class 实时连接适配 {
       transports: ["websocket"],
       reconnection: this.当前运行时策略.reconnection,
       autoConnect: this.当前运行时策略.intent !== "suspend",
-      auth: { session_id: sessionId },
+      auth: { session_id: sessionId, pow_token: powToken },
     });
     this.活跃Socket表.set(socket, { 由运行时挂起: false });
     return socket;

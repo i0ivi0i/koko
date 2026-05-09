@@ -60,7 +60,7 @@ export interface 房间快照恢复协作依赖 {
   cancelPendingFollowLatestReadSample(): void;
   exitCurrentRoomView(opts: { keepRoomCodeCache: boolean }): void;
   写入恢复补锚标记(value: boolean): void;
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   subscribeRoom(from: number): void;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
   loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
@@ -301,7 +301,7 @@ export function 创建恢复应用(deps: 恢复应用依赖): 恢复应用端口
     }
     try {
       deps.roomScroller.取消挂起滚动副作用();
-      deps.ensureRealtimeSocket(state.sessionId);
+      await deps.ensureRealtimeSocket(state.sessionId);
       const snapshot = await deps.withSessionRefreshOnInvalid((sessionId) =>
         deps.loadRoomSnapshot(roomId, sessionId)
       );

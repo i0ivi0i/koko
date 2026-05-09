@@ -5,6 +5,7 @@ use axum::{
     routing::{any, get, post},
     Router,
 };
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use object_store::{
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
@@ -28,6 +29,8 @@ use std::{
 mod tus_hook外壳;
 #[path = "前端静态入口.rs"]
 mod 前端静态入口;
+#[path = "连接门禁.rs"]
+pub mod 连接门禁;
 #[path = "协作分发做种.rs"]
 pub mod 协作分发做种;
 #[path = "协议响应.rs"]
@@ -116,6 +119,9 @@ pub struct 应用状态 {
     pub tus_internal_termination_token: Option<String>,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
+    /// DDoS/CC 防御状态（PoW 引擎 + IP 追踪 + 访客计数）。
+    /// None = 配置缺失时防御功能禁用（开发模式兑容）。
+    pub defense: Option<连接门禁::防御状态>,
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -180,6 +186,33 @@ pub async fn 构建应用状态(
         tus_internal_termination_token: tus.internal_termination_token,
         media_complete_max_concurrency,
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
+        defense: match crate::assembly::读取PoW配置() {
+            Ok(pow_config) => {
+                tracing::info!(
+                    application = "服务启动",
+                    adapter = "pow",
+                    outcome = "succeeded",
+                    trusted_proxy = pow_config.trusted_proxy,
+                    "PoW 防御已启用"
+                );
+                Some(连接门禁::防御状态 {
+                    engine: Arc::new(连接门禁::PoW引擎::new(&pow_config.secret, 2)),
+                    访客: Arc::new(连接门禁::访客计数器::new()),
+                    ip追踪: Arc::new(连接门禁::Ip追踪器::new()),
+                    trusted_proxy: pow_config.trusted_proxy,
+                })
+            }
+            Err(err) => {
+                tracing::warn!(
+                    application = "服务启动",
+                    adapter = "pow",
+                    outcome = "degraded",
+                    error = %err,
+                    "PoW 配置读取失败，防御功能已禁用"
+                );
+                None
+            }
+        },
     })
 }
 
@@ -264,7 +297,19 @@ pub fn 构建路由(state: 应用状态) -> Router {
         媒体_tus代理外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
     let tus_resource_proxy_path = format!("{normalized_tus_base_path}/{{*tus_upload_tail}}");
 
-    Router::new()
+    // PoW 防御路由：独立 state 避免 handler 签名被主路由 state 类型污染。
+    // defense 为 None 时这两个路由不注册，前端走无 PoW 连接路径。
+    let pow_routes = if let Some(ref defense) = state.defense {
+        Router::new()
+            .route("/api/pow/challenge", get(连接门禁::handle_pow_challenge))
+            .route("/api/pow/verify", post(连接门禁::handle_pow_verify))
+            .with_state(defense.clone())
+    } else {
+        Router::new()
+    };
+
+    let mut app = pow_routes
+        .merge(Router::new()
         .route(
             normalized_tus_base_path.as_str(),
             any(媒体_tus代理外壳::proxy_tus_upload_transport),
@@ -349,7 +394,25 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .merge(前端静态入口::构建前端静态资源路由())
         .layer(DefaultBodyLimit::max(媒体上传HTTP请求体上限字节数))
         .layer(socket_layer)
-        .with_state(state)
+        .with_state(state.clone()));
+
+    // IP 级 HTTP 限流：仅在防御启用时（有 KOKO_POW_SECRET）才加 governor layer。
+    // 开发态不设 secret 时跳过，避免 oneshot 测试缺少 ConnectInfo 导致 500。
+    if state.defense.is_some() {
+        let governor_conf = GovernorConfigBuilder::default()
+            .per_second(10)
+            .burst_size(30)
+            .finish()
+            .unwrap();
+        let governor_limiter = governor_conf.limiter().clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            governor_limiter.retain_recent();
+        });
+        app = app.layer(GovernorLayer::new(governor_conf));
+    }
+
+    app
 }
 
 /// 注册单节点 realtime 命名空间。

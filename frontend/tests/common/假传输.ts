@@ -386,7 +386,7 @@ export class 假传输 implements 前端传输端口 {
     return { room_id: "r-test", latest_event_position: 1, message_count: 1 };
   }
 
-  createSocket(sessionId: string): Socket {
+  createSocket(sessionId: string, _powToken?: string): Socket {
     this.socketSessionIds.push(sessionId);
     return this.socket as unknown as Socket;
   }

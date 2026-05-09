@@ -61,7 +61,7 @@ export interface 房间恢复编排依赖 {
   storage: 前端存储端口;
   roomKernel: 房间内核端口;
   roomScroller: 房间滚动器端口;
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   subscribeRoom(from: number): void;
   cancelPendingReadAnchorFlush(): void;
   cancelPendingFollowLatestReadSample(): void;
@@ -237,7 +237,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
         displayAlias: identity.display_alias,
         roomId,
       });
-      deps.ensureRealtimeSocket(identity.session_id);
+      await deps.ensureRealtimeSocket(identity.session_id);
       await restoreCurrentRoomIfNeeded();
     } catch (error) {
       const cachedIdentity = deps.storage.读取最近引导身份();
@@ -252,7 +252,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
           displayAlias: cachedIdentity.displayAlias,
           roomId,
         });
-        deps.ensureRealtimeSocket(cachedIdentity.sessionId);
+        await deps.ensureRealtimeSocket(cachedIdentity.sessionId);
         await restoreCurrentRoomIfNeeded();
       } else {
         deps.roomKernel.send({
@@ -278,7 +278,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     }
     try {
       deps.roomKernel.send({ type: "JOIN_REQUESTED" });
-      deps.ensureRealtimeSocket(读取恢复状态().sessionId);
+      await deps.ensureRealtimeSocket(读取恢复状态().sessionId);
       const snapshot = await withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.joinOrCreateRoom(sessionId, roomCode)
       );
@@ -304,7 +304,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       return;
     }
     try {
-      deps.ensureRealtimeSocket(读取恢复状态().sessionId);
+      await deps.ensureRealtimeSocket(读取恢复状态().sessionId);
       const snapshot = await withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.loadRoomSnapshot(roomId, sessionId)
       );

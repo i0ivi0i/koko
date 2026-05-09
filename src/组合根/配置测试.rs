@@ -272,3 +272,44 @@ fn 做种对账间隔不能大于等于join_ticket_ttl() {
     恢复环境变量("SWARM_TICKET_TTL_SECONDS", old_ticket_ttl);
     恢复环境变量("SWARM_SEED_RECONCILE_INTERVAL_SECONDS", old_seed_reconcile);
 }
+
+// ─── PoW 防御配置测试 ───
+
+#[test]
+fn pow密钥缺失时应返回错误() {
+    let result = 读取PoW配置_with(|_| None);
+    assert!(result.is_err(), "缺少 KOKO_POW_SECRET 应报错");
+    let msg = result.unwrap_err().to_string();
+    assert!(msg.contains("KOKO_POW_SECRET"), "错误信息应提示缺少的变量名");
+}
+
+#[test]
+fn pow密钥过短时应返回错误() {
+    let result = 读取PoW配置_with(|key| match key {
+        "KOKO_POW_SECRET" => Some("too-short".to_string()),
+        _ => None,
+    });
+    assert!(result.is_err(), "不足 32 字节的密钥应报错");
+}
+
+#[test]
+fn pow配置正常读取() {
+    let config = 读取PoW配置_with(|key| match key {
+        "KOKO_POW_SECRET" => Some("a]b9#kL2$mN4&pQ6^rS8*tU0!wX1@zY3".to_string()),
+        "KOKO_TRUSTED_PROXY" => Some("true".to_string()),
+        _ => None,
+    })
+    .expect("合法配置应可构建");
+    assert!(config.trusted_proxy, "trusted_proxy 为 true 时应解析为 true");
+    assert_eq!(config.secret.len(), 32, "密钥长度应为 32 字节");
+}
+
+#[test]
+fn pow配置默认不信任代理() {
+    let config = 读取PoW配置_with(|key| match key {
+        "KOKO_POW_SECRET" => Some("a]b9#kL2$mN4&pQ6^rS8*tU0!wX1@zY3".to_string()),
+        _ => None,
+    })
+    .expect("不设 KOKO_TRUSTED_PROXY 应可构建");
+    assert!(!config.trusted_proxy, "默认应不信任代理");
+}

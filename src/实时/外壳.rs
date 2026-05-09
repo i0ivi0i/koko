@@ -15,6 +15,9 @@ use socketioxide::{
 pub(crate) struct RealtimeConnectAuth {
     /// 当前连接声明的会话标识。
     session_id: String,
+    /// PoW 门禁令牌（由 /api/pow/verify 签发）。
+    /// 防御禁用时为 None，允许无 token 连接。
+    pow_token: Option<String>,
 }
 
 /// 存放在 socket extension 内的已认证会话。
@@ -448,16 +451,17 @@ pub(crate) fn 记录realtime断开(socket: SocketRef, reason: DisconnectReason) 
     }
 }
 
-/// connect middleware：把会话认证收口到连接握手。
+/// connect middleware：把会话认证 + PoW 门禁收口到连接握手。
 ///
-/// 这里继续只确认会话存在并写入 socket extension，不裁决房间权限。
+/// 验证顺序：PoW token（微秒级 HMAC）→ IP 连接计数 → 会话 DB 校验。
+/// 攻击流量在前两层就被拦截，永远不会撞到 DB。
 pub(crate) async fn 认证realtime连接(
     socket: SocketRef,
     auth: Result<RealtimeConnectAuth, socketioxide::ParserError>,
     state: 应用状态,
 ) -> Result<(), String> {
-    let session_id = match auth {
-        Ok(auth) => auth.session_id,
+    let auth = match auth {
+        Ok(auth) => auth,
         Err(_) => {
             tracing::info!(
                 application = "实时连接认证",
@@ -469,6 +473,39 @@ pub(crate) async fn 认证realtime连接(
             return Err("invalid_session".to_string());
         }
     };
+    let session_id = auth.session_id;
+
+    // ─── 第一层：PoW 门禁（微秒级 HMAC 验签，零 DB 开销）───
+    if let Some(ref defense) = state.defense {
+        match auth.pow_token.as_deref() {
+            Some(token) if defense.engine.验证token(token) => {
+                // token 合法，放行
+            }
+            Some(_) => {
+                tracing::info!(
+                    application = "实时连接认证",
+                    adapter = "pow",
+                    outcome = "rejected",
+                    session_id = session_id,
+                    error_code = "pow_invalid",
+                    "PoW token 无效或已过期"
+                );
+                return Err("pow_invalid".to_string());
+            }
+            None => {
+                tracing::info!(
+                    application = "实时连接认证",
+                    adapter = "pow",
+                    outcome = "rejected",
+                    session_id = session_id,
+                    error_code = "pow_required",
+                    "PoW token 缺失"
+                );
+                return Err("pow_required".to_string());
+            }
+        }
+    }
+
     tracing::info!(
         application = "实时连接认证",
         adapter = "socketioxide",

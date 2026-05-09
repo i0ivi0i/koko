@@ -58,6 +58,14 @@ futures-util = "0.3"
 # 标准 HTTP 缓存验证器需要稳定的 IMF-fixdate 解析/格式化；
 # 这里直接复用成熟小轮子，避免自己手搓 Last-Modified / If-Modified-Since 细节。
 httpdate = "1"
+# IP 级限流直接站在成熟令牌桶算法肩膀上，不手搓第二套速率控制器。
+governor = "0.8"
+# governor 的 axum tower layer 适配，零胶水代码即可接入 HTTP 路由。
+tower_governor = "0.8"
+# PoW challenge 和 token 的 HMAC 签名/验签，与 sha2 同属 RustCrypto 生态。
+hmac = "0.12"
+# 并发安全的 IP → 状态映射表，用于连接计数和自动冷却追踪。
+dashmap = "6"
 
 [dev-dependencies]
 serial_test = "3"

@@ -39,7 +39,7 @@ export interface 内核恢复编排桥接依赖 {
   roomScroller: 房间恢复编排依赖["roomScroller"];
   取消待刷新已读锚点(): void;
   取消待跟随最新采样(): void;
-  ensureRealtimeSocket(sessionId: string): void;
+  ensureRealtimeSocket(sessionId: string): void | Promise<void>;
   subscribeRoom(from: number): void;
   exitCurrentRoomView(opts?: { keepRoomCodeCache: boolean }): void;
   disconnectRealtime(): void;
