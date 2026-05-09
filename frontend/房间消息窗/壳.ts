@@ -379,6 +379,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
           this.mediaPreviewByAttachmentId[attachmentId] ?? null,
         读取时间线视频运行时预览: (attachmentId) =>
           this.读取时间线视频运行时预览(attachmentId),
+        读取时间线视频已知封面源: (attachmentId) =>
+          this.读取时间线视频已知封面源(attachmentId),
         读取时间线视频封面地址: (attachment, playback) =>
           this.读取时间线视频封面地址(attachment, playback),
         读取时间线视频首帧预览源: (attachment, playback, input) =>

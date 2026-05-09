@@ -39,6 +39,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
   protected readonly 媒体窗口观察Owner: 媒体窗口观察Owner;
   protected readonly 时间线播放器宿主Owner: 时间线播放器宿主Owner;
   protected readonly 时间线画面缓存Owner: 时间线画面缓存Owner;
+  private readonly 视频封面持久缓存 = new Map<string, string>();
   protected readonly 失效视频封面地址 = new Map<string, string>();
   protected readonly 自动播位置上报记录 = new Map<
     string,
@@ -860,7 +861,14 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
     attachmentId: string
   ): Extract<视频预览状态, { phase: "ready" }> | null {
     const preview = this.mediaPreviewByAttachmentId[attachmentId] ?? null;
+    if (preview?.phase === "ready") {
+      this.视频封面持久缓存.set(attachmentId, preview.src);
+    }
     return preview?.phase === "ready" ? preview : null;
+  }
+
+  protected 读取时间线视频已知封面源(attachmentId: string): string | null {
+    return this.视频封面持久缓存.get(attachmentId) ?? null;
   }
 
   protected 读取时间线视频预算投影(
@@ -974,6 +982,7 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
           posterSrc:
             playback?.thumbnailUrl ??
             this.读取时间线视频运行时预览(attachment.attachmentId)?.src ??
+            this.读取时间线视频已知封面源(attachment.attachmentId) ??
             attachment.posterSrc ??
             null,
           ...(viewerResumePosition ? { resumePosition: viewerResumePosition } : {}),

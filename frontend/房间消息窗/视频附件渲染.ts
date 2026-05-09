@@ -20,6 +20,7 @@ export type 视频附件渲染宿主 = {
   时间线隐藏接管附件Id: string | null;
   读取时间线视频预览状态(attachmentId: string): 视频预览状态 | null;
   读取时间线视频运行时预览(attachmentId: string): Extract<视频预览状态, { phase: "ready" }> | null;
+  读取时间线视频已知封面源(attachmentId: string): string | null;
   读取时间线视频封面地址(attachment: 时间线视频附件, playback: 媒体播放结果 | null): string;
   读取时间线视频首帧预览源(
     attachment: 时间线视频附件,
@@ -106,7 +107,9 @@ export const 渲染视频附件 = (
    * - 真正的 live owner 仍然只有同一颗 canonical Video.js player。
    */
   const previewPosterSrc =
-    runtimePreview?.src ?? context.读取时间线视频封面地址(attachment, playback);
+    runtimePreview?.src ??
+    context.读取时间线视频已知封面源(attachment.attachmentId) ??
+    context.读取时间线视频封面地址(attachment, playback);
   const playbackTimelineVideoSrc = context.读取时间线视频首帧预览源(
     attachment,
     playback,
