@@ -375,9 +375,10 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(preview).not.toBeNull();
+    /* poster 有封面就永远渲染（z:0），video (z:1) 自然遮住 */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
     expect(preview?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
     expect(preview?.autoplay).toBe(false);
 
@@ -389,9 +390,10 @@ describe("房间消息窗媒体查看器 / 双视频交接与位置桥", () => {
     });
     preview!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
+    /* 出帧后 poster 仍在 DOM — z:1 video 遮住 z:0 poster */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });

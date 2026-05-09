@@ -193,7 +193,8 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     expect(videoCard).not.toBeNull();
     expect(preservedPreview).toBe(existingPreview);
     expect(preservedPreview?.currentTime).toBeCloseTo(6.25, 2);
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    /* poster 有封面就永远渲染（z:0），已出帧 video (z:1) 自然遮住 */
+    expect(videoCard?.querySelector(".message-video-poster")).not.toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
@@ -322,7 +323,8 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     );
     restoredPreview?.dispatchEvent(new Event("loadedmetadata"));
     expect(restoredPreview?.currentTime).toBeCloseTo(19.5, 2);
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    /* poster 有封面就永远渲染（z:0），不再被意图压制 */
+    expect(videoCard?.querySelector(".message-video-poster")).not.toBeNull();
     expect(restoredPreview?.getAttribute("poster")).toBe(`http://media.local/poster-${targetId}`);
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
     Object.defineProperty(restoredPreview!, "readyState", {
@@ -331,7 +333,8 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     });
     restoredPreview!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    /* 出帧后 poster 仍在 DOM — z:1 video 遮住 z:0 poster */
+    expect(videoCard?.querySelector(".message-video-poster")).not.toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
@@ -431,7 +434,7 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     });
     restoredPreview!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    expect(videoCard?.querySelector(".message-video-poster")).not.toBeNull();
     expect(videoCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     pane.remove();
@@ -629,7 +632,8 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     });
     remountedPreview!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
-    expect(videoCard?.querySelector(".message-video-poster")).toBeNull();
+    /* 出帧后 poster 仍在 DOM — z:1 video 遮住 z:0 poster */
+    expect(videoCard?.querySelector(".message-video-poster")).not.toBeNull();
     expect(remountedPreview?.getAttribute("poster")).toBeNull();
 
     pane.remove();

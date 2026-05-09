@@ -212,9 +212,10 @@ describe("房间消息窗媒体查看器 - 无海报视频预览源", () => {
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
+    /* poster (runtime preview blob) 有封面就永远渲染（z:0），canonical (z:3) 自然遮住 */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });

@@ -196,9 +196,10 @@ describe("房间消息窗 / 自动播露出门禁", () => {
         `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
       )
     ).not.toBeNull();
+    /* poster 有封面就永远渲染（z:0），preview video (z:1) 自然遮住 */
     expect(
       pane.querySelector(`img.message-video-poster[data-attachment-id="${attachmentId}"]`)
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       pane.querySelector(
         `.message-video-canonical-host[data-attachment-id="${attachmentId}"]`

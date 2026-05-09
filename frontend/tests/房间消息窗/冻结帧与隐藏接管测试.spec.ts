@@ -100,9 +100,10 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
 
     expect(frozenFrame).not.toBeNull();
     expect(previewVideo).toBeNull();
+    /* poster 有封面就永远渲染（z:0），frozen frame (z:2) 自然遮住 */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });
@@ -393,7 +394,8 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     expect(releasedCard).not.toBeNull();
     expect(releasedPreview).not.toBeNull();
     expect(releasedPreview?.getAttribute("src")).toBe(releasedSrc);
-    expect(releasedCard?.querySelector("img.message-video-poster")).toBeNull();
+    /* poster 有封面就永远渲染（z:0），退场 owner preview (z:1) 自然遮住 */
+    expect(releasedCard?.querySelector("img.message-video-poster")).not.toBeNull();
     expect(releasedCard?.querySelector(".message-video-play-indicator")).toBeNull();
 
     releasedPreview?.dispatchEvent(new Event("loadedmetadata"));
@@ -633,8 +635,8 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
     expect(releasedFrozenFrame?.getAttribute("data-bridge-src")).toBe(releasedPlayback.src);
     expect(releasedPreview).toBeNull();
     /**
-     * poster 现在作为冻结帧 canvas 的安全网保留在 DOM 里（z-index: 0，被 canvas 覆盖），
-     * 但卡片的首要可见表面仍然必须是冻结帧，不是 poster。
+     * poster 有封面就永远渲染（z:0），frozen frame (z:2) 自然遮住 poster。
+     * 卡片的首要可见表面仍然必须是冻结帧，不是 poster。
      */
     expect(releasedCard?.querySelector("img.message-video-poster")).not.toBeNull();
     expect(

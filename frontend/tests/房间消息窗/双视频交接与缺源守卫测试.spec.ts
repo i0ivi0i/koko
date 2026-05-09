@@ -62,9 +62,10 @@ describe("房间消息窗媒体查看器 / 双视频交接与缺源守卫", () =
     expect(
       pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-initial-hidden"]')
     ).not.toBeNull();
+    /* poster 有封面就永远渲染（z:0），canonical (z:3) 自然遮住 */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-initial-hidden"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });

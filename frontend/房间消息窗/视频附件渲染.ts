@@ -285,16 +285,6 @@ export const 渲染视频附件 = (
     shouldReuseSavedTimelineFrameAsPreview &&
     !hasActualContinuityBridgeSurface &&
     !isRetiringReleasedOwner;
-  const shouldSuppressPosterForContinuity =
-    !shouldKeepPosterDuringSavedPositionOwnerWarmup &&
-    (Boolean(restorableTimelineFrame) ||
-      shouldReuseSavedTimelineFrameAsPreview ||
-      hasFrozenTimelineFrame ||
-      hasCurrentCanonicalRevealReady) &&
-    (playbackContinuityDecision.kind === "hidden_handoff" ||
-      playbackContinuityDecision.kind === "retiring_hold_frame" ||
-      playbackContinuityDecision.kind === "hold_frame" ||
-      playbackContinuityDecision.kind === "visible_canonical");
   const shouldShowTimelinePlayIndicator =
     !shouldRenderInlineVideo && !isRecentOwnerContinuityBridge &&
     !shouldReuseSavedTimelineFrameAsPreview && !hasSameSourceSavedTimelineFrame && !restorableTimelineFrame &&
@@ -416,44 +406,14 @@ export const 渲染视频附件 = (
         (!shouldRenderInlineVideo ||
           !shouldRevealCanonicalHost ||
           shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup)));
-  const shouldKeepCanonicalCoverDuringGuardedPreviewWarmup = shouldRenderInlineVideo && shouldRenderPreviewVideo &&
-    shouldRenderStageHost && shouldShowFirstFrameGuard &&
-    !hasStablePreviewPosterSurface && !hasCurrentDomPreviewFrame && !hasFrozenTimelineFrame;
-  const shouldRenderCanonicalLoadingPosterCover =
-    shouldRenderInlineVideo && !shouldPreferRetiringOwnerPreviewSurface &&
-    !shouldForceOwnerBridgePreview &&
-    (!(playbackContinuityDecision.kind === "hidden_handoff" && Boolean(restorableTimelineFrame)) ||
-      shouldKeepPosterDuringSavedPositionOwnerWarmup) &&
-    !shouldRevealCanonicalHost && !shouldRenderFrozenTimelineFrame && !hasCurrentDomPreviewFrame &&
-    Boolean(previewPosterSrc) && !(shouldRenderVisibleCanonicalHost && hasKnownReadyPreviewFrame) &&
-    (!shouldRenderPreviewVideo || shouldKeepCanonicalCoverDuringGuardedPreviewWarmup);
   /**
-   * 退场 owner 有冻结帧时，poster 必须作为安全网同时存在于 DOM：
-   * 冻结帧 canvas 在 z-index: 2 / position: absolute 覆盖 poster，
-   * 如果 drawImage 因 bitmap disposed / context lost 失败导致 canvas 透明，
-   * poster (z-index: 0 / position: relative) 仍能兜住卡片，避免纯黑背景。
+   * 有封面就渲染 poster。z-index 栈（poster:0 < video:1 < frozen:2 < canonical:3）
+   * 物理保证上层有像素时自然遮住 poster，无需显式压制逻辑。
+   * 这取代了之前 ~45 行的 shouldSuppressPosterForContinuity /
+   * shouldRenderCanonicalLoadingPosterCover / shouldRenderRetiringOwnerFrozenFramePosterSafetyNet /
+   * shouldKeepCanonicalCoverDuringGuardedPreviewWarmup 组合条件。
    */
-  const shouldRenderRetiringOwnerFrozenFramePosterSafetyNet =
-    isRetiringReleasedOwner &&
-    hasFrozenTimelineFrame &&
-    hasStablePreviewPosterSurface &&
-    !hasCurrentDomPreviewFrame;
-  const shouldRenderPreviewPosterSurface =
-    ((playbackContinuityDecision.visibleSurface === "placeholder" &&
-      hasStablePreviewPosterSurface &&
-      !hasCurrentCanonicalRevealReady &&
-      (!shouldReuseSavedTimelineFrameAsPreview || shouldKeepPosterDuringSavedPositionOwnerWarmup) &&
-      !shouldRevealCanonicalHost) ||
-      (hasStablePreviewPosterSurface &&
-      !shouldSuppressPosterForContinuity &&
-      !isRecentOwnerContinuityBridge &&
-      (!shouldReuseSavedTimelineFrameAsPreview || shouldKeepPosterDuringSavedPositionOwnerWarmup) &&
-      !hasSameSourceSavedTimelineFrame &&
-      !hasFrozenTimelineFrame &&
-      !hasCurrentDomPreviewFrame &&
-      (!shouldRenderInlineVideo || !shouldRevealCanonicalHost || shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup))) ||
-    shouldRenderCanonicalLoadingPosterCover ||
-    shouldRenderRetiringOwnerFrozenFramePosterSafetyNet;
+  const shouldRenderPreviewPosterSurface = hasStablePreviewPosterSurface;
   const previewVideoPoster =
     !shouldPreferRetiringOwnerPreviewSurface &&
     !hasFrozenTimelineFrame &&
@@ -480,7 +440,6 @@ export const 渲染视频附件 = (
     shouldRevealCanonicalHost,
     shouldRenderStageHost,
     shouldRenderInlineVideo,
-    shouldGatePreviewVideo: shouldShowFirstFrameGuard,
     shouldShowFirstFrameGuard,
     shouldShowTimelinePlayIndicator,
     renderMediaHint: input.渲染媒体提示(attachment.attachmentId, playback),

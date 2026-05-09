@@ -404,9 +404,10 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("poster")).toBeNull();
     expect(ownerVideo?.autoplay).toBe(true);
+    /* poster 有封面就永远渲染（z:0），canonical (z:3) 自然遮住 */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });
@@ -770,11 +771,12 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     expect(restoredVideo).not.toBeNull();
     expect(restoredVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(restoredVideo?.autoplay).toBe(false);
+    /* poster 有封面就永远渲染（z:0），video (z:1) 自然遮住 */
     expect(
       pane.querySelector<HTMLImageElement>(
         'img.message-video-poster[data-attachment-id="att-video-1"]'
       )
-    ).toBeNull();
+    ).not.toBeNull();
     expect(restoredVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
 
     restoredVideo!.dispatchEvent(new Event("loadedmetadata"));
@@ -786,14 +788,20 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     restoredVideo!.dispatchEvent(new Event("loadeddata"));
     await pane.updateComplete;
     expect(restoredVideo?.getAttribute("poster")).toBeNull();
+    /* 出帧后 poster 仍在 DOM — z:1 video 遮住 z:0 poster */
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     pane.remove();
   });
 
-  it("非 owner 视频有 poster 且被分配 preview 预算时，preview video 不得自带深色背景遮住 native poster，避免黑卡片", async () => {
+  /**
+   * T1: 非 owner 有封面 + 有预算时，<img> poster 和 <video> preview 必须共存于 DOM。
+   * poster 在 z:0 作为兜底，video 在 z:1 有帧时自然遮住 poster。
+   * 如果 poster 不在 DOM，video 未出帧前用户就看到黑卡片。
+   */
+  it("T1: 非 owner 有 poster 且被分配 preview 预算时，poster 和 preview video 共存于 DOM", async () => {
     const pane = 创建媒体消息窗();
     const 创建播放 = (attachmentId: string): 媒体播放结果 => ({
       mode: "swarm",
@@ -851,15 +859,81 @@ describe("房间消息窗媒体查看器 / 海报预热与候选预算", () => {
     const nonOwnerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-non-owner"]'
     );
+    const nonOwnerPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-non-owner"]'
+    );
 
-    /**
-     * 非 owner 的 preview video 未出首帧前，依赖 native poster 属性作为可见底板：
-     * 1. video 的 CSS background 已改为 transparent，不会自带深色渐变遮住 poster；
-     * 2. native poster 在浏览器里作为 video 内容区显示，用户看到的就是封面图；
-     * 3. 当 video 解出首帧后 poster 自然消失，过渡丝滑无闪烁。
-     */
+    /* 两者必须共存：poster 兜底 + video 准备接管 */
     expect(nonOwnerVideo).not.toBeNull();
-    expect(nonOwnerVideo!.getAttribute("poster")).toContain("poster-att-non-owner");
+    expect(nonOwnerPoster).not.toBeNull();
+
+    pane.remove();
+  });
+
+  /**
+   * T2: 有保存播放位置但 video 未出帧时，<img> poster 必须存在于 DOM。
+   * 旧逻辑基于"意图"压制 poster（shouldReuseSavedTimelineFrameAsPreview），
+   * 导致 video 还没 decode 帧时就看到黑卡片。
+   */
+  it("T2: 非 owner 有 poster 且有保存播放位置、video 未出帧时，poster 存在于 DOM", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [创建媒体消息项()];
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    pane.mediaPlaybackByAttachmentId = {};
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: "http://media.local/swarm-video-1",
+        currentTime: 31.25,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    /* video 未出帧 → poster 必须兜底，不能黑卡片 */
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
+
+    pane.remove();
+  });
+
+  /**
+   * T3: video 出帧后，poster 仍然留在 DOM（z-index 栈让 video 帧遮住 poster）。
+   * 新策略"有封面就渲染"意味着 poster 永远不从 DOM 移除，
+   * 这比"出帧后压制 poster"更简洁，且不会产生闪烁。
+   */
+  it("T3: 有保存位置的 video 出帧后，poster 仍在 DOM（z-index 栈让 video 帧遮住 poster）", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [创建媒体消息项()];
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    pane.mediaPlaybackByAttachmentId = {};
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: "http://media.local/swarm-video-1",
+        currentTime: 31.25,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const video = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    video!.dispatchEvent(new Event("loadedmetadata"));
+    Object.defineProperty(video!, "readyState", { configurable: true, value: 4 });
+    video!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+
+    /* poster 仍在 DOM — 有封面就永远渲染，z:1 video 帧自然遮住 z:0 poster */
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
 
     pane.remove();
   });

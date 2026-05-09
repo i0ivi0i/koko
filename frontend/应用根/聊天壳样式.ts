@@ -480,14 +480,13 @@ export const 聊天壳样式 = css`
     }
 
     /*
-     * 时间线里的自动播 video 只是预览层，不是第二颗正式播放器。
-     * 它必须和 poster 共用同一套尺寸、裁剪和命中规则，避免黑边和原生媒体误触。
+     * 三个视觉表面共享布局属性（尺寸、裁剪、交互透传）。
+     * position / z-index / background 各自声明，因为它们在叠加栈中承担不同角色。
+     * z-index 栈：poster:0 < preview:1 < frozen:2 < canonical:3 < cover:4 < guard:5 < indicator:6
      */
     .message-video-poster,
     .message-video-frozen-frame,
     .message-video-preview {
-      position: relative;
-      z-index: 0;
       display: block;
       width: 100%;
       max-width: 100%;
@@ -495,15 +494,40 @@ export const 聊天壳样式 = css`
       border-radius: inherit;
       object-fit: cover;
       pointer-events: none;
+    }
+
+    /*
+     * poster 是最低优先级兜底层（z:0）：
+     * - absolute 叠加保证它在 video/frozen/canonical 下方始终可见；
+     * - video 未出帧时用户看到的就是这张封面图，不是黑卡片；
+     * - 更高层表面有像素时自然遮住 poster，无需显式压制。
+     */
+    .message-video-poster {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
       background:
         radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.16), transparent 28%),
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
     }
 
+    /*
+     * preview video 叠在 poster 之上（z:1）：
+     * - 有帧时自然覆盖 poster，无帧时透明让 poster 透出；
+     * - background 必须 transparent，否则 video 未 decode 时深色背景遮住 poster。
+     */
+    .message-video-preview {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: transparent;
+    }
+
+    /* owner warmup 期间 poster 需要覆盖 canonical-host（z:3），所以提升到 z:4 */
     .message-video-poster--canonical-cover {
       position: absolute;
       inset: 0;
-      z-index: 2;
+      z-index: 4;
     }
 
     /*
@@ -519,16 +543,6 @@ export const 聊天壳样式 = css`
       height: 100%;
       border-radius: inherit;
       pointer-events: none;
-      background: transparent;
-    }
-
-    /*
-     * preview video 在未出首帧前不能自带深色背景：
-     * - 有 poster 的视频依赖 <video poster="..."> 原生属性作为可见底板；
-     * - 如果 video 自带不透明背景，native poster 在部分浏览器里会被背景遮住；
-     * - 保持 transparent 让 native poster / 下层 <img> poster / 卡片渐变依次透出。
-     */
-    .message-video-preview {
       background: transparent;
     }
 
@@ -550,7 +564,7 @@ export const 聊天壳样式 = css`
     .message-video-canonical-host {
       position: absolute;
       inset: 0;
-      z-index: 1;
+      z-index: 3;
       display: block;
       width: 100%;
       height: 100%;
@@ -571,10 +585,11 @@ export const 聊天壳样式 = css`
       background: transparent;
     }
 
+    /* 无 poster 时的首帧占位图，需要覆盖所有常规表面（z:5） */
     .message-video-first-frame-guard {
       position: absolute;
       inset: 0;
-      z-index: 2;
+      z-index: 5;
       display: block;
       width: 100%;
       height: 100%;
@@ -583,10 +598,11 @@ export const 聊天壳样式 = css`
       pointer-events: none;
     }
 
+    /* 播放指示器覆盖在所有视觉表面之上（z:6） */
     .message-video-play-indicator {
       position: absolute;
       inset: 0;
-      z-index: 3;
+      z-index: 6;
       display: grid;
       place-items: center;
       color: rgba(255, 255, 255, 0.82);
