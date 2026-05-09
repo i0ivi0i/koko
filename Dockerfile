@@ -24,6 +24,7 @@ WORKDIR /app
 
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src ./src
+COPY koko-torrent-core ./koko-torrent-core
 COPY migrations ./migrations
 COPY assets ./assets
 

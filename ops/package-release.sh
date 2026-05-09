@@ -15,6 +15,7 @@ readonly include_paths=(
   Cargo.lock
   build.rs
   src
+  koko-torrent-core
   migrations
   assets
   frontend
