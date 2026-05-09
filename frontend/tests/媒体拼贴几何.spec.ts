@@ -6,21 +6,31 @@ import {
 } from "../房间消息窗/媒体拼贴几何.js";
 
 /**
- * 媒体拼贴几何算法测试：
- * 移植自 Telegram Web K groupedLayout.ts，验证各种附件组合下的布局几何正确性。
+ * 媒体拼贴统一网格布局测试
  *
  * 核心验收标准：
- * 1. 每个卡片 x+width ≤ maxWidth，y+height ≤ totalHeight（无溢出）
- * 2. 卡片间距符合 spacing 约定
- * 3. 卡片宽高比与媒体原始比例差距合理（<15%）
+ * 1. 单张保持原始比例缩放（行为不变）
+ * 2. 多张（≥2）统一 2 列网格，卡片比例 2:3（宽:高）
+ * 3. 奇数尾行单张拉满宽度，行高与正常行一致
+ * 4. 所有卡片 x+width ≤ maxWidth, y+height ≤ totalHeight（无溢出）
+ *
+ * 设计决策详见 docs/specs/2025-05-09-媒体拼贴统一网格布局.md
  */
 
 const 默认配置 = { maxWidth: 384, spacing: 8 };
 
+/**
+ * 默认配置下的网格单元尺寸：
+ * cellWidth  = (384 - 8) / 2 = 188
+ * cellHeight = 188 * 3 / 2   = 282
+ */
+const 单元宽 = 188;
+const 单元高 = 282;
+
 /** 辅助：检查所有卡片不溢出容器 */
 function 断言无溢出(result: 拼贴结果, maxWidth: number): void {
   for (const item of result.items) {
-    expect(item.x + item.width).toBeLessThanOrEqual(maxWidth + 1); // +1 容忍取整
+    expect(item.x + item.width).toBeLessThanOrEqual(maxWidth + 1);
     expect(item.y + item.height).toBeLessThanOrEqual(result.totalHeight + 1);
     expect(item.x).toBeGreaterThanOrEqual(0);
     expect(item.y).toBeGreaterThanOrEqual(0);
@@ -29,23 +39,29 @@ function 断言无溢出(result: 拼贴结果, maxWidth: number): void {
   }
 }
 
-/** 辅助：检查卡片比例与原始比例差距 */
-function 断言比例接近(
-  result: 拼贴结果,
-  sizes: 媒体尺寸[],
-  maxDiff = 0.15
-): void {
+/**
+ * 辅助：检查正常行卡片（非尾行单张）的宽高比接近 2:3。
+ * 尾行只有 1 张时该卡片是拉满全宽的，比例不是 2:3，跳过。
+ */
+function 断言卡片比例为2比3(result: 拼贴结果, count: number): void {
+  const cols = 2;
+  const lastRowCols = count % cols === 0 ? cols : count % cols;
+  const lastRowStartIndex = count - lastRowCols;
+
   for (let i = 0; i < result.items.length; i++) {
-    const original = sizes[i]!.w / sizes[i]!.h;
-    const actual = result.items[i]!.width / result.items[i]!.height;
-    // 拼贴为了整齐会有一定裁切，允许 15% 偏差
-    // 对于极端比例差异的组合，放宽到 50%
-    const diff = Math.abs(original - actual) / Math.max(original, actual);
-    expect(diff).toBeLessThan(maxDiff);
+    const item = result.items[i]!;
+    /* 尾行单张拉满，比例不是 2:3，跳过 */
+    if (lastRowCols === 1 && i === lastRowStartIndex) continue;
+    const ratio = item.width / item.height;
+    /* 2:3 ≈ 0.6667，容忍取整 ±0.01 */
+    expect(ratio).toBeGreaterThan(0.65);
+    expect(ratio).toBeLessThan(0.69);
   }
 }
 
 describe("媒体拼贴几何", () => {
+  /* ── 边界 ── */
+
   describe("空输入与边界", () => {
     it("空数组返回空结果", () => {
       const result = 计算媒体拼贴几何([], 默认配置);
@@ -70,7 +86,9 @@ describe("媒体拼贴几何", () => {
     });
   });
 
-  describe("单张媒体", () => {
+  /* ── 单张（保持原始行为） ── */
+
+  describe("单张媒体（保持原始行为）", () => {
     it("横屏单图按比例缩放到 maxWidth", () => {
       const result = 计算媒体拼贴几何(
         [{ w: 1920, h: 1080 }],
@@ -80,7 +98,6 @@ describe("媒体拼贴几何", () => {
       expect(result.items[0]!.width).toBe(默认配置.maxWidth);
       expect(result.items[0]!.x).toBe(0);
       expect(result.items[0]!.y).toBe(0);
-      // 高度应该按 16:9 比例
       const expectedHeight = Math.round((默认配置.maxWidth * 1080) / 1920);
       expect(result.items[0]!.height).toBe(expectedHeight);
     });
@@ -96,55 +113,24 @@ describe("媒体拼贴几何", () => {
     });
   });
 
-  describe("两张媒体", () => {
-    it("两张横屏等宽左右排列", () => {
-      const sizes: 媒体尺寸[] = [{ w: 1920, h: 1080 }, { w: 1280, h: 720 }];
+  /* ── 统一网格（≥2 张） ── */
+
+  describe("统一网格布局（≥2 张）", () => {
+    it("2 张 → 1 行 2 列，等宽等高 2:3", () => {
+      const sizes: 媒体尺寸[] = [{ w: 1920, h: 1080 }, { w: 1080, h: 1920 }];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(2);
-      // 两张高度应该相同（同一行）
-      expect(result.items[0]!.height).toBe(result.items[1]!.height);
+      expect(result.items[0]!.width).toBe(单元宽);
+      expect(result.items[0]!.height).toBe(单元高);
+      expect(result.items[1]!.width).toBe(单元宽);
+      expect(result.items[1]!.height).toBe(单元高);
+      expect(result.items[1]!.x).toBe(单元宽 + 默认配置.spacing);
+      expect(result.totalHeight).toBe(单元高);
       断言无溢出(result, 默认配置.maxWidth);
+      断言卡片比例为2比3(result, 2);
     });
 
-    it("一竖一横按比例分宽", () => {
-      const sizes: 媒体尺寸[] = [{ w: 1080, h: 1920 }, { w: 1920, h: 1080 }];
-      const result = 计算媒体拼贴几何(sizes, 默认配置);
-      expect(result.items).toHaveLength(2);
-      // 两张高度相同
-      expect(result.items[0]!.height).toBe(result.items[1]!.height);
-      // 竖屏那张应该更窄
-      expect(result.items[0]!.width).toBeLessThan(result.items[1]!.width);
-      断言无溢出(result, 默认配置.maxWidth);
-    });
-
-    it("两张方形等宽左右排列", () => {
-      const sizes: 媒体尺寸[] = [{ w: 1000, h: 1000 }, { w: 800, h: 800 }];
-      const result = 计算媒体拼贴几何(sizes, 默认配置);
-      expect(result.items).toHaveLength(2);
-      expect(result.items[0]!.height).toBe(result.items[1]!.height);
-      断言无溢出(result, 默认配置.maxWidth);
-    });
-  });
-
-  describe("三张媒体", () => {
-    it("首张竖屏 → 左列满高 + 右列两张叠", () => {
-      const sizes: 媒体尺寸[] = [
-        { w: 1080, h: 1920 },
-        { w: 1920, h: 1080 },
-        { w: 1280, h: 720 },
-      ];
-      const result = 计算媒体拼贴几何(sizes, 默认配置);
-      expect(result.items).toHaveLength(3);
-      // 第一张高度 = 容器总高度（左列满高）
-      expect(result.items[0]!.height).toBe(result.totalHeight);
-      // 右列两张叠起来 + spacing = 总高度
-      const rightTotalHeight =
-        result.items[1]!.height + 默认配置.spacing + result.items[2]!.height;
-      expect(rightTotalHeight).toBe(result.totalHeight);
-      断言无溢出(result, 默认配置.maxWidth);
-    });
-
-    it("首张横屏 → 上行满宽 + 下行两张并排", () => {
+    it("3 张 → 2+1，尾行单张拉满宽度同行高", () => {
       const sizes: 媒体尺寸[] = [
         { w: 1920, h: 1080 },
         { w: 1080, h: 1920 },
@@ -152,46 +138,40 @@ describe("媒体拼贴几何", () => {
       ];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(3);
-      // 第一张宽度 = maxWidth（上行满宽）
-      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
-      // 下行两张 x 不同
-      expect(result.items[1]!.x).toBe(0);
-      expect(result.items[2]!.x).toBeGreaterThan(0);
+      /* 前两张 2:3 */
+      expect(result.items[0]!.width).toBe(单元宽);
+      expect(result.items[0]!.height).toBe(单元高);
+      expect(result.items[1]!.width).toBe(单元宽);
+      /* 第三张拉满整行 */
+      expect(result.items[2]!.width).toBe(默认配置.maxWidth);
+      expect(result.items[2]!.height).toBe(单元高);
+      expect(result.items[2]!.x).toBe(0);
+      expect(result.items[2]!.y).toBe(单元高 + 默认配置.spacing);
+      /* totalHeight = 2 行 */
+      expect(result.totalHeight).toBe(单元高 * 2 + 默认配置.spacing);
       断言无溢出(result, 默认配置.maxWidth);
     });
-  });
 
-  describe("四张媒体", () => {
-    it("首张横屏 → 上行满宽 + 下行三张按比例", () => {
+    it("4 张 → 2+2，四张全等 2:3", () => {
       const sizes: 媒体尺寸[] = [
         { w: 1920, h: 1080 },
-        { w: 800, h: 600 },
-        { w: 1280, h: 720 },
-        { w: 600, h: 800 },
-      ];
-      const result = 计算媒体拼贴几何(sizes, 默认配置);
-      expect(result.items).toHaveLength(4);
-      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
-      断言无溢出(result, 默认配置.maxWidth);
-    });
-
-    it("首张竖屏 → 左列满高 + 右列三张叠", () => {
-      const sizes: 媒体尺寸[] = [
         { w: 1080, h: 1920 },
-        { w: 1920, h: 1080 },
         { w: 1280, h: 720 },
         { w: 800, h: 600 },
       ];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(4);
-      // 第一张高度 = 容器总高度
-      expect(result.items[0]!.height).toBe(result.totalHeight);
+      for (const item of result.items) {
+        expect(item.width).toBe(单元宽);
+        expect(item.height).toBe(单元高);
+      }
+      expect(result.items[2]!.y).toBe(单元高 + 默认配置.spacing);
+      expect(result.totalHeight).toBe(单元高 * 2 + 默认配置.spacing);
       断言无溢出(result, 默认配置.maxWidth);
+      断言卡片比例为2比3(result, 4);
     });
-  });
 
-  describe("5+ 张媒体（ComplexLayouter）", () => {
-    it("5 张混合比例紧凑无溢出", () => {
+    it("5 张 → 2+2+1，尾行单张拉满", () => {
       const sizes: 媒体尺寸[] = [
         { w: 1920, h: 1080 },
         { w: 1080, h: 1920 },
@@ -201,20 +181,33 @@ describe("媒体拼贴几何", () => {
       ];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(5);
+      for (let i = 0; i < 4; i++) {
+        expect(result.items[i]!.width).toBe(单元宽);
+        expect(result.items[i]!.height).toBe(单元高);
+      }
+      expect(result.items[4]!.width).toBe(默认配置.maxWidth);
+      expect(result.items[4]!.height).toBe(单元高);
+      expect(result.items[4]!.y).toBe((单元高 + 默认配置.spacing) * 2);
+      expect(result.totalHeight).toBe(单元高 * 3 + 默认配置.spacing * 2);
       断言无溢出(result, 默认配置.maxWidth);
-      断言比例接近(result, sizes, 0.5);
     });
 
-    it("6 张全横屏紧凑无溢出", () => {
+    it("6 张 → 2+2+2，六张全等 2:3", () => {
       const sizes: 媒体尺寸[] = Array.from({ length: 6 }, () => ({
         w: 1920, h: 1080,
       }));
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(6);
+      for (const item of result.items) {
+        expect(item.width).toBe(单元宽);
+        expect(item.height).toBe(单元高);
+      }
+      expect(result.totalHeight).toBe(单元高 * 3 + 默认配置.spacing * 2);
       断言无溢出(result, 默认配置.maxWidth);
+      断言卡片比例为2比3(result, 6);
     });
 
-    it("10 张混合比例紧凑无溢出", () => {
+    it("10 张 → 5×2，全等 2:3", () => {
       const sizes: 媒体尺寸[] = [
         { w: 1920, h: 1080 }, { w: 1080, h: 1920 },
         { w: 1280, h: 720 }, { w: 800, h: 800 },
@@ -224,7 +217,35 @@ describe("媒体拼贴几何", () => {
       ];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(10);
+      for (const item of result.items) {
+        expect(item.width).toBe(单元宽);
+        expect(item.height).toBe(单元高);
+      }
+      expect(result.totalHeight).toBe(单元高 * 5 + 默认配置.spacing * 4);
       断言无溢出(result, 默认配置.maxWidth);
+      断言卡片比例为2比3(result, 10);
+    });
+
+    it("混合横竖屏不影响卡片几何（统一网格无视原始比例）", () => {
+      const sizes: 媒体尺寸[] = [
+        { w: 1920, h: 1080 },
+        { w: 1080, h: 1920 },
+        { w: 1000, h: 1000 },
+        { w: 3840, h: 2160 },
+      ];
+      const result = 计算媒体拼贴几何(sizes, 默认配置);
+      expect(result.items).toHaveLength(4);
+      for (const item of result.items) {
+        expect(item.width).toBe(单元宽);
+        expect(item.height).toBe(单元高);
+      }
+      断言卡片比例为2比3(result, 4);
+    });
+
+    it("contentWidth 始终返回 maxWidth", () => {
+      const sizes: 媒体尺寸[] = [{ w: 100, h: 200 }, { w: 300, h: 400 }];
+      const result = 计算媒体拼贴几何(sizes, 默认配置);
+      expect(result.contentWidth).toBe(默认配置.maxWidth);
     });
   });
 });
