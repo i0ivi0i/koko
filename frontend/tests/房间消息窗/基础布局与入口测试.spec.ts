@@ -185,9 +185,10 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
         估算消息行高度(index: number): number;
       }
     ).估算消息行高度(0);
-    const expectedGridHeight = 3 * 240 + 2 * 8;
+    /** Telegram Mosaic 算法输出的 totalHeight 由 fixture 直接提供 */
+    const expectedLayoutHeight = collage.attachmentLayout!.totalHeight;
 
-    expect(estimatedHeight).toBeGreaterThanOrEqual(22 + expectedGridHeight);
+    expect(estimatedHeight).toBeGreaterThanOrEqual(22 + expectedLayoutHeight);
 
     pane.remove();
   });
@@ -209,16 +210,17 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     pane.remove();
   });
 
-  it("拼贴模板和槽位元数据会从 presenter 透传到 DOM，而不是在 renderer 里重新猜多附件布局", async () => {
+  it("拼贴布局元数据会从 presenter 透传到 DOM 绝对定位，而不是在 renderer 里重新猜多附件布局", async () => {
     const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
     pane.items = [创建五附件拼贴消息项()];
     document.body.appendChild(pane);
     await pane.updateComplete;
 
     const grid = pane.querySelector<HTMLElement>(".message-attachment-grid");
-    expect(grid?.dataset.attachmentTemplate).toBe("hero-strip");
-    expect(grid?.style.getPropertyValue("--attachment-grid-columns")).toBe("2");
-    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("240px");
+    /** 容器用 position: relative + 固定宽高 */
+    expect(grid?.style.position).toBe("relative");
+    expect(grid?.style.width).toBe("384px");
+    expect(grid?.style.height).toBe("488px");
 
     const heroCard = pane.querySelector<HTMLElement>(
       '.message-attachment-card[data-attachment-id="att-hero"]'
@@ -226,14 +228,11 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
     const lowerVideoCard = pane.querySelector<HTMLElement>(
       '.message-attachment-card[data-attachment-id="att-video-4"]'
     );
-    expect(heroCard?.dataset.gridColumnSpan).toBe("1");
-    expect(heroCard?.dataset.gridRowStart).toBe("1");
-    expect(heroCard?.dataset.gridRowSpan).toBe("2");
-    expect(heroCard?.style.getPropertyValue("grid-column")).toBe("1 / span 1");
-    expect(heroCard?.style.getPropertyValue("grid-row")).toBe("1 / span 2");
-    expect(lowerVideoCard?.dataset.gridColumnStart).toBe("1");
-    expect(lowerVideoCard?.dataset.gridRowStart).toBe("3");
-    expect(lowerVideoCard?.style.getPropertyValue("grid-row")).toBe("3 / span 1");
+    /** 每张卡片用 position: absolute + left/top/width/height */
+    expect(heroCard?.style.position).toBe("absolute");
+    expect(heroCard?.style.left).toBe("0px");
+    expect(heroCard?.style.top).toBe("0px");
+    expect(lowerVideoCard?.style.position).toBe("absolute");
 
     pane.remove();
   });
@@ -490,6 +489,8 @@ describe("房间消息窗媒体查看器 - 基础布局与入口", () => {
             attachmentId: "att-video-1",
             width: 1280,
             height: 720,
+            layoutX: 0,
+            layoutY: 0,
             displayWidth: 320,
             displayHeight: 180,
             posterSrc: null,

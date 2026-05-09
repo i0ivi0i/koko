@@ -146,7 +146,8 @@ describe("聊天壳集成 / 消息舞台与媒体投影", () => {
     expect(el.shadowRoot!.querySelector(".message-body")).toBeNull();
     expect(mediaSurface).not.toBeNull();
     expect(mediaSurface?.classList.contains("message-bubble")).toBe(false);
-    expect(mediaSurface?.getAttribute("style")).toContain("width: 320px");
+    /** Telegram Mosaic 单张宽图用 maxWidth = min(maxContentWidth, 384) */
+    expect(mediaSurface?.getAttribute("style")).toContain("width: 384px");
     expect(el.shadowRoot!.querySelector(".message-image-link")).toBeNull();
     expect(previewTrigger).not.toBeNull();
 

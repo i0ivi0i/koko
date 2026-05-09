@@ -167,13 +167,14 @@ describe("聊天壳集成 / 界面骨架与布局", () => {
     expect(styles).toMatch(/\.back-button[\s\S]*color:\s*var\(--accent-core\)/);
   });
 
-  it("多附件网格会消费 presenter 提供的列数与行高变量，而不是把所有消息锁死在双列模板", () => {
+  it("附件容器使用 position: relative 承载绝对定位卡片，而不是旧的 CSS Grid", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain(".message-attachment-grid");
-    expect(styles).toContain("repeat(var(--attachment-grid-columns, 2), minmax(0, 1fr))");
-    expect(styles).toContain("gap: var(--attachment-grid-gap, 8px)");
-    expect(styles).toContain("grid-auto-rows: var(--attachment-grid-row-height, auto)");
+    expect(styles).toContain("position: relative");
+    /** 附件网格不再使用 grid 变量驱动列数和行高 */
+    expect(styles).not.toContain("--attachment-grid-columns");
+    expect(styles).not.toContain("--attachment-grid-row-height");
     expect(styles).toContain(".message-attachment-card");
   });
 

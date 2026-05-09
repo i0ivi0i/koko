@@ -187,30 +187,21 @@ export const 渲染消息附件 = (
   }
 
   const attachmentLayout = item.attachmentLayout;
-  const gridColumnCount =
-    attachmentLayout?.columnCount ?? (item.attachments.length >= 2 ? 2 : 1);
-  const gridStyle = [
-    `--attachment-grid-columns: ${gridColumnCount}`,
-    `--attachment-grid-gap: ${attachmentLayout?.gap ?? 8}px`,
-    attachmentLayout ? `--attachment-grid-row-height: ${attachmentLayout.rowHeight}px` : "",
-  ]
-    .filter((value) => value.length > 0)
-    .join("; ");
+
+  /**
+   * 容器样式：Telegram Mosaic 用 position: relative + 固定宽高，
+   * 每张卡片用 position: absolute 绝对定位到算法输出的 (layoutX, layoutY)。
+   */
+  const containerStyle = attachmentLayout
+    ? `position: relative; width: ${attachmentLayout.contentWidth}px; height: ${attachmentLayout.totalHeight}px`
+    : "";
 
   const 读取附件播放结果 = (attachmentId: string): 媒体播放结果 | null =>
     context.mediaPlaybackByAttachmentId[attachmentId] ?? null;
 
+  /** 每张卡片的绝对定位内联样式 */
   const 读取附件卡片样式 = (attachment: 消息展示项["attachments"][number]): string =>
-    [
-      attachment.gridColumnStart
-        ? `grid-column: ${attachment.gridColumnStart} / span ${attachment.gridColumnSpan ?? 1}`
-        : "",
-      attachment.gridRowStart
-        ? `grid-row: ${attachment.gridRowStart} / span ${attachment.gridRowSpan ?? 1}`
-        : "",
-    ]
-      .filter((value) => value.length > 0)
-      .join("; ");
+    `position: absolute; left: ${attachment.layoutX}px; top: ${attachment.layoutY}px; width: ${attachment.displayWidth}px; height: ${attachment.displayHeight}px`;
 
   const 渲染媒体提示 = (attachmentId: string, playback: 媒体播放结果 | null) => {
     if (!playback?.hint) {
@@ -263,8 +254,7 @@ export const 渲染消息附件 = (
     <div
       class="message-attachment-grid"
       data-attachment-count=${item.attachments.length}
-      data-attachment-template=${attachmentLayout?.template ?? "grid"}
-      style=${gridStyle}
+      style=${containerStyle}
     >
       ${item.attachments.map((attachment) => {
         const playback = 读取附件播放结果(attachment.attachmentId);
@@ -274,10 +264,6 @@ export const 渲染消息附件 = (
             <div
               class="message-attachment-card message-media-unavailable"
               data-attachment-id=${attachment.attachmentId}
-              data-grid-column-start=${attachment.gridColumnStart ?? ""}
-              data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-              data-grid-row-start=${attachment.gridRowStart ?? ""}
-              data-grid-row-span=${attachment.gridRowSpan ?? ""}
               style=${attachmentCardStyle}
             >
               ${渲染不可用附件(attachment, playback)}
@@ -302,4 +288,4 @@ export const 渲染消息附件 = (
       })}
     </div>
   `;
-};;
+};

@@ -208,10 +208,6 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
       data-budget-tier=${budgetTier}
       data-budget-reason=${budgetReason}
       data-formal-byte-source=${formalByteSource}
-      data-grid-column-start=${attachment.gridColumnStart ?? ""}
-      data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-      data-grid-row-start=${attachment.gridRowStart ?? ""}
-      data-grid-row-span=${attachment.gridRowSpan ?? ""}
       style=${attachmentCardStyle}
     >
       <button

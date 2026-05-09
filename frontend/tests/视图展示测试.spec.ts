@@ -84,7 +84,7 @@ describe("视图 / 消息展示项派生", () => {
     expect(adminShellSource).not.toContain('from "../视图.js"');
   });
 
-  it("五个混合媒体附件会被派生成 hero-strip 拼贴，而不是继续退化成双列流式列表", () => {
+  it("五个混合媒体附件会被 Telegram Mosaic 算法布局为多行绝对定位", () => {
     const item = 派生消息展示项(
       创建消息事件([
         创建图片附件("att-1", 960, 720),
@@ -97,78 +97,37 @@ describe("视图 / 消息展示项派生", () => {
       默认消息文本布局环境
     );
 
+    /**
+     * 新布局使用 Telegram Mosaic 绝对定位，
+     * 验证布局输出包含 totalHeight/contentWidth/spacing。
+     */
     expect(item.attachmentLayout).toEqual(
       expect.objectContaining({
-        template: "hero-strip",
-        columnCount: 2,
-        contentWidth: item.bubbleWidth,
+        contentWidth: expect.any(Number),
+        totalHeight: expect.any(Number),
+        spacing: 8,
       })
     );
 
-    expect(
-      item.attachments.map((attachment) => ({
-        attachmentId: attachment.attachmentId,
-        gridColumnStart: attachment.gridColumnStart,
-        gridColumnSpan: attachment.gridColumnSpan,
-        gridRowStart: attachment.gridRowStart,
-        gridRowSpan: attachment.gridRowSpan,
-      }))
-    ).toEqual([
-      {
-        attachmentId: "att-1",
-        gridColumnStart: 1,
-        gridColumnSpan: 1,
-        gridRowStart: 1,
-        gridRowSpan: 2,
-      },
-      {
-        attachmentId: "att-2",
-        gridColumnStart: 2,
-        gridColumnSpan: 1,
-        gridRowStart: 1,
-        gridRowSpan: 1,
-      },
-      {
-        attachmentId: "att-3",
-        gridColumnStart: 2,
-        gridColumnSpan: 1,
-        gridRowStart: 2,
-        gridRowSpan: 1,
-      },
-      {
-        attachmentId: "att-4",
-        gridColumnStart: 1,
-        gridColumnSpan: 1,
-        gridRowStart: 3,
-        gridRowSpan: 1,
-      },
-      {
-        attachmentId: "att-5",
-        gridColumnStart: 2,
-        gridColumnSpan: 1,
-        gridRowStart: 3,
-        gridRowSpan: 1,
-      },
-    ]);
+    /** 每张卡片都应有绝对坐标和正数尺寸 */
+    expect(item.attachments).toHaveLength(5);
+    for (const att of item.attachments) {
+      expect(att.layoutX).toBeGreaterThanOrEqual(0);
+      expect(att.layoutY).toBeGreaterThanOrEqual(0);
+      expect(att.displayWidth).toBeGreaterThan(0);
+      expect(att.displayHeight).toBeGreaterThan(0);
+    }
 
-    /**
-     * 这里锁的是“工整拼贴”的基本几何契约：
-     * hero 卡片必须独占整行，底下四张卡片共用同一组两列单元格。
-     * 只要这一层成立，Renderer 和 CSS 就能稳定消费同一份真相，
-     * 不会再退回“所有多媒体都只会两列平铺”的旧路。
-     */
-    expect(item.attachments[0]?.displayHeight).toBeGreaterThan(
-      (item.attachments[0]?.displayWidth ?? 0) * 1.8
-    );
-    expect(item.attachments[1]?.displayHeight).toBeGreaterThan(
-      (item.attachments[1]?.displayWidth ?? 0) * 1.22
-    );
-    expect(item.attachments[1]?.displayWidth).toBe(item.attachments[2]?.displayWidth);
-    expect(item.attachments[2]?.displayWidth).toBe(item.attachments[3]?.displayWidth);
-    expect(item.attachments[3]?.displayWidth).toBe(item.attachments[4]?.displayWidth);
+    /** 无溢出：每张卡片 x+width ≤ contentWidth，y+height ≤ totalHeight */
+    const maxWidth = item.attachmentLayout!.contentWidth;
+    const maxHeight = item.attachmentLayout!.totalHeight;
+    for (const att of item.attachments) {
+      expect(att.layoutX + att.displayWidth).toBeLessThanOrEqual(maxWidth + 1);
+      expect(att.layoutY + att.displayHeight).toBeLessThanOrEqual(maxHeight + 1);
+    }
   });
 
-  it("六个媒体附件会切换到三列拼贴模板，而不是永远锁死在旧的双列宽度公式里", () => {
+  it("六个媒体附件会被 Telegram Mosaic 算法布局为多行紧凑排列", () => {
     const item = 派生消息展示项(
       创建消息事件([
         创建图片附件("att-1"),
@@ -184,22 +143,22 @@ describe("视图 / 消息展示项派生", () => {
 
     expect(item.attachmentLayout).toEqual(
       expect.objectContaining({
-        template: "triple-grid",
-        columnCount: 3,
-        contentWidth: item.bubbleWidth,
+        contentWidth: expect.any(Number),
+        totalHeight: expect.any(Number),
+        spacing: 8,
       })
     );
 
-    expect(
-      item.attachments.map((attachment) => attachment.gridColumnStart)
-    ).toEqual([1, 2, 3, 1, 2, 3]);
-    expect(item.attachments.every((attachment) => attachment.gridColumnSpan === 1)).toBe(true);
-    expect(item.attachments.every((attachment) => attachment.gridRowSpan === 1)).toBe(true);
-    expect(
-      item.attachments.every(
-        (attachment) => attachment.displayHeight > attachment.displayWidth * 1.24
-      )
-    ).toBe(true);
+    expect(item.attachments).toHaveLength(6);
+    /** 每张卡片都有正数尺寸和合法坐标，无溢出 */
+    const maxWidth = item.attachmentLayout!.contentWidth;
+    const maxHeight = item.attachmentLayout!.totalHeight;
+    for (const att of item.attachments) {
+      expect(att.displayWidth).toBeGreaterThan(0);
+      expect(att.displayHeight).toBeGreaterThan(0);
+      expect(att.layoutX + att.displayWidth).toBeLessThanOrEqual(maxWidth + 1);
+      expect(att.layoutY + att.displayHeight).toBeLessThanOrEqual(maxHeight + 1);
+    }
   });
 
   it("没有附件地址表时，不会再凭空合成旧的 HTTP 内容路径", () => {

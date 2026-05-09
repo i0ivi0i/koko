@@ -7,6 +7,7 @@ import {
   type 文本布局结果,
   type 文本布局环境,
 } from "./文本布局.js";
+import { 计算媒体拼贴几何 } from "./媒体拼贴几何.js";
 
 /**
  * 聊天展示 owner 只负责消息列表、操作台和房间壳层 presenter。
@@ -33,20 +34,17 @@ export const 默认消息文本布局环境: 消息文本布局环境 = {
   bubbleHorizontalBorderWidth: 2,
 };
 
-export type 媒体拼贴模板 =
-  | "single"
-  | "double-grid"
-  | "hero-top"
-  | "quad-grid"
-  | "hero-strip"
-  | "triple-grid";
-
+/**
+ * 媒体拼贴布局：由 Telegram Mosaic 算法输出的绝对定位布局信息。
+ * 容器用 position: relative，每张卡片用 position: absolute。
+ */
 export interface 媒体附件拼贴布局 {
-  template: 媒体拼贴模板;
-  columnCount: number;
-  gap: number;
-  rowHeight: number;
+  /** 容器总高度（px） */
+  totalHeight: number;
+  /** 容器内容宽度（px） */
   contentWidth: number;
+  /** 卡片间距（px） */
+  spacing: number;
 }
 
 export interface 消息展示项 {
@@ -67,13 +65,17 @@ export interface 消息展示项 {
 export interface 图片附件展示项 {
   kind: "image";
   attachmentId: string;
+  /** 原始像素宽 */
   width: number;
+  /** 原始像素高 */
   height: number;
-  gridColumnStart?: number;
-  gridColumnSpan?: number;
-  gridRowStart?: number;
-  gridRowSpan?: number;
+  /** 布局输出：卡片在容器内的 x 坐标 */
+  layoutX: number;
+  /** 布局输出：卡片在容器内的 y 坐标 */
+  layoutY: number;
+  /** 布局输出：卡片显示宽度 */
   displayWidth: number;
+  /** 布局输出：卡片显示高度 */
   displayHeight: number;
 }
 
@@ -82,22 +84,14 @@ export interface 视频附件展示项 {
   attachmentId: string;
   width: number;
   height: number;
-  gridColumnStart?: number;
-  gridColumnSpan?: number;
-  gridRowStart?: number;
-  gridRowSpan?: number;
+  layoutX: number;
+  layoutY: number;
   displayWidth: number;
   displayHeight: number;
   posterSrc: string | null;
 }
 
 export type 媒体附件展示项 = 图片附件展示项 | 视频附件展示项;
-interface 媒体附件拼贴槽位 {
-  columnStart: number;
-  columnSpan: number;
-  rowStart: number;
-  rowSpan: number;
-}
 
 interface 媒体附件展示结果 {
   attachments: 媒体附件展示项[];
@@ -281,94 +275,74 @@ function 派生媒体附件展示结果(
   附件预览地址表: 附件预览地址表
 ): 媒体附件展示结果 {
   if (attachments.length === 0) {
-    return {
-      attachments: [],
-      attachmentLayout: null,
-    };
+    return { attachments: [], attachmentLayout: null };
   }
 
-  const 拼贴规划 = 规划媒体拼贴布局(attachments.length, layoutEnv);
-  const 单图宽度上限 = Math.max(140, Math.min(layoutEnv.maxContentWidth, 320));
-  const attachmentsItems = attachments.map<媒体附件展示项>((attachment, index) => {
-      const slot = 拼贴规划.slots[index] ?? {
-        columnStart: 1,
-        columnSpan: 1,
-        rowStart: 1,
-        rowSpan: 1,
-      };
-      const displayWidth =
-        拼贴规划.layout.template === "single"
-          ? Math.min(attachment.width, 单图宽度上限)
-          : 计算拼贴槽位宽度(拼贴规划.layout, slot);
-      const displayHeight =
-        拼贴规划.layout.template === "single"
-          ? Math.max(
-              72,
-              Math.round((displayWidth * attachment.height) / Math.max(1, attachment.width))
-            )
-          : 计算拼贴槽位高度(拼贴规划.layout, slot);
+  const spacing = 8;
+  const maxWidth = Math.max(248, Math.min(layoutEnv.maxContentWidth, 384));
 
-      /**
-       * 多附件消息在 presenter 层先收口成统一拼贴几何：
-       * 1. 壳层和 renderer 只消费一份槽位真相，不再各自猜“几列几行”；
-       * 2. 混合图片/视频也共用同一模板选择逻辑，避免一边是图片网格、一边是视频列表；
-       * 3. 多附件时不再逐张保留原始纵横比，而是统一裁切到拼贴槽位，换取 Telegram 式整齐结构。
-       */
-      if (attachment.kind === "video") {
-        return {
-          kind: "video",
-          attachmentId: attachment.attachment_id,
-          width: attachment.width,
-          height: attachment.height,
-          gridColumnStart: slot.columnStart,
-          gridColumnSpan: slot.columnSpan,
-          gridRowStart: slot.rowStart,
-          gridRowSpan: slot.rowSpan,
-          displayWidth,
-          displayHeight,
-          /**
-           * 视频消息流默认态只吃后端权威封面：
-           * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
-             * 2. realtime room_event 在无逐连接 session 上下文时，不会直接带 still_url，
-             *    这时只允许根据后端显式给出的 `has_preview_asset` 真相，回填当前会话的 preview 地址；
-           * 3. 不再让壳层临时抠首帧、长第二套预览链；
-           * 4. 正式播放仍然继续走唯一媒体主链。
-           */
-          posterSrc:
-            attachment.preview_asset?.still_url ??
-            (attachment.has_preview_asset
-              ? 读取附件预览地址(附件预览地址表, attachment.attachment_id)
-              : null),
-        };
-      }
+  /**
+   * 调用 Telegram Mosaic 算法：
+   * 输入每张媒体的真实宽高，输出每张的绝对坐标和尺寸。
+   * 卡片比例接近媒体原始比例，object-fit: cover 裁切量极小。
+   */
+  const 几何 = 计算媒体拼贴几何(
+    attachments.map((a) => ({ w: a.width, h: a.height })),
+    { maxWidth, spacing }
+  );
+
+  const attachmentsItems = attachments.map<媒体附件展示项>((attachment, index) => {
+    const geo = 几何.items[index];
+    /** 单张媒体不走 mosaic，用算法输出的绝对几何 */
+    const layoutX = geo?.x ?? 0;
+    const layoutY = geo?.y ?? 0;
+    const displayWidth = geo?.width ?? Math.min(attachment.width, maxWidth);
+    const displayHeight = geo?.height ?? Math.max(72, Math.round(
+      (displayWidth * attachment.height) / Math.max(1, attachment.width)
+    ));
+
+    if (attachment.kind === "video") {
       return {
-        kind: "image",
+        kind: "video",
         attachmentId: attachment.attachment_id,
         width: attachment.width,
         height: attachment.height,
-        gridColumnStart: slot.columnStart,
-        gridColumnSpan: slot.columnSpan,
-        gridRowStart: slot.rowStart,
-        gridRowSpan: slot.rowSpan,
+        layoutX,
+        layoutY,
         displayWidth,
         displayHeight,
         /**
-         * 图片 presenter 现在不再预写任何受控内容地址：
-         * 1. 时间线与查看器都等待运行时后续投影正式 swarm 源；
-         * 2. 冷启动阶段只允许稳定占位，不允许这里先偷塞 original/blob canonical；
-         * 3. 图片消息项现在只保留缩略/占位表面，不再挂旧 original 字段。
+         * 视频消息流默认态只吃后端权威封面：
+         * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
+         * 2. realtime room_event 无逐连接 session 上下文时，
+         *    只允许根据后端显式给出的 `has_preview_asset` 真相回填 preview 地址；
+         * 3. 不再让壳层临时抠首帧、长第二套预览链；
+         * 4. 正式播放仍走唯一媒体主链。
          */
+        posterSrc:
+          attachment.preview_asset?.still_url ??
+          (attachment.has_preview_asset
+            ? 读取附件预览地址(附件预览地址表, attachment.attachment_id)
+            : null),
       };
-    });
+    }
+    return {
+      kind: "image",
+      attachmentId: attachment.attachment_id,
+      width: attachment.width,
+      height: attachment.height,
+      layoutX,
+      layoutY,
+      displayWidth,
+      displayHeight,
+    };
+  });
 
-  const attachmentLayout =
-    拼贴规划.layout.template === "single"
-      ? {
-          ...拼贴规划.layout,
-          contentWidth: attachmentsItems[0]?.displayWidth ?? 拼贴规划.layout.contentWidth,
-          rowHeight: attachmentsItems[0]?.displayHeight ?? 拼贴规划.layout.rowHeight,
-        }
-      : 拼贴规划.layout;
+  const attachmentLayout: 媒体附件拼贴布局 = {
+    totalHeight: 几何.totalHeight,
+    contentWidth: 几何.contentWidth,
+    spacing,
+  };
 
   return {
     attachments: attachmentsItems,
@@ -376,142 +350,6 @@ function 派生媒体附件展示结果(
   };
 }
 
-function 规划媒体拼贴布局(
-  attachmentCount: number,
-  layoutEnv: 消息文本布局环境
-): {
-  layout: 媒体附件拼贴布局;
-  slots: 媒体附件拼贴槽位[];
-} {
-  const gap = 8;
-  const multiAttachmentWidth = Math.max(248, Math.min(layoutEnv.maxContentWidth, 384));
-  const 双列单元宽度 = Math.floor((multiAttachmentWidth - gap) / 2);
-  const 双列单元高度 = Math.max(196, Math.floor(双列单元宽度 * 1.28));
-  const 三列单元宽度 = Math.floor((multiAttachmentWidth - gap * 2) / 3);
-  const 三列单元高度 = Math.max(152, Math.floor(三列单元宽度 * 1.36));
-
-  /**
-   * 多媒体拼贴现在明确向“竖向短视频优先”的几何收口：
-   * 1. 双列和三列单元都明确做成 portrait cell，而不是“接近正方形”的海报块；
-   * 2. 三图/五图模板继续保留 leader column，让主卡片纵向跨两行；
-   * 3. 同时把拼贴最大内容宽度略放开，减少时间线两侧空耗的网页式留白。
-   */
-  if (attachmentCount <= 1) {
-    return {
-      layout: {
-        template: "single",
-        columnCount: 1,
-        gap: 0,
-        rowHeight: 0,
-        contentWidth: multiAttachmentWidth,
-      },
-      slots: [{ columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 }],
-    };
-  }
-
-  if (attachmentCount === 2) {
-    return {
-      layout: {
-        template: "double-grid",
-        columnCount: 2,
-        gap,
-        rowHeight: 双列单元高度,
-        contentWidth: multiAttachmentWidth,
-      },
-      slots: [
-        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-      ],
-    };
-  }
-
-  if (attachmentCount === 3) {
-    return {
-      layout: {
-        template: "hero-top",
-        columnCount: 2,
-        gap,
-        rowHeight: 双列单元高度,
-        contentWidth: multiAttachmentWidth,
-      },
-      slots: [
-        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 2 },
-        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
-      ],
-    };
-  }
-
-  if (attachmentCount === 4) {
-    return {
-      layout: {
-        template: "quad-grid",
-        columnCount: 2,
-        gap,
-        rowHeight: 双列单元高度,
-        contentWidth: multiAttachmentWidth,
-      },
-      slots: [
-        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
-      ],
-    };
-  }
-
-  if (attachmentCount === 5) {
-    return {
-      layout: {
-        template: "hero-strip",
-        columnCount: 2,
-        gap,
-        rowHeight: 双列单元高度,
-        contentWidth: multiAttachmentWidth,
-      },
-      slots: [
-        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 2 },
-        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
-        { columnStart: 1, columnSpan: 1, rowStart: 3, rowSpan: 1 },
-        { columnStart: 2, columnSpan: 1, rowStart: 3, rowSpan: 1 },
-      ],
-    };
-  }
-
-  return {
-    layout: {
-      template: "triple-grid",
-      columnCount: 3,
-      gap,
-      rowHeight: 三列单元高度,
-      contentWidth: multiAttachmentWidth,
-    },
-    slots: Array.from({ length: attachmentCount }, (_, index) => ({
-      columnStart: (index % 3) + 1,
-      columnSpan: 1,
-      rowStart: Math.floor(index / 3) + 1,
-      rowSpan: 1,
-    })),
-  };
-}
-
-function 计算拼贴槽位宽度(
-  layout: 媒体附件拼贴布局,
-  slot: 媒体附件拼贴槽位
-): number {
-  const 单列宽度 = Math.floor(
-    (layout.contentWidth - layout.gap * Math.max(0, layout.columnCount - 1)) / layout.columnCount
-  );
-  return 单列宽度 * slot.columnSpan + layout.gap * Math.max(0, slot.columnSpan - 1);
-}
-
-function 计算拼贴槽位高度(
-  layout: 媒体附件拼贴布局,
-  slot: 媒体附件拼贴槽位
-): number {
-  return layout.rowHeight * slot.rowSpan + layout.gap * Math.max(0, slot.rowSpan - 1);
-}
 
 /**
  * 展示层只读附件地址表，不直接知道 transport/session。
@@ -548,14 +386,10 @@ function 计算媒体附件内容宽度(
   if (attachmentLayout) {
     return Math.min(layoutEnv.maxContentWidth, attachmentLayout.contentWidth);
   }
-  const 宫格间距 = 8;
-  const 列数 = attachments.length >= 2 ? 2 : 1;
-  return 列数 === 1
+  /** 无布局时的兆底：单张用 displayWidth，多张用 maxContentWidth */
+  return attachments.length === 1
     ? attachments[0]?.displayWidth ?? 0
-    : Math.min(
-        layoutEnv.maxContentWidth,
-        (attachments[0]?.displayWidth ?? 0) * 2 + 宫格间距
-      );
+    : Math.min(layoutEnv.maxContentWidth, attachments[0]?.displayWidth ?? 0);
 }
 
 function 计算消息气泡宽度(

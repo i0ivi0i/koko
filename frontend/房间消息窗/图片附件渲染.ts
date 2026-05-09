@@ -42,10 +42,6 @@ export const 渲染图片附件 = (
     <div
       class="message-attachment-card message-image-card"
       data-attachment-id=${attachment.attachmentId}
-      data-grid-column-start=${attachment.gridColumnStart ?? ""}
-      data-grid-column-span=${attachment.gridColumnSpan ?? ""}
-      data-grid-row-start=${attachment.gridRowStart ?? ""}
-      data-grid-row-span=${attachment.gridRowSpan ?? ""}
       style=${input.attachmentCardStyle}
     >
       <button

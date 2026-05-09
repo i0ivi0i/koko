@@ -27,23 +27,11 @@ export const 估算媒体附件布局高度 = (item: 消息展示项): number =>
   }
   const layout = item.attachmentLayout;
   if (layout) {
-    const rowCount = Math.max(
-      1,
-      ...item.attachments.map(
-        (attachment) =>
-          (attachment.gridRowStart ?? 1) + Math.max(1, attachment.gridRowSpan ?? 1) - 1
-      )
-    );
-    return rowCount * layout.rowHeight + Math.max(0, rowCount - 1) * layout.gap;
+    /** Telegram Mosaic 算法已算好容器总高度，直接消费 */
+    return layout.totalHeight;
   }
-  const columnCount = item.attachments.length >= 2 ? 2 : 1;
-  const rowCount = Math.ceil(item.attachments.length / columnCount);
-  const rowHeight = Math.max(
-    0,
-    ...item.attachments.map((attachment) => attachment.displayHeight)
-  );
-  const gap = columnCount > 1 ? 8 : 0;
-  return rowCount * rowHeight + Math.max(0, rowCount - 1) * gap;
+  /** 无布局 fallback：单张用 displayHeight */
+  return item.attachments[0]?.displayHeight ?? 0;
 };
 
 export const 估算消息行高度 = (

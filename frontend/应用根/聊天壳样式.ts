@@ -422,10 +422,7 @@ export const 聊天壳样式 = css`
     }
 
     .message-attachment-grid {
-      display: grid;
-      grid-template-columns: repeat(var(--attachment-grid-columns, 2), minmax(0, 1fr));
-      grid-auto-rows: var(--attachment-grid-row-height, auto);
-      gap: var(--attachment-grid-gap, 8px);
+      position: relative;
       margin-top: 10px;
     }
 
@@ -439,10 +436,6 @@ export const 聊天壳样式 = css`
 
     .message-surface.media-message .message-body {
       padding: 0 2px;
-    }
-
-    .message-attachment-grid[data-attachment-count="1"] {
-      grid-template-columns: minmax(0, 1fr);
     }
 
     .message-attachment-card,
