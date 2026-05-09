@@ -1,0 +1,14 @@
+[package]
+name = "koko-torrent-core"
+version = "0.1.0"
+edition = "2021"
+# 纯计算 crate，零 IO / 零线程 / 零文件系统，确保可编译到 wasm32-unknown-unknown。
+# 后端 native 和前端 WASM 共享这一份 torrent 生成逻辑，保证 info_hash 100% 一致。
+
+[dependencies]
+# SHA-1 用于 BitTorrent piece hash（BEP-3 协议要求）
+sha1 = "0.10"
+# SHA-256 用于 content_hash（内容寻址标识）
+sha2 = "0.10"
+# 十六进制编码，将摘要转为可读字符串
+hex = "0.4"

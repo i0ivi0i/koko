@@ -348,8 +348,8 @@ fn 数据库连接池配置默认适合单机生产起步() {
     let cfg =
         koko::assembly::数据库连接池配置::from_env_with(|_| None).expect("缺省连接池配置应可解析");
 
-    assert_eq!(cfg.app_max_connections, 20);
-    assert_eq!(cfg.app_min_connections, 0);
+    assert_eq!(cfg.app_max_connections, 50);
+    assert_eq!(cfg.app_min_connections, 5);
     assert_eq!(cfg.migration_max_connections, 1);
     assert!(
         cfg.acquire_timeout_ms <= 5_000,

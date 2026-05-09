@@ -46,7 +46,7 @@ pub(crate) struct 协作分发可用性输入 {
 /// 1. 与上传主链解耦的内容标识；
 /// 2. 不依赖 torrent/runtime 的 swarm 锚点；
 /// 3. 后续 Phase 2 生成 metainfo 时仍可继续复用的内容摘要。
-pub(crate) fn 生成内容哈希(共享字节: &[u8]) -> String {
+pub fn 生成内容哈希(共享字节: &[u8]) -> String {
     let digest = Sha256::digest(共享字节);
     hex::encode(digest)
 }
@@ -70,7 +70,7 @@ pub(crate) fn 构造协作分发元数据写入请求(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 附件torrent元信息 {
+pub struct 附件torrent元信息 {
     pub torrent_bytes: Vec<u8>,
     pub torrent_info_hash: String,
     pub piece_length_bytes: i32,
@@ -80,7 +80,7 @@ pub(crate) struct 附件torrent元信息 {
 /// 这里继续把 torrent 内文件名固定到 `content_hash + canonical 扩展名`：
 /// 1. 同内容同 canonical 媒体类型仍可共享同一 info hash；
 /// 2. 前端 WebTorrent/file.type 也能拿到浏览器可播放的 MIME，而不是退化成 octet-stream。
-pub(crate) fn 生成附件torrent元信息(
+pub fn 生成附件torrent元信息(
     content_hash: &str,
     稳定扩展名: &str,
     共享字节: &[u8],
