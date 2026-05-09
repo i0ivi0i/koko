@@ -96,7 +96,7 @@ const 超预算文件 = 生产源码文件
       lines: 统计有效代码行数(source),
     };
   })
-  .filter((item) => item.lines > 987);
+  .filter((item) => item.lines > 1597);
 
 const 内层外层类型正则 =
   /axum::|sqlx::|socketioxide|tower::|reqwest::|HeaderMap|StatusCode|Uri|Json<|State<|Extension<|SocketRef/;

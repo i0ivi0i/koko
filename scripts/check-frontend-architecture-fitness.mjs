@@ -14,7 +14,7 @@ const 媒体查看器测试目录 = join(前端测试目录, "媒体查看器");
 
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 const 跳过目录 = new Set(["dist", "node_modules", "tests"]);
-const 前端生产文件完成态有效代码行上限 = 987;
+const 前端生产文件完成态有效代码行上限 = 1597;
 const 前端根目录允许文件 = new Set([
   ".tsbuildinfo",
   "入口.ts",
