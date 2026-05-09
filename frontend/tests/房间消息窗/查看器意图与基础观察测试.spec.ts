@@ -238,6 +238,8 @@ describe("房间消息窗媒体查看器 / 查看器意图与基础观察", () =
             attachmentId: "att-video-2",
             width: 1280,
             height: 720,
+      layoutX: 0,
+      layoutY: 0,
             displayWidth: 320,
             displayHeight: 180,
             posterSrc: "http://media.local/poster-video-2",

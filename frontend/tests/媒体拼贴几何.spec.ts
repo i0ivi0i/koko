@@ -36,8 +36,8 @@ function 断言比例接近(
   maxDiff = 0.15
 ): void {
   for (let i = 0; i < result.items.length; i++) {
-    const original = sizes[i].w / sizes[i].h;
-    const actual = result.items[i].width / result.items[i].height;
+    const original = sizes[i]!.w / sizes[i]!.h;
+    const actual = result.items[i]!.width / result.items[i]!.height;
     // 拼贴为了整齐会有一定裁切，允许 15% 偏差
     // 对于极端比例差异的组合，放宽到 50%
     const diff = Math.abs(original - actual) / Math.max(original, actual);
@@ -77,12 +77,12 @@ describe("媒体拼贴几何", () => {
         默认配置
       );
       expect(result.items).toHaveLength(1);
-      expect(result.items[0].width).toBe(默认配置.maxWidth);
-      expect(result.items[0].x).toBe(0);
-      expect(result.items[0].y).toBe(0);
+      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
+      expect(result.items[0]!.x).toBe(0);
+      expect(result.items[0]!.y).toBe(0);
       // 高度应该按 16:9 比例
       const expectedHeight = Math.round((默认配置.maxWidth * 1080) / 1920);
-      expect(result.items[0].height).toBe(expectedHeight);
+      expect(result.items[0]!.height).toBe(expectedHeight);
     });
 
     it("竖屏单图按比例缩放", () => {
@@ -91,7 +91,7 @@ describe("媒体拼贴几何", () => {
         默认配置
       );
       expect(result.items).toHaveLength(1);
-      expect(result.items[0].width).toBe(默认配置.maxWidth);
+      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
       断言无溢出(result, 默认配置.maxWidth);
     });
   });
@@ -102,7 +102,7 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(2);
       // 两张高度应该相同（同一行）
-      expect(result.items[0].height).toBe(result.items[1].height);
+      expect(result.items[0]!.height).toBe(result.items[1]!.height);
       断言无溢出(result, 默认配置.maxWidth);
     });
 
@@ -111,9 +111,9 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(2);
       // 两张高度相同
-      expect(result.items[0].height).toBe(result.items[1].height);
+      expect(result.items[0]!.height).toBe(result.items[1]!.height);
       // 竖屏那张应该更窄
-      expect(result.items[0].width).toBeLessThan(result.items[1].width);
+      expect(result.items[0]!.width).toBeLessThan(result.items[1]!.width);
       断言无溢出(result, 默认配置.maxWidth);
     });
 
@@ -121,7 +121,7 @@ describe("媒体拼贴几何", () => {
       const sizes: 媒体尺寸[] = [{ w: 1000, h: 1000 }, { w: 800, h: 800 }];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(2);
-      expect(result.items[0].height).toBe(result.items[1].height);
+      expect(result.items[0]!.height).toBe(result.items[1]!.height);
       断言无溢出(result, 默认配置.maxWidth);
     });
   });
@@ -136,10 +136,10 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(3);
       // 第一张高度 = 容器总高度（左列满高）
-      expect(result.items[0].height).toBe(result.totalHeight);
+      expect(result.items[0]!.height).toBe(result.totalHeight);
       // 右列两张叠起来 + spacing = 总高度
       const rightTotalHeight =
-        result.items[1].height + 默认配置.spacing + result.items[2].height;
+        result.items[1]!.height + 默认配置.spacing + result.items[2]!.height;
       expect(rightTotalHeight).toBe(result.totalHeight);
       断言无溢出(result, 默认配置.maxWidth);
     });
@@ -153,10 +153,10 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(3);
       // 第一张宽度 = maxWidth（上行满宽）
-      expect(result.items[0].width).toBe(默认配置.maxWidth);
+      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
       // 下行两张 x 不同
-      expect(result.items[1].x).toBe(0);
-      expect(result.items[2].x).toBeGreaterThan(0);
+      expect(result.items[1]!.x).toBe(0);
+      expect(result.items[2]!.x).toBeGreaterThan(0);
       断言无溢出(result, 默认配置.maxWidth);
     });
   });
@@ -171,7 +171,7 @@ describe("媒体拼贴几何", () => {
       ];
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(4);
-      expect(result.items[0].width).toBe(默认配置.maxWidth);
+      expect(result.items[0]!.width).toBe(默认配置.maxWidth);
       断言无溢出(result, 默认配置.maxWidth);
     });
 
@@ -185,7 +185,7 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(4);
       // 第一张高度 = 容器总高度
-      expect(result.items[0].height).toBe(result.totalHeight);
+      expect(result.items[0]!.height).toBe(result.totalHeight);
       断言无溢出(result, 默认配置.maxWidth);
     });
   });
@@ -202,6 +202,7 @@ describe("媒体拼贴几何", () => {
       const result = 计算媒体拼贴几何(sizes, 默认配置);
       expect(result.items).toHaveLength(5);
       断言无溢出(result, 默认配置.maxWidth);
+      断言比例接近(result, sizes, 0.5);
     });
 
     it("6 张全横屏紧凑无溢出", () => {
