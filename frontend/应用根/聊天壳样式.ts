@@ -513,14 +513,19 @@ export const 聊天壳样式 = css`
 
     /*
      * preview video 叠在 poster 之上（z:1）：
-     * - 有帧时自然覆盖 poster，无帧时透明让 poster 透出；
-     * - background 必须 transparent，否则 video 未 decode 时深色背景遮住 poster。
+     * - 浏览器 <video> 未解码出帧时，内部渲染面是纯黑像素，CSS background 无法改变；
+     * - 所以默认 opacity:0，让底层 poster (z:0) 透出；
+     * - JS 确认当前帧已提交后，模板加 --has-frame class，opacity→1 自然覆盖 poster。
      */
     .message-video-preview {
       position: absolute;
       inset: 0;
       z-index: 1;
       background: transparent;
+      opacity: 0;
+    }
+    .message-video-preview--has-frame {
+      opacity: 1;
     }
 
     /* owner warmup 期间 poster 需要覆盖 canonical-host（z:3），所以提升到 z:4 */

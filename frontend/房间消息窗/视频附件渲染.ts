@@ -441,6 +441,7 @@ export const 渲染视频附件 = (
     shouldRenderStageHost,
     shouldRenderInlineVideo,
     shouldShowFirstFrameGuard,
+    hasCurrentDomPreviewFrame,
     shouldShowTimelinePlayIndicator,
     renderMediaHint: input.渲染媒体提示(attachment.attachmentId, playback),
     操作: {
