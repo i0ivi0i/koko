@@ -36,6 +36,82 @@ function 应用内存窗口裁剪(messages: 消息事件[]): 消息事件[] {
   return messages.slice(messages.length - 内存窗口保留尾部);
 }
 
+/**
+ * REALTIME fast-path 检查 current 末尾候选窗口大小。
+ *
+ * 100 条足以覆盖近期所有可能的乐观消息和网络重发：
+ * - 单一会话乐观消息一般不超过几十条；
+ * - socket.io reconnect 补洞通常也只重送最近几十条；
+ * - 取 100 提供充足边界、同时 Set 构建成本可忽略。
+ */
+const REALTIME_FAST_PATH_TAIL_WINDOW = 100;
+
+/**
+ * REALTIME 增量 fast-path：检测"纯 append"场景跳过 O(N log N) 完整合并。
+ *
+ * 命中条件全满足才能走（任一不满足都回退到 `合并房间时间线消息` 完整合并）：
+ * 1. current 升序（由前次 fast-path 或 SNAPSHOT/HISTORY 完整合并保证起点升序）
+ * 2. events 内部升序
+ * 3. events 首条 event_position 严格大于 current 末尾 event_position
+ * 4. events 与 current 尾部 N 条无 client_message_id 冲突（覆盖近期乐观消息）
+ * 5. events 与 current 尾部 N 条无 message_id 重复（覆盖网络重发）
+ *
+ * 命中时返回 [...current, ...events]，O(M + N_tail)。
+ * 不命中返回 null，让调用方走完整合并。
+ *
+ * 性能动机（spec §Plan v2 补强 §A）：万人房 100 条/s 推送下，
+ * 单次合流从 ~30k ops 降到 ~M+100 ops，主线程预算从 jank 边缘降到充裕。
+ */
+function 尝试REALTIME快速合流(
+  current: 消息事件[],
+  events: 消息事件[]
+): 消息事件[] | null {
+  if (events.length === 0) {
+    // 空 events 等价 no-op，直接复用 current 引用，不进入完整合并
+    return current;
+  }
+  if (current.length === 0) {
+    // 首次写入（current 空）走完整合并以确保排序与去重不变量
+    return null;
+  }
+
+  // 条件 2：events 内部升序
+  for (let i = 1; i < events.length; i++) {
+    const prev = events[i - 1]!;
+    const curr = events[i]!;
+    if (curr.event_position <= prev.event_position) {
+      return null;
+    }
+  }
+
+  // 条件 3：events 首条 严格大于 current 末尾 event_position
+  const last = current[current.length - 1]!;
+  if (events[0]!.event_position <= last.event_position) {
+    return null;
+  }
+
+  // 条件 4 & 5：尾部 100 条无 client_message_id / message_id 冲突
+  const tailStart = Math.max(0, current.length - REALTIME_FAST_PATH_TAIL_WINDOW);
+  const tailClientIds = new Set<string>();
+  const tailMessageIds = new Set<string>();
+  for (let i = tailStart; i < current.length; i++) {
+    const m = current[i]!;
+    tailClientIds.add(m.client_message_id);
+    tailMessageIds.add(m.message_id);
+  }
+  for (const e of events) {
+    if (tailClientIds.has(e.client_message_id)) {
+      return null;
+    }
+    if (tailMessageIds.has(e.message_id)) {
+      return null;
+    }
+  }
+
+  // 全部条件满足：纯 append，跳过完整合并。
+  return [...current, ...events];
+}
+
 export type 创建乐观房间消息输入 = {
   roomId: string;
   sessionId: string;
@@ -137,8 +213,14 @@ export function 推进房间时间线(
       return 应用内存窗口裁剪(合并房间时间线消息(input.messages));
     case "HISTORY":
       return 应用内存窗口裁剪(合并房间时间线消息([...input.messages, ...current]));
-    case "REALTIME":
-      return 应用内存窗口裁剪(合并房间时间线消息([...current, ...input.events]));
+    case "REALTIME": {
+      // 先尝试 fast-path：90%+ 实时推送是单调递增 append，能避免 O(N log N) 全量合并。
+      // 不命中（乱序、重发、乐观替换等）回退到完整合并，结果完全等价。
+      const 快速结果 = 尝试REALTIME快速合流(current, input.events);
+      return 应用内存窗口裁剪(
+        快速结果 ?? 合并房间时间线消息([...current, ...input.events])
+      );
+    }
     case "OPTIMISTIC":
       return 应用内存窗口裁剪(合并房间时间线消息([...current, input.message]));
   }
