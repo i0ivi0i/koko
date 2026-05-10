@@ -49,4 +49,16 @@ export interface 消息仓库端口 {
    * 清理本房间本地缓存，防止下次错误地用陈旧数据填充首屏。
    */
   清空房间(roomId: string): Promise<void>;
+
+  /**
+   * 显式刷出内部所有 buffered 写入（如果实现层有 coalesce 缓冲）。
+   *
+   * 设计意图：
+   * - 对于 in-memory 实现：no-op；
+   * - 对于 IndexedDB adapter：把 100ms debounce buffer 立即落盘；
+   * - 主要使用方：`pagehide` / `beforeunload` 钩子，避免页面关闭时丢数据。
+   *
+   * 错误降级：与其他方法一致，异常一律吞掉返回 resolved Promise。
+   */
+  flush(): Promise<void>;
 }

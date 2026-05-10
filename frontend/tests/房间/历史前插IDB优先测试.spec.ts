@@ -50,6 +50,7 @@ function 制造装配(opts: {
     写入,
     读取窗口,
     清空房间: vi.fn(async () => {}),
+    flush: vi.fn(async () => {}),
   };
 
   const state = {
@@ -147,6 +148,7 @@ describe("HISTORY 路径 IDB 优先", () => {
         throw new Error("idb broken");
       },
       async 清空房间() {},
+      async flush() {},
     };
     const transportLoadRoomHistory = vi.fn(async () => ({
       room_id: "r-1",

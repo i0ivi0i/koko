@@ -40,6 +40,7 @@ const 制造仓库桩 = () => {
       return [];
     },
     async 清空房间() {},
+    async flush() {},
   };
   return { 仓库, 写入调用 };
 };
@@ -144,6 +145,7 @@ describe("时间线事实派发到本地缓存", () => {
         return [];
       },
       async 清空房间() {},
+      async flush() {},
     };
     expect(() =>
       时间线事实派发到本地缓存({

@@ -45,6 +45,7 @@ const 制造仓库桩 = () => {
       return [];
     },
     async 清空房间() {},
+    async flush() {},
   };
   return { 仓库, 写入调用记录 };
 };
@@ -118,6 +119,7 @@ describe("BOOTSTRAP 写入 IDB", () => {
         return [];
       },
       async 清空房间() {},
+      async flush() {},
     };
     const snapshot = 制造快照("r-2", [制造消息("r-2", 1)]);
     const 协作 = 创建最小协作({ 消息仓库: 仓库 });
