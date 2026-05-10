@@ -161,24 +161,6 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
          * 2. 紧接着外层再回灌一条更近位置，露出的 preview 就会在用户眼前 seek 一下；
          * 3. 这里先把最后一拍位置灌回本地桥，再对齐底板 preview，用户看到的才是同一帧退场。
          */
-        /**
-         * render 前命令式隐藏旧 canonical host：
-         * video 元素的 GPU 纹理层由 compositor 独立合成。
-         * Lit render 整棵移除 canonical host div 时，compositor 撕裂旧 video 纹理层
-         * 与新建 frozen frame canvas 纹理层之间有一帧间隙 → 黑闪。
-         * 在 willUpdate（render 前）用 visibility:hidden 立即停止 compositor 合成旧 host，
-         * 让 frozen frame canvas 在同帧接管，不留视觉空窗。
-         */
-        const 退场宿主 = this.renderRoot.querySelector<HTMLElement>(
-          `.message-video-canonical-host[data-attachment-id="${previousOwnerAttachmentId}"]`
-        );
-        if (退场宿主) {
-          退场宿主.style.visibility = "hidden";
-        }
-        const 退场视频 = this.时间线播放器宿主Owner.读取当前视频元素();
-        if (退场视频) {
-          退场视频.style.visibility = "hidden";
-        }
         this.时间线播放器宿主Owner.冲刷当前播放位置();
         同步时间线退场Owner底板预览({
           root: this,

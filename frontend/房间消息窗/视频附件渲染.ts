@@ -375,10 +375,9 @@ export const 渲染视频附件 = (
     !shouldUseHiddenStageCover &&
     (shouldStageWarmupGuardedOwnerCanonical || shouldStageWarmupColdInitialOwnerCanonical);
   const shouldRenderVisibleCanonicalHost =
-    (shouldRenderInlineVideo &&
-      !shouldPreferRetiringOwnerPreviewSurface &&
-      (shouldRevealCanonicalHost || shouldUseHiddenStageCover)) ||
-    (isRetiringReleasedOwner && hasFrozenTimelineFrame);
+    shouldRenderInlineVideo &&
+    !shouldPreferRetiringOwnerPreviewSurface &&
+    (shouldRevealCanonicalHost || shouldUseHiddenStageCover);
   const shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup =
     shouldRenderVisibleCanonicalHost && !hasVisibleCanonicalCommittedFrame &&
     (hasCurrentDomPreviewFrame || hasFrozenTimelineFrame || shouldReuseSavedTimelineFrameAsPreview || hasStablePreviewPosterSurface);

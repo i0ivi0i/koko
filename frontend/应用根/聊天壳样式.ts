@@ -550,7 +550,6 @@ export const 聊天壳样式 = css`
       border-radius: inherit;
       pointer-events: none;
       background: transparent;
-      will-change: transform;
     }
 
     /*

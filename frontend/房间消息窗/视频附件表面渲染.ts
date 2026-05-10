@@ -153,7 +153,7 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
           <div
             class="message-video-canonical-host"
             data-attachment-id=${attachment.attachmentId}
-            data-covered=${shouldRevealCanonicalHost && !shouldRenderFrozenTimelineFrame ? "false" : "true"}
+            data-covered=${shouldRevealCanonicalHost ? "false" : "true"}
             data-video-kind=${视频地址属于旧流媒体清单(ownerCanonicalVideoSrc)
               ? "archived_stream"
               : "file"}

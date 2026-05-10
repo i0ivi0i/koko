@@ -360,7 +360,6 @@ const 配置时间线自动播视频 = (
    * 3. 进入查看器后，这些预览态属性会被显式撤掉，避免把消息流约束污染到沉浸层。
    */
   video.className = "message-video-preview";
-  video.style.visibility = "";
   video.dataset.attachmentId = attachmentId;
   video.dataset.canonicalPlayer = "true";
   video.muted = true;

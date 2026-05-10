@@ -219,6 +219,147 @@ describe("时间线画面缓存Owner", () => {
     }
   });
 
+  it("预热路径会链式调度 rVFC，让 Map 持续追踪屏幕实际显示帧（消除退场跳帧）", () => {
+    const { owner } = 创建Owner();
+    const drawImage = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob: vi.fn(),
+      toDataURL: vi.fn(),
+    } as unknown as HTMLCanvasElement;
+    const 原始创建元素 = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      if (tagName === "canvas") {
+        return canvas;
+      }
+      return 原始创建元素(tagName);
+    });
+
+    const callbacks: Array<() => void> = [];
+    let currentTime = 10.0;
+    const dataset = { attachmentId: "att-1" } as DOMStringMap;
+    const video = {
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+      videoWidth: 1280,
+      videoHeight: 720,
+      paused: false,
+      isConnected: true,
+      get currentTime() {
+        return currentTime;
+      },
+      currentSrc: "http://media.local/swarm/video.mp4",
+      getAttribute: (name: string) =>
+        name === "src" ? "http://media.local/swarm/video.mp4" : null,
+      dataset,
+      requestVideoFrameCallback: ((cb: () => void) => {
+        callbacks.push(cb);
+        return callbacks.length;
+      }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
+    } as unknown as HTMLVideoElement;
+
+    try {
+      owner.捕获自动播冻结帧("att-1", video, { 预热已合成帧: true });
+      expect(callbacks).toHaveLength(1);
+      expect(drawImage).not.toHaveBeenCalled();
+
+      // 第一帧 rVFC 触发：执行捕获 + 链式调度下一次 rVFC
+      callbacks[0]!();
+      expect(drawImage).toHaveBeenCalledTimes(1);
+      expect(callbacks).toHaveLength(2);
+
+      // 第二帧推进
+      currentTime = 10.0167;
+      callbacks[1]!();
+      expect(drawImage).toHaveBeenCalledTimes(2);
+      expect(callbacks).toHaveLength(3);
+
+      // video 暂停后链式应停止
+      currentTime = 10.0334;
+      (video as { paused: boolean }).paused = true;
+      callbacks[2]!();
+      expect(drawImage).toHaveBeenCalledTimes(2);
+      expect(callbacks).toHaveLength(3);
+    } finally {
+      createElement.mockRestore();
+    }
+  });
+
+  it("立即提交在 Map 已有最近同源帧时直接复用，不再 drawImage（避免退场 decoder buffer 偏移）", () => {
+    const { owner, 请求刷新 } = 创建Owner();
+    const drawImage = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob: vi.fn(),
+      toDataURL: vi.fn(),
+    } as unknown as HTMLCanvasElement;
+    const 原始创建元素 = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      if (tagName === "canvas") {
+        return canvas;
+      }
+      return 原始创建元素(tagName);
+    });
+
+    const existingBitmap = document.createElement("canvas");
+    (
+      owner as unknown as {
+        时间线自动播冻结帧: Map<
+          string,
+          {
+            src: string;
+            currentTime: number;
+            bitmap: CanvasImageSource;
+            width: number;
+            height: number;
+            updatedAt: number;
+            dispose(): void;
+          }
+        >;
+      }
+    ).时间线自动播冻结帧.set("att-1", {
+      src: "http://media.local/swarm/video.mp4",
+      currentTime: 22.0,
+      bitmap: existingBitmap,
+      width: 320,
+      height: 180,
+      updatedAt: Date.now(),
+      dispose: vi.fn(),
+    });
+    请求刷新.mockClear();
+
+    const video = {
+      readyState: HTMLMediaElement.HAVE_ENOUGH_DATA,
+      videoWidth: 1280,
+      videoHeight: 720,
+      paused: false,
+      currentTime: 22.0167,
+      currentSrc: "http://media.local/swarm/video.mp4",
+      getAttribute: (name: string) =>
+        name === "src" ? "http://media.local/swarm/video.mp4" : null,
+    } as unknown as HTMLVideoElement;
+
+    try {
+      owner.捕获自动播冻结帧("att-1", video, { 立即提交: true });
+
+      expect(drawImage).not.toHaveBeenCalled();
+      expect(请求刷新).toHaveBeenCalledOnce();
+      // Map 中仍是原 bitmap（未被覆盖）
+      expect(
+        owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
+          src: "http://media.local/swarm/video.mp4",
+          currentTime: 22.0,
+          updatedAt: 1,
+        })?.bitmap
+      ).toBe(existingBitmap);
+    } finally {
+      createElement.mockRestore();
+    }
+  });
+
   it("同源短时重进时，新实例仍能读到旧实例导出的首帧与冻结帧", () => {
     vi.useFakeTimers();
     try {

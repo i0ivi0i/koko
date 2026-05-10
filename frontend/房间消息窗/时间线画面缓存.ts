@@ -9,7 +9,13 @@ import type { 聊天列表展示项 } from "./视图.js";
 
 const 时间线自动播冻结帧最大边长 = 480;
 const 时间线自动播冻结帧允许时间偏差秒 = 2.5;
-const 时间线自动播冻结帧预热最小位移秒 = 1.5;
+/**
+ * 屏幕实际显示帧的追踪精度：
+ * 60fps 下一帧 ~16.7ms = 0.0167 秒；阈值取 0.01，确保相邻帧步进能顺利通过节流。
+ * 让 rVFC 链式调度的每一帧都能更新 Map，退场时 Map 中即"屏幕刚 present 的那一帧"。
+ */
+const 时间线自动播冻结帧预热最小位移秒 = 0.01;
+const 时间线自动播冻结帧立即提交复用阈值毫秒 = 200;
 const 时间线自动播冻结帧无续播位置保活毫秒 = 4_000;
 const 时间线短时重进暖状态保活毫秒 = 2_500;
 
@@ -314,6 +320,24 @@ export class 时间线画面缓存Owner {
   ): void {
     const 初始源 = this.依赖.读取视频当前播放源(video);
     const 初始时间 = video.currentTime;
+    /**
+     * 立即提交优先复用最近 present 帧：
+     * 退场时 video.currentTime 已经走到 decoder 的"下一帧"，但屏幕刚 present 的是上一帧；
+     * 链式 rVFC 早已把"屏幕刚 present 的那一帧"写进 Map，直接复用即可消除跳帧。
+     * 只有 Map 里没有最近同源帧时才回落到同步 drawImage。
+     */
+    if (options.立即提交 && attachmentId && 初始源) {
+      const existing = this.时间线自动播冻结帧.get(attachmentId);
+      if (
+        existing &&
+        existing.src === 初始源 &&
+        Number.isFinite(existing.updatedAt) &&
+        Date.now() - existing.updatedAt <= 时间线自动播冻结帧立即提交复用阈值毫秒
+      ) {
+        this.依赖.请求刷新();
+        return;
+      }
+    }
     const captureKey =
       初始源 && Number.isFinite(初始时间)
         ? `${初始源}\u0000${Math.round(初始时间 * 2) / 2}\u0000${options.预热已合成帧 ? "warm" : "now"}`
@@ -384,7 +408,26 @@ export class 时间线画面缓存Owner {
       }
       this.时间线自动播冻结帧导出中.set(attachmentId, captureKey);
       video.requestVideoFrameCallback(() => {
+        /**
+         * 状态门禁：暂停 / 切换 attachmentId / 元素脱链都立即终止链。
+         * 既不再 drawImage，也不再调度下一帧。
+         */
+        const datasetAttachmentId = video.dataset?.attachmentId;
+        if (
+          video.paused ||
+          video.isConnected === false ||
+          (datasetAttachmentId !== undefined && datasetAttachmentId !== attachmentId)
+        ) {
+          if (this.时间线自动播冻结帧导出中.get(attachmentId) === captureKey) {
+            this.时间线自动播冻结帧导出中.delete(attachmentId);
+          }
+          return;
+        }
         执行捕获();
+        /**
+         * 链式调度：让 Map 持续追踪屏幕实际显示的最新帧。
+         */
+        this.捕获自动播冻结帧(attachmentId, video, options);
       });
       return;
     }
