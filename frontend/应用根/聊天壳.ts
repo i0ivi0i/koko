@@ -21,8 +21,8 @@ import {
 import {
   聊天壳布局观测器,
   按房间宽度派生消息文本布局环境,
-  附件预览地址表相同,
 } from "./聊天壳布局协作.js";
+import { 创建聊天列表展示项缓存 } from "./聊天列表展示项缓存.js";
 import { 渲染聊天壳操作台 } from "./聊天壳操作台视图.js";
 import { 聊天壳样式 } from "./聊天壳样式.js";
 
@@ -48,14 +48,14 @@ export class 聊天壳 extends LitElement {
   private 消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(
     this.消息文本布局宽度缓存
   );
-  private 聊天列表展示项缓存: {
-    messages: 聊天应用快照["messages"];
-    sessionId: 聊天应用快照["sessionId"];
-    firstUnreadEventPosition: 聊天应用快照["firstUnreadEventPosition"];
-    layoutEnv: 消息文本布局环境;
-    previewUrlByAttachmentId: 聊天应用快照["media"]["previewUrlByAttachmentId"];
-    items: ReturnType<typeof 派生聊天列表展示项>;
-  } | null = null;
+  /**
+   * 聊天列表展示项增量缓存（plan v2 §B）。
+   *
+   * 旧版本是引用相等缓存：xstate 每次 send 都返回新 messages 数组引用，
+   * 缓存永远 miss，N=3000 时每次 REALTIME 全量重派生（含文本布局测量）。
+   * 新版本按 message_id 单条增量缓存，只对新增/变更的消息重派生。
+   */
+  private readonly 聊天列表展示项缓存 = 创建聊天列表展示项缓存();
 
   static override styles = 聊天壳样式;
 
@@ -259,8 +259,9 @@ export class 聊天壳 extends LitElement {
       return;
     }
     this.消息文本布局宽度缓存 = nextWidth;
+    // 新 layoutEnv 引用：增量缓存内部检测到 `上次layoutEnv !== input.layoutEnv` 时
+    // 会自动全局失效（参 `创建聊天列表展示项缓存` 实现），不需要这里手动清空。
     this.消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(nextWidth);
-    this.聊天列表展示项缓存 = null;
     this.requestUpdate();
   }
 
@@ -281,34 +282,20 @@ export class 聊天壳 extends LitElement {
   }
 
   private 读取聊天列表展示项(聊天快照: 聊天应用快照): ReturnType<typeof 派生聊天列表展示项> {
-    const layoutEnv = this.读取消息文本布局环境();
-    const cache = this.聊天列表展示项缓存;
-    if (
-      cache &&
-      cache.messages === 聊天快照.messages &&
-      cache.sessionId === 聊天快照.sessionId &&
-      cache.firstUnreadEventPosition === 聊天快照.firstUnreadEventPosition &&
-      cache.layoutEnv === layoutEnv &&
-      附件预览地址表相同(cache.previewUrlByAttachmentId, 聊天快照.media.previewUrlByAttachmentId)
-    ) {
-      return cache.items;
-    }
-    const items = 派生聊天列表展示项(
-      聊天快照.messages,
-      聊天快照.sessionId,
-      聊天快照.firstUnreadEventPosition,
-      layoutEnv,
-      聊天快照.media.previewUrlByAttachmentId
-    );
-    this.聊天列表展示项缓存 = {
+    /**
+     * 增量缓存增原路：
+     * - 按 (message_id, 内容指纹) 缓存单条派生结果；
+     * - sessionId / layoutEnv 变化时全局失效（语义变了）；
+     * - 消息被裁掉时缓存条目自动驱逐。
+     * 结果语义与原 `派生聊天列表展示项` 完全一致，仅是增量计算。
+     */
+    return this.聊天列表展示项缓存.派生({
       messages: 聊天快照.messages,
-      sessionId: 聊天快照.sessionId,
+      currentSessionId: 聊天快照.sessionId,
       firstUnreadEventPosition: 聊天快照.firstUnreadEventPosition,
-      layoutEnv,
-      previewUrlByAttachmentId: 聊天快照.media.previewUrlByAttachmentId,
-      items,
-    };
-    return items;
+      layoutEnv: this.读取消息文本布局环境(),
+      附件预览地址表: 聊天快照.media.previewUrlByAttachmentId,
+    });
   }
 
   override render() {
