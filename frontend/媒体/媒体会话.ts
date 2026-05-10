@@ -296,8 +296,18 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           if (!current.playback) {
             return;
           }
+          if (current.kind === "image") {
+            /**
+             * 图片缩略图与查看器原图共享同一份 swarm 字节流：
+             * 1. 关闭查看器没有“前台正式播放器实例”要释放，仅 viewer consumer 占用走外层释放；
+             * 2. 这里若把 playback 清成 null，时间线缩略图就会退化成默认灰黑 SVG 占位图，
+             *    用户表现就是“放大欣赏后返回，群聊里图片不见了”，再点也打不开；
+             * 3. 因此图片路径下 PLAYBACK_RELEASED 只走通用门禁与代次自增，不动业务真相。
+             */
+            return;
+          }
           /**
-           * 关闭 viewer 只释放“前台正式播放源”，不等于附件业务退场：
+           * 视频关闭 viewer 只释放“前台正式播放源”，不等于附件业务退场：
            * 会话壳和 locallyComplete 仍可保留，但 playback 必须清空，
            * 否则时间线会把看过的视频继续渲染成真实 `<video>`。
            *

@@ -29,6 +29,15 @@ const 创建协作分发播放结果 = (attachmentId: string): 媒体播放结�
   hint: "正在协作分发",
 });
 
+const 创建图片协作分发播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "swarm",
+  attachmentId,
+  kind: "image",
+  src: `blob:https://localhost/swarm-image-${attachmentId}`,
+  thumbnailUrl: `http://media.local/thumb-${attachmentId}`,
+  hint: null,
+});
+
 const 创建降级播放结果 = (attachmentId: string): 媒体播放结果 => ({
   mode: "degraded",
   attachmentId,
@@ -426,6 +435,42 @@ describe("媒体会话", () => {
       sourceVersion: 释放前版本,
       lastSignal: "PLAYBACK_RELEASED",
     });
+  });
+
+  it("图片关闭查看器（PLAYBACK_RELEASED）必须保留 playback，让时间线缩略图继续显示 swarm 源", async () => {
+    /**
+     * 图片缩略图唯一来源是 playback.src（swarm webtorrent 字节流）；
+     * 关闭查看器后若把 playback 清成 null，时间线就只剩默认灰黑 SVG 占位图，
+     * 用户看到的 bug：图片放大欣赏后返回，缩略图变灰黑，再次点开打不开。
+     *
+     * PLAYBACK_RELEASED 的视频契约（清 playback 释放真实 <video>）不能推广到图片：
+     * 图片不存在"前台正式播放器实例"占用，缩略图与查看器原图本是同一份字节，
+     * 关闭查看器只该释放 viewer 专属 consumer，不该清空业务真相。
+     */
+    const attachmentId = "att-image-release-keep-playback-1";
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValue(创建图片协作分发播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "image",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    const 释放前 = 会话.snapshot();
+    expect(释放前.playback).toMatchObject({
+      mode: "swarm",
+      kind: "image",
+      src: `blob:https://localhost/swarm-image-${attachmentId}`,
+    });
+
+    会话.send({ type: "PLAYBACK_RELEASED" });
+
+    const 释放后 = 会话.snapshot();
+    expect(释放后.playback).toEqual(释放前.playback);
+    expect(释放后.lastSignal).toBe("PLAYBACK_RELEASED");
+    expect(释放后.sourceVersion).toBe(释放前.sourceVersion);
   });
 
   it("PLAYBACK_RELEASED 后重新解析回同一播放源时，也不会把 sourceVersion 错判成新版本", async () => {
