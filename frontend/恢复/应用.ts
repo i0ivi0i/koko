@@ -3,6 +3,7 @@ import type { 房间内核事件 } from "../房间/运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "../平台/存储.js";
 import type { 聊天状态 } from "../应用根/聊天状态.js";
+import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
 
 type 恢复失败 = Error & {
   status?: number;
@@ -65,6 +66,11 @@ export interface 房间快照恢复协作依赖 {
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
   loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
+  /**
+   * 消息仓库（application port）：快照进场后 fire-and-forget 写入本地缓存。
+   * 仓库仅为用户体验加速服务，写入失败不影响业务主链；实现需自己吃掉异常。
+   */
+  消息仓库: 消息仓库端口;
 }
 
 export interface 房间快照恢复协作 {
@@ -251,6 +257,27 @@ export function 创建恢复应用(deps: 恢复应用依赖): 恢复应用端口
       hasMoreBefore: snapshot.has_more_before,
     });
     deps.roomScroller.安排首屏定位();
+    /**
+     * BOOTSTRAP 路径将首屏快照镜像到本地缓存（spec §7.1）。
+     *
+     * 设计考量：
+     * 1. queueMicrotask 包装，不阻塞当前同步财产，避免 IDB IO 拖慢首屏业务路径；
+     * 2. fire-and-forget：底层仓库实现身应该快掉异常（返回 Promise.resolve()），
+     *    .catch 只是作为防御性兑底，以防 stub / future 实现报错造成 unhandled rejection；
+     * 3. 空 snapshot_messages 跳过，绕开无谓 transaction。
+     *
+     * 错误恢复路径 `从房间快照恢复` 会再次走过此函数；
+     * IDB upsert 幂等 保证多次写入无副作用。
+     */
+    if (snapshot.snapshot_messages.length > 0) {
+      const 需写入的消息 = snapshot.snapshot_messages;
+      const 需写入的房间 = snapshot.room_id;
+      queueMicrotask(() => {
+        void deps.消息仓库.写入(需写入的房间, 需写入的消息).catch((错误) => {
+          console.warn("[消息分层缓存] BOOTSTRAP 写入本地缓存失败（不影响业务）", 错误);
+        });
+      });
+    }
   }
 
   function 处理恢复失败(error: unknown, keepRoomVisible: boolean): void {

@@ -12,6 +12,7 @@ import type { 房间滚动器 } from "../时间线/滚动器.js";
 import type { 聊天内核平台端口 } from "./聊天应用编排桥接.js";
 import type { 聊天应用编排协调器依赖 } from "./聊天应用编排协调器.js";
 import type { 聊天应用本地状态协调器 } from "./聊天应用本地状态协调器.js";
+import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
 
 export interface 聊天应用编排依赖工厂输入 {
   状态协调器: 聊天应用本地状态协调器;
@@ -42,6 +43,11 @@ export interface 聊天应用编排依赖工厂输入 {
   上报历史前插开始(): void;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
   排空到期任务?: 聊天应用编排协调器依赖["排空到期任务"];
+  /**
+   * 消息仓库读取器：每次懒创建恢复编排时读取当前仓库实例，
+   * 与 `读取房间传输()` / `读取实时传输()` 同样采用函数闭包以适应 “重置端口后不多带陈旧实例” 的变更。
+   */
+  读取消息仓库(): 消息仓库端口;
 }
 
 /**
@@ -74,6 +80,7 @@ export function 创建聊天应用编排协调器依赖(
       等待壳渲染完成: async () => {
         await input.等待壳渲染完成();
       },
+      消息仓库: input.读取消息仓库(),
     }),
     创建实时编排依赖: () => ({
       读取实时状态: () => input.状态协调器.读取实时状态(),

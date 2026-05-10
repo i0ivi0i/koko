@@ -52,6 +52,8 @@ import {
   type 平台桥接命令,
 } from "./聊天内核平台运行时.js";
 import { 处理权威新消息平台副作用 } from "./聊天内核通知副作用.js";
+import { 创建IndexedDB消息仓库 } from "../聊天本地缓存/IndexedDB消息仓库.js";
+import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
 import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
   创建房间视口Actor,
@@ -197,6 +199,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 实时连接: 聊天实时连接端口;
   private 媒体传输: 媒体传输端口;
   private storage: 前端存储端口;
+  /**
+   * 聊天本地缓存 application port。
+   *
+   * 装配点仅此一处，避免多处重复 new IndexedDB 连接；底层 adapter 在 IDB 不可用时
+   * 自动返回空仓库。该字段是 readonly，仅在 adapter / port 完全重写时才考虑调整。
+   */
+  private readonly 消息仓库: 消息仓库端口 = 创建IndexedDB消息仓库();
   private readonly 媒体编排: 媒体播放会话应用端口;
   private readonly 状态协调器: 聊天应用本地状态协调器;
   private readonly 执行平台桥接命令: (command: 平台桥接命令) => Promise<void>;
@@ -326,6 +335,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     };
     this.编排协调器 = new 聊天应用编排协调器(
       创建聊天应用编排协调器依赖({
+        读取消息仓库: () => this.消息仓库,
         状态协调器: this.状态协调器,
         接收时间线事实: (event) => this.接收时间线事实(event),
         接收实时会话事实: (event) => this.接收实时会话事实(event),

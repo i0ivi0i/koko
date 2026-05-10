@@ -6,6 +6,7 @@ import { 创建恢复应用 } from "../应用.js";
 import type { 聊天房间传输端口 } from "../../聊天共享/适配/聊天房间传输端口.js";
 import { Http接口错误 } from "../../平台/传输.js";
 import type { 聊天状态 } from "../../应用根/聊天状态.js";
+import type { 消息仓库端口 } from "../../聊天本地缓存/消息仓库端口.js";
 
 export type Transport异常 =
   | {
@@ -69,6 +70,11 @@ export interface 房间恢复编排依赖 {
   disconnectRealtime(): void;
   写入恢复补锚标记(value: boolean): void;
   等待壳渲染完成(): Promise<void>;
+  /**
+   * 消息仓库（application port）：BOOTSTRAP / 错误恢复 路径快照进场后异步镜像写入本地缓存。
+   * 透传给 `创建恢复应用`，由 application 层裁决何时调用。
+   */
+  消息仓库: 消息仓库端口;
 }
 
 export interface 房间恢复编排端口 {
@@ -174,6 +180,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     loadRoomEvents: (roomId, sessionId, from) =>
       deps.transport.loadRoomEvents(roomId, sessionId, from),
     withSessionRefreshOnInvalid,
+    消息仓库: deps.消息仓库,
   });
 
   const 会话失效恢复 = 创建会话失效恢复协作({

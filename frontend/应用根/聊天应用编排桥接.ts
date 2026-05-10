@@ -3,6 +3,7 @@ import {
   type 房间恢复编排依赖,
   type 房间恢复编排端口,
 } from "../恢复/壳层/房间恢复编排.js";
+import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
 import {
   创建实时应用,
   type 实时应用依赖 as 房间实时编排依赖,
@@ -45,6 +46,8 @@ export interface 内核恢复编排桥接依赖 {
   disconnectRealtime(): void;
   写入恢复补锚标记(value: boolean): void;
   等待壳渲染完成(): Promise<void>;
+  /** 消息仓库 application port，BOOTSTRAP / 错误恢复 透传给恢复应用使用。 */
+  消息仓库: 消息仓库端口;
 }
 
 export interface 内核实时编排桥接依赖 {
@@ -199,6 +202,7 @@ export function 创建内核恢复编排端口(
     disconnectRealtime: deps.disconnectRealtime,
     写入恢复补锚标记: deps.写入恢复补锚标记,
     等待壳渲染完成: deps.等待壳渲染完成,
+    消息仓库: deps.消息仓库,
   });
 }
 
