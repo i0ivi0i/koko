@@ -76,6 +76,8 @@ export interface 内核阅读推进编排桥接依赖 {
   withSessionRefreshOnInvalid: 阅读推进编排依赖["withSessionRefreshOnInvalid"];
   等待壳渲染完成: 阅读推进编排依赖["等待壳渲染完成"];
   滚到最新位置: 阅读推进编排依赖["滚到最新位置"];
+  /** 消息仓库 application port：历史前插 IDB 优先 + miss 回写。 */
+  消息仓库: 消息仓库端口;
 }
 
 export type 聊天内核平台快照 = Pick<
@@ -241,5 +243,6 @@ export function 创建内核阅读推进编排端口(
     withSessionRefreshOnInvalid: deps.withSessionRefreshOnInvalid,
     等待壳渲染完成: deps.等待壳渲染完成,
     滚到最新位置: deps.滚到最新位置,
+    消息仓库: deps.消息仓库,
   });
 }

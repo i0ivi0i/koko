@@ -117,6 +117,7 @@ export function 创建聊天应用编排协调器依赖(
         await input.等待壳渲染完成();
       },
       滚到最新位置: () => input.roomScroller.滚到最新位置(),
+      消息仓库: input.读取消息仓库(),
     }),
     排空到期任务: input.排空到期任务,
   };

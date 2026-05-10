@@ -106,9 +106,10 @@ describe("传输 / 组合根与边界", () => {
     expect(readSource).toContain(
       "deps.transport.updateRoomReadAnchor(state.roomId, state.sessionId, nextPosition)"
     );
-    expect(readSource).toContain(
-      "deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)"
-    );
+    // Task 3 把 loadRoomHistory 调用拆成多行 + 把 55 / oldestMessage.event_position 提为局部变量,
+    // 这里改为只断言"调用了正确传输方法 + 仍然消费分页大小常量"这两个边界事实。
+    expect(readSource).toContain("deps.transport.loadRoomHistory(");
+    expect(readSource).toContain("历史分页默认页大小 = 55");
     expect(readSource).not.toContain("deps.transport.createSocket");
 
     expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId, signal)");

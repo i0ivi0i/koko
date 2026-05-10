@@ -111,6 +111,21 @@ export function 创建阅读推进测试场景(input: {
     hasMoreBefore: input.hasMoreBefore ?? false,
   });
 
+  /**
+   * 阅读推进编排现在要求注入 消息仓库（application port，HISTORY 分层缓存入口）。
+   * 测试只关心传输/视口编排，所以这里用最小空实现兜底：
+   * - 读取窗口 始终返回空数组 → 走服务端 fallback 路径，行为等价于"没有本地缓存"；
+   * - 写入 / 清空 都是 no-op，避免触发 IDB；
+   * - 这样既不破坏既有测试（依然按服务端 transport 流程跑），又不引入对真 IDB 的依赖。
+   */
+  const 空消息仓库 = {
+    async 写入(): Promise<void> {},
+    async 读取窗口(): Promise<消息事件[]> {
+      return [];
+    },
+    async 清空房间(): Promise<void> {},
+  };
+
   const deps = {
     读取阅读状态: () => state,
     写入阅读状态: updateState,
@@ -123,6 +138,7 @@ export function 创建阅读推进测试场景(input: {
     滚到最新位置: async () => {
       滚到最新调用.push(Date.now());
     },
+    消息仓库: 空消息仓库,
   };
 
   return {

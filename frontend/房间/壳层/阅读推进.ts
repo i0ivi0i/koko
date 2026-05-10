@@ -2,8 +2,18 @@ import type { 房间时间线事件 } from "../../时间线/运行时.js";
 import type { 历史补偿上下文 } from "../../时间线/滚动器.js";
 import type { 聊天状态 } from "../../应用根/聊天状态.js";
 import type { 聊天房间传输端口 } from "../../聊天共享/适配/聊天房间传输端口.js";
+import type { 消息事件 } from "../../聊天共享/契约.js";
+import type { 消息仓库端口 } from "../../聊天本地缓存/消息仓库端口.js";
 
 const 阅读推进节流毫秒 = 400;
+
+/**
+ * 历史分页默认页大小。
+ *
+ * 55 与服务端 `loadRoomHistory` 默认页大小一致（spec §8）。
+ * 全局常量，需要调整时只改一处。
+ */
+const 历史分页默认页大小 = 55;
 
 type 房间滚动器端口 = {
   读取当前可见阅读锚点(): number | null;
@@ -21,6 +31,11 @@ export interface 阅读推进编排依赖 {
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
   等待壳渲染完成(): Promise<void>;
   滚到最新位置(): Promise<void>;
+  /**
+   * 消息仓库（application port）：历史前插优先级入口。
+   * 命中跳服务端，miss 走服务端 后异步回写。
+   */
+  消息仓库: 消息仓库端口;
 }
 
 export interface 阅读推进编排端口 {
@@ -171,6 +186,13 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * - 以当前最老消息的 event_position 作为锚点；
    * - 只往顶部追加，不动已经可见的消息；
    * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
+   *
+   * 分层缓存路径（spec §8）：
+   * 1. 先查本地仓库的严格小于上界 N 条；
+   * 2. 命中 ≥ N 条时直接前插内存，不发服务端请求，hasMoreBefore=true（极限下一页可能还有）；
+   * 3. 未命中或不足 N 条走服务端取得权威页，服务端返回后异步回写仓库。
+   *
+   * IDB 异常一律被 catch 为 cache miss（返回空数组），不会阅报错业务路径。
    */
   async function 请求加载更早历史(): Promise<void> {
     const state = deps.读取阅读状态();
@@ -183,6 +205,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       return;
     }
     const 补偿上下文 = deps.roomScroller.读取历史补偿上下文();
+    const 上界位置 = oldestMessage.event_position;
 
     deps.写入阅读状态({
       historyLoading: true,
@@ -190,20 +213,63 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     });
 
     try {
+      // 第一步：先查本地仓库。IDB 异常被看作 cache miss 而非业务错误。
+      const 缓存命中 = await deps.消息仓库
+        .读取窗口(state.roomId, {
+          上界event_position: 上界位置,
+          数量: 历史分页默认页大小,
+        })
+        .catch(() => [] as 消息事件[]);
+
+      // 本地命中 ≥ 页大小：跳过服务端，直接前插内存。hasMoreBefore 仍为 true，
+      // 让下一次上滑可以继续查 IDB / fallback 服务端。
+      if (缓存命中.length >= 历史分页默认页大小) {
+        deps.接收时间线事实({
+          type: "HISTORY_PAGE_APPENDED",
+          messages: 缓存命中,
+          hasMoreBefore: true,
+        });
+        deps.写入阅读状态({ historyLoading: false, historyErrorCode: "" });
+        if (缓存命中.length > 0) {
+          deps.上报历史前插开始?.();
+        }
+        await deps.roomScroller.应用历史补偿(补偿上下文, 缓存命中.length > 0);
+        return;
+      }
+
+      // 第二步：未命中或不足走服务端取得权威历史页。
       const page = await deps.withSessionRefreshOnInvalid((sessionId) =>
-        deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)
+        deps.transport.loadRoomHistory(
+          state.roomId,
+          sessionId,
+          上界位置,
+          历史分页默认页大小
+        )
       );
       deps.接收时间线事实({
         type: "HISTORY_PAGE_APPENDED",
         messages: page.messages,
         hasMoreBefore: page.messages.length > 0,
       });
+      // 服务端页异步回写 IDB，下次同位置上滑可直接命中。
+      if (page.messages.length > 0) {
+        const 需回写的页 = page.messages;
+        const 需回写的房间 = state.roomId;
+        queueMicrotask(() => {
+          void deps.消息仓库.写入(需回写的房间, 需回写的页).catch((错误) => {
+            console.warn(
+              "[消息分层缓存] HISTORY 回写本地缓存失败（不影响业务）",
+              错误
+            );
+          });
+        });
+      }
       deps.写入阅读状态({
         historyLoading: false,
         historyErrorCode: "",
       });
       // 历史页是往列表顶部前插的，但守视口不能再只靠 scrollHeight 差值。
-      // 新策略优先围绕旧锚点恢复；只有锚点彻底找不回时，才退回高度差值兜底。
+      // 新策略优先围绕旧锚点恢复；只有锚点彻底找不回时，才退回高度差值兌底。
       if (page.messages.length > 0) {
         deps.上报历史前插开始?.();
       }
