@@ -191,6 +191,12 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
   }
 
   protected override willUpdate(changedProperties: PropertyValues<this>): void {
+    // P2 优化：在 render 之前更新缓存，确保 rangeExtractor 首帧就能用到正确值。
+    if (changedProperties.has("items")) {
+      this._cachedUnreadDividerIndex = this.items.findIndex(
+        (item) => item.kind === "unread-divider"
+      );
+    }
     if (changedProperties.has("inlineAutoplayOwnerAttachmentId")) {
       const previousOwnerAttachmentId =
         changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
@@ -270,11 +276,6 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
 
   override updated(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has("items")) {
-      // P2 优化：items 变更时一次性计算 unreadDividerIndex，
-      // 后续每帧 rangeExtractor 直接用缓存值（O(1)），不再 O(N) 扫描。
-      this._cachedUnreadDividerIndex = this.items.findIndex(
-        (item) => item.kind === "unread-divider"
-      );
       this.同步时间线视频首帧就绪缓存();
     }
     this.同步时间线自动播播放状态(changedProperties);
