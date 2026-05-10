@@ -27,6 +27,45 @@ import {
 } from "./时间线媒体协作.js";
 
 /**
+ * 计算 pinned 消息索引（尾部倒序短路扫描）。
+ *
+ * 替代原 `提取消息虚拟范围` 内部 `for (const [index, item] of this.items.entries())`
+ * 的 O(N) 全量遍历。pinned attachment 几乎总来自 owner / 接管 / 退场 这些"近期"
+ * 语义，几乎一定在 items 尾部 ±100 条内，所以从末尾倒序扫描、命中即停可以把
+ * 万人房 N=3000 + 高频 scroll 的扫描成本从 O(N) 降到 O(K)。
+ *
+ * 修复 plan v2 §C 漏洞。
+ *
+ * @param items 当前虚拟列表所有展示项；
+ * @param pinnedAttachmentIds 需要被锁定渲染的视频 attachmentId 列表（通常 ≤ 3 个）。
+ * @returns 命中 pinned 的 items 索引集合。
+ */
+export function 计算pinned索引(
+  items: readonly 聊天列表展示项[],
+  pinnedAttachmentIds: readonly string[]
+): Set<number> {
+  const result = new Set<number>();
+  if (pinnedAttachmentIds.length === 0) {
+    return result;
+  }
+  // 用 Set 跟踪剩余待找的 attachmentId，命中后立即移除，所有都找到时停止扫描。
+  const remaining = new Set(pinnedAttachmentIds);
+  for (let i = items.length - 1; i >= 0 && remaining.size > 0; i -= 1) {
+    const item = items[i];
+    if (!item || item.kind !== "message") {
+      continue;
+    }
+    for (const attachment of item.attachments) {
+      if (attachment.kind === "video" && remaining.has(attachment.attachmentId)) {
+        result.add(i);
+        remaining.delete(attachment.attachmentId);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * 真正的房间消息窗 owner 收进本文件：
  * 1. 根级 `frontend/房间消息窗.ts` 已删除；
  * 2. 这里统一承接消息列表虚拟化、局部媒体交互和滚动观察；
@@ -305,21 +344,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
       this.时间线隐藏接管附件Id,
       this.最近退场Owner附件Id,
     ].filter((attachmentId): attachmentId is string => Boolean(attachmentId));
-    const pinnedIndexes = new Set<number>();
-    for (const [index, item] of this.items.entries()) {
-      if (item.kind !== "message") {
-        continue;
-      }
-      if (
-        item.attachments.some(
-          (attachment) =>
-            attachment.kind === "video" &&
-            pinnedAttachmentIds.includes(attachment.attachmentId)
-        )
-      ) {
-        pinnedIndexes.add(index);
-      }
-    }
+    const pinnedIndexes = 计算pinned索引(this.items, pinnedAttachmentIds);
     return 提取消息虚拟范围(this.items, range, {
       pinnedIndexes,
     });
