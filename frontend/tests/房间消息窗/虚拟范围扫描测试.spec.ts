@@ -15,6 +15,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { 计算pinned索引 } from "../../房间消息窗/壳.js";
+import { 提取消息虚拟范围 } from "../../房间消息窗/消息虚拟列表.js";
 import type { 聊天列表展示项, 消息展示项 } from "../../房间消息窗/视图.js";
 
 /**
@@ -119,5 +120,90 @@ describe("计算pinned索引 - 尾部倒序短路扫描", () => {
     );
     const result = 计算pinned索引(items, ["全部不存在"]);
     expect(result.size).toBe(0);
+  });
+});
+
+/**
+ * 提取消息虚拟范围 — unreadDividerIndex 参数化测试。
+ *
+ * 验证传入预计算的 unreadDividerIndex 时跳过 O(N) findIndex 扫描，
+ * 结果与自动扫描一致。
+ */
+describe("提取消息虚拟范围 — unreadDividerIndex 参数化", () => {
+  /** 制造含 unread-divider 的 items 列表。 */
+  const 制造含分隔条items = (count: number, dividerAt: number): 聊天列表展示项[] => {
+    const items: 聊天列表展示项[] = [];
+    for (let i = 0; i < count; i += 1) {
+      if (i === dividerAt) {
+        items.push({
+          kind: "unread-divider",
+          id: "unread-divider",
+          label: "未读消息",
+        } as 聊天列表展示项);
+      }
+      items.push(制造视频消息项(`m-${i}`, [`a-${i}`]));
+    }
+    return items;
+  };
+
+  it("传入 unreadDividerIndex 时结果包含该索引及其后一项", () => {
+    const items = 制造含分隔条items(200, 50);
+    // divider 在 index 50（因为每个 i 在 divider 之前都插了消息）
+    const range = { startIndex: 100, endIndex: 110, overscan: 4, count: items.length };
+    const result = 提取消息虚拟范围(items, range, { unreadDividerIndex: 50 });
+    expect(result).toContain(50);
+    expect(result).toContain(51);
+  });
+
+  it("未传 unreadDividerIndex 时退回 findIndex（兼容）", () => {
+    const items = 制造含分隔条items(200, 50);
+    const range = { startIndex: 100, endIndex: 110, overscan: 4, count: items.length };
+    const result = 提取消息虚拟范围(items, range);
+    expect(result).toContain(50);
+  });
+
+  it("unreadDividerIndex = -1 时不添加额外索引", () => {
+    // 无分隔条的 items
+    const items: 聊天列表展示项[] = Array.from({ length: 200 }, (_, i) =>
+      制造视频消息项(`m-${i}`, [`a-${i}`])
+    );
+    const range = { startIndex: 100, endIndex: 110, overscan: 4, count: 200 };
+    const result = 提取消息虚拟范围(items, range, { unreadDividerIndex: -1 });
+    // 无分隔条且传入 -1：不应有超出 overscan 范围的索引
+    for (const idx of result) {
+      expect(idx).toBeGreaterThanOrEqual(96);
+      expect(idx).toBeLessThanOrEqual(114);
+    }
+  });
+
+  it("性能契约：传入 unreadDividerIndex 时不触发 findIndex 全量扫描", () => {
+    const items: 聊天列表展示项[] = Array.from({ length: 3000 }, (_, i) =>
+      制造视频消息项(`m-${i}`, [`a-${i}`])
+    );
+    // 在 index 500 插入分隔条
+    items.splice(500, 0, {
+      kind: "unread-divider",
+      id: "unread-divider",
+      label: "未读消息",
+    } as 聊天列表展示项);
+    const range = { startIndex: 2900, endIndex: 2910, overscan: 4, count: items.length };
+    // 用 Proxy 拦截索引访问计数（仅计算非 overscan 范围内的访问）
+    let kindAccessCount = 0;
+    const itemsProxy = new Proxy(items, {
+      get(target, prop) {
+        const val = Reflect.get(target, prop);
+        // 只统计超出 range 区域的项访问
+        if (typeof prop === "string" && /^\d+$/.test(prop)) {
+          const idx = Number(prop);
+          if (idx < 2896 && idx !== 500 && idx !== 501) {
+            kindAccessCount++;
+          }
+        }
+        return val;
+      },
+    });
+    提取消息虚拟范围(itemsProxy, range, { unreadDividerIndex: 500 });
+    // 传入 unreadDividerIndex 后不应扫描远离视口的索引
+    expect(kindAccessCount).toBeLessThan(20);
   });
 });

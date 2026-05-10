@@ -59,6 +59,9 @@ export const 提取消息虚拟范围 = (
   range: 消息虚拟范围,
   options: {
     pinnedIndexes?: Iterable<number>;
+    // 预计算的未读分隔条索引，传入时跳过 O(N) findIndex 扫描。
+    // 未传（undefined）退回 findIndex 兼容；-1 表示无分隔条。
+    unreadDividerIndex?: number;
   } = {}
 ): number[] => {
   const indexes = new Set<number>();
@@ -67,7 +70,12 @@ export const 提取消息虚拟范围 = (
   for (let index = start; index <= end; index += 1) {
     indexes.add(index);
   }
-  const unreadDividerIndex = items.findIndex((item) => item.kind === "unread-divider");
+  // P2 优化：优先使用调用方预计算的 unreadDividerIndex，避免每帧 O(N) 扫描。
+  // undefined 退回 findIndex（兼容旧调用方），-1 表示明确无分隔条。
+  const unreadDividerIndex =
+    options.unreadDividerIndex !== undefined
+      ? options.unreadDividerIndex
+      : items.findIndex((item) => item.kind === "unread-divider");
   if (unreadDividerIndex >= 0) {
     indexes.add(unreadDividerIndex);
     if (unreadDividerIndex + 1 < items.length) {

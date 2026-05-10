@@ -107,6 +107,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
   declare inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
+  // P2 优化：items 变更时预计算 unreadDividerIndex，避免虚拟列表每帧 O(N) findIndex。
+  private _cachedUnreadDividerIndex: number = -1;
 
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
@@ -268,6 +270,11 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
 
   override updated(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has("items")) {
+      // P2 优化：items 变更时一次性计算 unreadDividerIndex，
+      // 后续每帧 rangeExtractor 直接用缓存值（O(1)），不再 O(N) 扫描。
+      this._cachedUnreadDividerIndex = this.items.findIndex(
+        (item) => item.kind === "unread-divider"
+      );
       this.同步时间线视频首帧就绪缓存();
     }
     this.同步时间线自动播播放状态(changedProperties);
@@ -347,6 +354,7 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
     const pinnedIndexes = 计算pinned索引(this.items, pinnedAttachmentIds);
     return 提取消息虚拟范围(this.items, range, {
       pinnedIndexes,
+      unreadDividerIndex: this._cachedUnreadDividerIndex,
     });
   }
 
