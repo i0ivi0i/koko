@@ -115,6 +115,9 @@ impl 数据库连接池配置 {
             .min_connections(self.app_min_connections)
             .acquire_timeout(self.acquire_timeout())
             .idle_timeout(Some(self.idle_timeout()))
+            // 万人并发场景可观测：连接获取超 500ms 触发 WARN 日志，
+            // 帮助定位连接池争抢瓶颈。sqlx 默认 slow_level = Warn。
+            .acquire_slow_threshold(Duration::from_millis(500))
     }
 }
 
