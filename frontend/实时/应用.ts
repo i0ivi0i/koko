@@ -71,6 +71,8 @@ export type 房间实时编排端口 = 实时应用端口;
  */
 export function 创建实时应用(deps: 实时应用依赖): 实时应用端口 {
   let realtimeSocket: Socket | null = null;
+  // P0 修复：追踪上次订阅的房间 ID，切换房间时先通知服务端 leave 旧房间。
+  let 上次订阅房间Id: string | null = null;
   const 读取当前时间 = deps.读取当前时间 ?? (() => Date.now());
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
@@ -163,6 +165,7 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
   };
 
   function disconnect(): void {
+    上次订阅房间Id = null;
     if (realtimeSocket) {
       deps.transport.释放Socket?.(realtimeSocket);
       realtimeSocket = null;
@@ -176,6 +179,14 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
     if (!roomId || !realtimeSocket) {
       return;
     }
+    // P0 修复：切换房间前先通知服务端离开旧房间，防止订阅泄漏。
+    // 同房间重复订阅（断线重连）不发 unsubscribe。
+    if (上次订阅房间Id && 上次订阅房间Id !== roomId) {
+      realtimeSocket.emit("unsubscribe_room_stream", {
+        room_id: 上次订阅房间Id,
+      });
+    }
+    上次订阅房间Id = roomId;
     deps.接收实时会话事实({
       type: "SUBSCRIPTION_STARTED",
     });
