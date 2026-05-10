@@ -77,13 +77,29 @@ const COALESCE_FLUSH_THRESHOLD = 100;
 const COALESCE_DEBOUNCE_MS = 100;
 
 /**
+ * 每房间最大缓存条数。flush 后对涉及的房间做容量检查，
+ * 超出时从 event_position 最小端删除多余记录。
+ *
+ * 5000 条 ≈ 活跃大群 1-2 天对话量，既保证离线恢复体验，
+ * 又避免月级 IDB 无限增长到 GB 级（依据 MDN Storage quotas 2025）。
+ */
+const 每房间最大缓存条数 = 5000;
+/** 导出供测试验证。 */
+export const IDB_每房间最大缓存条数 = 每房间最大缓存条数;
+
+/**
  * 工厂函数：装配 IndexedDB 消息仓库 adapter。
  *
  * 不持有跨实例状态，每次调用返回独立闭包；这样测试 / 多 Tab 都可独立装配，
  * 不会互相串扰（实际数据库唯一性由 数据库名 保证）。
  */
-export function 创建IndexedDB消息仓库(): 消息仓库端口 {
+export function 创建IndexedDB消息仓库(options?: {
+  /** 可选：覆盖每房间最大缓存条数（测试注入用，生产默认 5000）。 */
+  maxPerRoom?: number;
+}): 消息仓库端口 {
   // IDB 全局能力探测：缺任一项就返回空仓库（可能是隐私模式 / 老内核）。
+  const 房间容量上限 = options?.maxPerRoom ?? 每房间最大缓存条数;
+
   if (typeof indexedDB === "undefined" || typeof IDBKeyRange === "undefined") {
     return 创建空仓库();
   }
@@ -169,6 +185,31 @@ export function 创建IndexedDB消息仓库(): 消息仓库端口 {
       }
       await Promise.all(tasks);
       await tx.done;
+      // ── 懒淘汰：只对本次 flush 涉及的房间做容量检查 ──
+      // count() 是 IDB 原生 O(1) 操作，删除 O(excess)。
+      for (const roomId of 待写.keys()) {
+        try {
+          const range = IDBKeyRange.bound(
+            [roomId, Number.MIN_SAFE_INTEGER],
+            [roomId, Number.MAX_SAFE_INTEGER]
+          );
+          const count = await db.count(消息库名, range);
+          if (count <= 房间容量上限) continue;
+          const excess = count - 房间容量上限;
+          // 从 event_position 最小端（最旧）开始删除
+          const evictTx = db.transaction(消息库名, "readwrite");
+          let cursor = await evictTx.store.openCursor(range, "next");
+          let deleted = 0;
+          while (cursor && deleted < excess) {
+            await cursor.delete();
+            deleted += 1;
+            cursor = await cursor.continue();
+          }
+          await evictTx.done;
+        } catch {
+          // 淘汰失败静默：不影响已成功的写入
+        }
+      }
     } catch {
       // 刷盘失败静默：本地缓存是体验加速，不影响业务真相
     }
