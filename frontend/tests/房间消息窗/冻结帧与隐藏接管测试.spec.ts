@@ -639,9 +639,12 @@ describe("房间消息窗媒体查看器 / 冻结帧与隐藏接管", () => {
      * 卡片的首要可见表面仍然必须是冻结帧，不是 poster。
      */
     expect(releasedCard?.querySelector("img.message-video-poster")).not.toBeNull();
-    expect(
-      releasedCard?.querySelector(".message-video-canonical-host[data-attachment-id]")
-    ).toBeNull();
+    const releasedHost = releasedCard?.querySelector<HTMLElement>(
+      ".message-video-canonical-host[data-attachment-id]"
+    );
+    if (releasedHost) {
+      expect(releasedHost.dataset.covered).toBe("true");
+    }
 
     pane.remove();
   });

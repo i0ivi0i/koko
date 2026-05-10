@@ -176,7 +176,7 @@ export const 渲染视频附件 = (
     );
   const frozenTimelineFrame = context.读取时间线自动播冻结帧(
     attachment.attachmentId,
-    previewVideoSrc ?? ownerCanonicalVideoSrc,
+    previewVideoSrc ?? ownerCanonicalVideoSrc ?? savedTimelineFrameSrc,
     restorableTimelineFrame
   );
   const hasFrozenTimelineFrame = Boolean(frozenTimelineFrame);
@@ -375,9 +375,10 @@ export const 渲染视频附件 = (
     !shouldUseHiddenStageCover &&
     (shouldStageWarmupGuardedOwnerCanonical || shouldStageWarmupColdInitialOwnerCanonical);
   const shouldRenderVisibleCanonicalHost =
-    shouldRenderInlineVideo &&
-    !shouldPreferRetiringOwnerPreviewSurface &&
-    (shouldRevealCanonicalHost || shouldUseHiddenStageCover);
+    (shouldRenderInlineVideo &&
+      !shouldPreferRetiringOwnerPreviewSurface &&
+      (shouldRevealCanonicalHost || shouldUseHiddenStageCover)) ||
+    (isRetiringReleasedOwner && hasFrozenTimelineFrame);
   const shouldKeepStablePreviewSurfaceDuringVisibleCanonicalWarmup =
     shouldRenderVisibleCanonicalHost && !hasVisibleCanonicalCommittedFrame &&
     (hasCurrentDomPreviewFrame || hasFrozenTimelineFrame || shouldReuseSavedTimelineFrameAsPreview || hasStablePreviewPosterSurface);

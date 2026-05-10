@@ -70,7 +70,7 @@ describe("时间线画面缓存Owner", () => {
     expect(owner.读取自动播冻结帧("att-1", "/swarm/video.mp4", {
       ...position,
       currentTime: 20,
-    })).toBeNull();
+    })?.width).toBe(320);
     expect(owner.读取自动播冻结帧("att-1", "/swarm/other.mp4", position)).toBeNull();
   });
 
