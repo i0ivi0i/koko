@@ -433,6 +433,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         接收实时会话事实: (event) => {
           this.接收实时会话事实(event);
         },
+        // 页面隐藏 / 冻结时走 lifecycle 路径主动刷仓库 buffer。
+        flush消息仓库: () => this.flush仓库(),
       });
     };
     this.dispatch = async (command) => {
@@ -475,39 +477,16 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   /**
-   * 页面离开钩子：在 pagehide / beforeunload 时主动 flush 消息仓库 buffer。
+   * dispose 时主动 flush 消息仓库 buffer，避免推出应用丢失 100ms 内未落盘数据。
    *
-   * 设计意图（Task 9 / spec §10）：
-   * - adapter 内部 100ms debounce 缓冲；
-   * - 用户切走 / 关 tab 时，不能丢掉这 100ms 内累积的 REALTIME 写入；
-   * - 用 fire-and-forget：浏览器关闭可能不会等异步完成，但服务端是真相，
-   *   下次 BOOTSTRAP 仍能拉回，丢失最多 100ms 的本地缓存数据可接受。
+   * 页面隐藏 / 冻结阶段的 flush 走 `处理聊天内核平台桥接命令` 里的
+   * `flush消息仓库` 依赖。这里只负责 dispose 路径，不直接听浏览器生命周期事件。
    */
-  private readonly flush仓库于离开 = (): void => {
+  private readonly flush仓库 = (): void => {
     void this.消息仓库.flush().catch(() => {
-      /* pagehide 阶段任何异常都吃掉 */
+      /* dispose 阶段任何异常都吃掉 */
     });
   };
-
-  /**
-   * 浏览器环境注册离开钩子；非浏览器环境（测试）直接跳过。
-   * 用 IIFE 避免污染构造函数顺序，且把注册和反注册收口到同一字段。
-   *
-   * 不能直接引用浏览器全局符号字面量（架构边界禁止），所以走 EventTarget cast。
-   */
-  private readonly 取消注册离开钩子 = ((): (() => void) => {
-    const probe = globalThis as unknown as { addEventListener?: unknown };
-    if (typeof probe.addEventListener !== "function") {
-      return () => {};
-    }
-    const target = globalThis as unknown as EventTarget;
-    target.addEventListener("pagehide", this.flush仓库于离开);
-    target.addEventListener("beforeunload", this.flush仓库于离开);
-    return () => {
-      target.removeEventListener("pagehide", this.flush仓库于离开);
-      target.removeEventListener("beforeunload", this.flush仓库于离开);
-    };
-  })();
 
   dispose(): void {
     this.编排协调器.dispose();
@@ -518,10 +497,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomTimeline.stop();
     this.roomViewport.stop();
     this.appLifecycle.stop();
-    // 移除 pagehide / beforeunload 监听，避免内核被多次实例化时重复注册。
-    this.取消注册离开钩子();
-    // 最后再 flush 一次，保证 dispose 显式调用时也能落盘 buffer。
-    this.flush仓库于离开();
+    // 显式 dispose 时补刷一次，作为页面隐藏路径以外的兑底。
+    this.flush仓库();
   }
 
   private 标记用户滚动意图(): void {

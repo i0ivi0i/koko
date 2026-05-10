@@ -40,6 +40,8 @@ interface 聊天内核平台运行时依赖 {
   读取运行时预算(): 聊天本地状态补丁["runtimeBudget"];
   写入本地状态(patch: 聊天本地状态补丁): void;
   接收实时会话事实(event: 实时会话事件): void;
+  /** 页面隐藏 / 冻结时主动刷消息仓库缓冲（Task 9）；走平台 lifecycle 路径以守住应用 owner 不听浏览器事件的边界。 */
+  flush消息仓库?: () => void;
 }
 
 const 同步应用生命周期快照并执行副作用 = (
@@ -75,17 +77,15 @@ export async function 处理聊天内核平台桥接命令(
   deps: 聊天内核平台运行时依赖
 ): Promise<void> {
   switch (command.type) {
-    case "PLATFORM_LIFECYCLE_CHANGED":
-      deps.appLifecycle.send({
-        type: "LIFECYCLE_SNAPSHOT_CHANGED",
-        snapshot: command.snapshot,
-      });
+    case "PLATFORM_LIFECYCLE_CHANGED": {
+      deps.appLifecycle.send({ type: "LIFECYCLE_SNAPSHOT_CHANGED", snapshot: command.snapshot });
       同步应用生命周期快照并执行副作用(deps);
-      deps.接收实时会话事实({
-        type: "LIFECYCLE_POLICY_CHANGED",
-        heavyWorkPolicy: deps.appLifecycle.snapshot().heavyWorkPolicy,
-      });
+      const heavyWorkPolicy = deps.appLifecycle.snapshot().heavyWorkPolicy;
+      deps.接收实时会话事实({ type: "LIFECYCLE_POLICY_CHANGED", heavyWorkPolicy });
+      // 页面隐藏/冻结时主动刷仓库 buffer，避免关 tab 丢失最近 100ms 未落盘 REALTIME。
+      if (command.snapshot.phase === "page_hidden" || command.snapshot.phase === "frozen") deps.flush消息仓库?.();
       return;
+    }
     case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
       deps.appLifecycle.send({
         type: "SERVICE_WORKER_UPDATE_READY",
