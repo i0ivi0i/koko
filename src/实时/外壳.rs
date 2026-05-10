@@ -88,6 +88,13 @@ pub(crate) struct RealtimeSubscribeBody {
     pub(crate) from: i64,
 }
 
+/// Realtime 取消订阅命令负载。
+#[derive(Deserialize, Clone)]
+pub(crate) struct RealtimeUnsubscribeBody {
+    /// 要离开的房间标识。
+    pub(crate) room_id: String,
+}
+
 /// Realtime 统一创建消息命令负载。
 #[derive(Deserialize, Clone)]
 pub(crate) struct RealtimeCreateMessageBody {
@@ -552,6 +559,27 @@ pub(crate) async fn 认证realtime连接(
     }
 }
 
+/// Realtime 控制面：取消订阅房间事件流。
+///
+/// 纯适配层操作，零 DB 开销。对应 socket.io 官方模式：
+/// `s.on("leave_room", |s, Data(room)| { s.leave(room); })`
+pub(crate) fn handle_realtime_unsubscribe(
+    socket: SocketRef,
+    auth: 已认证会话,
+    payload: RealtimeUnsubscribeBody,
+) {
+    let room_id = payload.room_id;
+    socket.leave(room_id.clone());
+    tracing::info!(
+        application = "取消订阅房间事件流",
+        adapter = "socketioxide",
+        outcome = "succeeded",
+        room_id = room_id,
+        session_id = auth.session_id,
+        "socket 已离开房间"
+    );
+}
+
 /// Realtime 控制面：订阅房间事件流。
 ///
 /// 语义分离约束：
@@ -573,6 +601,23 @@ pub(crate) async fn handle_realtime_subscribe(
         "realtime 订阅请求已受理"
     );
     let room_id = payload.room_id.clone();
+    // ── 兜底：join 新房间前先 leave 所有旧业务房间，防客户端未发 unsubscribe ──
+    // socket.rooms() 返回 Vec<Room>（含 socket 自身 ID room），只 leave 非自身且非目标的房间。
+    let self_room = socket.id.to_string();
+    for old_room in socket.rooms() {
+        if *old_room != *self_room && *old_room != *room_id {
+            tracing::info!(
+                application = "订阅房间事件流",
+                adapter = "socketioxide",
+                outcome = "auto_leave",
+                old_room_id = %old_room,
+                new_room_id = room_id,
+                session_id = auth.session_id.as_str(),
+                "兜底：加入新房间前自动离开旧房间"
+            );
+            socket.leave(old_room);
+        }
+    }
     let from = payload.from;
     let session_id = auth.session_id.clone();
     let repo = 构建共享仓储(&state);

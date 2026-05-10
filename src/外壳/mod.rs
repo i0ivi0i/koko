@@ -448,6 +448,16 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
                     },
                 );
 
+                // 控制面命令：取消订阅房间事件流（纯适配层，零 DB 开销）。
+                socket.on(
+                    "unsubscribe_room_stream",
+                    |s: SocketRef,
+                     Extension(auth): Extension<实时外壳::已认证会话>,
+                     Data::<实时外壳::RealtimeUnsubscribeBody>(payload)| async move {
+                        实时外壳::handle_realtime_unsubscribe(s, auth, payload);
+                    },
+                );
+
                 // 业务热命令：创建统一消息。
                 socket.on(
                     "create_message",
