@@ -54,6 +54,7 @@ import {
 import { 处理权威新消息平台副作用 } from "./聊天内核通知副作用.js";
 import { 创建IndexedDB消息仓库 } from "../聊天本地缓存/IndexedDB消息仓库.js";
 import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
+import { 时间线事实派发到本地缓存 } from "./时间线事实派发到本地缓存.js";
 import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
   创建房间视口Actor,
@@ -590,11 +591,21 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   /**
    * 时间线合流规则继续只允许走这一条入口。
    * 恢复 / realtime / 历史分页只能上报事实，不能各自在外面拼 messages 数组。
+   *
+   * 分层缓存派发（spec §7.3）：
+   * - 在 actor 同步快照后，派发函数决定是否要镜像到本地缓存；
+   * - 仅 REALTIME 事件触发镜像（其他类型在各自路径已写或不该写）；
+   * - 派发本身是 fire-and-forget，不阻塞业务编排。
    */
   private 接收时间线事实(event: 房间时间线事件): void {
     const baselineLatestEventPosition = this.回填房间壳补丁().latestEventPosition;
     this.roomTimeline.send(event);
     this.同步房间时间线快照();
+    时间线事实派发到本地缓存({
+      event,
+      roomId: this.回填房间壳补丁().roomId,
+      消息仓库: this.消息仓库,
+    });
     const snapshot = this.roomTimeline.getSnapshot().context;
     if (snapshot.latestEventPosition !== baselineLatestEventPosition) {
       this.发送房间事件({
