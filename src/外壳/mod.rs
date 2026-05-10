@@ -14,7 +14,7 @@ use object_store::{
 use socketioxide::{
     extract::{Data, Extension, SocketRef, TryData},
     handler::ConnectHandler,
-    SocketIo,
+    SocketIo, TransportType,
 };
 use sqlx::PgPool;
 use std::{
@@ -291,7 +291,19 @@ fn 构建_s3客户端(
 }
 
 pub fn 构建路由(state: 应用状态) -> Router {
-    let (socket_layer, io) = SocketIo::new_layer();
+    // ── 万人实时场景显式调参（依据 socketioxide 官方 SocketIoBuilder 文档）──
+    // max_buffer_size: 128→256，大房间广播时 InternalChannelFull 风险降低。
+    // max_payload: 100KB→2MB，附件元数据 JSON 不再被截断。
+    // transports: Websocket-only，去掉 polling 开销。
+    // ping_timeout: 20s→10s，半开连接更快剔除。
+    let (socket_layer, io) = SocketIo::builder()
+        .max_buffer_size(256)
+        .max_payload(2_000_000)
+        .ping_interval(std::time::Duration::from_secs(25))
+        .ping_timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(45))
+        .transports([TransportType::Websocket])
+        .build_layer();
     注册realtime命名空间(&io, state.clone());
     let normalized_tus_base_path =
         媒体_tus代理外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
