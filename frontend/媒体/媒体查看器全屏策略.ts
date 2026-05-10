@@ -1,5 +1,9 @@
 import type { VideoJs全屏进入结果, VideoJs播放器源描述 } from "./videojs播放器壳.js";
 import { 判定播放连续性表面 } from "./视频可见槽位协议.js";
+import {
+  创建媒体查看器历史接管,
+  type 媒体查看器历史接管,
+} from "./媒体查看器历史接管.js";
 import type {
   PhotoSwipe数据源项目,
   PhotoSwipe查看器选项,
@@ -31,8 +35,6 @@ type 可锁定屏幕方向 = ScreenOrientation & {
   lock?: (orientation: 媒体方向锁) => Promise<void>;
   unlock?: () => void;
 };
-
-const 媒体全屏历史键 = "__kokoMediaFullscreenSession";
 
 const 退出原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
   try {
@@ -158,10 +160,12 @@ export const 启动同会话全屏策略 = (
   let cleaned = false;
   let 本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
   let 本会话正在原生视频全屏 = false;
-  let historyPushed = false;
-  let historyConsumedByUser = false;
-  let historyCleanupInProgress = false;
-  let historyCleanupTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const 历史接管: 媒体查看器历史接管 = 创建媒体查看器历史接管({
+    sessionId,
+    onUserBackPressed: () => {
+      closeFullscreen();
+    },
+  });
   let videoOrientation = 读取视频方向锁(读取当前项目());
   const 允许系统全屏 = options.允许系统全屏 !== false;
 
@@ -226,11 +230,6 @@ export const 启动同会话全屏策略 = (
       // 部分浏览器不支持 unlock，忽略即可。
     }
   };
-  const removePopStateListener = (): void => {
-    if (typeof window !== "undefined") {
-      window.removeEventListener("popstate", handlePopState);
-    }
-  };
   const syncOrientationFromVideoMetadata = (): void => {
     const metadataOrientation = 读取视频元素方向锁(video);
     if (!metadataOrientation || metadataOrientation === videoOrientation) {
@@ -260,28 +259,12 @@ export const 启动同会话全屏策略 = (
       return;
     }
     cleaned = true;
-    if (historyCleanupTimer) {
-      globalThis.clearTimeout(historyCleanupTimer);
-      historyCleanupTimer = null;
-    }
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
     video.removeEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
     video.removeEventListener("webkitbeginfullscreen", handleNativeVideoFullscreenStart);
     video.removeEventListener("webkitendfullscreen", handleNativeVideoFullscreenEnd);
     unlockScreenOrientation();
-    if (
-      historyPushed &&
-      !historyConsumedByUser &&
-      typeof history !== "undefined" &&
-      typeof history.back === "function" &&
-      (history.state as Record<string, unknown> | null)?.[媒体全屏历史键] === sessionId
-    ) {
-      historyCleanupInProgress = true;
-      history.back();
-      historyCleanupTimer = globalThis.setTimeout(removePopStateListener, 0);
-      return;
-    }
-    removePopStateListener();
+    历史接管.消费();
   };
   const closeFullscreen = (): void => {
     if (
@@ -313,15 +296,6 @@ export const 启动同会话全屏策略 = (
     cleanup();
     回收查看器();
   };
-  const handlePopState = (): void => {
-    if (historyCleanupInProgress) {
-      historyCleanupInProgress = false;
-      removePopStateListener();
-      return;
-    }
-    historyConsumedByUser = true;
-    closeFullscreen();
-  };
   const handleFullscreenChange = (): void => {
     if (是主全屏目标(document.fullscreenElement)) {
       本会话已接管系统全屏 = true;
@@ -349,28 +323,6 @@ export const 启动同会话全屏策略 = (
       回收查看器();
     }
   };
-  const pushMediaHistoryEntry = (): void => {
-    if (
-      typeof window === "undefined" ||
-      typeof history === "undefined" ||
-      typeof history.pushState !== "function"
-    ) {
-      return;
-    }
-    try {
-      const currentState =
-        history.state && typeof history.state === "object" ? history.state : {};
-      history.pushState(
-        { ...currentState, [媒体全屏历史键]: sessionId },
-        "",
-        window.location.href
-      );
-      historyPushed = true;
-      window.addEventListener("popstate", handlePopState);
-    } catch {
-      // 这里失败也不能回退成旧原生全屏旁路；只是少一层返回键接管。
-    }
-  };
   const 处理播放器壳进入全屏结果 = (result: VideoJs全屏进入结果): void => {
     if (cleaned) {
       return;
@@ -391,7 +343,7 @@ export const 启动同会话全屏策略 = (
   video.addEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
   video.addEventListener("webkitbeginfullscreen", handleNativeVideoFullscreenStart);
   video.addEventListener("webkitendfullscreen", handleNativeVideoFullscreenEnd);
-  pushMediaHistoryEntry();
+  历史接管.接管();
 
   startPlayback();
   /**

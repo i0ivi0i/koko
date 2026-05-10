@@ -18,6 +18,7 @@ import {
   type 可原生全屏容器元素,
   type 同会话全屏策略控制器,
 } from "./媒体查看器全屏策略.js";
+import { 创建媒体查看器历史接管 } from "./媒体查看器历史接管.js";
 
 export type 媒体查看器项目 =
   | {
@@ -564,6 +565,34 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
           const lightbox = 是异步媒体查看器结果(photoSwipe)
             ? await photoSwipe
             : photoSwipe;
+          /**
+           * PhotoSwipe v5 故意不内置 history 模块，路由责任交宿主接：
+           * 1. 进入查看器先把"返回键归属"压一条 pushState；
+           * 2. 用户按物理返回键 / 浏览器后退时 popstate 触发，程序化 close lightbox（带 PhotoSwipe 关闭动画）而不是退出群聊；
+           * 3. 用户从查看器内部关闭（点关闭按钮 / ESC / 拖拽 / 背景）时，历史接管.消费() 把入口 entry history.back 回去，保 history 干净。
+           */
+          const 历史接管 = 创建媒体查看器历史接管({
+            sessionId: `image-${generation}`,
+            onUserBackPressed: () => {
+              /**
+               * PhotoSwipe v5 的程序化关闭只能通过 lightbox.pswp?.close()，它走 close 动画并随后 destroy；
+               * lightbox.destroy() 仅解绑 lightbox 本体的事件监听器，不会关闭打开中的 instance。
+               * 真拿不到 pswp 时再回退到销毁 lightbox 自己，至少把视口让回聊天。
+               */
+              try {
+                const lightboxWithPswp = lightbox as 媒体查看器实例 & {
+                  pswp?: { close?: () => void };
+                };
+                if (typeof lightboxWithPswp.pswp?.close === "function") {
+                  lightboxWithPswp.pswp.close();
+                  return;
+                }
+                lightbox.destroy();
+              } catch {
+                // 即便关闭失败，也不能让 popstate 把整页带走；继续进入释放视口与关闭通知。
+              }
+            },
+          });
           let 已通知查看器关闭 = false;
           const 通知查看器关闭 = (): void => {
             if (已通知查看器关闭) {
@@ -599,10 +628,12 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
           };
 
           lightbox.on?.("close", () => {
+            历史接管.消费();
             releaseViewport();
             通知查看器关闭();
           });
           lightbox.on?.("destroy", () => {
+            历史接管.释放();
             releaseViewport();
             通知查看器关闭();
           });
@@ -620,8 +651,10 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
             通知图片补齐中(loadedIndex);
             通知图片补齐完成(loadedIndex);
           });
+          历史接管.接管();
           lightbox.init?.();
           if (lightbox.loadAndOpen?.(imageStartAt) === false) {
+            历史接管.释放();
             lightbox.destroy();
             releaseViewport();
             通知查看器关闭();

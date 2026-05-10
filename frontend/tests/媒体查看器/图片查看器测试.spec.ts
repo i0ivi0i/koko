@@ -180,4 +180,134 @@ describe("媒体查看器适配器 - 图片 PhotoSwipe 会话", () => {
     expect(onViewportCaptureEnd).toHaveBeenCalledTimes(1);
     expect(consoleError).toHaveBeenCalledWith("打开媒体查看器失败", error);
   });
+
+  it("图片查看器打开时会通过 pushState 接管浏览器返回键，让按返回不会退出群聊", async () => {
+    const pushState = vi.spyOn(history, "pushState");
+    const init = vi.fn();
+    const loadAndOpen = vi.fn(() => true);
+    const destroy = vi.fn();
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init,
+      loadAndOpen,
+      destroy,
+      on: vi.fn(),
+    }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-image-back-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-back-1",
+          src: "http://media.local/back-image-1",
+          alt: "图片返回键测试",
+          width: 1200,
+          height: 800,
+        },
+      ],
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(pushState).toHaveBeenCalledWith(
+      expect.objectContaining({ __kokoMediaFullscreenSession: expect.any(String) }),
+      "",
+      expect.any(String)
+    );
+  });
+
+  it("图片查看器打开后 popstate 触发，会程序化关闭 lightbox（不退出群聊）", async () => {
+    const init = vi.fn();
+    const loadAndOpen = vi.fn(() => true);
+    const destroy = vi.fn();
+    const eventListeners = new Map<string, (payload?: unknown) => void>();
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init,
+      loadAndOpen,
+      destroy,
+      on: vi.fn((eventName: string, callback: (payload?: unknown) => void) => {
+        eventListeners.set(eventName, callback);
+      }),
+    }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-image-popstate-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-popstate-1",
+          src: "http://media.local/popstate-image-1",
+          alt: "popstate 测试",
+          width: 1200,
+          height: 800,
+        },
+      ],
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    await Promise.resolve();
+
+    expect(destroy).toHaveBeenCalled();
+  });
+
+  it("图片查看器主动关闭时会调用 history.back 消费 pushState 入的 entry，保 history 干净", async () => {
+    const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
+    const pushState = vi.spyOn(history, "pushState");
+    const init = vi.fn();
+    const loadAndOpen = vi.fn(() => true);
+    const destroy = vi.fn();
+    const eventListeners = new Map<string, (payload?: unknown) => void>();
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init,
+      loadAndOpen,
+      destroy,
+      on: vi.fn((eventName: string, callback: (payload?: unknown) => void) => {
+        eventListeners.set(eventName, callback);
+      }),
+    }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-image-consume-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-consume-1",
+          src: "http://media.local/consume-image-1",
+          alt: "消费 entry 测试",
+          width: 1200,
+          height: 800,
+        },
+      ],
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 模拟实际 pushState 已落地：让 history.state 反映被 push 的内容
+    const pushedState = pushState.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    if (pushedState) {
+      history.replaceState(pushedState, "", window.location.href);
+    }
+
+    eventListeners.get("close")?.();
+    await Promise.resolve();
+
+    expect(back).toHaveBeenCalled();
+  });
 });
