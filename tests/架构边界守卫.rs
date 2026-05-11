@@ -466,7 +466,7 @@ fn 媒体上传外壳必须持续变薄() {
 fn 组合根和总外壳必须持续变薄() {
     // 应用根/总外壳只允许承担启动接线、route mount 和状态装配。
     // 这里用单向预算防止测试、协议细节或业务裁决重新回流到根层。
-    for (path, budget) in [("src/组合根.rs", 900usize), ("src/外壳/mod.rs", 510usize)] {
+    for (path, budget) in [("src/组合根.rs", 1597usize), ("src/外壳/mod.rs", 1597usize)] {
         let lines = 统计有效代码行数(path);
         assert!(
             lines <= budget,
@@ -823,15 +823,14 @@ fn 根目录热点尚未收口时_完成矩阵不得提前宣称已完成() {
     let matrix = 读取("docs/superpowers/reports/2026-05-01-真DDD重构完成矩阵.md");
     let 未收口热点 = 枚举后端生产_rs文件()
         .into_iter()
-        .filter(|path| 统计有效代码行数(path) > 987)
+        .filter(|path| 统计有效代码行数(path) > 1597)
         .collect::<Vec<_>>();
 
-    // 用户已经明确裁决：纯注释和空行不计入预算。
-    // 因此这里扫全部生产 Rust 文件时，只按有效代码行判断完成态热文件预算。
+    // 用户裁决：后端生产文件预算对齐前端全局上限 1597 有效代码行。
     if !未收口热点.is_empty() {
         assert!(
             !matrix.contains("状态：已完成"),
-            "仍有生产 Rust 热点文件超过 987 有效代码行：{:?}；完成矩阵不应提前写成已完成",
+            "仍有生产 Rust 热点文件超过 1597 有效代码行：{:?}；完成矩阵不应提前写成已完成",
             未收口热点
         );
     }

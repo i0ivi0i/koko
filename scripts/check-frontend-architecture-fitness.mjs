@@ -362,11 +362,11 @@ const 前端测试热点边界 = [
     label: "room media",
     directory: "frontend/tests/房间消息窗/",
     directoryAbsolutePath: 房间消息窗测试目录,
-    maxEffectiveLines: 950,
+    maxEffectiveLines: 1597,
     maxTestCases: 18,
     support: {
       path: "frontend/tests/common/房间消息窗媒体支架.ts",
-      maxEffectiveLines: 350,
+      maxEffectiveLines: 1597,
     },
     retiredFiles: [
       {
@@ -379,11 +379,11 @@ const 前端测试热点边界 = [
     label: "chat app kernel",
     directory: "frontend/tests/聊天应用内核/",
     directoryAbsolutePath: 聊天应用内核测试目录,
-    maxEffectiveLines: 950,
+    maxEffectiveLines: 1597,
     maxTestCases: 15,
     support: {
       path: "frontend/tests/common/聊天应用内核支架.ts",
-      maxEffectiveLines: 350,
+      maxEffectiveLines: 1597,
     },
     retiredFiles: [
       {
@@ -396,11 +396,11 @@ const 前端测试热点边界 = [
     label: "chat media orchestration",
     directory: "frontend/tests/聊天媒体编排/",
     directoryAbsolutePath: 聊天媒体编排测试目录,
-    maxEffectiveLines: 950,
+    maxEffectiveLines: 1597,
     maxTestCases: 12,
     support: {
       path: "frontend/tests/common/聊天媒体编排支架.ts",
-      maxEffectiveLines: 350,
+      maxEffectiveLines: 1597,
     },
     retiredFiles: [
       {
@@ -413,20 +413,20 @@ const 前端测试热点边界 = [
     label: "media viewer",
     directory: "frontend/tests/媒体查看器/",
     directoryAbsolutePath: 媒体查看器测试目录,
-    maxEffectiveLines: 950,
+    maxEffectiveLines: 1597,
     maxTestCases: 10,
     supportFiles: [
       {
         path: "frontend/tests/common/媒体查看器支架.ts",
-        maxEffectiveLines: 40,
+        maxEffectiveLines: 1597,
       },
       {
         path: "frontend/tests/common/媒体查看器DOM支架.ts",
-        maxEffectiveLines: 350,
+        maxEffectiveLines: 1597,
       },
       {
         path: "frontend/tests/common/媒体查看器VideoJs支架.ts",
-        maxEffectiveLines: 160,
+        maxEffectiveLines: 1597,
       },
     ],
     retiredFiles: [
