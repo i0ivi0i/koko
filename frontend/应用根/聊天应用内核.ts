@@ -369,6 +369,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           await this.编排协调器.接收Realtime追加后跟随();
         },
         接收权威事件后副作用: (events) => {
+          performance.mark?.("room_event_received");
           this.roomViewport.send({ type: "AUTHORITATIVE_EVENTS_APPENDED" });
           this.同步房间视口快照();
           const currentSessionId = this.回填房间壳补丁().sessionId;

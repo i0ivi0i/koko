@@ -900,7 +900,16 @@ export function 创建媒体播放会话应用(
           if (!attachment.distribution_hint) {
             continue;
           }
-          void 媒体定位器.获取定位(attachment.attachment_id).catch(() => {});
+          const aid = attachment.attachment_id;
+          const ih = attachment.distribution_hint.torrent_info_hash;
+          console.debug("[MEDIA_HINT_INGESTED]", aid, ih);
+          performance.mark?.(`media_hint_ingested:${aid}`);
+          console.debug("[SWARM_PREWARM_TICKET_FETCHING]", aid);
+          performance.mark?.(`swarm_prewarm_ticket_fetching:${aid}`);
+          void 媒体定位器.获取定位(aid).then(() => {
+            console.debug("[LOCATOR_REFRESH_RESOLVED]", aid);
+            performance.mark?.(`locator_refresh_resolved:${aid}`);
+          }).catch(() => {});
         }
       }
     },

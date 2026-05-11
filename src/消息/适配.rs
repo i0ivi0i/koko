@@ -403,6 +403,45 @@ pub(super) async fn 提交统一消息事件_异步(
         .await
         .unwrap_or_default();
 
+    let 附件快照列表: Vec<contract::附件快照> = 附件
+        .iter()
+        .map(|a| {
+            let mut snapshot = 已校验附件转契约快照(a);
+            let aid = match a {
+                domain::message::已校验附件引用::图片 { 附件标识, .. }
+                | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
+            };
+            if let Some(hint) = 分发线索映射.get(aid) {
+                match &mut snapshot {
+                    contract::附件快照::图片(img) => img.分发线索 = Some(hint.clone()),
+                    contract::附件快照::视频(vid) => vid.分发线索 = Some(hint.clone()),
+                }
+                tracing::info!(
+                    application = "创建消息",
+                    adapter = "消息适配",
+                    observation = "message_media_distribution_hint_attached",
+                    room_id = 房间标识,
+                    message_id = message_id.as_str(),
+                    attachment_id = aid,
+                    torrent_info_hash = hint.torrent_info_hash.as_str(),
+                    "媒体附件分发线索已附加到消息事件"
+                );
+            } else {
+                tracing::warn!(
+                    application = "创建消息",
+                    adapter = "消息适配",
+                    observation = "message_media_distribution_hint_missing",
+                    room_id = 房间标识,
+                    message_id = message_id.as_str(),
+                    attachment_id = aid,
+                    reason = "distribution_metadata_not_found",
+                    "媒体附件缺少分发线索，接收者将无法提前预热"
+                );
+            }
+            snapshot
+        })
+        .collect();
+
     Ok(contract::领域事件::消息已创建 {
         房间标识: 房间标识.to_string(),
         消息标识: message_id,
@@ -410,23 +449,7 @@ pub(super) async fn 提交统一消息事件_异步(
         发送者会话标识: 会话标识.to_string(),
         发送者花名: sender_display_alias,
         文本: 文本.to_string(),
-        附件: 附件
-            .iter()
-            .map(|a| {
-                let mut snapshot = 已校验附件转契约快照(a);
-                let aid = match a {
-                    domain::message::已校验附件引用::图片 { 附件标识, .. }
-                    | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
-                };
-                if let Some(hint) = 分发线索映射.get(aid) {
-                    match &mut snapshot {
-                        contract::附件快照::图片(img) => img.分发线索 = Some(hint.clone()),
-                        contract::附件快照::视频(vid) => vid.分发线索 = Some(hint.clone()),
-                    }
-                }
-                snapshot
-            })
-            .collect(),
+        附件: 附件快照列表,
         事件位置: next_position,
     })
 }
