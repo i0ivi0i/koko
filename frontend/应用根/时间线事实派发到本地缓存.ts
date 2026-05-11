@@ -43,6 +43,8 @@ export function 时间线事实派发到本地缓存(input: {
   // 闭包捕获本批 messages，避免后续 actor 状态变化影响异步任务读取的引用。
   const 待写消息 = event.messages;
   queueMicrotask(() => {
+    // 防御：测试/热重载场景下仓库引用可能已失效，跳过即可。
+    if (!消息仓库) return;
     void 消息仓库.写入(roomId, 待写消息).catch((错误) => {
       console.warn(
         "[消息分层缓存] REALTIME 写入本地缓存失败（不影响业务）",

@@ -256,6 +256,8 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         const 需回写的页 = page.messages;
         const 需回写的房间 = state.roomId;
         queueMicrotask(() => {
+          // 防御：测试/热重载场景下 deps 可能已被回收，跳过即可。
+          if (!deps.消息仓库) return;
           void deps.消息仓库.写入(需回写的房间, 需回写的页).catch((错误) => {
             console.warn(
               "[消息分层缓存] HISTORY 回写本地缓存失败（不影响业务）",

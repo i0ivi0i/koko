@@ -273,6 +273,8 @@ export function 创建恢复应用(deps: 恢复应用依赖): 恢复应用端口
       const 需写入的消息 = snapshot.snapshot_messages;
       const 需写入的房间 = snapshot.room_id;
       queueMicrotask(() => {
+        // 防御：测试/热重载场景下 deps 可能已被回收，跳过即可（fire-and-forget 语义）。
+        if (!deps.消息仓库) return;
         void deps.消息仓库.写入(需写入的房间, 需写入的消息).catch((错误) => {
           console.warn("[消息分层缓存] BOOTSTRAP 写入本地缓存失败（不影响业务）", 错误);
         });
