@@ -3,6 +3,9 @@ import type {
   媒体附件转发请求,
   媒体附件转发结果,
   媒体种类,
+  媒体定位结果,
+  附件分发线索,
+  附件快照,
 } from "../../聊天共享/契约.js";
 import type { 媒体传输端口 } from "../../平台/传输.js";
 import { 创建媒体运行时Actor } from "../运行时.js";
@@ -127,6 +130,36 @@ type 可替换媒体播放器 = { 解析播放结果(input: { attachmentId: stri
 type 可替换媒体查看器 = { 打开(input: 媒体查看器打开请求): void; 同步?(input: 媒体查看器打开请求): void; 销毁(): void; };
 type 可替换媒体发布器 = { 处理选择媒体文件(files: Iterable<File>): Promise<void>; 移除草稿(localId: string): void; 继续上传草稿(localId: string): Promise<void>; 重新上传草稿(localId: string): Promise<void>; 清空(): void; 销毁(): void; };
 type 媒体播放会话内部桥 = { 替换媒体播放器(player: 可替换媒体播放器): void; 替换媒体查看器(viewer: 可替换媒体查看器): void; 关闭媒体查看器(): void; 替换媒体发布器(publisher: 可替换媒体发布器): void; 替换媒体草稿列表(drafts: 媒体附件草稿[]): void; };
+
+/** 从广播路径丰富 hint 构造最小 locator 结果，供直接缓存和 prefetch 使用。
+ *  web_seed_url 在广播路径下为 null（含 per-session 鉴权无法共享），
+ *  prefetch (deselect=true) 只加入 swarm 不下载数据，不需要 web_seed。 */
+function 从丰富hint构造最小定位结果(
+  attachment: 附件快照 & { distribution_hint: 附件分发线索 },
+): 媒体定位结果 {
+  const hint = attachment.distribution_hint;
+  return {
+    attachment_id: attachment.attachment_id,
+    kind: attachment.kind,
+    status: "ready",
+    thumbnail_url: null,
+    distribution: {
+      content_id: hint.content_hash,
+      content_hash: hint.content_hash,
+      swarm_id: hint.swarm_id,
+      web_seed_until: String(hint.web_seed_until),
+      torrent_url: hint.torrent_url ?? null,
+      torrent_info_hash: hint.torrent_info_hash,
+      announce_urls: hint.announce_urls ?? [],
+      web_seed_url: hint.web_seed_url ?? null,
+      join_ticket: hint.join_ticket ?? null,
+      ticket_expires_at: hint.ticket_expires_at ?? null,
+      media_state: { code: "MEDIA_READY", retry_after_ms: null },
+      survival_mode: "server_assisted",
+      ice_servers: hint.ice_servers as { urls: string; username?: string; credential?: string }[],
+    },
+  };
+}
 
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`; const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
 const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`; const 构造协作补齐ConsumerId = (attachmentId: string): string => `backfill:${attachmentId}`;
@@ -901,9 +934,22 @@ export function 创建媒体播放会话应用(
             continue;
           }
           const aid = attachment.attachment_id;
-          const ih = attachment.distribution_hint.torrent_info_hash;
-          console.debug("[MEDIA_HINT_INGESTED]", aid, ih);
+          const hint = attachment.distribution_hint;
+          console.debug("[MEDIA_HINT_INGESTED]", aid, hint.torrent_info_hash);
           performance.mark?.(`media_hint_ingested:${aid}`);
+
+          // 丰富 hint 路径：广播携带 join_ticket + announce_urls，
+          // 直接写入 locator 缓存，消除后续 viewport/autoplay 触发的 HTTP locator 往返（80-200ms）。
+          // WebTorrent 会话在 viewport sync 时自然创建，无需提前启动。
+          if (hint.join_ticket && hint.announce_urls?.length) {
+            console.debug("[SWARM_DIRECT_PREFETCH]", aid);
+            performance.mark?.(`swarm_direct_prefetch:${aid}`);
+            const locator = 从丰富hint构造最小定位结果(attachment as 附件快照 & { distribution_hint: 附件分发线索 });
+            媒体定位器.写入定位缓存(aid, locator);
+            continue;
+          }
+
+          // 降级：hint 无运行态字段（历史/重播路径），走旧的 locator HTTP prefetch
           console.debug("[SWARM_PREWARM_TICKET_FETCHING]", aid);
           performance.mark?.(`swarm_prewarm_ticket_fetching:${aid}`);
           void 媒体定位器.获取定位(aid).then(() => {

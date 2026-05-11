@@ -147,6 +147,60 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     编排.销毁();
   });
 
+  it("丰富hint直接预热：含join_ticket+announce_urls时跳过HTTP locator", async () => {
+    const loadMediaLocator = vi.fn(async () => {
+      throw new Error("should not be called for enriched hint");
+    });
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const 编排 = 创建测试编排(loadMediaLocator);
+
+    const enrichedEvent = {
+      message_id: "msg-enriched",
+      room_id: "room-1",
+      client_message_id: "cmsg-enriched",
+      sender_session_id: OTHER_SESSION,
+      sender_display_alias: "他人",
+      text: "",
+      attachments: [
+        {
+          attachment_id: "att-enriched-1",
+          kind: "video",
+          width: 1920,
+          height: 1080,
+          has_preview_asset: false,
+          distribution_hint: {
+            content_hash: "sha256-enriched",
+            swarm_id: "swarm-enriched",
+            torrent_info_hash: "ih-enriched",
+            web_seed_until: 9999999999,
+            join_ticket: "eyJhbGciOiJIUzI1NiJ9.test-ticket",
+            ticket_expires_at: "2099-01-01T00:00:00Z",
+            announce_urls: ["wss://tracker.example.com/announce"],
+            torrent_url: "/api/media/att-enriched-1/torrent?ticket=eyJhbGciOiJIUzI1NiJ9.test-ticket",
+            web_seed_url: null,
+            ice_servers: [],
+          },
+        },
+      ],
+      event_position: 10,
+    } as unknown as 消息事件;
+
+    编排.预热权威消息媒体分发([enrichedEvent], MY_SESSION);
+    await 刷新异步队列();
+
+    // 丰富 hint 路径不走 HTTP locator
+    expect(loadMediaLocator).not.toHaveBeenCalled();
+    // 应有直接预热日志
+    const directPrefetchCalls = debugSpy.mock.calls.filter(
+      (args) => args[0] === "[SWARM_DIRECT_PREFETCH]"
+    );
+    expect(directPrefetchCalls.length).toBe(1);
+    expect(directPrefetchCalls[0]?.[1]).toBe("att-enriched-1");
+
+    debugSpy.mockRestore();
+    编排.销毁();
+  });
+
   it("混合场景只预热他人的含 distribution_hint 附件", async () => {
     const loadMediaLocator = vi.fn(async () => {
       throw new Error("unused in prewarm");

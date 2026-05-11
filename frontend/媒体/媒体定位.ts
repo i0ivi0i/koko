@@ -389,9 +389,25 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     }
   };
 
+  /** 直接写入定位缓存（广播路径丰富 hint 可跳过 HTTP locator 直接缓存）。
+   *  写入后会取消该 attachment 的 inflight 请求和代次，防止旧请求覆盖。 */
+  const 写入定位缓存 = (attachmentId: string, locator: 媒体定位结果): void => {
+    放弃未完成定位(attachmentId);
+    const currentSessionId = deps.getSessionId();
+    const next: 定位缓存项 = {
+      attachmentId,
+      sessionId: currentSessionId,
+      value: locator,
+      stale: false,
+    };
+    cache.set(attachmentId, next);
+    void repo.保存(next);
+  };
+
   return {
     读取缓存,
     获取定位,
+    写入定位缓存,
     标记过期,
     放弃未完成定位,
     清空,
