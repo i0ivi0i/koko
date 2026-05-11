@@ -2,7 +2,7 @@ use crate::message::application as 消息应用;
 use crate::realtime::application as 实时应用;
 use crate::shared::contract;
 use crate::shell::{
-    协议响应::{event_to_json, events_to_json, map_domain_err_tuple},
+    协议响应::{self, event_to_json, events_to_json, map_domain_err_tuple},
     应用状态, 构建共享仓储,
 };
 use serde::Deserialize;
@@ -831,9 +831,26 @@ pub(crate) async fn handle_realtime_create_message(
                         )
                     }
                 };
-            // 广播路径当前没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
-            // 这里显式传 `None`，保持 preview 真相仍由同一个投影函数 owner 控制。
-            let payload = event_to_json(event, None, None);
+            // 广播路径：含分发线索附件时构造 SwarmBroadcastContext，
+            // 让 event_to_json 自动在 distribution_hint 里签发 join_ticket + 运行态字段。
+            // 无分发线索附件时传 None，避免无意义的 async ICE 查询。
+            let swarm_ctx = if !含分发线索附件.is_empty() {
+                Some(协议响应::SwarmBroadcastContext {
+                    ticket_secret: state.swarm_ticket_secret.as_deref(),
+                    tracker_public_url: state.swarm_tracker_public_url.as_str(),
+                    ice_servers: state.get_turn_ice_servers().await,
+                    ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
+                    now_epoch_seconds: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0),
+                })
+            } else {
+                None
+            };
+            // 广播路径没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
+            // session_id 显式传 None，保持 preview 真相仍由同一个投影函数 owner 控制。
+            let payload = event_to_json(event, None, swarm_ctx.as_ref());
             let broadcast_result = socket
                 .within(room_id.clone())
                 .emit("room_event", &payload)
