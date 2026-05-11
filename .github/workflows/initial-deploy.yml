@@ -26,6 +26,8 @@ jobs:
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_TURN_KEY_ID: ${{ secrets.CLOUDFLARE_TURN_KEY_ID }}
+      CLOUDFLARE_TURN_API_TOKEN: ${{ secrets.CLOUDFLARE_TURN_API_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -80,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh "${VPS_USER}@${VPS_HOST}" "VERSION='${VERSION}' ARCHIVE='${ARCHIVE}' CLOUDFLARE_API_TOKEN='${CLOUDFLARE_API_TOKEN}' bash -s" <<'REMOTE'
+          ssh "${VPS_USER}@${VPS_HOST}" "VERSION='${VERSION}' ARCHIVE='${ARCHIVE}' CLOUDFLARE_API_TOKEN='${CLOUDFLARE_API_TOKEN}' CLOUDFLARE_TURN_KEY_ID='${CLOUDFLARE_TURN_KEY_ID}' CLOUDFLARE_TURN_API_TOKEN='${CLOUDFLARE_TURN_API_TOKEN}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           run_as_root() {
@@ -115,6 +117,8 @@ jobs:
           run_as_root mkdir -p /opt/koko/shared/incoming
           run_as_root mv "/tmp/${ARCHIVE}" "/opt/koko/shared/incoming/${VERSION}.tar.gz"
           upsert_env_value "CLOUDFLARE_API_TOKEN" "${CLOUDFLARE_API_TOKEN}" "/opt/koko/env/production.env"
+          upsert_env_value "CLOUDFLARE_TURN_KEY_ID" "${CLOUDFLARE_TURN_KEY_ID}" "/opt/koko/env/production.env"
+          upsert_env_value "CLOUDFLARE_TURN_API_TOKEN" "${CLOUDFLARE_TURN_API_TOKEN}" "/opt/koko/env/production.env"
 
           tmp_dir="/tmp/koko-bootstrap-${VERSION}"
           rm -rf "${tmp_dir}"
