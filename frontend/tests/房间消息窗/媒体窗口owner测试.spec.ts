@@ -35,6 +35,7 @@ describe("房间消息窗媒体窗口Owner", () => {
       "video-near",
       "video-far",
       "img-1",
+      "video-tail",
     ]);
   });
 

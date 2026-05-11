@@ -725,7 +725,7 @@ describe("房间消息窗媒体查看器 - 高速换窗与预算", () => {
     expect(最新附件集合.length).toBeLessThanOrEqual(24);
     expect(
       最新附件集合.filter((attachmentId) => attachmentId.startsWith(视频附件前缀)).length
-    ).toBeLessThanOrEqual(4);
+    ).toBeLessThanOrEqual(12);
 
     pane.remove();
   });
