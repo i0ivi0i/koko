@@ -475,8 +475,10 @@ describe("realtime真实链路", () => {
       socketB.emit("subscribe_room_stream", { room_id: room.room_id, from: 0 });
       expect((await subscribed).kind).toBe("subscribed");
 
-      // 先积累一段“更早历史”，再把 A 的已读锚点推进到中间位置。
+      // 先积累一段"更早历史"，再把 A 的已读锚点推进到中间位置。
       // 后面继续追加新消息后，再用 HTTP snapshot 断言后端会围绕第一条未读开窗。
+      // 注意：服务端每连接令牌桶容量 10、补充 5/s，连发 40 条会命中限流。
+      // 每条之间留 200ms 间隔（200ms × 5/s = 1 token/200ms）确保不被 rate_limited。
       for (let index = 1; index <= 20; index += 1) {
         const nextEvent = once<房间事件>(socketB, "room_event");
         socketB.emit("create_message", {
@@ -486,6 +488,7 @@ describe("realtime真实链路", () => {
           attachment_ids: [],
         });
         await nextEvent;
+        await sleep(200);
       }
 
       await postJson<Record<string, never>>(
@@ -505,6 +508,7 @@ describe("realtime真实链路", () => {
           attachment_ids: [],
         });
         await nextEvent;
+        await sleep(200);
       }
 
       const snapshot = await getJson<房间恢复快照响应>(
@@ -641,6 +645,11 @@ async function expectNoEvent(socket: Socket, event: string): Promise<void> {
     };
     socket.on(event, onEvent);
   });
+}
+
+/** 简易 sleep：令牌桶限流测试中用于控制发送速率。 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uniqueRoomCode(prefix: string): string {
