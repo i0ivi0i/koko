@@ -8,10 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
 use tokio::time::{Duration, timeout};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
-
-use test_support::env_support::*;
+use crate::test_support::env_support::*;
 
 fn 生成迁移测试数据库名(prefix: &str) -> String {
     let uniq = SystemTime::now()

@@ -3,8 +3,6 @@ use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
 
 #[path = "房间接口测试/历史分页.rs"]
 mod history_tests;
@@ -15,7 +13,7 @@ mod read_anchor_tests;
 #[path = "房间接口测试/快照.rs"]
 mod snapshot_tests;
 
-use test_support::http::*;
+use crate::test_support::http::*;
 
 /// 房间接口测试：
 /// 1. 这里只守 bootstrap / snapshot / events / history / 阅读推进 这些房间 HTTP 契约。

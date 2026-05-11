@@ -52,7 +52,8 @@ fn panic_hook会把panic写入统一日志主链() {
         .with_target(false)
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber).expect("测试进程内应能安装全局 subscriber");
+    // 合并为单二进制后 set_global_default 只能调一次，改用 with_default 作用域守卫。
+    let _guard = tracing::subscriber::set_default(subscriber);
     koko::assembly::安装panic日志钩子();
 
     let _ = std::panic::catch_unwind(|| panic!("测试 panic"));

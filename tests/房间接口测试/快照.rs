@@ -271,7 +271,7 @@ async fn 晚进群历史视频消息快照仍会带legacy_preview_asset() {
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入视频附件");
-            super::test_support::media::插入ready视频附件记录(
+            crate::test_support::media::插入ready视频附件记录(
                 &pool,
                 &identity.会话标识,
                 &attachment_id_for_worker,
@@ -385,7 +385,7 @@ async fn 晚进群新单文件视频消息快照默认不带preview_asset() {
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入视频附件");
-            super::test_support::media::插入ready视频附件记录(
+            crate::test_support::media::插入ready视频附件记录(
                 &pool,
                 &identity.会话标识,
                 &attachment_id_for_worker,

@@ -5,8 +5,6 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
 
 #[path = "媒体上传测试/abandon.rs"]
 mod abandon_tests;
@@ -29,4 +27,4 @@ mod 单文件主链;
 // - prepare / complete / abandon 各自守自己的上传阶段 owner
 // - tus 回调 / 公网地址推导继续守协议与地址推导
 // - 不允许再把具体测试 bodies 堆回顶层文件
-use test_support::{env_support::*, http::*, media::*};
+use crate::test_support::{env_support::*, http::*, media::*};

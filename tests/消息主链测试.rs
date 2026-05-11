@@ -2,10 +2,7 @@ use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
-
-use test_support::media::*;
+use crate::test_support::media::*;
 
 /// 消息主链测试：
 /// 1. 这里只守消息成立顺序、附件引用落库、以及 ready/prepared 附件进入消息主链的边界。

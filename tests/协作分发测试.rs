@@ -24,11 +24,9 @@ mod tracker_proxy_tests;
 mod distribution_slice_support;
 #[path = "协作分发测试/上传场景支撑.rs"]
 mod upload_scene_support;
-#[path = "测试支撑/mod.rs"]
-mod test_support;
 
 // 顶层 manifest 只保留共享 imports 与子模块挂载：
 // - 可用性裁决 / 内容读取 / 分发元数据 / 投影一致性各守自己的协作分发切片
 // - locator / torrent / tracker 读侧合同拆到独立子模块
 // - 顶层不再夹带任何 inline 测试 bodies 与测试启动支撑
-use test_support::{env_support::*, http::*, media::*};
+use crate::test_support::{env_support::*, http::*, media::*};

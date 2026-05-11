@@ -3,10 +3,7 @@ use serial_test::serial;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
-
-use test_support::{env_support::*, http::*, media::*};
+use crate::test_support::{env_support::*, http::*, media::*};
 
 // 共享契约测试要显式保留 prepare 与 hook 的协议输入，
 // 否则很容易把“共享契约”和“测试装配细节”再混成新的万能 builder。

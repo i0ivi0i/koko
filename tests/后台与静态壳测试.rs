@@ -7,10 +7,7 @@ use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
-
-use test_support::{http::*, logging::*, media::*};
+use crate::test_support::{http::*, logging::*, media::*};
 
 /// 后台与静态壳测试：
 /// 1. 这里只守后台接口 contract、静态壳缓存策略、service worker 暴露和 HTTP 冷路径日志。

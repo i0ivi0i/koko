@@ -4,8 +4,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
 
 /// 实时链路测试：
 /// 1. 这里只守 realtime 主链、控制面 kind、幂等重试与并发顺序。

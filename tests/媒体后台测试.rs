@@ -4,8 +4,6 @@ use sqlx::{postgres::PgPoolOptions, Row};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
 
 // 媒体后台测试只守后台维护 owner：
 // - 上传残留清理
@@ -20,4 +18,4 @@ mod cold_source_cleanup_tests;
 #[path = "媒体后台测试/上传残留清理.rs"]
 mod upload_cleanup_tests;
 
-use test_support::{http::*, media::*};
+use crate::test_support::{http::*, media::*};

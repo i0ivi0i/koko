@@ -5,6 +5,9 @@ members = [".", "koko-torrent-core"]
 name = "koko"
 version = "0.1.0"
 edition = "2021"
+# 禁用自动测试发现：所有集成测试统一走 tests/集成测试.rs 单入口，
+# 避免 17 个独立二进制各自链接一遍完整依赖图。
+autotests = false
 
 [dependencies]
 dotenvy = "0.15"
@@ -79,6 +82,13 @@ serial_test = "3"
 tower = { version = "0.5", default-features = false, features = ["util"] }
 # 集成测试验证 koko-torrent-core 与 bip_metainfo 产出一致的 info_hash。
 koko-torrent-core = { path = "koko-torrent-core" }
+
+# ── 集成测试统一入口 ─────────────────────────────────────────
+# tests/ 下只编译一个二进制，避免 17 次独立链接。
+# 参考：https://matklad.github.io/2021/02/27/delete-cargo-integration-tests.html
+[[test]]
+name = "集成测试"
+path = "tests/集成测试.rs"
 
 # ── 编译性能 profile ─────────────────────────────────────────
 # 参考：https://doc.rust-lang.org/cargo/guide/build-performance.html
