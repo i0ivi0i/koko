@@ -1,4 +1,4 @@
-import type { 消息事件 } from "../聊天共享/契约.js";
+import type { 消息事件, 附件快照 } from "../聊天共享/契约.js";
 
 /**
  * 内存窗口上限：任意写入合流后，messages 数组长度不允许超过此值。
@@ -119,6 +119,8 @@ export type 创建乐观房间消息输入 = {
   clientMessageId: string;
   text: string;
   latestEventPosition: number;
+  /** 乐观消息携带的附件最小渲染快照，由 提取可发送媒体附件元数据 产生。 */
+  attachments?: 附件快照[];
 };
 
 const 是本地乐观消息 = (message: 消息事件): boolean =>
@@ -235,7 +237,7 @@ export function 创建乐观房间消息(input: 创建乐观房间消息输入):
     sender_session_id: input.sessionId,
     sender_display_alias: input.displayAlias,
     text: input.text,
-    attachments: [],
+    attachments: input.attachments ?? [],
     event_position: input.latestEventPosition + 1,
   };
 }

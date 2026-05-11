@@ -52,6 +52,7 @@ fn 已校验附件转契约快照(
             宽: *宽,
             高: *高,
             有预览图: *有预览图,
+            分发线索: None,
         }),
         domain::message::已校验附件引用::视频 {
             附件标识,
@@ -63,8 +64,57 @@ fn 已校验附件转契约快照(
             宽: *宽,
             高: *高,
             有预览图: *有预览图,
+            分发线索: None,
         }),
     }
+}
+
+/// 为 realtime 广播路径批量丰富分发线索。
+/// 仅在 `提交统一消息事件_异步` 的 tx.commit 之后调用，不参与 domain 消息成立校验。
+/// 查询失败时静默降级为空映射，不影响消息投递。
+async fn 查询附件分发线索批量_异步(
+    pool: &PgPool,
+    附件标识列表: &[&str],
+) -> Result<HashMap<String, contract::附件分发线索>, contract::错误码> {
+    if 附件标识列表.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows = sqlx::query(
+        "SELECT attachment_id, content_hash, swarm_id, torrent_info_hash, \
+                EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch \
+         FROM attachment_distribution_metadata \
+         WHERE attachment_id = ANY($1)",
+    )
+    .bind(附件标识列表.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    let mut map = HashMap::new();
+    for row in rows {
+        let attachment_id: String = row.get("attachment_id");
+        let content_hash: Option<String> = row.get("content_hash");
+        let swarm_id: Option<String> = row.get("swarm_id");
+        let torrent_info_hash: Option<String> = row.get("torrent_info_hash");
+        let web_seed_until: Option<i64> = row.get("web_seed_until_epoch");
+        // 四个字段全部到齐且 info_hash 非空时才填充分发线索
+        if let (Some(ch), Some(si), Some(ih), Some(ws)) =
+            (content_hash, swarm_id, torrent_info_hash, web_seed_until)
+        {
+            if !ih.is_empty() {
+                map.insert(
+                    attachment_id,
+                    contract::附件分发线索 {
+                        content_hash: ch,
+                        swarm_id: si,
+                        torrent_info_hash: ih,
+                        web_seed_until秒: ws,
+                    },
+                );
+            }
+        }
+    }
+    Ok(map)
 }
 
 /// 房间快照、历史页、增量页都会读消息附件引用。
@@ -109,6 +159,7 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: false,
+                分发线索: None,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -119,6 +170,7 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: row.get("has_preview_asset"),
+                分发线索: None,
             }),
             _ => return Err(contract::错误码::系统错误),
         };
@@ -314,6 +366,18 @@ pub(super) async fn 提交统一消息事件_异步(
 
     tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
 
+    // realtime 广播路径丰富分发线索：tx 已提交，此处失败仅降级为无线索，不影响消息投递。
+    let 附件标识列表: Vec<&str> = 附件
+        .iter()
+        .map(|a| match a {
+            domain::message::已校验附件引用::图片 { 附件标识, .. }
+            | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
+        })
+        .collect();
+    let 分发线索映射 = 查询附件分发线索批量_异步(pool, &附件标识列表)
+        .await
+        .unwrap_or_default();
+
     Ok(contract::领域事件::消息已创建 {
         房间标识: 房间标识.to_string(),
         消息标识: message_id,
@@ -321,7 +385,23 @@ pub(super) async fn 提交统一消息事件_异步(
         发送者会话标识: 会话标识.to_string(),
         发送者花名: sender_display_alias,
         文本: 文本.to_string(),
-        附件: 附件.iter().map(已校验附件转契约快照).collect(),
+        附件: 附件
+            .iter()
+            .map(|a| {
+                let mut snapshot = 已校验附件转契约快照(a);
+                let aid = match a {
+                    domain::message::已校验附件引用::图片 { 附件标识, .. }
+                    | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
+                };
+                if let Some(hint) = 分发线索映射.get(aid) {
+                    match &mut snapshot {
+                        contract::附件快照::图片(img) => img.分发线索 = Some(hint.clone()),
+                        contract::附件快照::视频(vid) => vid.分发线索 = Some(hint.clone()),
+                    }
+                }
+                snapshot
+            })
+            .collect(),
         事件位置: next_position,
     })
 }

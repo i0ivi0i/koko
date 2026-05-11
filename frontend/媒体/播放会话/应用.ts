@@ -87,6 +87,8 @@ export type 媒体播放会话应用依赖 = {
   登记程序滚动来源(source: 程序滚动来源): void;
   清除程序滚动来源(source: 程序滚动来源): void;
   抓取视频预览?: typeof 从媒体源抓取视频预览;
+  /** complete 成功后 fire-and-forget 预取 locator，让发送者视频秒播。 */
+  预取媒体定位?(attachmentId: string): void;
 };
 
 export interface 媒体播放会话应用端口 {
@@ -275,7 +277,14 @@ export function 创建媒体播放会话应用(
     },
   });
 
-  const 草稿发布 = 创建播放会话草稿发布(deps);
+  const 草稿发布 = 创建播放会话草稿发布({
+    ...deps,
+    // complete 成功后 fire-and-forget 预取 locator，让发送者视频秒播。
+    // 利用 inflight 去重：发送后自动播触发 获取定位() 时 piggyback 此请求。
+    预取媒体定位: (attachmentId) => {
+      void 媒体定位器.获取定位(attachmentId).catch(() => {});
+    },
+  });
   let 媒体发布器: 播放会话媒体发布器 = 草稿发布.创建媒体发布器();
 
   const 窗口附件协作 = 创建窗口附件协作({
@@ -603,6 +612,13 @@ export function 创建媒体播放会话应用(
         attachmentIds: input.attachmentIds,
         positionRetentionAttachmentIds: input.positionRetentionAttachmentIds,
       });
+      // Phase 3: 含 distribution_hint 的视频附件 → eager pre-fetch locator
+      // 利用 inflight 去重：自动播后续调 获取定位() 时 piggyback 此请求
+      if (input.eagerPrefetchAttachmentIds) {
+        for (const attachmentId of input.eagerPrefetchAttachmentIds) {
+          void 媒体定位器.获取定位(attachmentId).catch(() => {});
+        }
+      }
     },
     请求重渲染: deps.请求重渲染,
   });

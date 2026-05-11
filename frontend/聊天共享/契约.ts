@@ -88,6 +88,14 @@ export interface 预览资源描述 {
   still_url: string;
 }
 
+/** 广播路径可选携带的分发线索，让接收端提前预热 swarm 连接。 */
+export interface 附件分发线索 {
+  content_hash: string;
+  swarm_id: string;
+  torrent_info_hash: string;
+  web_seed_until: number;
+}
+
 export interface 图片附件快照 {
   kind: "image";
   attachment_id: string;
@@ -95,6 +103,7 @@ export interface 图片附件快照 {
   height: number;
   has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
+  distribution_hint?: 附件分发线索;
 }
 
 /**
@@ -108,6 +117,7 @@ export interface 视频附件快照 {
   height: number;
   has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
+  distribution_hint?: 附件分发线索;
 }
 
 export type 附件快照 = 图片附件快照 | 视频附件快照;

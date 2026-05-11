@@ -4,7 +4,7 @@ import type { 房间内核事件 } from "../房间/运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
 import type { 实时会话事件 } from "./会话运行时.js";
 import { 创建乐观房间消息 } from "../时间线/领域.js";
-import { 提取可发送媒体附件标识 } from "../媒体/媒体草稿.js";
+import { 提取可发送媒体附件标识, 提取可发送媒体附件元数据 } from "../媒体/媒体草稿.js";
 import {
   处理实时控制面结果,
   处理连接错误,
@@ -256,19 +256,20 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
       return;
     }
 
-    if (attachmentIds.length === 0) {
-      deps.接收时间线事实({
-        type: "OPTIMISTIC_MESSAGE_ADDED",
-        message: 创建乐观房间消息({
-          roomId: state.roomId,
-          sessionId: state.sessionId,
-          displayAlias: state.displayAlias,
-          clientMessageId,
-          text,
-          latestEventPosition: state.latestEventPosition,
-        }),
-      });
-    }
+    // 所有消息都创建乐观占位，包括带附件的消息。
+    // 附件元数据从 ready 草稿提取，让发送者立即看到消息 + 媒体卡片。
+    deps.接收时间线事实({
+      type: "OPTIMISTIC_MESSAGE_ADDED",
+      message: 创建乐观房间消息({
+        roomId: state.roomId,
+        sessionId: state.sessionId,
+        displayAlias: state.displayAlias,
+        clientMessageId,
+        text,
+        latestEventPosition: state.latestEventPosition,
+        attachments: 提取可发送媒体附件元数据(state.composerMediaDrafts) ?? [],
+      }),
+    });
     deps.写入实时状态({
       messageInput: "",
       composerMediaDrafts: [],

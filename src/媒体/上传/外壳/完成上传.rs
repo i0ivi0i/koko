@@ -617,28 +617,32 @@ pub(super) async fn complete_media_upload(
                     ice_servers: state.get_turn_ice_servers().await,
                 },
             );
-            // complete 成功后立刻尝试触发 sidecar 做种：
-            // 1. 这里不改变“ready 真相已经落库”的结果；start 失败只记告警并交给后台对账补偿；
-            // 2. 命令载荷严格来自同一份 runtime_distribution，避免再长第二套 transport 真相；
-            // 3. 真正“谁该做种”的裁决仍在后端 owner，不在 sidecar 里发明业务语义。
+            // complete 成功后 fire-and-forget 触发 sidecar 做种：
+            // 1. 不再阻塞 complete 响应（省 ~50-200ms），让前端更早拿到 ready 快照；
+            // 2. 命令载荷严格来自同一份 runtime_distribution，不长第二套 transport 真相；
+            // 3. 失败只记告警并交给后台对账周期性补偿，不影响 ready 真相。
             if let Some(启动命令) =
                 super::协作分发做种::从协作分发响应构造做种启动命令(
                     &runtime_distribution,
                     state.swarm_seeder_tracker_url.as_str(),
                 )
             {
-                if let Err(err) =
-                    super::协作分发做种::尝试启动协作分发做种(&state, &启动命令).await
-                {
-                    tracing::warn!(
-                        application = "完成媒体上传",
-                        phase = "seed_start_failed",
-                        attachment_id = attachment_id.as_str(),
-                        info_hash = 启动命令.info_hash.as_str(),
-                        error = %err,
-                        "complete 成功后触发 sidecar 做种失败，等待后台对账重试"
-                    );
-                }
+                let spawn_state = state.clone();
+                let spawn_attachment_id = attachment_id.clone();
+                tokio::spawn(async move {
+                    if let Err(err) =
+                        super::协作分发做种::尝试启动协作分发做种(&spawn_state, &启动命令).await
+                    {
+                        tracing::warn!(
+                            application = "完成媒体上传",
+                            phase = "seed_start_failed",
+                            attachment_id = spawn_attachment_id.as_str(),
+                            info_hash = 启动命令.info_hash.as_str(),
+                            error = %err,
+                            "complete 成功后触发 sidecar 做种失败，等待后台对账重试"
+                        );
+                    }
+                });
             }
             let media_asset = super::媒体资产外壳::构造媒体资产响应体(
                 &snapshot,

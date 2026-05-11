@@ -515,6 +515,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     removeDraft: deps.removeDraft,
     上传器表,
     草稿上传器键表,
+    ...(deps.预取媒体定位 ? { 预取媒体定位: deps.预取媒体定位 } : {}),
   };
 
   const 读取或创建上传器 = (

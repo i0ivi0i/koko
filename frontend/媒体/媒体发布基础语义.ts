@@ -58,6 +58,8 @@ export type 媒体发布器依赖 = {
   >;
   createPreviewUrl?(file: Blob | null): string;
   yieldToMainThread?(): Promise<void>;
+  /** complete 成功后 fire-and-forget 预取 locator，让发送者视频秒播。 */
+  预取媒体定位?(attachmentId: string): void;
 };
 
 export const 大视频高吞吐阈值字节数 = 32 * 1024 * 1024;

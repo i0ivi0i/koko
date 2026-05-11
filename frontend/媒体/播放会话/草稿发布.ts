@@ -35,6 +35,8 @@ interface 播放会话草稿发布依赖 {
   读取草稿(): 媒体附件草稿[];
   写入草稿列表(next: 媒体附件草稿[]): void;
   回收媒体草稿预览地址(previewUrls: string[]): void;
+  /** complete 成功后 fire-and-forget 预取 locator，让发送者视频秒播。 */
+  预取媒体定位?(attachmentId: string): void;
 }
 
 export type 播放会话媒体发布器 = ReturnType<typeof 创建媒体发布器>;
@@ -90,6 +92,7 @@ export function 创建播放会话草稿发布(deps: 播放会话草稿发布依
         updateDraft: 更新媒体草稿状态,
         removeDraft: 移除媒体草稿,
         clearDrafts: 清空媒体草稿,
+        ...(deps.预取媒体定位 ? { 预取媒体定位: deps.预取媒体定位 } : {}),
       });
     },
 

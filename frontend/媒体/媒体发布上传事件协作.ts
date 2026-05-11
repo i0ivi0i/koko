@@ -34,6 +34,8 @@ export type 媒体上传事件接线依赖 = {
   removeDraft: 媒体发布器依赖["removeDraft"];
   上传器表: Map<string, 媒体上传器>;
   草稿上传器键表: Map<string, string>;
+  /** complete 成功后 fire-and-forget 预取 locator，让发送者视频秒播。 */
+  预取媒体定位?(attachmentId: string): void;
 };
 
 /**
@@ -105,6 +107,9 @@ async function 处理媒体上传成功事件(
       status: "ready",
       errorCode: "",
     });
+    // complete 成功后 fire-and-forget 预取 locator：
+    // 用户还在看 composer，发送前 locator 缓存已热，视频秒播。
+    deps.预取媒体定位?.(ready.attachment_id);
   } catch (error: unknown) {
     const processedDraft = deps.读取媒体草稿(file.id);
     if (

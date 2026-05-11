@@ -224,6 +224,7 @@ function 创建场景(overrides: {
         };
       }
   >;
+  预取媒体定位?: (attachmentId: string) => void;
 } = {}) {
   const 默认上传器 = new 假媒体上传器();
   const 大视频上传器 = new 假媒体上传器();
@@ -319,6 +320,7 @@ function 创建场景(overrides: {
     preprocessVideo: overrides.preprocessVideo,
     createPreviewUrl: (file: Blob | null) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
     yieldToMainThread,
+    ...(overrides.预取媒体定位 ? { 预取媒体定位: overrides.预取媒体定位 } : {}),
   } as any);
   return {
     发布器,

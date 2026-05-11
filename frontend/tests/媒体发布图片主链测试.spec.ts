@@ -110,6 +110,19 @@ describe("媒体发布器 / 图片主链", () => {
       }),
     ]);
   });
+  it("complete 成功后会 fire-and-forget 预取媒体定位", async () => {
+    const 预取媒体定位 = vi.fn();
+    const 场景 = 创建场景({ 预取媒体定位 });
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "prefetch.jpg", {
+      type: "image/jpeg",
+    });
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+
+    await 场景.默认上传器.触发上传成功("att-canonical.webp");
+
+    expect(预取媒体定位).toHaveBeenCalledWith("att-canonical.webp");
+  });
+
   it("complete 失败时会把草稿收口成 failed", async () => {
     const 场景 = 创建场景();
     场景.completeMediaUpload.mockRejectedValueOnce(

@@ -29,6 +29,8 @@ type 窗口会话协作依赖 = {
   接收消息附件同步(input: {
     attachmentIds: string[];
     positionRetentionAttachmentIds: string[];
+    /** 含分发线索的视频附件 ID，触发 eager locator pre-fetch。 */
+    eagerPrefetchAttachmentIds?: string[];
   }): void;
   请求重渲染(): void;
 };
@@ -141,9 +143,17 @@ export function 创建窗口会话协作(
       if (清理失活媒体会话(activeAttachmentIds)) {
         deps.请求重渲染();
       }
+      // 筛选含分发线索的视频附件，上限 2 条，触发 eager locator pre-fetch
+      const eagerPrefetchIds = activeWindowAttachments
+        .filter((item) => item.kind === "video" && item.hasDistributionHint)
+        .slice(0, 2)
+        .map((item) => item.attachmentId);
       deps.接收消息附件同步({
         attachmentIds: Array.from(activeAttachmentIds),
         positionRetentionAttachmentIds: attachments.map((item) => item.attachmentId),
+        ...(eagerPrefetchIds.length > 0
+          ? { eagerPrefetchAttachmentIds: eagerPrefetchIds }
+          : {}),
       });
       if (补齐当前房间媒体会话(activeWindowAttachments)) {
         deps.请求重渲染();

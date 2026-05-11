@@ -43,6 +43,30 @@ function 需要回收旧预览地址(current: string, next?: string): string[] {
   return [current];
 }
 
+/**
+ * 从 ready 草稿中提取乐观消息需要的最小附件渲染事实。
+ * 语义与 `提取可发送媒体附件标识` 一致：
+ * - 全部 ready → 返回 `{ kind, attachment_id, width, height }[]`；
+ * - 含非 ready 或缺 attachmentId → 返回 `null` 阻止发送；
+ * - 空列表 → 返回 `[]`（纯文本消息合法）。
+ */
+export function 提取可发送媒体附件元数据(
+  草稿列表: 媒体附件草稿[]
+): { kind: "image" | "video"; attachment_id: string; width: number; height: number }[] | null {
+  if (草稿列表.length === 0) {
+    return [];
+  }
+  if (草稿列表.some((draft) => draft.status !== "ready" || !draft.attachmentId)) {
+    return null;
+  }
+  return 草稿列表.map((draft) => ({
+    kind: draft.kind,
+    attachment_id: draft.attachmentId,
+    width: draft.width,
+    height: draft.height,
+  }));
+}
+
 export function 提取可发送媒体附件标识(草稿列表: 媒体附件草稿[]): string[] | null {
   if (草稿列表.length === 0) {
     return [];

@@ -4,6 +4,8 @@ import type { 媒体缓存快照 } from "../媒体缓存.js";
 export type 媒体附件条目 = {
   attachmentId: string;
   kind: 媒体种类;
+  /** 广播消息是否携带分发线索，用于 eager locator pre-fetch 判断。 */
+  hasDistributionHint?: boolean;
 };
 
 type 窗口外显式保活上下文 = {
@@ -55,6 +57,7 @@ export function 创建窗口附件协作(
         attachments.push({
           attachmentId,
           kind: attachment.kind,
+          hasDistributionHint: !!attachment.distribution_hint,
         });
       }
     }

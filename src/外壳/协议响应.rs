@@ -38,13 +38,22 @@ fn attachments_to_json(
         .iter()
         .map(|attachment| match attachment {
             contract::附件快照::图片(image) => {
-                serde_json::json!({
+                let mut payload = serde_json::json!({
                     "kind": "image",
                     "attachment_id": image.附件标识,
                     "width": image.宽,
                     "height": image.高,
                     "has_preview_asset": false
-                })
+                });
+                if let Some(ref hint) = image.分发线索 {
+                    payload["distribution_hint"] = serde_json::json!({
+                        "content_hash": hint.content_hash,
+                        "swarm_id": hint.swarm_id,
+                        "torrent_info_hash": hint.torrent_info_hash,
+                        "web_seed_until": hint.web_seed_until秒,
+                    });
+                }
+                payload
             }
             contract::附件快照::视频(video) => {
                 let mut payload = serde_json::json!({
@@ -54,6 +63,14 @@ fn attachments_to_json(
                     "height": video.高,
                     "has_preview_asset": video.有预览图
                 });
+                if let Some(ref hint) = video.分发线索 {
+                    payload["distribution_hint"] = serde_json::json!({
+                        "content_hash": hint.content_hash,
+                        "swarm_id": hint.swarm_id,
+                        "torrent_info_hash": hint.torrent_info_hash,
+                        "web_seed_until": hint.web_seed_until秒,
+                    });
+                }
                 if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
                     video.附件标识.as_str(),
                     session_id,

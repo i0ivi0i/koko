@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { 创建乐观房间消息, 推进房间时间线 } from "../时间线/领域";
+import { 提取可发送媒体附件元数据 } from "../媒体/媒体草稿";
 import type { 消息事件 } from "../聊天共享/契约";
 
 const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" | "event_position">): 消息事件 => ({
@@ -140,6 +141,80 @@ describe("房间时间线", () => {
       attachments: [],
       event_position: 10,
     });
+  });
+
+  it("创建乐观消息可携带媒体附件元数据", () => {
+    const optimistic = 创建乐观房间消息({
+      roomId: "r-test",
+      sessionId: "s-test",
+      displayAlias: "暴躁的企鹅",
+      clientMessageId: "client-media-1",
+      text: "看这个视频",
+      latestEventPosition: 5,
+      attachments: [
+        { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080 },
+        { kind: "image", attachment_id: "att-i1", width: 800, height: 600 },
+      ],
+    });
+
+    expect(optimistic.attachments).toEqual([
+      { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080 },
+      { kind: "image", attachment_id: "att-i1", width: 800, height: 600 },
+    ]);
+    expect(optimistic.message_id).toBe("local-client-media-1");
+    expect(optimistic.event_position).toBe(6);
+  });
+
+  it("不传 attachments 时乐观消息附件为空数组", () => {
+    const optimistic = 创建乐观房间消息({
+      roomId: "r-test",
+      sessionId: "s-test",
+      displayAlias: "暴躁的企鹅",
+      clientMessageId: "client-text-only",
+      text: "纯文本",
+      latestEventPosition: 3,
+    });
+    expect(optimistic.attachments).toEqual([]);
+  });
+
+  it("提取可发送媒体附件元数据只提取 ready 草稿的最小渲染事实", () => {
+    const drafts = [
+      {
+        localId: "d1", kind: "video" as const, attachmentId: "att-v1",
+        previewUrl: "", width: 1920, height: 1080,
+        status: "ready" as const, fileName: "a.mp4", errorCode: "",
+      },
+      {
+        localId: "d2", kind: "image" as const, attachmentId: "att-i1",
+        previewUrl: "", width: 800, height: 600,
+        status: "transporting" as const, fileName: "b.png", errorCode: "",
+      },
+    ];
+    // 含非 ready 草稿时返回 null（与 提取可发送媒体附件标识 保持一致的安全语义）
+    expect(提取可发送媒体附件元数据(drafts)).toBeNull();
+  });
+
+  it("全部 ready 时提取可发送媒体附件元数据返回最小渲染快照", () => {
+    const drafts = [
+      {
+        localId: "d1", kind: "video" as const, attachmentId: "att-v1",
+        previewUrl: "", width: 1920, height: 1080,
+        status: "ready" as const, fileName: "a.mp4", errorCode: "",
+      },
+      {
+        localId: "d2", kind: "image" as const, attachmentId: "att-i1",
+        previewUrl: "", width: 800, height: 600,
+        status: "ready" as const, fileName: "b.png", errorCode: "",
+      },
+    ];
+    expect(提取可发送媒体附件元数据(drafts)).toEqual([
+      { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080 },
+      { kind: "image", attachment_id: "att-i1", width: 800, height: 600 },
+    ]);
+  });
+
+  it("空草稿列表时提取可发送媒体附件元数据返回空数组", () => {
+    expect(提取可发送媒体附件元数据([])).toEqual([]);
   });
 
   it("恢复、实时、历史分页都只能把事实交给时间线 owner，不再各自手拼 messages 数组", () => {

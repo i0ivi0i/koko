@@ -999,6 +999,7 @@ mod 实时外壳测试 {
                     宽: 1280,
                     高: 720,
                     有预览图: true,
+                    分发线索: None,
                 })],
                 事件位置: 1,
             },
@@ -1012,6 +1013,39 @@ mod 实时外壳测试 {
             payload["attachments"][0].get("preview_asset").is_none(),
             "没有逐连接会话上下文时，不应在 room_event 里伪造 still_url"
         );
+    }
+
+    #[test]
+    fn room_event附件携带分发线索时输出distribution_hint() {
+        let payload = crate::shell::协议响应::event_to_json(
+            contract::领域事件::消息已创建 {
+                房间标识: "room-1".to_string(),
+                消息标识: "msg-1".to_string(),
+                客户端消息标识: "client-1".to_string(),
+                发送者会话标识: "s-1".to_string(),
+                发送者花名: "测试".to_string(),
+                文本: "".to_string(),
+                附件: vec![contract::附件快照::视频(contract::视频附件快照 {
+                    附件标识: "att-v1".to_string(),
+                    宽: 1920,
+                    高: 1080,
+                    有预览图: false,
+                    分发线索: Some(contract::附件分发线索 {
+                        content_hash: "hash123".to_string(),
+                        swarm_id: "swarm123".to_string(),
+                        torrent_info_hash: "ih123".to_string(),
+                        web_seed_until秒: 1715500000,
+                    }),
+                })],
+                事件位置: 1,
+            },
+            None,
+        );
+        let hint = &payload["attachments"][0]["distribution_hint"];
+        assert_eq!(hint["torrent_info_hash"], "ih123");
+        assert_eq!(hint["swarm_id"], "swarm123");
+        assert_eq!(hint["content_hash"], "hash123");
+        assert_eq!(hint["web_seed_until"], 1715500000);
     }
 
     // ── 令牌桶限流测试 ──────────────────────────────────────────────

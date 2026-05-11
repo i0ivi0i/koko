@@ -143,6 +143,16 @@ pub enum 附件类型 {
     视频,
 }
 
+/// 附件分发线索是可选投影字段，仅供广播时前端优化使用。
+/// domain 层的消息成立校验不读取、不校验此字段。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 附件分发线索 {
+    pub content_hash: String,
+    pub swarm_id: String,
+    pub torrent_info_hash: String,
+    pub web_seed_until秒: i64,
+}
+
 /// 图片附件快照只承载聊天时间线渲染所需的最小事实。
 /// 这里故意不暴露对象存储 key、签名 URL、缩略图存储实现等 adapter 私货。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,9 +160,11 @@ pub struct 图片附件快照 {
     pub 附件标识: String,
     pub 宽: i32,
     pub 高: i32,
-    /// 共享事件只保留“当前附件有没有稳定静态封面”这个事实，
+    /// 共享事件只保留"当前附件有没有稳定静态封面"这个事实，
     /// 具体 still_url 由带会话上下文的投影层统一生成。
     pub 有预览图: bool,
+    /// 广播路径可选携带分发线索，让接收端提前预热 swarm 连接。
+    pub 分发线索: Option<附件分发线索>,
 }
 
 /// 视频附件快照沿用与图片相同的最小稳定渲染事实。
@@ -164,6 +176,8 @@ pub struct 视频附件快照 {
     pub 高: i32,
     /// 视频和图片沿用同一条 preview 真相语义，避免后面再长第二套判断。
     pub 有预览图: bool,
+    /// 广播路径可选携带分发线索，让接收端提前预热 swarm 连接。
+    pub 分发线索: Option<附件分发线索>,
 }
 
 /// 统一附件快照：消息只引用附件真相，不直接内嵌文件存储细节。

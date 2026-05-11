@@ -227,6 +227,7 @@ async fn 查询房间消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: false,
+                分发线索: None,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -237,6 +238,7 @@ async fn 查询房间消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: row.get("has_preview_asset"),
+                分发线索: None,
             }),
             _ => return Err(contract::错误码::系统错误),
         };
