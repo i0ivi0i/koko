@@ -127,6 +127,8 @@ async fn 查询消息附件映射_异步(
         return Ok(HashMap::new());
     }
 
+    // LEFT JOIN 分发元数据：幂等重试路径也携带 distribution_hint，
+    // 与房间冷路径保持一致，让所有读路径的接收端都能预热 swarm。
     let rows = sqlx::query(
         "SELECT mar.message_id,
                 mar.sort_order,
@@ -134,9 +136,14 @@ async fn 查询消息附件映射_异步(
                 a.kind,
                 a.width,
                 a.height,
-                a.thumbnail_storage_key IS NOT NULL AS has_preview_asset \
+                a.thumbnail_storage_key IS NOT NULL AS has_preview_asset,
+                adm.content_hash  AS dist_content_hash,
+                adm.swarm_id      AS dist_swarm_id,
+                adm.torrent_info_hash AS dist_torrent_info_hash,
+                EXTRACT(EPOCH FROM adm.web_seed_until)::BIGINT AS dist_web_seed_until_epoch \
          FROM message_attachment_refs mar \
          JOIN attachments a ON a.id = mar.attachment_id \
+         LEFT JOIN attachment_distribution_metadata adm ON adm.attachment_id = a.attachment_id \
          WHERE mar.message_id = ANY($1) \
          ORDER BY mar.message_id ASC, mar.sort_order ASC",
     )
@@ -149,6 +156,24 @@ async fn 查询消息附件映射_异步(
     for row in rows {
         let message_id: String = row.get("message_id");
         let kind: String = row.get("kind");
+        // 从 LEFT JOIN 结果提取分发线索：四字段全到齐且 info_hash 非空才有效
+        let 分发线索 = {
+            let ch: Option<String> = row.get("dist_content_hash");
+            let si: Option<String> = row.get("dist_swarm_id");
+            let ih: Option<String> = row.get("dist_torrent_info_hash");
+            let ws: Option<i64> = row.get("dist_web_seed_until_epoch");
+            match (ch, si, ih, ws) {
+                (Some(ch), Some(si), Some(ih), Some(ws)) if !ih.is_empty() => {
+                    Some(contract::附件分发线索 {
+                        content_hash: ch,
+                        swarm_id: si,
+                        torrent_info_hash: ih,
+                        web_seed_until秒: ws,
+                    })
+                }
+                _ => None,
+            }
+        };
         let attachment = match kind.as_str() {
             "image" => contract::附件快照::图片(contract::图片附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -159,7 +184,7 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: false,
-                分发线索: None,
+                分发线索,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -170,7 +195,7 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: row.get("has_preview_asset"),
-                分发线索: None,
+                分发线索,
             }),
             _ => return Err(contract::错误码::系统错误),
         };

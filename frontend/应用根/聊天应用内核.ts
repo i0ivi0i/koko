@@ -371,9 +371,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         接收权威事件后副作用: (events) => {
           this.roomViewport.send({ type: "AUTHORITATIVE_EVENTS_APPENDED" });
           this.同步房间视口快照();
+          const currentSessionId = this.回填房间壳补丁().sessionId;
+          // 权威事件到达即触发 locator 预热，比 viewport sync 早 50-200ms
+          this.媒体编排.预热权威消息媒体分发(events, currentSessionId);
           处理权威新消息平台副作用({
             events,
-            currentSessionId: this.回填房间壳补丁().sessionId,
+            currentSessionId,
             平台桥接: this.平台桥接,
           });
         },

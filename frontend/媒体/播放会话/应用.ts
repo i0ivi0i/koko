@@ -116,6 +116,8 @@ export interface 媒体播放会话应用端口 {
     heavyWorkPolicy: "normal" | "reduced" | "suspended";
   }): void;
   处理平台在线状态变化(online: boolean): void;
+  /** room_event 到达即触发：过滤掉 sender=self，为含 distribution_hint 的附件 fire-and-forget locator pre-fetch。 */
+  预热权威消息媒体分发(events: 消息事件[], currentSessionId: string): void;
   清空(): void;
   销毁(): void;
 }
@@ -883,6 +885,23 @@ export function 创建媒体播放会话应用(
     处理平台在线状态变化(online: boolean): void {
       for (const session of 媒体会话表.values()) {
         session.send({ type: online ? "ORIGIN_AVAILABLE" : "ORIGIN_UNAVAILABLE" });
+      }
+    },
+
+    预热权威消息媒体分发(events, currentSessionId): void {
+      // room_event 到达时立即触发，比 viewport sync → eagerPrefetch 早 50-200ms。
+      // 只预热他人消息：发送者自身不需要重复预热。
+      // fire-and-forget：利用 inflight 去重，后续 viewport/autoplay 会 piggyback 同一请求。
+      for (const event of events) {
+        if (event.sender_session_id === currentSessionId) {
+          continue;
+        }
+        for (const attachment of event.attachments ?? []) {
+          if (!attachment.distribution_hint) {
+            continue;
+          }
+          void 媒体定位器.获取定位(attachment.attachment_id).catch(() => {});
+        }
       }
     },
 
