@@ -731,45 +731,82 @@ async fn 读取受控附件内容响应(
     }
 }
 
+/// torrent endpoint 的双轨鉴权方式。
+/// - `会话鉴权`：原有路径，用 session_id 走成员资格校验；
+/// - `票据鉴权`：广播路径，用 join_ticket 验票——ticket 已证明持有者有权进入对应 swarm，
+///   自然有权拉取同一 info_hash 的 .torrent 文件。
+#[derive(Debug)]
+enum Torrent鉴权方式 {
+    会话鉴权 { session_id: String },
+    票据鉴权 { ticket: String },
+}
+
+/// 从 query 参数中解析 torrent 鉴权方式：session_id 优先，无则降级到 ticket。
+fn 解析torrent鉴权(raw_query: &HashMap<String, String>) -> Result<Torrent鉴权方式, (StatusCode, &'static str, &'static str)> {
+    if let Some(session_id) = raw_query.get("session_id").map(|v| v.trim()).filter(|v| !v.is_empty()) {
+        return Ok(Torrent鉴权方式::会话鉴权 { session_id: session_id.to_string() });
+    }
+    if let Some(ticket) = raw_query.get("ticket").map(|v| v.trim()).filter(|v| !v.is_empty()) {
+        return Ok(Torrent鉴权方式::票据鉴权 { ticket: ticket.to_string() });
+    }
+    Err((StatusCode::BAD_REQUEST, "invalid_argument", "缺少 session_id 或 ticket"))
+}
+
 /// 冷路径：受控读取附件对应的 torrent metainfo。
-/// 它先复用 locator 的成员资格与 ready 校验，再返回稳定 metainfo 字节。
+/// 支持双轨鉴权：session_id（原有 locator 路径）或 ticket（广播路径无 session_id 时降级）。
 pub(super) async fn load_media_torrent(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
     Query(raw_query): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let query = match parse_attachment_content_query(raw_query) {
-        Ok(query) => query,
+    let auth = match 解析torrent鉴权(&raw_query) {
+        Ok(auth) => auth,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();
-    let session_id_for_usecase = query.session_id.clone();
-    let torrent_result = match task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state_for_usecase);
-        let media_repo = repo.媒体仓储();
-        协作分发应用::查询媒体定位(
-            &media_repo,
-            &attachment_id_for_usecase,
-            &session_id_for_usecase,
-        )
-        .map_err(map_domain_err_tuple)?;
-        crate::media::application::读取协作分发torrent元信息(
-            &media_repo,
-            &attachment_id_for_usecase,
-        )
-        .map_err(map_domain_err_tuple)
-    })
-    .await
-    {
-        Ok(Ok(torrent)) => torrent,
-        Ok(Err((status, code, message))) => return err_resp(status, code, message),
-        Err(err) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("torrent 任务执行失败: {err}"),
-            );
+    let torrent_result = match auth {
+        Torrent鉴权方式::会话鉴权 { session_id } => {
+            // 原有路径：成员资格 + session 校验 + 读 torrent
+            match task::spawn_blocking(move || {
+                let repo = 构建共享仓储(&state_for_usecase);
+                let media_repo = repo.媒体仓储();
+                协作分发应用::查询媒体定位(&media_repo, &attachment_id_for_usecase, &session_id)
+                    .map_err(map_domain_err_tuple)?;
+                crate::media::application::读取协作分发torrent元信息(&media_repo, &attachment_id_for_usecase)
+                    .map_err(map_domain_err_tuple)
+            }).await {
+                Ok(Ok(t)) => t,
+                Ok(Err((status, code, msg))) => return err_resp(status, code, msg),
+                Err(err) => return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", format!("torrent 任务执行失败: {err}")),
+            }
+        }
+        Torrent鉴权方式::票据鉴权 { ticket } => {
+            // 广播路径：ticket 验票 + 读 torrent（跳过成员资格——ticket 本身就是短时授权凭证）
+            let ticket_secret = match state.swarm_ticket_secret.as_deref() {
+                Some(s) => s.to_string(),
+                None => return err_resp(StatusCode::UNAUTHORIZED, "ticket_not_configured", "服务端未配置 ticket 密钥"),
+            };
+            match task::spawn_blocking(move || {
+                let repo = 构建共享仓储(&state_for_usecase);
+                let media_repo = repo.媒体仓储();
+                // 先读 torrent 元信息拿到 info_hash，再验票
+                let torrent = crate::media::application::读取协作分发torrent元信息(&media_repo, &attachment_id_for_usecase)
+                    .map_err(map_domain_err_tuple)?;
+                let Some(ref t) = torrent else {
+                    return Err((StatusCode::NOT_FOUND, "torrent_not_found", "附件无 torrent 元信息".to_string()));
+                };
+                // 验票：ticket 必须锚定正确的 info_hash
+                let diagnosis = media_distribution::诊断协作分发join_ticket(&ticket_secret, &t.torrent_info_hash, &ticket);
+                if !matches!(diagnosis, media_distribution::协作分发入群票据校验诊断::通过) {
+                    return Err((StatusCode::UNAUTHORIZED, "ticket_invalid", "join_ticket 验证失败".to_string()));
+                }
+                Ok(torrent)
+            }).await {
+                Ok(Ok(t)) => t,
+                Ok(Err((status, code, msg))) => return err_resp(status, code, msg),
+                Err(err) => return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", format!("torrent 任务执行失败: {err}")),
+            }
         }
     };
     let Some(torrent) = torrent_result else {
@@ -903,5 +940,43 @@ mod tests {
         assert_eq!(新起点秒, 1_016);
         assert_eq!(状态码, media_distribution::媒体状态连接群友中);
         assert_eq!(重试毫秒, media_distribution::连接群友默认重试毫秒);
+    }
+
+    // ── torrent 双轨鉴权解析测试 ──
+
+    #[test]
+    fn torrent鉴权优先使用session_id() {
+        let mut q = HashMap::new();
+        q.insert("session_id".into(), "s-1".into());
+        q.insert("ticket".into(), "eyJ...".into());
+        let result = 解析torrent鉴权(&q).unwrap();
+        assert!(matches!(result, Torrent鉴权方式::会话鉴权 { session_id } if session_id == "s-1"));
+    }
+
+    #[test]
+    fn torrent鉴权无session_id时降级到ticket() {
+        let mut q = HashMap::new();
+        q.insert("ticket".into(), "eyJtoken".into());
+        let result = 解析torrent鉴权(&q).unwrap();
+        assert!(matches!(result, Torrent鉴权方式::票据鉴权 { ticket } if ticket == "eyJtoken"));
+    }
+
+    #[test]
+    fn torrent鉴权两者皆无时返回错误() {
+        let q = HashMap::new();
+        let result = 解析torrent鉴权(&q);
+        assert!(result.is_err());
+        let (status, code, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(code, "invalid_argument");
+    }
+
+    #[test]
+    fn torrent鉴权空白session_id会降级到ticket() {
+        let mut q = HashMap::new();
+        q.insert("session_id".into(), "  ".into());
+        q.insert("ticket".into(), "valid-ticket".into());
+        let result = 解析torrent鉴权(&q).unwrap();
+        assert!(matches!(result, Torrent鉴权方式::票据鉴权 { ticket } if ticket == "valid-ticket"));
     }
 }
