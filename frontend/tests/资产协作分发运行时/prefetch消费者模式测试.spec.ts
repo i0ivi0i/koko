@@ -76,4 +76,49 @@ describe("prefetch 消费者模式", () => {
       expect.any(Function),
     );
   });
+
+  /**
+   * prefetch→viewer 升级：
+   * 1. prefetch 先建会话（join swarm，不下载）
+   * 2. viewer 绑定到同一 swarm → 复用同一底层 torrent（不二次 client.add）
+   * 3. 升级后 eagerCompleting=true、已获得帮助资格=true、refs=2
+   */
+  it("prefetch 会话被 viewer 升级时应复用同一 swarm 会话并启用 piece selection", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:prefetch-upgrade-1");
+    const add = vi.fn(
+      ((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+        onTorrent(torrent);
+        return torrent;
+      }) as WebTorrent浏览器客户端["add"]
+    );
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    // Step 1: prefetch 先建会话
+    await 解析协作分发源({
+      attachmentId: "att-upgrade-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-upgrade-1"),
+      consumerId: "prefetch:att-upgrade-1",
+    });
+    expect(add).toHaveBeenCalledTimes(1);
+
+    // Step 2: viewer 绑定到同一附件 → 复用同一底层 torrent
+    await 解析协作分发源({
+      attachmentId: "att-upgrade-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-upgrade-1"),
+      consumerId: "viewer:att-upgrade-1",
+    });
+    // 不应再次调用 client.add()（复用已有 swarm 会话）
+    expect(add).toHaveBeenCalledTimes(1);
+
+    const state = 读取协作分发会话状态("swarm-att-upgrade-1");
+    expect(state).toMatchObject({
+      eagerCompleting: true,
+      已获得帮助资格: true,
+      refs: 2,
+    });
+  });
 });
