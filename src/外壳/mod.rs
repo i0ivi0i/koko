@@ -137,12 +137,15 @@ pub struct TurnIceServersCache {
 }
 
 const TURN_CREDENTIAL_TTL: i64 = 86_400;
+fn stun_only() -> serde_json::Value {
+    serde_json::json!([{ "urls": ["stun:stun.cloudflare.com:3478"] }])
+}
 
 impl 应用状态 {
     pub async fn get_turn_ice_servers(&self) -> serde_json::Value {
         let (Some(key_id), Some(api_token)) =
             (self.cloudflare_turn_key_id.as_deref(), self.cloudflare_turn_api_token.as_deref())
-        else { return serde_json::json!([]); };
+        else { return stun_only(); };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64).unwrap_or_default();
@@ -162,7 +165,7 @@ impl 应用状态 {
         match res.and_then(|r| Ok((r.status(), r))).map_err(|e| e.to_string()) {
             Ok((status, r)) if status.is_success() => {
                 let json: serde_json::Value = r.json().await.unwrap_or_default();
-                let ice = json.get("iceServers").cloned().unwrap_or_else(|| serde_json::json!([]));
+                let ice = json.get("iceServers").cloned().unwrap_or_else(stun_only);
                 let mut c = self.turn_ice_servers_cache.write().await;
                 c.ice_servers = ice.clone();
                 c.fetched_at_epoch_secs = now;
@@ -175,7 +178,7 @@ impl 应用状态 {
                 };
                 tracing::warn!(adapter = "cloudflare_turn", %detail, "TURN 凭证刷新失败，缓存兜底");
                 let c = self.turn_ice_servers_cache.read().await;
-                if c.fetched_at_epoch_secs > 0 { c.ice_servers.clone() } else { serde_json::json!([]) }
+                if c.fetched_at_epoch_secs > 0 { c.ice_servers.clone() } else { stun_only() }
             }
         }
     }
