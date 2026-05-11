@@ -115,7 +115,7 @@ pub(super) async fn forward_media_attachment(
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "message": event_to_json(消息事件, Some(session_id.as_str())),
+            "message": event_to_json(消息事件, Some(session_id.as_str()), None),
             "attachment": attachment,
         })),
     )

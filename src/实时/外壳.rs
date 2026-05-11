@@ -659,7 +659,7 @@ pub(crate) async fn handle_realtime_subscribe(
             let events_json = 构造房间增量事件载荷(
                 &房间标识,
                 最新事件位置,
-                events_to_json(事件, Some(auth.session_id.as_str())),
+                events_to_json(事件, Some(auth.session_id.as_str()), None),
             );
             if let Err(err) = socket.emit("control_result", &control) {
                 记录订阅单连接发送失败(
@@ -833,7 +833,7 @@ pub(crate) async fn handle_realtime_create_message(
                 };
             // 广播路径当前没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
             // 这里显式传 `None`，保持 preview 真相仍由同一个投影函数 owner 控制。
-            let payload = event_to_json(event, None);
+            let payload = event_to_json(event, None, None);
             let broadcast_result = socket
                 .within(room_id.clone())
                 .emit("room_event", &payload)
@@ -1098,6 +1098,7 @@ mod 实时外壳测试 {
                 事件位置: 1,
             },
             None,
+            None,
         );
 
         assert_eq!(payload["type"], "message_created");
@@ -1127,6 +1128,7 @@ mod 实时外壳测试 {
                 })],
                 事件位置: 1,
             },
+            None,
             None,
         );
 
@@ -1164,12 +1166,60 @@ mod 实时外壳测试 {
                 事件位置: 1,
             },
             None,
+            None,
         );
         let hint = &payload["attachments"][0]["distribution_hint"];
         assert_eq!(hint["torrent_info_hash"], "ih123");
         assert_eq!(hint["swarm_id"], "swarm123");
         assert_eq!(hint["content_hash"], "hash123");
         assert_eq!(hint["web_seed_until"], 1715500000);
+    }
+
+    #[test]
+    fn 广播附件json包含丰富后的distribution_hint() {
+        use crate::shell::协议响应::{event_to_json, SwarmBroadcastContext};
+        let payload = event_to_json(
+            contract::领域事件::消息已创建 {
+                房间标识: "room-1".into(),
+                消息标识: "msg-1".into(),
+                客户端消息标识: "cmsg-1".into(),
+                发送者会话标识: "s-sender".into(),
+                发送者花名: "sender".into(),
+                文本: "hello".into(),
+                附件: vec![contract::附件快照::视频(contract::视频附件快照 {
+                    附件标识: "att-1".into(),
+                    宽: 1920,
+                    高: 1080,
+                    有预览图: false,
+                    分发线索: Some(contract::附件分发线索 {
+                        content_hash: "sha256-abc".into(),
+                        swarm_id: "swarm-1".into(),
+                        torrent_info_hash: "ih-abc".into(),
+                        web_seed_until秒: 9999999999,
+                    }),
+                })],
+                事件位置: 1,
+            },
+            None,
+            Some(&SwarmBroadcastContext {
+                ticket_secret: Some("test-secret"),
+                tracker_public_url: "wss://tracker.example.com/announce",
+                ice_servers: serde_json::json!([]),
+                ticket_ttl_seconds: 120,
+                now_epoch_seconds: 1700000000,
+            }),
+        );
+        let hint = &payload["attachments"][0]["distribution_hint"];
+        // 广播路径必须包含运行态字段
+        assert!(hint["join_ticket"].as_str().is_some(), "应包含 join_ticket");
+        assert!(hint["ticket_expires_at"].as_str().is_some(), "应包含过期时间");
+        assert_eq!(hint["announce_urls"][0].as_str().unwrap(), "wss://tracker.example.com/announce");
+        assert!(hint["web_seed_url"].is_null(), "广播路径 web_seed_url 应为 null");
+        let torrent_url = hint["torrent_url"].as_str().unwrap();
+        assert!(torrent_url.starts_with("/api/media/att-1/torrent?ticket="), "应含 ticket 鉴权参数");
+        // 稳定字段仍然存在
+        assert_eq!(hint["torrent_info_hash"], "ih-abc");
+        assert_eq!(hint["swarm_id"], "swarm-1");
     }
 
     // ── 令牌桶限流测试 ──────────────────────────────────────────────

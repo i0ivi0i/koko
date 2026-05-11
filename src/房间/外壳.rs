@@ -317,7 +317,7 @@ pub(super) async fn join_or_create_room(
                     "latest_event_position": 最新事件位置,
                     "last_read_event_position": 上次已读事件位置,
                     "first_unread_event_position": 首条未读事件位置,
-                    "snapshot_messages": events_to_json(首屏消息, Some(session_id.as_str())),
+                    "snapshot_messages": events_to_json(首屏消息, Some(session_id.as_str()), None),
                     "has_more_before": 首屏前仍有更早历史,
                 })),
             )
@@ -426,7 +426,7 @@ pub(super) async fn load_room_snapshot(
                     "latest_event_position": 最新事件位置,
                     "last_read_event_position": 上次已读事件位置,
                     "first_unread_event_position": 首条未读事件位置,
-                    "snapshot_messages": events_to_json(首屏消息, Some(session_id.as_str())),
+                    "snapshot_messages": events_to_json(首屏消息, Some(session_id.as_str()), None),
                     "has_more_before": 首屏前仍有更早历史,
                 })),
             )
@@ -706,7 +706,7 @@ pub(super) async fn load_room_events(
                 Json(serde_json::json!({
                     "room_id": 房间标识,
                     "latest_event_position": 最新事件位置,
-                    "events": events_to_json(事件, Some(session_id.as_str()))
+                    "events": events_to_json(事件, Some(session_id.as_str()), None)
                 })),
             )
                 .into_response()
@@ -838,7 +838,7 @@ pub(super) async fn load_room_history(
                 StatusCode::OK,
                 Json(serde_json::json!({
                     "room_id": 房间标识,
-                    "messages": events_to_json(消息, Some(session_id.as_str())),
+                    "messages": events_to_json(消息, Some(session_id.as_str()), None),
                 })),
             )
                 .into_response()

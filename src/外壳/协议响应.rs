@@ -9,6 +9,23 @@ use crate::shared::contract;
 
 use super::媒体资产外壳;
 
+/// 广播路径 swarm 运行态上下文。
+/// shell 层负责传入，attachments_to_json 负责丰富 distribution_hint JSON。
+/// 只在广播含分发线索附件的消息时构造，其他路径传 None。
+#[derive(Debug)]
+pub(crate) struct SwarmBroadcastContext<'a> {
+    /// ticket 签名密钥，无则不签发 join_ticket
+    pub ticket_secret: Option<&'a str>,
+    /// tracker WebSocket 公开地址
+    pub tracker_public_url: &'a str,
+    /// STUN/TURN ICE servers（Cloudflare TURN API 失败时为 `[]`）
+    pub ice_servers: serde_json::Value,
+    /// ticket 有效期（秒）
+    pub ticket_ttl_seconds: i64,
+    /// 当前 UNIX 时间戳（秒）
+    pub now_epoch_seconds: i64,
+}
+
 /// 统一错误响应体（跨 HTTP 接口稳定结构）。
 #[derive(Serialize)]
 struct ApiError {
@@ -20,19 +37,75 @@ struct ApiError {
 
 /// 领域事件 -> 传输 JSON 的稳定映射层。
 /// 约束：只做字段翻译，不添加业务语义。
+/// `swarm_ctx` 只在广播路径传入，历史/订阅/转发路径传 `None`。
 pub(crate) fn events_to_json(
     events: Vec<contract::领域事件>,
     session_id: Option<&str>,
+    swarm_ctx: Option<&SwarmBroadcastContext<'_>>,
 ) -> Vec<serde_json::Value> {
     events
         .into_iter()
-        .map(|event| event_to_json(event, session_id))
+        .map(|event| event_to_json(event, session_id, swarm_ctx))
         .collect()
+}
+
+/// 构造 distribution_hint JSON，可选丰富广播运行态字段。
+/// 无 `swarm_ctx` 时只输出四个稳定字段（历史/重播路径）；
+/// 有 `swarm_ctx` 时追加 join_ticket、announce_urls、torrent_url、ice_servers，
+/// 供前端跳过 HTTP locator 直接创建 prefetch WebTorrent 会话。
+fn build_distribution_hint(
+    attachment_id: &str,
+    hint: &contract::附件分发线索,
+    swarm_ctx: Option<&SwarmBroadcastContext<'_>>,
+) -> serde_json::Value {
+    let mut json = serde_json::json!({
+        "content_hash": hint.content_hash,
+        "swarm_id": hint.swarm_id,
+        "torrent_info_hash": hint.torrent_info_hash,
+        "web_seed_until": hint.web_seed_until秒,
+    });
+    let Some(ctx) = swarm_ctx else { return json };
+    // 广播路径：丰富运行态字段供前端直接创建 prefetch WebTorrent 会话
+    if let Some(secret) = ctx.ticket_secret {
+        let now = ctx.now_epoch_seconds;
+        let exp = now + ctx.ticket_ttl_seconds;
+        let claims = serde_json::json!({
+            "sub": "__room_broadcast__",
+            "aid": attachment_id,
+            "ih": hint.torrent_info_hash,
+            "iat": now as usize,
+            "exp": exp as usize,
+        });
+        if let Ok(ticket) = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+            &claims,
+            &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()),
+        ) {
+            let expires_at = time::OffsetDateTime::from_unix_timestamp(exp)
+                .ok()
+                .and_then(|dt| dt.format(&time::format_description::well_known::Rfc3339).ok());
+            json["join_ticket"] = serde_json::Value::String(ticket.clone());
+            json["ticket_expires_at"] = expires_at
+                .map(serde_json::Value::String)
+                .unwrap_or(serde_json::Value::Null);
+            // torrent_url 用 ticket 鉴权替代 session_id（广播路径无 session_id）
+            json["torrent_url"] = serde_json::Value::String(
+                format!("/api/media/{}/torrent?ticket={}", attachment_id, ticket),
+            );
+        }
+    }
+    json["announce_urls"] = serde_json::json!([ctx.tracker_public_url]);
+    // 广播路径 web_seed_url 固定为 null：URL 含 per-session 鉴权无法共享，
+    // prefetch (deselect=true) 不下载数据不需要 web_seed
+    json["web_seed_url"] = serde_json::Value::Null;
+    json["ice_servers"] = ctx.ice_servers.clone();
+    json
 }
 
 fn attachments_to_json(
     attachments: &[contract::附件快照],
     session_id: Option<&str>,
+    swarm_ctx: Option<&SwarmBroadcastContext<'_>>,
 ) -> Vec<serde_json::Value> {
     attachments
         .iter()
@@ -46,12 +119,7 @@ fn attachments_to_json(
                     "has_preview_asset": false
                 });
                 if let Some(ref hint) = image.分发线索 {
-                    payload["distribution_hint"] = serde_json::json!({
-                        "content_hash": hint.content_hash,
-                        "swarm_id": hint.swarm_id,
-                        "torrent_info_hash": hint.torrent_info_hash,
-                        "web_seed_until": hint.web_seed_until秒,
-                    });
+                    payload["distribution_hint"] = build_distribution_hint(&image.附件标识, hint, swarm_ctx);
                 }
                 payload
             }
@@ -64,12 +132,7 @@ fn attachments_to_json(
                     "has_preview_asset": video.有预览图
                 });
                 if let Some(ref hint) = video.分发线索 {
-                    payload["distribution_hint"] = serde_json::json!({
-                        "content_hash": hint.content_hash,
-                        "swarm_id": hint.swarm_id,
-                        "torrent_info_hash": hint.torrent_info_hash,
-                        "web_seed_until": hint.web_seed_until秒,
-                    });
+                    payload["distribution_hint"] = build_distribution_hint(&video.附件标识, hint, swarm_ctx);
                 }
                 if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
                     video.附件标识.as_str(),
@@ -85,9 +148,11 @@ fn attachments_to_json(
 }
 
 /// 单条领域事件 -> JSON。
+/// `swarm_ctx` 只在广播路径传入，其他路径传 `None`。
 pub(crate) fn event_to_json(
     event: contract::领域事件,
     session_id: Option<&str>,
+    swarm_ctx: Option<&SwarmBroadcastContext<'_>>,
 ) -> serde_json::Value {
     match event {
         contract::领域事件::消息已创建 {
@@ -108,7 +173,7 @@ pub(crate) fn event_to_json(
             "sender_display_alias": 发送者花名,
             "text": 文本,
             "body": 文本,
-            "attachments": attachments_to_json(&附件, session_id),
+            "attachments": attachments_to_json(&附件, session_id, swarm_ctx),
             "event_position": 事件位置
         }),
     }
