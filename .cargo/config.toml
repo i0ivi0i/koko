@@ -1,0 +1,17 @@
+# ── Rust 编译性能优化 ──────────────────────────────────────────
+# 参考来源：
+#   - Cargo 官方文档：https://doc.rust-lang.org/cargo/guide/build-performance.html
+#   - corrode.dev：https://corrode.dev/blog/tips-for-faster-rust-compile-times/
+#
+# 当前项目痛点：
+#   1. 17 个独立集成测试文件 → 17 次 MSVC link.exe 链接（最大瓶颈）
+#   2. 默认 debug info 全量生成 → 编译+链接+磁盘三重浪费
+#   3. proc-macro（serde/sqlx/axum derive）以 opt-level=0 编译 → 宏展开慢
+
+# ── Windows 上用 rust-lld 替换默认 MSVC link.exe ──────────────
+# MSVC link.exe 是单线程链接器，对 Rust 项目极不友好。
+# rust-lld 从 Rust 1.81 起在 stable x86_64-pc-windows-msvc 可用，
+# 无需额外安装，直接随 toolchain 附带。
+# 预计链接阶段加速 2-5 倍。
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"

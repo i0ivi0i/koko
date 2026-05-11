@@ -79,3 +79,24 @@ serial_test = "3"
 tower = { version = "0.5", default-features = false, features = ["util"] }
 # 集成测试验证 koko-torrent-core 与 bip_metainfo 产出一致的 info_hash。
 koko-torrent-core = { path = "koko-torrent-core" }
+
+# ── 编译性能 profile ─────────────────────────────────────────
+# 参考：https://doc.rust-lang.org/cargo/guide/build-performance.html
+
+[profile.dev]
+# 本项目只保留行号表，够 panic backtrace 用；需要完整调试时用 --profile debugging。
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# 第三方依赖不生成 debug info，节省编译+链接+磁盘。
+debug = false
+
+[profile.dev.build-override]
+# proc-macro 和 build script 以 opt-level=3 编译：
+# serde/sqlx/axum 的 derive 宏展开速度显著提升（宏在编译期执行，优化它 = 加速所有使用方）。
+opt-level = 3
+
+[profile.debugging]
+# 需要单步调试时：cargo test --profile debugging
+inherits = "dev"
+debug = true
