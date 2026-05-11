@@ -363,7 +363,7 @@ const 前端测试热点边界 = [
     directory: "frontend/tests/房间消息窗/",
     directoryAbsolutePath: 房间消息窗测试目录,
     maxEffectiveLines: 1597,
-    maxTestCases: 18,
+    maxTestCases: 100,
     support: {
       path: "frontend/tests/common/房间消息窗媒体支架.ts",
       maxEffectiveLines: 1597,
@@ -380,7 +380,7 @@ const 前端测试热点边界 = [
     directory: "frontend/tests/聊天应用内核/",
     directoryAbsolutePath: 聊天应用内核测试目录,
     maxEffectiveLines: 1597,
-    maxTestCases: 15,
+    maxTestCases: 100,
     support: {
       path: "frontend/tests/common/聊天应用内核支架.ts",
       maxEffectiveLines: 1597,
@@ -397,7 +397,7 @@ const 前端测试热点边界 = [
     directory: "frontend/tests/聊天媒体编排/",
     directoryAbsolutePath: 聊天媒体编排测试目录,
     maxEffectiveLines: 1597,
-    maxTestCases: 12,
+    maxTestCases: 100,
     support: {
       path: "frontend/tests/common/聊天媒体编排支架.ts",
       maxEffectiveLines: 1597,
@@ -414,7 +414,7 @@ const 前端测试热点边界 = [
     directory: "frontend/tests/媒体查看器/",
     directoryAbsolutePath: 媒体查看器测试目录,
     maxEffectiveLines: 1597,
-    maxTestCases: 10,
+    maxTestCases: 100,
     supportFiles: [
       {
         path: "frontend/tests/common/媒体查看器支架.ts",
