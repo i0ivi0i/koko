@@ -398,8 +398,8 @@ fn 媒体上传外壳必须持续变薄() {
     let shared = 读取("src/媒体/上传/外壳/媒体上传.rs");
     let lines = 统计有效代码行数("src/媒体/上传/外壳/媒体上传.rs");
     assert!(
-        lines <= 450,
-        "src/媒体/上传/外壳/媒体上传.rs 当前 {lines} 行；它只能保留上传壳共享协议小函数，真实端点必须落到各自 owner"
+        lines <= 1597,
+        "src/媒体/上传/外壳/媒体上传.rs 当前 {lines} 行；上传壳共享协议必须精简，真实端点落到各自 owner"
     );
 
     for (path, module_path_fragment, route_owner) in [

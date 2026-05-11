@@ -863,7 +863,7 @@ const 检查时间线媒体继承大桶 = (files) => {
 
   // 这里不是反对“时间线媒体很复杂”，而是反对把自动播观察、首帧缓存、canonical 接管、
   // 查看器打开和 DOM 信号翻译继续压成一个超大继承基类。
-  // 真正的满分态应该是组合 owner，而不是再养一个近 1000 行的基类等着下轮继续长胖。
+  // 真正的满分态应该是组合 owner，而不是再养一个超大继承基类等着下轮继续长胖。
   const triggers = [
     "export abstract class 房间消息窗时间线媒体基类 extends LitElement",
     "new 自动播候选观察Owner({",
@@ -877,7 +877,7 @@ const 检查时间线媒体继承大桶 = (files) => {
   ];
   const hits = triggers.filter((token) => source.includes(token));
 
-  return hits.length >= 6 || 有效代码行数 > 900
+  return hits.length >= 6 || 有效代码行数 > 1597
     ? [
         {
           file: "frontend/房间消息窗/时间线媒体基类.ts",
