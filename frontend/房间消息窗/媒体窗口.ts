@@ -36,7 +36,7 @@ export interface 可渲染真实预览视频输入 extends 媒体窗口基础输
 
 const 近视口真实预览视频预算上限 = 2;
 const 近视口活媒体会话预算上限 = 24;
-const 近视口活视频会话预算上限 = 4;
+export const 近视口活视频会话预算上限 = 12;
 
 const 归一化附件标识 = (attachmentId: string | null | undefined): string =>
   attachmentId?.trim() ?? "";

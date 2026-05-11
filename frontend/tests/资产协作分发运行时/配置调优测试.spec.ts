@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { 零引用完成会话保留上限 } from "../../媒体/资产协作分发生命周期.js";
+import { 近视口活视频会话预算上限 } from "../../房间消息窗/媒体窗口.js";
 import {
   获取或创建协作分发浏览器运行时,
   重置协作分发浏览器运行时,
@@ -72,5 +73,14 @@ describe("配置调优", () => {
       expect.objectContaining({ storeCacheSlots: 150 }),
       expect.any(Function),
     );
+  });
+
+  /**
+   * 近视口活视频会话预算从 4 提升到 12：
+   * 允许更多视频同时维持 WebTorrent 会话（含 prefetch 预连接），
+   * 滚动浏览时秒播率大幅提升。
+   */
+  it("近视口活视频会话预算上限应为 12", () => {
+    expect(近视口活视频会话预算上限).toBe(12);
   });
 });
