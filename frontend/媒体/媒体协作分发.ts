@@ -759,6 +759,9 @@ export async function 接入协作分发种子(
         urlList: distribution.web_seed_url ? [distribution.web_seed_url] : [],
         private: true,
         maxWebConns: 4,
+        // storeCacheSlots: 做种时内存中缓存 150 个 piece（默认 20），
+        // 减少 IndexedDB 随机读 IO，多 peer 并发拉取时上传吞吐量翻倍。
+        storeCacheSlots: 150,
         destroyStoreOnDestroy: false,
         ...读取协作分发持久ChunkStore选项(distribution),
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
