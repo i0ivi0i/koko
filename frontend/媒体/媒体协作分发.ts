@@ -85,7 +85,10 @@ export interface WebTorrent浏览器客户端 {
   destroy?(): void;
 }
 
-type WebTorrent浏览器构造器 = new () => WebTorrent浏览器客户端;
+/** WebTorrent 浏览器构造器，可选传入 maxConns 等客户端级配置 */
+type WebTorrent浏览器构造器 = new (
+  opts?: Record<string, unknown>
+) => WebTorrent浏览器客户端;
 
 type WebTorrentChunkStore构造器 = new (
   chunkLength: number,
@@ -893,7 +896,9 @@ export async function 获取或创建协作分发浏览器运行时(
       安装协作分发WebRtc关闭降噪();
       const WebTorrentCtor = await loadCtor();
       const serviceWorkerRegistration = await 读取媒体ServiceWorker注册();
-      const client = new WebTorrentCtor();
+      // maxConns: 万人 swarm 中允许单客户端同时维护 128 个 peer 连接（默认 55），
+      // 提升下载速度和做种覆盖率。
+      const client = new WebTorrentCtor({ maxConns: 128 });
       const streamServer = client.createServer({
         controller: serviceWorkerRegistration,
       });

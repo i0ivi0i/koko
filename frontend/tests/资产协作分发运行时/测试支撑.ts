@@ -164,14 +164,32 @@ export function 创建假WebTorrent构造器(add: WebTorrent浏览器客户端["
   const createServer = vi.fn().mockReturnValue({ close: closeServer });
   const destroy = vi.fn();
   const remove = vi.fn();
+
+  /** 最近一次被 new 出来的实例，用于测试构造器参数和运行时属性 */
+  let _lastInstance: InstanceType<typeof FakeWebTorrent> | null = null;
+
   class FakeWebTorrent {
+    /** 构造器接收到的选项——测试用来断言 maxConns 等参数 */
+    _opts: Record<string, unknown> | undefined;
     createServer = createServer;
     add = add;
     destroy = destroy;
     remove = remove;
+    /** 模拟 WebTorrent 的 tracker 属性，供 ICE 配置注入测试使用 */
+    tracker: Record<string, unknown> | undefined;
+
+    constructor(opts?: Record<string, unknown>) {
+      this._opts = opts;
+      _lastInstance = this;
+    }
   }
+
   return {
-    ctor: FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端,
+    ctor: FakeWebTorrent as unknown as new (
+      opts?: Record<string, unknown>
+    ) => WebTorrent浏览器客户端,
+    /** 返回最近一次 new FakeWebTorrent() 产生的实例 */
+    lastInstance: () => _lastInstance,
     createServer,
     closeServer,
     destroy,
