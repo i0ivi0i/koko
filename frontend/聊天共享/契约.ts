@@ -233,6 +233,8 @@ export interface 媒体协作分发定位片段 {
     retry_after_ms: number | null;
   };
   survival_mode: "server_assisted" | "peer_only_after_expiry";
+  /** 后端按需下发 STUN/TURN 服务器列表，用于 WebRTC NAT 穿透。空数组 = 无 TURN。 */
+  ice_servers?: { urls: string; username?: string; credential?: string }[];
 }
 
 /**
@@ -257,6 +259,8 @@ export interface 媒体资产分发表面 {
   join_ticket: string | null;
   ticket_expires_at: string | null;
   survival_mode: "server_assisted" | "peer_only_after_expiry";
+  /** 后端按需下发 STUN/TURN 服务器列表，用于 WebRTC NAT 穿透。空数组 = 无 TURN。 */
+  ice_servers?: { urls: string; username?: string; credential?: string }[];
 }
 
 export interface 单文件视频资产描述 {

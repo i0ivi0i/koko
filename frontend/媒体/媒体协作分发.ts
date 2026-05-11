@@ -765,6 +765,10 @@ export async function 接入协作分发种子(
         destroyStoreOnDestroy: false,
         // deselect: prefetch 模式时 join swarm 但不选择任何 piece 下载
         ...(options.deselect ? { deselect: true } : {}),
+        // 后端下发 STUN/TURN 凭证时注入 WebRTC rtcConfig，穿透对称 NAT
+        ...(distribution.ice_servers?.length
+          ? { rtcConfig: { iceServers: distribution.ice_servers } }
+          : {}),
         ...读取协作分发持久ChunkStore选项(distribution),
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {

@@ -83,4 +83,46 @@ describe("配置调优", () => {
   it("近视口活视频会话预算上限应为 12", () => {
     expect(近视口活视频会话预算上限).toBe(12);
   });
+
+  /**
+   * 后端下发 ice_servers 时，client.add() 应注入 rtcConfig.iceServers：
+   * 这让 WebRTC 连接在对称 NAT 下也能通过 TURN 中继穿透。
+   */
+  it("后端下发 ice_servers 时 client.add() 应注入 rtcConfig", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:test-ice-inject");
+    const add = vi.fn(((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-ice-test");
+    // 模拟后端下发 STUN/TURN 凭证
+    locator.distribution!.ice_servers = [
+      { urls: "stun:example.com:3478" },
+      { urls: "turn:example.com:3478", username: "u", credential: "c" },
+    ];
+
+    await 解析协作分发源({
+      attachmentId: "att-ice-test",
+      kind: "video",
+      locator,
+      consumerId: "session:att-ice-test",
+    });
+
+    expect(add).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        rtcConfig: {
+          iceServers: [
+            { urls: "stun:example.com:3478" },
+            { urls: "turn:example.com:3478", username: "u", credential: "c" },
+          ],
+        },
+      }),
+      expect.any(Function),
+    );
+  });
 });
