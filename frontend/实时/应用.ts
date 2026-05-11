@@ -169,9 +169,7 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
     if (realtimeSocket) {
       deps.transport.释放Socket?.(realtimeSocket);
       realtimeSocket = null;
-      return;
     }
-    realtimeSocket = null;
   }
 
   function subscribeRoom(from: number): void {

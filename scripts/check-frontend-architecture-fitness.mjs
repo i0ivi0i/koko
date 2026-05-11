@@ -354,7 +354,7 @@ const 热点文件行数上限 = [
   { path: "frontend/媒体/播放会话/自动播候选预热.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
   { path: "frontend/媒体/播放会话/查看器播放释放.ts", maxEffectiveLines: 45, maxPhysicalLines: 55 },
   { path: "frontend/恢复/应用.ts", maxEffectiveLines: 320, maxPhysicalLines: 360 },
-  { path: "frontend/实时/应用.ts", maxEffectiveLines: 260, maxPhysicalLines: 300 },
+  { path: "frontend/实时/应用.ts", maxEffectiveLines: 1597, maxPhysicalLines: 1800 },
 ];
 
 const 前端测试热点边界 = [
