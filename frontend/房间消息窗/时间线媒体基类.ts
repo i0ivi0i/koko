@@ -53,6 +53,11 @@ export abstract class 房间消息窗时间线媒体基类 extends LitElement {
 
   protected abstract 读取当前虚拟消息项(): 消息虚拟项[];
 
+  override disconnectedCallback(): void {
+    this.视频封面持久缓存.clear();
+    super.disconnectedCallback();
+  }
+
   constructor() {
     super();
     this.自动播候选观察Owner = new 自动播候选观察Owner({

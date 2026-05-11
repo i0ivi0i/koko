@@ -505,6 +505,60 @@ describe("资产协作分发运行时 / 释放与预算边界", () => {
     });
   });
 
+  it("locallyComplete 零引用保留会话超过 LRU 上限时，最旧的零引用会话被淘汰", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandles: ReturnType<typeof 创建可观测假Torrent>[] = [];
+    const add = vi.fn(((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+      const handle = 创建可观测假Torrent(
+        `blob:http://media.local/swarm-att-lru-${torrentHandles.length}`
+      );
+      torrentHandles.push(handle);
+      onTorrent(handle.torrent);
+      return handle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    /**
+     * 创建 LRU 上限 + 1 个 locallyComplete 零引用会话。
+     * 从生命周期导出的常量来确保测试与实现同步。
+     */
+    const { 零引用完成会话保留上限 } = await import("../../媒体/资产协作分发生命周期.js");
+    const totalSessions = 零引用完成会话保留上限 + 1;
+
+    for (let i = 0; i < totalSessions; i++) {
+      const attachmentId = `att-lru-${i}`;
+      await 解析协作分发源({
+        attachmentId,
+        kind: "video",
+        locator: 准备好的定位结果(attachmentId),
+        consumerId: `session:${attachmentId}`,
+        eagerCompleting: true,
+      });
+      // torrent done → locallyComplete
+      torrentHandles[i]!.emit("done");
+      // 释放消费者 → 进入零引用 light_help
+      释放协作分发消费者({
+        attachmentId,
+        consumerId: `session:${attachmentId}`,
+      });
+      await Promise.resolve();
+    }
+
+    // 最旧的会话（att-lru-0）应该已经被 LRU 淘汰
+    expect(读取协作分发会话状态("swarm-att-lru-0")).toBeNull();
+    // 最新的会话（att-lru-{totalSessions-1}）应该仍然存在
+    expect(
+      读取协作分发会话状态(`swarm-att-lru-${totalSessions - 1}`)
+    ).not.toBeNull();
+    // 总保留数应等于上限
+    expect(读取资产协作分发预算().zeroRefLightHelpSessionCount).toBe(
+      零引用完成会话保留上限
+    );
+    // 第 2 个会话（swarm-att-lru-1）是存活的最旧会话，刚好在上限内
+    expect(读取协作分发会话状态("swarm-att-lru-1")).not.toBeNull();
+  });
+
   it("媒体协作分发模块不再自己维护协作分发会话表", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "../../媒体/媒体协作分发.ts"),

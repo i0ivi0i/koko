@@ -149,6 +149,8 @@ export class 房间消息窗 extends 房间消息窗时间线媒体基类 {
     this.失效视频封面地址.clear();
     this.时间线画面缓存Owner.清空();
     this.时间线唯一播放器可见接管就绪源.clear();
+    this.时间线唯一播放器可见宿主已出帧源.clear();
+    this.时间线唯一播放器待提交接管源.clear();
     this.时间线隐藏接管附件Id = null;
     this.媒体窗口观察Owner.重置();
     this.自动播位置上报记录.clear();

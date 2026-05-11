@@ -17,6 +17,16 @@ import type {
 
 const ZERO_REF_PEER_COMPLETION_GRACE_MS = 30_000;
 
+/**
+ * 零引用 locallyComplete 保留会话的 LRU 上限。
+ *
+ * 每个保留会话 = 一个活跃种子 + 60 秒心跳定时器 + torrent metadata 内存。
+ * 128 个会话 ≈ 每秒 ~2 次 tracker 心跳，可 24 小时持续运行。
+ * 超限时淘汰最早进入零引用态的会话——最久没被前台引用的视频。
+ * 有消费者的会话和正在补齐的会话不计入此配额。
+ */
+export const 零引用完成会话保留上限 = 128;
+
 export const 同步协作分发会话生命周期 = (
   runtime: 资产协作分发运行时内部,
   session: 底层协作分发会话
@@ -165,6 +175,47 @@ export const 让零引用会话降到轻帮助态 = (
   if (!session.locallyComplete) {
     停止协作分发存活上报(session);
     session.hint = null;
+  }
+};
+
+/**
+ * 当零引用 locallyComplete 会话数超过 LRU 上限时，淘汰最旧的。
+ *
+ * "最旧"按 Map 迭代顺序裁决（即插入顺序 = 最早创建的会话）。
+ * 只淘汰零消费者且已完成的会话；正在补齐中或有消费者的会话不动。
+ * 这条链路保证：最近被用户引用过的视频继续满血做种帮助群友。
+ */
+export const 淘汰超限零引用完成会话 = (
+  runtime: 资产协作分发运行时内部
+): void => {
+  /** 先收集符合淘汰条件的 swarmId（按 Map 插入序 = 最旧在前）。 */
+  const candidates: string[] = [];
+  for (const [swarmId, session] of runtime.底层会话表) {
+    if (
+      session.consumerBindings.size === 0 &&
+      session.locallyComplete
+    ) {
+      candidates.push(swarmId);
+    }
+  }
+  if (candidates.length <= 零引用完成会话保留上限) {
+    return;
+  }
+  /** 只淘汰超出部分，从最旧开始。 */
+  const excess = candidates.length - 零引用完成会话保留上限;
+  for (let i = 0; i < excess; i++) {
+    const swarmId = candidates[i]!;
+    const session = runtime.底层会话表.get(swarmId);
+    if (!session) {
+      continue;
+    }
+    删除底层协作分发会话(runtime, swarmId, session);
+    if (!runtime.已销毁) {
+      runtime.actor.send({
+        type: "SESSION_DROPPED",
+        swarmId,
+      });
+    }
   }
 };
 
