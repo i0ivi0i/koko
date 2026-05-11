@@ -714,7 +714,7 @@ async function 上报协作分发存活(
 export async function 接入协作分发种子(
   runtime: 协作分发浏览器运行时,
   distribution: 媒体协作分发定位片段,
-  options: { joinTicketRef?: 协作分发JoinTicketRef } = {}
+  options: { joinTicketRef?: 协作分发JoinTicketRef; deselect?: boolean } = {}
 ): Promise<WebTorrent种子> {
   // join_ticket 是 tracker 入群门禁。它必须跟随 locator 续租，不能被首次建 torrent 的闭包冻住。
   const joinTicketRef = options.joinTicketRef ?? { value: distribution.join_ticket };
@@ -763,6 +763,8 @@ export async function 接入协作分发种子(
         // 减少 IndexedDB 随机读 IO，多 peer 并发拉取时上传吞吐量翻倍。
         storeCacheSlots: 150,
         destroyStoreOnDestroy: false,
+        // deselect: prefetch 模式时 join swarm 但不选择任何 piece 下载
+        ...(options.deselect ? { deselect: true } : {}),
         ...读取协作分发持久ChunkStore选项(distribution),
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {

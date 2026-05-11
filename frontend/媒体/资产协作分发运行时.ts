@@ -58,6 +58,7 @@ export type 协作分发消费者模式 =
   | "inline_autoplay"
   | "backfill"
   | "preview"
+  | "prefetch"
   | "session";
 
 export type 协作分发消费者绑定 = {
@@ -227,6 +228,7 @@ export interface 资产协作分发运行时端口 {
     refs: number;
     consumers: string[];
     eagerCompleting: boolean;
+    已获得帮助资格: boolean;
     locallyComplete: boolean;
     hint: 协作分发媒体源["hint"];
     lifecycle: WebTorrentSessionLifecycleSnapshot;
@@ -300,6 +302,10 @@ const 推导消费者模式 = (input: {
   }
   if (input.consumerId?.startsWith("viewer:")) {
     return "viewer";
+  }
+  // prefetch: 提前 join swarm 但不下载任何 piece，为后续播放预热 peer 连接
+  if (input.consumerId?.startsWith("prefetch:")) {
+    return "prefetch";
   }
   return "session";
 };
@@ -685,6 +691,8 @@ async function 确保协作分发会话(
     设置协作分发会话生命周期(runtime, session, "joining");
     const torrent = await 接入协作分发种子(browserRuntime, input.distribution, {
       joinTicketRef: session.joinTicketRef,
+      // prefetch 模式：join swarm 但不选择任何 piece 下载
+      deselect: consumerBinding.mode === "prefetch",
     });
     session.torrent = torrent;
     设置协作分发会话生命周期(runtime, session, "swarm_active");
@@ -759,6 +767,7 @@ const 读取会话状态 = (
     refs: session.consumerBindings.size,
     consumers: Array.from(session.consumerBindings.keys()),
     eagerCompleting: session.eagerCompleting,
+    已获得帮助资格: session.已获得帮助资格,
     locallyComplete: session.locallyComplete,
     hint: session.hint ?? (session.eagerCompleting ? "正在补块" : null),
     lifecycle: 读取协作分发会话生命周期(session),
