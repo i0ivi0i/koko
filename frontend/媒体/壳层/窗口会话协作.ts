@@ -18,6 +18,8 @@ type 窗口会话协作依赖 = {
   ): boolean;
   读取附件条目(attachmentId: string): 媒体附件条目 | null;
   触发视频预览收敛(attachmentId: string): void;
+  /** prefetch 回调：视频进入活跃窗口 500ms 后触发，以 prefetch 模式 join swarm 但不下载数据 */
+  触发视频prefetch预热?(attachmentId: string): void;
   应保留帮助任务(input: {
     attachmentId: string;
     playback: 媒体播放结果 | null;
@@ -41,15 +43,45 @@ export interface 窗口会话协作端口 {
  * 2. 只负责前台会话集合收口，不改播放真相、不改 WebTorrent 真相；
  * 3. 这样聊天媒体编排根文件只做装配，不再自己内联窗口会话裁剪流程。
  */
+// prefetch 防抖时长：视频进入活跃窗口后等待此时长才触发 prefetch，
+// 避免快速滚动时频繁创建又销毁 swarm 会话。
+const PREFETCH_DEBOUNCE_MS = 500;
+
 export function 创建窗口会话协作(
   deps: 窗口会话协作依赖
 ): 窗口会话协作端口 {
+  // 每个 attachmentId 的 prefetch 防抖定时器
+  const prefetch定时器表 = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const 取消prefetch定时器 = (attachmentId: string): void => {
+    const timer = prefetch定时器表.get(attachmentId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      prefetch定时器表.delete(attachmentId);
+    }
+  };
+
+  const 调度prefetch预热 = (attachmentId: string): void => {
+    if (!deps.触发视频prefetch预热 || prefetch定时器表.has(attachmentId)) {
+      return;
+    }
+    prefetch定时器表.set(
+      attachmentId,
+      setTimeout(() => {
+        prefetch定时器表.delete(attachmentId);
+        deps.触发视频prefetch预热!(attachmentId);
+      }, PREFETCH_DEBOUNCE_MS)
+    );
+  };
+
   const 清理失活媒体会话 = (activeAttachmentIds: Set<string>): boolean => {
     let hasSessionSetChanged = false;
     for (const [attachmentId, session] of deps.读取媒体会话表()) {
       if (activeAttachmentIds.has(attachmentId)) {
         continue;
       }
+      // 离开活跃窗口时取消待触发的 prefetch 定时器
+      取消prefetch定时器(attachmentId);
       const playback = session.snapshot().playback;
       if (
         deps.应保留帮助任务({
@@ -89,6 +121,10 @@ export function 创建窗口会话协作(
         continue;
       }
       deps.触发视频预览收敛(attachment.attachmentId);
+      // 新视频会话创建后调度 500ms 防抖 prefetch
+      if (attachment.kind === "video") {
+        调度prefetch预热(attachment.attachmentId);
+      }
     }
     return hasSessionSetChanged;
   };
