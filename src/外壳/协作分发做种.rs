@@ -9,7 +9,7 @@ use std::{
 /// 后端 owner 发给 seeder sidecar 的最小启动命令。
 /// 这里只保留协议执行所需字段，不把业务裁决泄漏到 sidecar。
 #[derive(Debug, Clone)]
-pub(super) struct 协作分发做种启动命令 {
+pub(crate) struct 协作分发做种启动命令 {
     pub info_hash: String,
     pub announce_urls: Vec<String>,
     pub web_seed_url: Option<String>,
@@ -62,7 +62,7 @@ fn 归一化sidecar媒体地址(raw: Option<&str>) -> Option<String> {
 /// 2. 缺少 `join_ticket` 时不能启动做种；后端 strong seed 也必须走同源 tracker 门禁；
 /// 3. sidecar 只吃 transport 线索，不承载页面态字段；
 /// 4. 浏览器 public announce 已在 locator contract 里返回，这里只能使用 sidecar 私有 announce。
-pub(super) fn 从协作分发响应构造做种启动命令(
+pub(crate) fn 从协作分发响应构造做种启动命令(
     runtime_distribution: &serde_json::Value,
     seeder_tracker_url: &str,
 ) -> Option<协作分发做种启动命令> {
@@ -97,7 +97,7 @@ pub(super) fn 从协作分发响应构造做种启动命令(
 
 /// 尝试触发一次 seeder start。
 /// 失败时调用方可自行决定是否降级重试；这里保持错误可见，不吞掉基础设施问题。
-pub(super) async fn 尝试启动协作分发做种(
+pub(crate) async fn 尝试启动协作分发做种(
     state: &应用状态,
     命令: &协作分发做种启动命令,
 ) -> io::Result<()> {

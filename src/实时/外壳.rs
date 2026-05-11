@@ -798,14 +798,39 @@ pub(crate) async fn handle_realtime_create_message(
     .map_err(map_domain_err_tuple)
     {
         Ok(event) => {
-            let (room_id, client_message_id, event_position) = match &event {
-                contract::领域事件::消息已创建 {
-                    房间标识,
-                    客户端消息标识,
-                    事件位置,
-                    ..
-                } => (房间标识.clone(), 客户端消息标识.clone(), *事件位置),
-            };
+            let (room_id, message_id, client_message_id, event_position, 含分发线索附件) =
+                match &event {
+                    contract::领域事件::消息已创建 {
+                        房间标识,
+                        消息标识,
+                        客户端消息标识,
+                        事件位置,
+                        附件,
+                        ..
+                    } => {
+                        let hints: Vec<(String, String)> = 附件
+                            .iter()
+                            .filter_map(|a| {
+                                let (id, hint) = match a {
+                                    contract::附件快照::图片(img) => {
+                                        (&img.附件标识, img.分发线索.as_ref())
+                                    }
+                                    contract::附件快照::视频(vid) => {
+                                        (&vid.附件标识, vid.分发线索.as_ref())
+                                    }
+                                };
+                                hint.map(|h| (id.clone(), h.torrent_info_hash.clone()))
+                            })
+                            .collect();
+                        (
+                            房间标识.clone(),
+                            消息标识.clone(),
+                            客户端消息标识.clone(),
+                            *事件位置,
+                            hints,
+                        )
+                    }
+                };
             // 广播路径当前没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
             // 这里显式传 `None`，保持 preview 真相仍由同一个投影函数 owner 控制。
             let payload = event_to_json(event, None);
@@ -839,6 +864,22 @@ pub(crate) async fn handle_realtime_create_message(
                     room_runtime_continues = broadcast_observation.room_runtime_continues,
                     "创建消息成功"
                 );
+                // 广播成功后幂等确认强种子：消除"接收者先到 swarm、强种子还没注册"的竞态窗口。
+                // 这不是第二条做种主链，而是对 complete 阶段 fire-and-forget 的同链路兜底。
+                if !含分发线索附件.is_empty() {
+                    let spawn_state = state.clone();
+                    let spawn_room_id = room_id.clone();
+                    let spawn_message_id = message_id.clone();
+                    tokio::spawn(async move {
+                        确认消息附件强种子(
+                            &spawn_state,
+                            &spawn_room_id,
+                            &spawn_message_id,
+                            含分发线索附件,
+                        )
+                        .await;
+                    });
+                }
             }
         }
         Err((_, code, message)) => {
@@ -862,6 +903,89 @@ pub(crate) async fn handle_realtime_create_message(
                     &err,
                 );
             }
+        }
+    }
+}
+
+/// 广播成功后幂等确认强种子：逐附件查询分发元数据 → 构造做种命令 → 调用 sidecar start。
+/// 这是对 complete_media_upload 阶段 fire-and-forget 的同链路兜底，
+/// 消除"接收者先到 swarm、强种子还没注册"的竞态窗口。
+/// 失败只记结构化 warn，不影响消息投递。
+async fn 确认消息附件强种子(
+    state: &应用状态,
+    room_id: &str,
+    message_id: &str,
+    含分发线索附件: Vec<(String, String)>, // (attachment_id, torrent_info_hash)
+) {
+    use crate::media::application::媒体仓储端口 as _;
+    use crate::media_distribution;
+
+    for (attachment_id, torrent_info_hash) in &含分发线索附件 {
+        let state_for_query = state.clone();
+        let aid = attachment_id.clone();
+        let distribution_snapshot = match tokio::task::spawn_blocking(move || {
+            let repo = 构建共享仓储(&state_for_query);
+            let media_repo = repo.媒体仓储();
+            media_repo.查询协作分发元数据(&aid)
+        })
+        .await
+        {
+            Ok(Ok(Some(snapshot))) => snapshot,
+            other => {
+                tracing::warn!(
+                    application = "创建消息",
+                    adapter = "强种子确认",
+                    outcome = "skipped",
+                    room_id = room_id,
+                    message_id = message_id,
+                    attachment_id = attachment_id.as_str(),
+                    torrent_info_hash = torrent_info_hash.as_str(),
+                    seed_confirm_stage = "query_distribution",
+                    error = ?other.err().map(|e| e.to_string()),
+                    "广播后强种子确认跳过：查不到分发元数据"
+                );
+                continue;
+            }
+        };
+        let now_epoch秒 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_default();
+        let runtime_distribution = media_distribution::协作分发快照转响应值(
+            &distribution_snapshot,
+            media_distribution::协作分发响应上下文 {
+                attachment_id: attachment_id.as_str(),
+                session_id: "__backend_strong_seed__",
+                tracker_public_url: state.swarm_tracker_public_url.as_str(),
+                web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+                ticket_secret: state.swarm_ticket_secret.as_deref(),
+                ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
+                冷源仍可用: now_epoch秒 <= distribution_snapshot.web_seed_until秒,
+                附件已删除: false,
+                now_epoch秒,
+                stale_seconds: state.swarm_peer_presence_stale_seconds,
+                ice_servers: state.get_turn_ice_servers().await,
+            },
+        );
+        let Some(启动命令) = crate::shell::协作分发做种::从协作分发响应构造做种启动命令(
+            &runtime_distribution,
+            state.swarm_seeder_tracker_url.as_str(),
+        ) else {
+            continue;
+        };
+        if let Err(err) = crate::shell::协作分发做种::尝试启动协作分发做种(state, &启动命令).await {
+            tracing::warn!(
+                application = "创建消息",
+                adapter = "强种子确认",
+                outcome = "failed",
+                room_id = room_id,
+                message_id = message_id,
+                attachment_id = attachment_id.as_str(),
+                torrent_info_hash = torrent_info_hash.as_str(),
+                seed_confirm_stage = "seed_start",
+                error = %err,
+                "广播后强种子确认失败，等待后台对账重试"
+            );
         }
     }
 }
