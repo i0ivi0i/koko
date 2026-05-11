@@ -138,7 +138,12 @@ pub struct TurnIceServersCache {
 
 const TURN_CREDENTIAL_TTL: i64 = 86_400;
 fn stun_only() -> serde_json::Value {
-    serde_json::json!([{ "urls": ["stun:stun.cloudflare.com:3478"] }])
+    serde_json::json!([{ "urls": [
+        "stun:stun.cloudflare.com:3478",
+        "stun:stun.qq.com:3478",
+        "stun:stun.chat.bilibili.com:3478",
+        "stun:stun.miwifi.com:3478",
+    ] }])
 }
 
 impl 应用状态 {
