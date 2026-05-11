@@ -614,6 +614,8 @@ pub(super) async fn complete_media_upload(
                     附件已删除: false,
                     now_epoch秒,
                     stale_seconds: state.swarm_peer_presence_stale_seconds,
+                    coturn_auth_secret: state.coturn_auth_secret.as_deref(),
+                    koko_domain: state.koko_domain.as_deref(),
                 },
             );
             // complete 成功后立刻尝试触发 sidecar 做种：

@@ -173,6 +173,8 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 附件已删除: false,
                 now_epoch秒: 当前时间戳秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
+                coturn_auth_secret: state.coturn_auth_secret.as_deref(),
+                koko_domain: state.koko_domain.as_deref(),
             },
         );
         let Some(启动命令) = 从协作分发响应构造做种启动命令(

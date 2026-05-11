@@ -119,6 +119,11 @@ pub struct 应用状态 {
     pub tus_internal_termination_token: Option<String>,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
+    /// coturn TURN 服务器共享密钥（TURN REST API 临时凭证）。
+    /// None = 未部署 coturn，响应中 ice_servers 为空数组。
+    pub coturn_auth_secret: Option<String>,
+    /// 公网域名，拼装 STUN/TURN 地址。
+    pub koko_domain: Option<String>,
     /// DDoS/CC 防御状态（PoW 引擎 + IP 追踪 + 访客计数）。
     /// None = 配置缺失时防御功能禁用（开发模式兑容）。
     pub defense: Option<连接门禁::防御状态>,
@@ -177,6 +182,8 @@ pub async fn 构建应用状态(
         swarm_ticket_secret: swarm.ticket_secret,
         swarm_ticket_ttl_seconds: swarm.ticket_ttl_seconds,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
+        coturn_auth_secret: swarm.coturn_auth_secret,
+        koko_domain: swarm.koko_domain,
         swarm_connecting_window_started_at: Arc::new(Mutex::new(HashMap::new())),
         tus_public_endpoint: tus.public_endpoint,
         tus_server_port: tus.server_port,

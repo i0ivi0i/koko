@@ -67,6 +67,9 @@ governor = "0.8"
 tower_governor = "0.8"
 # PoW challenge 和 token 的 HMAC 签名/验签，与 sha2 同属 RustCrypto 生态。
 hmac = "0.12"
+# TURN REST API 临时凭证 = HMAC-SHA1 + base64（coturn 标准协议要求 SHA1，不是 SHA256）
+sha1 = "0.10"
+base64 = "0.22"
 # 并发安全的 IP → 状态映射表，用于连接计数和自动冷却追踪。
 dashmap = "6"
 
