@@ -79,10 +79,9 @@ fn 渲染前端入口_html() -> Result<String, String> {
 async fn load_frontend_index() -> impl IntoResponse {
     match 渲染前端入口_html() {
         Ok(html) => Html(html).into_response(),
-        Err(err) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("渲染前端入口失败: {err}"),
-        ),
+        Err(err) => {
+            tracing::error!(%err, "渲染前端入口失败");
+            err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "系统错误")
+        }
     }
 }
