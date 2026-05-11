@@ -119,14 +119,66 @@ pub struct 应用状态 {
     pub tus_internal_termination_token: Option<String>,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
-    /// coturn TURN 服务器共享密钥（TURN REST API 临时凭证）。
-    /// None = 未部署 coturn，响应中 ice_servers 为空数组。
-    pub coturn_auth_secret: Option<String>,
-    /// 公网域名，拼装 STUN/TURN 地址。
-    pub koko_domain: Option<String>,
+    /// Cloudflare Realtime TURN 凭证缓存（全局 anycast STUN/TURN）。
+    /// key_id + api_token 均为 None 时，响应中 ice_servers 为空数组。
+    pub cloudflare_turn_key_id: Option<String>,
+    pub cloudflare_turn_api_token: Option<String>,
+    pub turn_ice_servers_cache: Arc<tokio::sync::RwLock<TurnIceServersCache>>,
     /// DDoS/CC 防御状态（PoW 引擎 + IP 追踪 + 访客计数）。
     /// None = 配置缺失时防御功能禁用（开发模式兑容）。
     pub defense: Option<连接门禁::防御状态>,
+}
+
+/// Cloudflare Realtime TURN 凭证缓存（TTL 24h，半衰期刷新）。
+#[derive(Clone, Default)]
+pub struct TurnIceServersCache {
+    pub ice_servers: serde_json::Value,
+    pub fetched_at_epoch_secs: i64,
+}
+
+const TURN_CREDENTIAL_TTL: i64 = 86_400;
+
+impl 应用状态 {
+    pub async fn get_turn_ice_servers(&self) -> serde_json::Value {
+        let (Some(key_id), Some(api_token)) =
+            (self.cloudflare_turn_key_id.as_deref(), self.cloudflare_turn_api_token.as_deref())
+        else { return serde_json::json!([]); };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64).unwrap_or_default();
+        {
+            let c = self.turn_ice_servers_cache.read().await;
+            if c.fetched_at_epoch_secs > 0 && (now - c.fetched_at_epoch_secs) < TURN_CREDENTIAL_TTL / 2 {
+                return c.ice_servers.clone();
+            }
+        }
+        let url = format!(
+            "https://rtc.live.cloudflare.com/v1/turn/keys/{key_id}/credentials/generate-ice-servers"
+        );
+        let res = reqwest::Client::new()
+            .post(&url).bearer_auth(api_token)
+            .json(&serde_json::json!({ "ttl": TURN_CREDENTIAL_TTL }))
+            .send().await;
+        match res.and_then(|r| Ok((r.status(), r))).map_err(|e| e.to_string()) {
+            Ok((status, r)) if status.is_success() => {
+                let json: serde_json::Value = r.json().await.unwrap_or_default();
+                let ice = json.get("iceServers").cloned().unwrap_or_else(|| serde_json::json!([]));
+                let mut c = self.turn_ice_servers_cache.write().await;
+                c.ice_servers = ice.clone();
+                c.fetched_at_epoch_secs = now;
+                ice
+            }
+            other => {
+                let detail = match other {
+                    Ok((s, r)) => format!("{s}: {}", r.text().await.unwrap_or_default()),
+                    Err(e) => e,
+                };
+                tracing::warn!(adapter = "cloudflare_turn", %detail, "TURN 凭证刷新失败，缓存兜底");
+                let c = self.turn_ice_servers_cache.read().await;
+                if c.fetched_at_epoch_secs > 0 { c.ice_servers.clone() } else { serde_json::json!([]) }
+            }
+        }
+    }
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -182,8 +234,9 @@ pub async fn 构建应用状态(
         swarm_ticket_secret: swarm.ticket_secret,
         swarm_ticket_ttl_seconds: swarm.ticket_ttl_seconds,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
-        coturn_auth_secret: swarm.coturn_auth_secret,
-        koko_domain: swarm.koko_domain,
+        cloudflare_turn_key_id: swarm.cloudflare_turn_key_id,
+        cloudflare_turn_api_token: swarm.cloudflare_turn_api_token,
+        turn_ice_servers_cache: Arc::new(tokio::sync::RwLock::new(TurnIceServersCache::default())),
         swarm_connecting_window_started_at: Arc::new(Mutex::new(HashMap::new())),
         tus_public_endpoint: tus.public_endpoint,
         tus_server_port: tus.server_port,

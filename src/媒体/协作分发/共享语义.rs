@@ -300,10 +300,9 @@ pub(crate) struct 协作分发响应上下文<'a> {
     pub 附件已删除: bool,
     pub now_epoch秒: i64,
     pub stale_seconds: i64,
-    /// coturn 共享密钥，有值时生成 TURN REST API 临时凭证注入 ice_servers。
-    pub coturn_auth_secret: Option<&'a str>,
-    /// 公网域名，拼装 STUN/TURN 服务器地址（如 `turn:example.com:3478`）。
-    pub koko_domain: Option<&'a str>,
+    /// TURN/STUN 凭证（Cloudflare Realtime TURN API 预取）。
+    /// shell 层负责获取和缓存，domain 层只接收注入。
+    pub ice_servers: serde_json::Value,
 }
 
 #[derive(serde::Serialize)]
@@ -416,45 +415,6 @@ pub(crate) fn 诊断协作分发join_ticket(
 /// 1. 不下发存储键；
 /// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / media_state；
 /// 3. join_ticket/ticket_expires_at 只表达 swarm 门禁，不扩散成页面流程字段。
-/// 为 coturn TURN REST API 生成临时凭证。
-///
-/// 协议要求：`username = "{expiry_timestamp}:{arbitrary_id}"`，
-/// `credential = base64(HMAC-SHA1(secret, username))`。
-/// coturn 收到后用共享密钥验签，过期则拒绝。
-///
-/// TTL 采用 24 小时而非 swarm ticket 的 120 秒：
-/// - WebTorrent 每个 torrent 的 tracker client 在创建时拷贝 rtcConfig 快照，
-///   之后不再跟踪变化；
-/// - 120s ticket TTL 会导致观看 >2 分钟视频时新 peer 无法 TURN 中转；
-/// - TURN 凭证用于网络层 NAT 穿透，不是业务门禁，24h 是 coturn 社区常见实践。
-fn 生成turn临时凭证(
-    secret: &str,
-    domain: &str,
-    now_epoch秒: i64,
-) -> serde_json::Value {
-    use base64::Engine as _;
-    use hmac::{Hmac, Mac};
-    use sha1::Sha1;
-
-    const TURN_CREDENTIAL_TTL_SECONDS: i64 = 86_400;
-    let expiry = now_epoch秒.saturating_add(TURN_CREDENTIAL_TTL_SECONDS);
-    let username = format!("{expiry}:koko");
-    let mut mac =
-        Hmac::<Sha1>::new_from_slice(secret.as_bytes()).expect("HMAC 接受任意长度密钥");
-    mac.update(username.as_bytes());
-    let credential =
-        base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
-
-    serde_json::json!([
-        { "urls": format!("stun:{domain}:3478") },
-        {
-            "urls": format!("turn:{domain}:3478"),
-            "username": username,
-            "credential": credential,
-        }
-    ])
-}
-
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &crate::media::模型::协作分发元数据快照,
     上下文: 协作分发响应上下文<'_>,
@@ -501,11 +461,7 @@ pub(crate) fn 协作分发快照转响应值(
         // survival_mode 表达的是“服务器流媒体退场后正式靠什么继续活”，
         // 它是稳定共享语义，不等于当前 media_state，也不承载前端页面提示文案。
         "survival_mode": "peer_only_after_expiry",
-        // ice_servers: 有 coturn 密钥+域名时注入 STUN/TURN 凭证，否则空数组
-        "ice_servers": 上下文.coturn_auth_secret
-            .and_then(|secret| 上下文.koko_domain.map(|domain| (secret, domain)))
-            .map(|(secret, domain)| 生成turn临时凭证(secret, domain, 上下文.now_epoch秒))
-            .unwrap_or_else(|| serde_json::json!([])),
+        "ice_servers": 上下文.ice_servers,
     })
 }
 
@@ -696,32 +652,70 @@ mod tests {
     }
 
     #[test]
-    fn 有coturn密钥时生成turn临时凭证包含stun和turn() {
-        let result = 生成turn临时凭证("test-secret", "example.com", 1_000_000);
-        let arr = result.as_array().expect("ice_servers 应为数组");
-        assert_eq!(arr.len(), 2, "应包含 STUN + TURN 两个条目");
-        // STUN 条目
-        assert_eq!(arr[0]["urls"], "stun:example.com:3478");
-        // TURN 条目
-        assert_eq!(arr[1]["urls"], "turn:example.com:3478");
-        let username = arr[1]["username"].as_str().unwrap();
-        assert!(
-            username.starts_with("1086400:"),
-            "username 应以 expiry:koko 格式开头，got: {username}"
+    fn 注入的ice_servers会原样出现在响应中() {
+        let ice = serde_json::json!([
+            { "urls": ["stun:stun.cloudflare.com:3478"] },
+            { "urls": ["turn:turn.cloudflare.com:3478?transport=udp"], "username": "u", "credential": "c" }
+        ]);
+        let snapshot = crate::media::模型::协作分发元数据快照 {
+            附件标识: "att".to_string(),
+            content_id: "cid".to_string(),
+            content_hash: "ch".to_string(),
+            swarm_id: "sw".to_string(),
+            web_seed_until秒: 999_999_999,
+            最近片段peer存活时间戳秒: None,
+            最近完整peer存活时间戳秒: None,
+            最近后端强种子存活时间戳秒: None,
+            torrent_info_hash: Some("deadbeef".repeat(5)),
+        };
+        let result = 协作分发快照转响应值(
+            &snapshot,
+            协作分发响应上下文 {
+                attachment_id: "att",
+                session_id: "sess",
+                tracker_public_url: "/api/swarm/announce",
+                web_seed_public_endpoint: None,
+                ticket_secret: None,
+                ticket_ttl_seconds: 120,
+                冷源仍可用: true,
+                附件已删除: false,
+                now_epoch秒: 1_000_000,
+                stale_seconds: 180,
+                ice_servers: ice.clone(),
+            },
         );
-        assert!(
-            arr[1]["credential"].as_str().unwrap().len() > 10,
-            "credential 应为有效 base64 编码"
-        );
+        assert_eq!(result["ice_servers"], ice, "注入的 ice_servers 应原样透传到响应");
     }
 
     #[test]
-    fn 无coturn密钥时ice_servers为空数组() {
-        // 直接测试 Option 链路逻辑
-        let ice: serde_json::Value = None::<&str>
-            .and_then(|secret: &str| Some("domain").map(|domain| (secret, domain)))
-            .map(|(secret, domain)| 生成turn临时凭证(secret, domain, 0))
-            .unwrap_or_else(|| serde_json::json!([]));
-        assert_eq!(ice, serde_json::json!([]), "无密钥时 ice_servers 应为空数组");
+    fn 无turn时ice_servers为空数组() {
+        let snapshot = crate::media::模型::协作分发元数据快照 {
+            附件标识: "att".to_string(),
+            content_id: "cid".to_string(),
+            content_hash: "ch".to_string(),
+            swarm_id: "sw".to_string(),
+            web_seed_until秒: 999_999_999,
+            最近片段peer存活时间戳秒: None,
+            最近完整peer存活时间戳秒: None,
+            最近后端强种子存活时间戳秒: None,
+            torrent_info_hash: Some("deadbeef".repeat(5)),
+        };
+        let result = 协作分发快照转响应值(
+            &snapshot,
+            协作分发响应上下文 {
+                attachment_id: "att",
+                session_id: "sess",
+                tracker_public_url: "/api/swarm/announce",
+                web_seed_public_endpoint: None,
+                ticket_secret: None,
+                ticket_ttl_seconds: 120,
+                冷源仍可用: true,
+                附件已删除: false,
+                now_epoch秒: 1_000_000,
+                stale_seconds: 180,
+                ice_servers: serde_json::json!([]),
+            },
+        );
+        assert_eq!(result["ice_servers"], serde_json::json!([]), "无 TURN 时 ice_servers 应为空数组");
     }
 }

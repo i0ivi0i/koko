@@ -410,6 +410,7 @@ pub(super) async fn load_media_locator(
         locator.原始冷源删除时间戳秒,
         now_epoch秒,
     );
+    let ice_servers = state.get_turn_ice_servers().await;
     let mut runtime_distribution = locator.协作分发.as_ref().map(|snapshot| {
         media_distribution::协作分发快照转响应值(
             snapshot,
@@ -425,8 +426,7 @@ pub(super) async fn load_media_locator(
                     == crate::media::模型::附件状态读取结果::已过期,
                 now_epoch秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
-                coturn_auth_secret: state.coturn_auth_secret.as_deref(),
-                koko_domain: state.koko_domain.as_deref(),
+                ice_servers,
             },
         )
     });

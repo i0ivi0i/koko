@@ -29,6 +29,8 @@ services:
       SWARM_TRACKER_UPSTREAM_URL: "ws://tracker:7072"
       SWARM_SEEDER_CONTROL_BASE_URL: "http://seeder:7073"
       SWARM_SEEDER_TRACKER_URL: "ws://app:8080/api/swarm/announce"
+      # TURN 中继：production.env 设 CLOUDFLARE_TURN_KEY_ID + CLOUDFLARE_TURN_API_TOKEN 启用
+      # Cloudflare Realtime TURN 全局 anycast NAT 穿透，不再自建 coturn。
       # PoW 防御：production.env 必须设 KOKO_POW_SECRET（≥32 字节随机字符串）
       # 和 KOKO_TRUSTED_PROXY=true（Caddy 反代场景），否则防御自动禁用。
     volumes:
@@ -131,32 +133,6 @@ services:
       - "7073"
     expose:
       - "7073"
-    networks:
-      - koko-internal
-
-  coturn:
-    # coturn TURN 中继服务器：穿透对称 NAT，让 WebRTC peer 在公网环境下也能建立连接。
-    # production.env 必须设 COTURN_AUTH_SECRET 和 KOKO_DOMAIN。
-    image: coturn/coturn:4.6
-    restart: unless-stopped
-    env_file:
-      - ${KOKO_ENV_FILE:-/opt/koko/env/production.env}
-    command:
-      - -n
-      - --log-file=stdout
-      - --listening-port=3478
-      - --realm=${KOKO_DOMAIN}
-      - --use-auth-secret
-      - --static-auth-secret=${COTURN_AUTH_SECRET}
-      - --no-cli
-      - --no-multicast-peers
-      - --no-tcp-relay
-      - --min-port=49152
-      - --max-port=49252
-    ports:
-      - "3478:3478/udp"
-      - "3478:3478/tcp"
-      - "49152-49252:49152-49252/udp"
     networks:
       - koko-internal
 

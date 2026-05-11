@@ -187,11 +187,11 @@ pub struct 协作分发配置 {
     pub peer_presence_stale_seconds: i64,
     pub media_origin_cleanup_interval_seconds: i64,
     pub swarm_seed_reconcile_interval_seconds: i64,
-    /// coturn TURN 服务器共享密钥，用于生成 REST API 临时凭证。
-    /// None = 未部署 coturn，响应中 ice_servers 为空数组。
-    pub coturn_auth_secret: Option<String>,
-    /// 公网域名，用于拼装 STUN/TURN 服务器地址。
-    pub koko_domain: Option<String>,
+    /// Cloudflare Realtime TURN key ID，用于调用 TURN 凭证 API。
+    /// None = 未配置，响应中 ice_servers 为空数组。
+    pub cloudflare_turn_key_id: Option<String>,
+    /// Cloudflare Realtime TURN API token。
+    pub cloudflare_turn_api_token: Option<String>,
 }
 
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
@@ -597,8 +597,8 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         ));
     }
     let ticket_secret = 读取可选环境变量("SWARM_TICKET_SECRET");
-    let coturn_auth_secret = 读取可选环境变量("COTURN_AUTH_SECRET");
-    let koko_domain = 读取可选环境变量("KOKO_DOMAIN");
+    let cloudflare_turn_key_id = 读取可选环境变量("CLOUDFLARE_TURN_KEY_ID");
+    let cloudflare_turn_api_token = 读取可选环境变量("CLOUDFLARE_TURN_API_TOKEN");
     let ticket_ttl_seconds = 读取可选整数("SWARM_TICKET_TTL_SECONDS", 120).and_then(|value| {
         if value <= 0 {
             Err(io::Error::new(
@@ -644,8 +644,8 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         peer_presence_stale_seconds,
         media_origin_cleanup_interval_seconds,
         swarm_seed_reconcile_interval_seconds,
-        coturn_auth_secret,
-        koko_domain,
+        cloudflare_turn_key_id,
+        cloudflare_turn_api_token,
     })
 }
 
