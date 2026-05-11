@@ -88,12 +88,28 @@ export interface 预览资源描述 {
   still_url: string;
 }
 
-/** 广播路径可选携带的分发线索，让接收端提前预热 swarm 连接。 */
+/** 广播路径可选携带的分发线索，让接收端提前预热 swarm 连接。
+ *  稳定字段（content_hash/swarm_id/torrent_info_hash/web_seed_until）始终存在；
+ *  运行态字段（join_ticket/announce_urls/torrent_url/ice_servers）仅广播路径附带，
+ *  历史/重播路径为 undefined。前端检测到运行态字段时可跳过 HTTP locator 直接预热。 */
 export interface 附件分发线索 {
   content_hash: string;
   swarm_id: string;
   torrent_info_hash: string;
   web_seed_until: number;
+  // ── 广播路径运行态字段（可选）──
+  /** 短时入群票据，用于 torrent_url 鉴权和 tracker announce */
+  join_ticket?: string;
+  /** join_ticket 过期时间（RFC 3339） */
+  ticket_expires_at?: string;
+  /** tracker WebSocket announce URL 列表 */
+  announce_urls?: string[];
+  /** torrent 文件下载地址（含 ticket 鉴权参数） */
+  torrent_url?: string;
+  /** 广播路径固定为 null（per-session 鉴权无法共享），prefetch 不需要 web_seed */
+  web_seed_url?: string | null;
+  /** STUN/TURN ICE servers */
+  ice_servers?: unknown[];
 }
 
 export interface 图片附件快照 {
