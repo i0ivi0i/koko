@@ -21,11 +21,11 @@ const ZERO_REF_PEER_COMPLETION_GRACE_MS = 30_000;
  * 零引用 locallyComplete 保留会话的 LRU 上限。
  *
  * 每个保留会话 = 一个活跃种子 + 60 秒心跳定时器 + torrent metadata 内存。
- * 128 个会话 ≈ 每秒 ~2 次 tracker 心跳，可 24 小时持续运行。
+ * 256 个会话 ≈ 每秒 ~4 次 tracker 心跳，可 24 小时持续运行。
  * 超限时淘汰最早进入零引用态的会话——最久没被前台引用的视频。
  * 有消费者的会话和正在补齐的会话不计入此配额。
  */
-export const 零引用完成会话保留上限 = 128;
+export const 零引用完成会话保留上限 = 256;
 
 export const 同步协作分发会话生命周期 = (
   runtime: 资产协作分发运行时内部,
