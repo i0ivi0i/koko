@@ -316,6 +316,11 @@ pub struct 待做种协作分发项 {
     pub swarm_id: String,
     pub web_seed_until秒: i64,
     pub torrent_info_hash: String,
+    /// 权威 .torrent 字节，直接下发 sidecar 避免 HTTP 重拉。
+    /// 查询时已 fetch（用于 metainfo 校验），这里保留而非丢弃。
+    pub torrent_bytes: Vec<u8>,
+    /// canonical 对象存储键（相对路径），shell 用来拼绝对文件路径。
+    pub storage_key: String,
 }
 
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。

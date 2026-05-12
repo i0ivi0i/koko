@@ -127,6 +127,8 @@ pub struct 应用状态 {
     /// DDoS/CC 防御状态（PoW 引擎 + IP 追踪 + 访客计数）。
     /// None = 配置缺失时防御功能禁用（开发模式兑容）。
     pub defense: Option<连接门禁::防御状态>,
+    /// 媒体存储驱动（本地/S3），决定做种对账是否下发 localSeed hint。
+    pub media_storage_driver: crate::assembly::媒体存储驱动,
 }
 
 /// Cloudflare Realtime TURN 凭证缓存（TTL 24h，半衰期刷新）。
@@ -254,6 +256,7 @@ pub async fn 构建应用状态(
         tus_internal_termination_token: tus.internal_termination_token,
         media_complete_max_concurrency,
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
+        media_storage_driver: media_storage.驱动.clone(),
         defense: match crate::assembly::读取PoW配置() {
             Ok(pow_config) => {
                 tracing::info!(

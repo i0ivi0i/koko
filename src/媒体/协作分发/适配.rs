@@ -130,7 +130,8 @@ async fn 列出待做种协作分发项_异步(
                 dm.swarm_id,
                 EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch,
                 dm.torrent_info_hash,
-                dm.torrent_bytes
+                dm.torrent_bytes,
+                a.storage_key
          FROM attachments a
          JOIN attachment_distribution_metadata dm
            ON dm.attachment_id = a.attachment_id
@@ -187,6 +188,8 @@ async fn 列出待做种协作分发项_异步(
                 swarm_id: row.get("swarm_id"),
                 web_seed_until秒: row.get("web_seed_until_epoch"),
                 torrent_info_hash,
+                torrent_bytes,
+                storage_key: row.get("storage_key"),
             })
         })
         .collect())
