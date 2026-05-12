@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 import { EventEmitter } from "node:events";
+import { link, mkdir, stat } from "node:fs/promises";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -146,7 +148,37 @@ const 绑定会话日志 = (session) => {
   });
 };
 
+/**
+ * 尝试把 canonical 文件硬链接到 WebTorrent staging 目录。
+ * 布局锁定于 Task 0 characterization 测试：stagingRoot/<infoHash>/<torrentFileName>
+ * client.add 的 { path } 设为 stagingRoot/<infoHash>。
+ * 失败时返回 null，调用方降级到网络下载。
+ */
+const 执行硬链接Staging = async (localSeed, infoHash) => {
+  if (!localSeed || localSeed.strategy !== "hardlink") return null;
+  const { stagingRoot, canonicalFilePath, torrentFileName } = localSeed;
+  if (!stagingRoot || !canonicalFilePath || !torrentFileName) return null;
+
+  const stagingDir = path.join(stagingRoot, infoHash);
+  const targetPath = path.join(stagingDir, torrentFileName);
+
+  try {
+    await stat(targetPath);
+    return stagingDir;
+  } catch {
+    // 目标不存在，需要创建硬链接
+  }
+
+  await mkdir(stagingDir, { recursive: true });
+  await link(canonicalFilePath, targetPath);
+  return stagingDir;
+};
+
 const 选择种子来源 = (payload, normalizedInfoHash) => {
+  // 优先使用后端直接下发的权威 torrent bytes，避免 HTTP 重拉
+  if (typeof payload.torrentBytesBase64 === "string" && payload.torrentBytesBase64.length > 0) {
+    return Buffer.from(payload.torrentBytesBase64, "base64");
+  }
   if (typeof payload.magnetUri === "string" && payload.magnetUri.trim().length > 0) {
     return payload.magnetUri.trim();
   }
@@ -241,6 +273,19 @@ export const 启动做种会话 = async (payload) => {
       : [];
   const announceTicketRef = { value: joinTicket };
 
+  // 本地硬链接 staging：把 canonical 文件链接到 WebTorrent 期望的 store 布局
+  let stagingDir = null;
+  if (payload.localSeed && Buffer.isBuffer(source)) {
+    try {
+      stagingDir = await 执行硬链接Staging(payload.localSeed, normalizedInfoHash);
+    } catch (err) {
+      console.warn(
+        `[dev-seeder][${normalizedInfoHash}] 硬链接 staging 失败，降级到网络下载:`,
+        err?.message ?? err
+      );
+    }
+  }
+
   const torrent = await new Promise((resolve, reject) => {
     let settled = false;
     const timeout = setTimeout(() => {
@@ -252,6 +297,7 @@ export const 启动做种会话 = async (payload) => {
     const options = {
       announce,
       urlList,
+      ...(stagingDir ? { path: stagingDir } : {}),
       /**
        * seeder 也必须按统一 swarm 门禁入场：
        * - tracker 开启 join ticket 时，announce 请求要带 ticket；
@@ -284,6 +330,16 @@ export const 启动做种会话 = async (payload) => {
       reject(error);
     });
   });
+
+  // 本地 staging 后短等 piece verification 完成
+  if (stagingDir && !torrent.done) {
+    const waitMs = typeof payload.readinessWaitMs === "number" ? payload.readinessWaitMs : 1500;
+    await new Promise((resolve) => {
+      if (torrent.done) return resolve();
+      const timer = setTimeout(resolve, waitMs);
+      torrent.once("done", () => { clearTimeout(timer); resolve(); });
+    });
+  }
 
   const actualInfoHash = 归一化InfoHash(torrent.infoHash) ?? normalizedInfoHash;
   const session = {
