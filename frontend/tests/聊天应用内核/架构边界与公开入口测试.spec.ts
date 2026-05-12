@@ -14,7 +14,6 @@ const 前端根目录允许文件 = [
   "css.d.ts",
   "dev-seeder.d.mts",
   "dev-seeder.mjs",
-  "idb-chunk-store.d.ts",
   "index.html",
   "media-sw.ts",
   "package.json",

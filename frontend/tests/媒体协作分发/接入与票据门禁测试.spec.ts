@@ -151,19 +151,8 @@ describe("媒体协作分发 / 接入与票据门禁", () => {
     ]);
   });
 
-  it("接入协作分发种子时会优先交给项目可控的 IndexedDB chunk store，避免看过的 WebTorrent 字节在刷新后漂移", async () => {
+  it("接入协作分发种子时不注入自定义 chunk store，让 WebTorrent 使用内置 OPFS 持久化", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
-    vi.stubGlobal("indexedDB", {});
-    vi.stubGlobal("navigator", {
-      storage: {
-        getDirectory: vi.fn(),
-      },
-    });
-    vi.stubGlobal("FileSystemFileHandle", {
-      prototype: {
-        createWritable: vi.fn(),
-      },
-    });
     const { torrent } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-persistent-store"
     );
@@ -189,8 +178,9 @@ describe("媒体协作分发 / 接入与票据门禁", () => {
       locator.distribution
     );
 
-    const addOptions = addOptionsList[0];
-    expect(addOptions?.store).toBeTypeOf("function");
+    const addOptions = addOptionsList[0] as Record<string, unknown> | undefined;
+    // WebTorrent v2.5+ 内置 OPFS chunk store，项目不再覆盖
+    expect(addOptions?.store).toBeUndefined();
     expect(addOptions?.destroyStoreOnDestroy).toBe(false);
   });
 

@@ -7,8 +7,6 @@ import {
   调高协作分发Tracker连接监听器预算,
   调高协作分发Torrent监听器预算,
 } from "./媒体协作分发监听器预算.js";
-import IndexedDBChunkStore from "idb-chunk-store";
-import { Buffer } from "buffer";
 
 export interface WebTorrent文件 {
   readonly streamURL: string;
@@ -71,7 +69,6 @@ export interface WebTorrent浏览器客户端 {
       private?: boolean;
       maxWebConns?: number;
       destroyStoreOnDestroy?: boolean;
-      store?: WebTorrentChunkStore构造器;
       storeCacheSlots?: number;
       noPeersIntervalTime?: number;
       getAnnounceOpts?: () => Record<string, string | undefined>;
@@ -90,14 +87,6 @@ type WebTorrent浏览器构造器 = new (
   opts?: Record<string, unknown>
 ) => WebTorrent浏览器客户端;
 
-type WebTorrentChunkStore构造器 = new (
-  chunkLength: number,
-  opts?: Record<string, unknown>
-) => unknown;
-
-type 可挂Buffer的全局对象 = typeof globalThis & {
-  Buffer?: typeof Buffer;
-};
 
 export interface 协作分发浏览器运行时 {
   client: WebTorrent浏览器客户端;
@@ -558,49 +547,6 @@ const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位�
   return Math.floor(retryAfter);
 };
 
-const 规范化协作分发Store名称 = (torrentInfoHash: string): string =>
-  `koko-webtorrent-${torrentInfoHash.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-
-const 补齐IndexedDBChunkStoreBuffer全局 = (): void => {
-  const target = globalThis as 可挂Buffer的全局对象;
-  target.Buffer ??= Buffer;
-};
-
-const 创建协作分发IndexedDBChunkStore = (
-  torrentInfoHash: string
-): WebTorrentChunkStore构造器 => {
-  const storeName = 规范化协作分发Store名称(torrentInfoHash);
-  return class 协作分发IndexedDBChunkStore extends IndexedDBChunkStore {
-    constructor(chunkLength: number, opts: Record<string, unknown> = {}) {
-      // IndexedDB store 仍由 WebTorrent 持有：同一 infohash 复用 piece，并继续按 swarm 上传给后来者。
-      super(chunkLength, {
-        ...opts,
-        name: storeName,
-      });
-    }
-  };
-};
-
-const 读取协作分发持久ChunkStore选项 = (
-  distribution: 媒体协作分发定位片段
-): { store?: WebTorrentChunkStore构造器 } => {
-  const store能力 =
-    获取默认浏览器应用平台().storage.读取协作分发字节Store能力?.() ?? null;
-  if (store能力?.indexedDBStore可用 !== true) {
-    return {};
-  }
-  /**
-   * WebTorrent 官方支持自定义 abstract-chunk-store。这里用成熟的
-   * idb-chunk-store 把 piece 字节锚定到完整 infohash 名称：
-   * - 看过/补齐过的字节继续留在 WebTorrent store 里，而不是旁路缓存；
-   * - 刷新、重新进房后同一 torrent 能按同一 store owner 复用 piece；
-   * - 浏览器默认 OPFS/FSA 能力仍是有价值事实，但不能让项目失去可测试的持久化 owner。
-   */
-  补齐IndexedDBChunkStoreBuffer全局();
-  return {
-    store: 创建协作分发IndexedDBChunkStore(distribution.torrent_info_hash!),
-  };
-};
 
 async function 拉取受控Torrent字节(
   distribution: 媒体协作分发定位片段
@@ -759,17 +705,14 @@ export async function 接入协作分发种子(
         urlList: distribution.web_seed_url ? [distribution.web_seed_url] : [],
         private: true,
         maxWebConns: 4,
-        // storeCacheSlots: 做种时内存中缓存 150 个 piece（默认 20），
-        // 减少 IndexedDB 随机读 IO，多 peer 并发拉取时上传吞吐量翻倍。
+        // 内存中缓存 150 个 piece（默认 20），减少底层存储随机读 IO，多 peer 并发拉取时上传吞吐量翻倍。
         storeCacheSlots: 150,
+        // WebTorrent v2.5+ 内置 OPFS 持久化 store，不再手动注入 idb-chunk-store。
         destroyStoreOnDestroy: false,
-        // deselect: prefetch 模式时 join swarm 但不选择任何 piece 下载
         ...(options.deselect ? { deselect: true } : {}),
-        // 后端下发 STUN/TURN 凭证时注入 WebRTC rtcConfig，穿透对称 NAT
         ...(distribution.ice_servers?.length
           ? { rtcConfig: { iceServers: distribution.ice_servers } }
           : {}),
-        ...读取协作分发持久ChunkStore选项(distribution),
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {
           if (!joinTicketRef.value) {

@@ -134,12 +134,10 @@ describe("存储运行时", () => {
           createWritable: vi.fn(),
         },
       },
-      indexedDB: {},
     });
 
     expect(runtime.读取协作分发字节Store能力?.()).toEqual({
       webTorrent默认OPFSStore可用: true,
-      indexedDBStore可用: true,
     });
   });
 
