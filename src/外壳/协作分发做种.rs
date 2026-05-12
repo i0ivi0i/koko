@@ -95,12 +95,13 @@ pub(crate) fn 从协作分发响应构造做种启动命令(
     })
 }
 
-/// 尝试触发一次 seeder start。
+/// 尝试触发一次 seeder start，返回 sidecar 的完整 JSON 响应。
+/// 调用方可从响应中读取 `done`（WebTorrent torrent.done，完整 seed 事实）等运行时字段。
 /// 失败时调用方可自行决定是否降级重试；这里保持错误可见，不吞掉基础设施问题。
 pub(crate) async fn 尝试启动协作分发做种(
     state: &应用状态,
     命令: &协作分发做种启动命令,
-) -> io::Result<()> {
+) -> io::Result<serde_json::Value> {
     let url = format!("{}/seed/start", state.swarm_seeder_control_base_url);
     let payload = serde_json::json!({
         "infoHash": 命令.info_hash,
@@ -115,17 +116,20 @@ pub(crate) async fn 尝试启动协作分发做种(
         .send()
         .await
         .map_err(|err| io::Error::other(format!("调用 seeder start 失败: {err}")))?;
-    if response.status().is_success() {
-        return Ok(());
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::from("<empty>"));
+        return Err(io::Error::other(format!(
+            "调用 seeder start 返回非成功状态: status={status}, detail={detail}"
+        )));
     }
-    let status = response.status();
-    let detail = response
-        .text()
+    response
+        .json::<serde_json::Value>()
         .await
-        .unwrap_or_else(|_| String::from("<empty>"));
-    Err(io::Error::other(format!(
-        "调用 seeder start 返回非成功状态: status={status}, detail={detail}"
-    )))
+        .map_err(|err| io::Error::other(format!("解析 seeder start 响应失败: {err}")))
 }
 
 /// 周期性做种对账：
@@ -183,15 +187,35 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
             continue;
         };
         active_info_hashes.insert(启动命令.info_hash.clone());
-        if let Err(err) = 尝试启动协作分发做种(&state, &启动命令).await {
-            tracing::warn!(
+        // 调用 sidecar start（幂等），获取 WebTorrent 运行时事实快照
+        let sidecar_resp = match 尝试启动协作分发做种(&state, &启动命令).await {
+            Ok(resp) => resp,
+            Err(err) => {
+                tracing::warn!(
+                    application = "协作分发做种对账",
+                    adapter = "shell",
+                    outcome = "failed",
+                    attachment_id = 待做种.附件标识.as_str(),
+                    info_hash = 启动命令.info_hash.as_str(),
+                    error = %err,
+                    "周期做种 start 失败，等待下一轮重试"
+                );
+                continue;
+            }
+        };
+        // torrent.done 是 WebTorrent "完整 seed" 的唯一事实。
+        // 未 done 时不写 backend_strong_seed presence，等下一轮 reconcile 自然重试。
+        let done = sidecar_resp["done"].as_bool().unwrap_or(false);
+        if !done {
+            tracing::info!(
                 application = "协作分发做种对账",
                 adapter = "shell",
-                outcome = "failed",
+                outcome = "not_ready",
                 attachment_id = 待做种.附件标识.as_str(),
                 info_hash = 启动命令.info_hash.as_str(),
-                error = %err,
-                "周期做种 start 失败，等待下一轮重试"
+                done = done,
+                progress = sidecar_resp["progress"].as_f64().unwrap_or(0.0),
+                "sidecar 尚未完成下载，不写 backend strong seed presence"
             );
             continue;
         }

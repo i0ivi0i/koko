@@ -47,7 +47,10 @@ async fn 记录假seeder_start请求(
         StatusCode::OK,
         AxumJson(serde_json::json!({
             "ok": true,
-            "created": true
+            "created": true,
+            "done": true,
+            "progress": 1.0,
+            "capability": "hybrid"
         })),
     )
 }

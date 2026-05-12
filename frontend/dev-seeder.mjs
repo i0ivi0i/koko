@@ -83,7 +83,7 @@ const 发送JSON响应 = (response, statusCode, payload) => {
 const 读取WebTorrent构造器 = async () => {
   /**
    * 强制 mock 模式只用于测试与诊断：
-   * - 默认仍优先 hybrid/webtorrent；
+   * - 默认仍优先 webtorrent（>= 2.3.0 已原生支持 WebRTC via node-datachannel）；
    * - 只有显式设置 SWARM_SEEDER_FORCE_MOCK=1 才会跳过 WebTorrent 运行时探测。
    */
   if (process.env.SWARM_SEEDER_FORCE_MOCK?.trim() === "1") {
@@ -95,31 +95,21 @@ const 读取WebTorrent构造器 = async () => {
   }
 
   /**
-   * 优先尝试 webtorrent-hybrid：
-   * 1. 它是官方 FAQ 明确提到的“Node 端可连接 WebRTC 浏览器 peer”路径；
-   * 2. 但它包含原生依赖，某些开发机可能暂时没有装好；
-   * 3. 回退到 webtorrent 时，sidecar 仍可工作，但会在日志里明确提醒能力边界。
+   * webtorrent >= 2.3.0 原生内置 WebRTC（via node-datachannel），webtorrent-hybrid 已废弃。
+   * 只要 import("webtorrent") 成功，sidecar 即具备完整 WebRTC 能力，标记为 "hybrid"。
    */
   try {
-    const hybrid = await import("webtorrent-hybrid");
+    const mod = await import("webtorrent");
     return {
-      Ctor: hybrid.default ?? hybrid.WebTorrent ?? hybrid,
+      Ctor: mod.default ?? mod.WebTorrent ?? mod,
       capability: "hybrid",
     };
-  } catch (hybridError) {
-    try {
-      const fallback = await import("webtorrent");
-      return {
-        Ctor: fallback.default ?? fallback.WebTorrent ?? fallback,
-        capability: "webtorrent",
-      };
-    } catch (fallbackError) {
-      return {
-        Ctor: null,
-        capability: "mock",
-        error: fallbackError ?? hybridError,
-      };
-    }
+  } catch (err) {
+    return {
+      Ctor: null,
+      capability: "mock",
+      error: err,
+    };
   }
 };
 
@@ -371,6 +361,9 @@ const server = createServer(async (request, response) => {
         restarted,
         sourceChanged,
         infoHash: session.infoHash,
+        done: Boolean(session.torrent?.done),
+        progress: session.torrent?.progress ?? 0,
+        capability,
         activeCount: activeSessions.size,
       });
       return;

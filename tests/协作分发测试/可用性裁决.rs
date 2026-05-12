@@ -84,9 +84,57 @@ async fn 记录假seeder_start请求(
         StatusCode::OK,
         AxumJson(serde_json::json!({
             "ok": true,
-            "created": true
+            "created": true,
+            "done": true,
+            "progress": 1.0,
+            "capability": "hybrid"
         })),
     )
+}
+
+/// 返回 done: false 的假 seeder，模拟 WebTorrent 尚未完成下载的场景。
+/// 用于验证 reconcile 在 sidecar 未 done 时不写 backend strong seed presence。
+async fn 记录假notready_seeder_start请求(
+    AxumState(records): AxumState<假Seeder控制面记录句柄>,
+    AxumJson(payload): AxumJson<serde_json::Value>,
+) -> (StatusCode, AxumJson<serde_json::Value>) {
+    records
+        .lock()
+        .expect("seeder 控制面记录锁不应中毒")
+        .start_payloads
+        .push(payload);
+    (
+        StatusCode::OK,
+        AxumJson(serde_json::json!({
+            "ok": true,
+            "created": true,
+            "done": false,
+            "progress": 0.3,
+            "capability": "hybrid"
+        })),
+    )
+}
+
+/// 启动返回 not-ready（done: false）的假 seeder 控制面。
+async fn 启动假notready_seeder控制面() -> (String, 假Seeder控制面记录句柄, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("应能绑定假的 not-ready seeder 控制面端口");
+    let address = listener
+        .local_addr()
+        .expect("应能读取假的 not-ready seeder 控制面地址");
+    let records: 假Seeder控制面记录句柄 = Arc::new(Mutex::new(假Seeder控制面记录::default()));
+    let app = Router::new()
+        .route("/seed/start", post(记录假notready_seeder_start请求))
+        .route("/seed/reconcile", post(记录假seeder_reconcile请求))
+        .with_state(records.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("假的 not-ready seeder 控制面应能启动");
+    });
+    等待假seeder控制面就绪(address).await;
+    (format!("http://{address}"), records, server)
 }
 
 async fn 记录假seeder_reconcile请求(
