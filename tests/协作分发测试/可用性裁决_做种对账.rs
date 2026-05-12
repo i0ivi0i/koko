@@ -154,6 +154,10 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
+    env::set_var(
+        "SWARM_SEEDER_TRACKER_URL",
+        "ws://127.0.0.1:18080/api/swarm/announce",
+    );
     env::set_var("SWARM_TICKET_SECRET", "seed-reconcile-ticket-secret");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
@@ -230,6 +234,33 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         "对账触发的 seeder start 集合里必须包含当前测试附件的权威 infoHash"
     );
     let matched_start_payload = matched_start_payload.expect("上面已断言存在匹配 payload");
+    // 零延迟做种新字段断言
+    assert!(
+        matched_start_payload["torrentBytesBase64"]
+            .as_str()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false),
+        "做种对账必须下发非空 torrentBytesBase64，避免 sidecar 再走 HTTP 拉 .torrent"
+    );
+    assert_eq!(
+        matched_start_payload["localSeed"]["strategy"].as_str(),
+        Some("hardlink"),
+        "本地存储模式下做种对账必须下发 localSeed hardlink 提示"
+    );
+    assert!(
+        matched_start_payload["localSeed"]["canonicalFilePath"]
+            .as_str()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false),
+        "localSeed 必须包含 canonicalFilePath"
+    );
+    assert!(
+        matched_start_payload["localSeed"]["torrentFileName"]
+            .as_str()
+            .map(|v| v.starts_with("content-"))
+            .unwrap_or(false),
+        "localSeed.torrentFileName 必须以 content- 开头"
+    );
     assert_eq!(
         matched_start_payload["announceUrls"]
             .as_array()
