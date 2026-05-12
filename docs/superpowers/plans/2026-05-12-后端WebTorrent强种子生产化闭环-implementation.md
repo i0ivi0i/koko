@@ -2009,6 +2009,11 @@ git commit -m "test: 验证后端WebTorrent强种子闭环"
 **Files:**
 - No source edits unless smoke exposes a root-cause bug.
 
+- **Approved test inputs**:
+  - MP4 source directory: `D:\200-生活\230-照片备份\233-Telegram\色色`
+  - Smoke room: `1234b`
+  - Files in this directory are read-only test inputs. Do not move, rename, edit, or delete them.
+
 - [ ] **Step 1: Start real dev stack**
 
 ```powershell
@@ -2040,10 +2045,24 @@ Expected:
 
 - [ ] **Step 3: Browser smoke with required CLI skills**
 
+Prepare the exact room and smoke file:
+
+```powershell
+$smokeRoom = "1234b"
+$mediaDir = "D:\200-生活\230-照片备份\233-Telegram\色色"
+$smokeFile = Get-ChildItem -LiteralPath $mediaDir -File -Filter *.mp4 -ErrorAction Stop |
+  Sort-Object Length |
+  Select-Object -First 1
+if ($null -eq $smokeFile) {
+  throw "指定目录没有 MP4 文件: $mediaDir"
+}
+$smokeFile.FullName
+```
+
 Use all three required browser skills for this project:
 
 ```text
-playwright-cli: open two browser contexts, join same room, upload a small mp4, send media message.
+playwright-cli: open two browser contexts, join room 1234b, upload $smokeFile.FullName, send media message.
 chrome-devtools-cli: inspect console/network, confirm no sidecar/control errors and no direct HLS/DASH/CDN/range formal playback path.
 browser-trace: capture page trace around receiver media startup and swarm entry.
 ```
@@ -2104,15 +2123,16 @@ Expected:
 
 - [ ] **Step 6: Upload/load pressure smoke**
 
-Run the existing upload pressure harness with a local mp4 of 32 MiB or larger:
+Run the existing upload pressure harness with an MP4 from the approved media directory. Pick the smallest file that is at least 32 MiB so routine pressure remains bounded while still exercising large-file behavior:
 
 ```powershell
-$benchFile = Get-ChildItem -Path data\attachments,tmp,tests\fixtures -Recurse -File -Filter *.mp4 -ErrorAction SilentlyContinue |
+$mediaDir = "D:\200-生活\230-照片备份\233-Telegram\色色"
+$benchFile = Get-ChildItem -LiteralPath $mediaDir -File -Filter *.mp4 -ErrorAction Stop |
   Where-Object { $_.Length -ge 33554432 } |
-  Sort-Object Length -Descending |
+  Sort-Object Length |
   Select-Object -First 1
 if ($null -eq $benchFile) {
-  throw "缺少 32MiB 以上本地 mp4 压测文件；先用真实视频放到 tmp\bench-media\large.mp4 后重跑。"
+  throw "指定目录没有 32MiB 以上 MP4 文件: $mediaDir"
 }
 python scripts/媒体上传并发压测.py --upload-file $benchFile.FullName --concurrency-levels 1,2,4 --iterations-per-vu 1
 ```
