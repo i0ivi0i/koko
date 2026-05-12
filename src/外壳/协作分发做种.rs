@@ -1,4 +1,5 @@
 use super::{应用状态, 构建共享仓储};
+use base64::Engine as _;
 use crate::{media::distribution::application as 协作分发应用, media_distribution};
 use std::{
     collections::HashSet,
@@ -15,6 +16,10 @@ pub(crate) struct 协作分发做种启动命令 {
     pub web_seed_url: Option<String>,
     pub torrent_url: Option<String>,
     pub join_ticket: Option<String>,
+    /// 权威 torrent bytes 的 base64 编码，直接下发 sidecar 避免 HTTP 重拉。
+    pub torrent_bytes_base64: Option<String>,
+    /// 本地做种提示（硬链接 staging），S3 模式或参数不完整时为 None。
+    pub local_seed: Option<serde_json::Value>,
 }
 
 /// 后端 strong seed 是基础设施 owner，不应冒充任何前端会话。
@@ -68,6 +73,35 @@ fn 提取storage_key扩展名(storage_key: &str) -> Option<&str> {
     }
 }
 
+/// 本地存储模式下构造 localSeed 控制面 hint。
+/// S3 模式或参数不完整时返回 None——sidecar 自然降级到 WebSeed fallback。
+fn 构造本地做种提示(
+    media_storage_driver: &crate::assembly::媒体存储驱动,
+    attachment_storage_dir: &str,
+    storage_key: &str,
+    content_hash: &str,
+) -> Option<serde_json::Value> {
+    if !matches!(media_storage_driver, crate::assembly::媒体存储驱动::本地目录) {
+        return None;
+    }
+    let ext = 提取storage_key扩展名(storage_key)?;
+    let torrent_file_name = media_distribution::推导torrent内部文件名(content_hash, ext);
+    let root_path = std::path::Path::new(attachment_storage_dir);
+    let canonical_file_path = root_path.join(storage_key);
+    let staging_root = std::env::var("SWARM_SEEDER_STAGING_DIR")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root_path.join(".swarm-seeder-staging"));
+    Some(serde_json::json!({
+        "strategy": "hardlink",
+        "rootPath": root_path.to_string_lossy(),
+        "stagingRoot": staging_root.to_string_lossy(),
+        "canonicalFilePath": canonical_file_path.to_string_lossy(),
+        "torrentFileName": torrent_file_name,
+    }))
+}
+
 /// 把 runtime 分发响应收口成 sidecar 可执行命令。
 /// 约束：
 /// 1. 缺少 `torrent_info_hash` 时不能启动做种；
@@ -104,6 +138,8 @@ pub(crate) fn 从协作分发响应构造做种启动命令(
         web_seed_url,
         torrent_url,
         join_ticket: Some(join_ticket),
+        torrent_bytes_base64: None,
+        local_seed: None,
     })
 }
 
@@ -121,6 +157,9 @@ pub(crate) async fn 尝试启动协作分发做种(
         "webSeedUrl": 命令.web_seed_url,
         "torrentUrl": 命令.torrent_url,
         "joinTicket": 命令.join_ticket,
+        "torrentBytesBase64": 命令.torrent_bytes_base64,
+        "localSeed": 命令.local_seed,
+        "readinessWaitMs": 1500,
     });
     let response = reqwest::Client::new()
         .post(url.as_str())
@@ -192,12 +231,22 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 ice_servers: state.get_turn_ice_servers().await,
             },
         );
-        let Some(启动命令) = 从协作分发响应构造做种启动命令(
+        let Some(mut 启动命令) = 从协作分发响应构造做种启动命令(
             &runtime_distribution,
             state.swarm_seeder_tracker_url.as_str(),
         ) else {
             continue;
         };
+        // 丰富零延迟做种字段：权威 torrent bytes + 本地硬链接提示
+        启动命令.torrent_bytes_base64 = Some(
+            base64::engine::general_purpose::STANDARD.encode(&待做种.torrent_bytes),
+        );
+        启动命令.local_seed = 构造本地做种提示(
+            &state.media_storage_driver,
+            &state.attachment_storage_dir,
+            &待做种.storage_key,
+            &待做种.content_hash,
+        );
         active_info_hashes.insert(启动命令.info_hash.clone());
         // 调用 sidecar start（幂等），获取 WebTorrent 运行时事实快照
         let sidecar_resp = match 尝试启动协作分发做种(&state, &启动命令).await {
@@ -338,6 +387,46 @@ mod tests {
         .expect("有 info_hash 与 join_ticket 时应能构造做种命令");
 
         assert_eq!(命令.join_ticket.as_deref(), Some("ticket-valid"));
+    }
+
+    #[test]
+    fn 本地存储模式下做种启动命令包含torrent_bytes_base64和local_seed() {
+        let torrent_bytes = b"fake-torrent-bytes";
+        let storage_key = "media-assets/abc/canonical.mp4";
+        let content_hash = "abc123";
+        let attachment_storage_dir = "/data/attachments";
+        let local_seed = 构造本地做种提示(
+            &crate::assembly::媒体存储驱动::本地目录,
+            attachment_storage_dir,
+            storage_key,
+            content_hash,
+        );
+        assert!(local_seed.is_some(), "本地存储模式应生成 localSeed");
+        let hint = local_seed.unwrap();
+        assert_eq!(hint["strategy"].as_str(), Some("hardlink"));
+        assert!(
+            hint["canonicalFilePath"].as_str().unwrap().contains(storage_key),
+            "canonicalFilePath 应包含 storage_key"
+        );
+        assert!(
+            hint["torrentFileName"].as_str().unwrap().starts_with("content-"),
+            "torrentFileName 应以 content- 开头"
+        );
+        // torrentBytesBase64 编码验证
+        use base64::Engine as _;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(torrent_bytes);
+        assert!(!encoded.is_empty());
+    }
+
+    #[test]
+    fn s3模式下做种启动命令不包含local_seed() {
+        let local_seed = 构造本地做种提示(
+            &crate::assembly::媒体存储驱动::S3对象存储,
+            "/data/attachments",
+            "media-assets/abc/canonical.mp4",
+            "abc123",
+        );
+        assert!(local_seed.is_none(), "S3 模式不应生成 localSeed");
     }
 
     #[test]
