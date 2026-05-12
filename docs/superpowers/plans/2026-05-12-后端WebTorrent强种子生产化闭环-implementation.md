@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 按 `docs/superpowers/specs/2026-05-12-后端WebTorrent强种子生产化闭环-design.md` 修正强种子事实 owner，让 `backend_strong_seed` 只在 sidecar WebTorrent runtime 证明自己是完整、持票、同 `infoHash`、WebRTC-capable seed 后写入。
+**Goal:** 按 `docs/superpowers/specs/2026-05-12-后端WebTorrent强种子生产化闭环-design.md` 修正强种子事实 owner，并用流式 WebSeed、sidecar 上传遥测、WebSeed-blocked 真实烟测证明服务器能作为高速 WebTorrent 强帮助者给群友供字节。
 
-**Architecture:** Rust shell 保持唯一落库 owner，但不再用 `/seed/start` HTTP ack 推断强种子成立；Node sidecar 成为 WebTorrent runtime 事实 owner，返回稳定 `SeedSessionSnapshot`。domain/application/contract 不接触 sidecar runtime 字段，complete/reuse/forward/realtime/reconcile 统一复用同一个 shell 裁决函数。
+**Architecture:** Rust shell 保持唯一落库 owner，但不再用 `/seed/start` HTTP ack 推断强种子成立；Node sidecar 成为 WebTorrent runtime 事实 owner，返回稳定 `SeedSessionSnapshot`。Rust WebSeed 只作为 swarm 内冷启动字节源并流式输出 canonical bytes；真实高速能力通过 sidecar `upload` 事件、上传速度字段和阻断 WebSeed 后的浏览器 swarm 烟测证明。
 
 **Tech Stack:** Rust 2021、Tokio、Reqwest、SQLx、Axum、futures-util、Node.js ESM、WebTorrent / webtorrent-hybrid、Vitest、PowerShell、Playwright/Chrome DevTools/browser-trace。
 
@@ -41,6 +41,12 @@
 - **Modify**: `src/外壳/mod.rs`
   - 在 `应用状态` 内复用 `reqwest::Client`，避免 sidecar 控制面每次新建 client。
   - 只放 shell 基础设施，不放业务事实。
+- **Modify**: `src/媒体/资产/外壳.rs`
+  - WebSeed / 受控附件内容读取必须流式输出 canonical bytes，不允许无 Range 请求把整份大视频读进内存。
+- **Modify**: `Cargo.toml`
+  - 显式增加 `tokio-util` 的 `io` feature，用 `ReaderStream` 把对象存储 `AsyncRead` 转成 HTTP body。
+- **Modify**: `Cargo.lock`
+  - 由 `cargo check` 更新锁文件，禁止手写。
 
 ### Rust callers
 
@@ -71,6 +77,7 @@
 - **Modify**: `frontend/dev-seeder.mjs`
   - 生产默认要求 `webtorrent-hybrid`，只有 `SWARM_SEEDER_FORCE_MOCK=1` 才允许 mock。
   - 增加 `SeedSessionSnapshot` 构造函数。
+  - 记录 `upload` 事件、`uploadSpeed`、`downloadSpeed`、`lastUploadedAt`、`lastUploadedBytes`，让真实烟测能证明 sidecar 向群友上传过字节。
   - `/seed/start` 返回 snapshot。
   - 新增 `/seed/status`，返回同一 snapshot shape。
   - `/health` 保留 `capability`、`activeCount`、`sessions`。
@@ -1524,12 +1531,391 @@ git commit -m "test: complete不把sidecar未ready写成强种子"
 
 ---
 
-## Task 9: Full verification and same-slice cleanup
+## Task 9: Rust WebSeed streaming - 服务器强帮助不能整块吃内存
+
+**Files:**
+- Modify: `Cargo.toml:61-63`
+- Modify: `Cargo.lock`
+- Modify: `src/媒体/资产/外壳.rs:1-16, 543-732`
+- Modify: `tests/启动器脚本检查.ps1`
+
+- [ ] **Step 1: RED - launcher script checks WebSeed streaming shape**
+
+在 `tests/启动器脚本检查.ps1` 增加检查：
+
+```powershell
+$mediaAssetShellPath = Join-Path $repoRoot "src\媒体\资产\外壳.rs"
+Assert-True (Test-Path -LiteralPath $mediaAssetShellPath) "缺少 src\媒体\资产\外壳.rs。"
+$mediaAssetShell = Get-Content -LiteralPath $mediaAssetShellPath -Raw
+Assert-True ($mediaAssetShell -match 'object_store::buffered::BufReader') "受控附件内容无 Range 读取必须使用 object_store::buffered::BufReader 流式读 canonical bytes。"
+Assert-True ($mediaAssetShell -match 'ReaderStream::new') "受控附件内容无 Range 读取必须通过 ReaderStream 转成 HTTP body。"
+Assert-True ($mediaAssetShell -match 'Body::from_stream') "受控附件内容无 Range 读取必须用 Body::from_stream 输出，不能整块 bytes().await。"
+Assert-True ($mediaAssetShell -match 'get_opts\(\s*&object_path,\s*GetOptions::new\(\)\.with_range') "Range 请求仍应走对象存储 range 读取，服务 WebTorrent piece 请求。"
+```
+
+- [ ] **Step 2: Verify RED**
+
+Run:
+
+```powershell
+pwsh -NoProfile -File tests/启动器脚本检查.ps1
+```
+
+Expected: FAIL because `src/媒体/资产/外壳.rs` currently imports `Bytes` only and uses `get_result.bytes().await` for full no-Range reads.
+
+- [ ] **Step 3: Add direct dependency**
+
+在 `Cargo.toml` 的 `[dependencies]` 增加：
+
+```toml
+tokio-util = { version = "0.7", features = ["io"] }
+```
+
+- [ ] **Step 4: Replace full-object buffering with streaming body**
+
+把 `src/媒体/资产/外壳.rs` imports 改为：
+
+```rust
+use axum::{
+    body::{Body, Bytes},
+    extract::{Path, Query, State},
+    http::{header, HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
+};
+use object_store::buffered::BufReader;
+use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectStoreExt};
+use tokio_util::io::ReaderStream;
+```
+
+在 `读取受控附件内容响应` 内，把从 `let object_path = ObjectPath::from(target.存储键.clone());` 到原最终响应构造结束的对象读取段替换为：
+
+```rust
+let object_path = ObjectPath::from(target.存储键.clone());
+let head_result = match state.attachment_store.head(&object_path).await {
+    Ok(meta) => meta,
+    Err(err) => {
+        tracing::error!(
+            application = "读取附件内容",
+            adapter = "http",
+            outcome = "failed",
+            request_kind = "附件内容读取",
+            attachment_id = attachment_id.as_str(),
+            session_id = session_id.as_str(),
+            error_code = "system_error",
+            error = %err,
+            "对象存储读取元数据失败"
+        );
+        return err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "附件内容读取失败",
+        );
+    }
+};
+let object_size = head_result.size;
+let range = if headers.contains_key(header::RANGE) {
+    match 解析标准字节范围(headers.get(header::RANGE), object_size) {
+        Ok(range) => range,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    }
+} else {
+    None
+};
+
+tracing::info!(
+    application = "读取附件内容",
+    adapter = "http",
+    outcome = "succeeded",
+    request_kind = "附件内容读取",
+    attachment_id = attachment_id.as_str(),
+    session_id = session_id.as_str(),
+    "读取附件内容成功"
+);
+
+match range {
+    Some(range) => {
+        let get_result = match state
+            .attachment_store
+            .get_opts(
+                &object_path,
+                GetOptions::new().with_range(Some(range.请求.clone())),
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(err) => {
+                tracing::error!(
+                    application = "读取附件内容",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "附件内容读取",
+                    attachment_id = attachment_id.as_str(),
+                    session_id = session_id.as_str(),
+                    error_code = "system_error",
+                    error = %err,
+                    "对象存储 Range 读取失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "附件内容读取失败",
+                );
+            }
+        };
+        let body = match get_result.bytes().await {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                tracing::error!(
+                    application = "读取附件内容",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "附件内容读取",
+                    attachment_id = attachment_id.as_str(),
+                    session_id = session_id.as_str(),
+                    error_code = "system_error",
+                    error = %err,
+                    "对象 Range 内容读取失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "附件内容读取失败",
+                );
+            }
+        };
+        (
+            StatusCode::PARTIAL_CONTENT,
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+                (
+                    header::CONTENT_RANGE,
+                    构造content_range值(&range, object_size),
+                ),
+            ],
+            body,
+        )
+            .into_response()
+    }
+    None => {
+        let reader = BufReader::new(state.attachment_store.clone(), &head_result);
+        let stream = ReaderStream::new(reader);
+        (
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+            ],
+            Body::from_stream(stream),
+        )
+            .into_response()
+    }
+}
+```
+
+- [ ] **Step 5: Verify GREEN**
+
+Run:
+
+```powershell
+pwsh -NoProfile -File tests/启动器脚本检查.ps1
+cargo test --test 集成测试 视频complete会触发seeder_start命令 -- --nocapture
+cargo check
+```
+
+Expected: all PASS. `git grep -n "Body::from_stream\\|ReaderStream::new\\|get_opts(.*with_range" -- src/媒体/资产/外壳.rs` must show the streaming and range paths.
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add -- Cargo.toml Cargo.lock src/媒体/资产/外壳.rs tests/启动器脚本检查.ps1
+git commit -m "perf: 流式输出WebSeed canonical字节"
+```
+
+---
+
+## Task 10: Sidecar upload telemetry - 证明后端真的向群友上传过字节
+
+**Files:**
+- Modify: `frontend/dev-seeder.mjs`
+- Modify: `frontend/dev-seeder.d.mts`
+- Modify: `frontend/tests/dev-seeder做种续租测试.spec.ts`
+
+- [ ] **Step 1: RED - add upload telemetry tests**
+
+在 `frontend/tests/dev-seeder做种续租测试.spec.ts` 追加：
+
+```ts
+it("upload事件会记录sidecar向peer上传字节的事实", async () => {
+  const module = (await import("../dev-seeder.mjs")) as unknown as {
+    记录做种上传事件: (session: Record<string, unknown>, bytes: number, now: Date) => void;
+  };
+  const session: Record<string, unknown> = {
+    infoHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    joinTicket: "ticket-valid",
+    torrent: {
+      progress: 1,
+      numPeers: 1,
+      downloaded: 1024,
+      uploaded: 4096,
+      uploadSpeed: 2048,
+      downloadSpeed: 0,
+    },
+  };
+
+  module.记录做种上传事件(session, 2048, new Date("2026-05-12T00:00:00.000Z"));
+
+  expect(session["lastUploadedAt"]).toBe("2026-05-12T00:00:00.000Z");
+  expect(session["lastUploadedBytes"]).toBe(2048);
+  expect(session["uploadEvents"]).toBe(1);
+});
+
+it("SeedSessionSnapshot暴露上传速度与最近上传时间供真实烟测证明", async () => {
+  const module = (await import("../dev-seeder.mjs")) as unknown as {
+    构造做种会话快照: (session: unknown, capability: string) => Record<string, unknown>;
+  };
+
+  const snapshot = module.构造做种会话快照(
+    {
+      infoHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      source: "http://127.0.0.1:8080/api/media/att/torrent?session_id=s-1",
+      joinTicket: "ticket-valid",
+      torrent: {
+        progress: 1,
+        numPeers: 2,
+        downloaded: 1048576,
+        uploaded: 2097152,
+        uploadSpeed: 524288,
+        downloadSpeed: 0,
+      },
+      lastUploadedAt: "2026-05-12T00:00:01.000Z",
+      lastUploadedBytes: 262144,
+      uploadEvents: 3,
+      addedAt: "2026-05-12T00:00:00.000Z",
+    },
+    "hybrid"
+  );
+
+  expect(snapshot).toMatchObject({
+    ready: true,
+    uploaded: 2097152,
+    uploadSpeed: 524288,
+    downloadSpeed: 0,
+    lastUploadedAt: "2026-05-12T00:00:01.000Z",
+    lastUploadedBytes: 262144,
+    uploadEvents: 3,
+  });
+});
+```
+
+- [ ] **Step 2: Verify RED**
+
+Run:
+
+```powershell
+pnpm --dir frontend test tests/dev-seeder做种续租测试.spec.ts
+```
+
+Expected: FAIL because `记录做种上传事件` and the new snapshot fields do not exist.
+
+- [ ] **Step 3: Implement telemetry functions and snapshot fields**
+
+在 `frontend/dev-seeder.mjs` 增加导出：
+
+```js
+export const 记录做种上传事件 = (session, bytes, now = new Date()) => {
+  const uploadedBytes = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+  session.lastUploadedAt = now.toISOString();
+  session.lastUploadedBytes = uploadedBytes;
+  session.uploadEvents = Number.isFinite(session.uploadEvents) ? session.uploadEvents + 1 : 1;
+};
+```
+
+把 `构造做种会话快照` 的返回对象补齐字段：
+
+```js
+uploadSpeed: Number.isFinite(session?.torrent?.uploadSpeed) ? session.torrent.uploadSpeed : 0,
+downloadSpeed: Number.isFinite(session?.torrent?.downloadSpeed) ? session.torrent.downloadSpeed : 0,
+lastUploadedAt: typeof session?.lastUploadedAt === "string" ? session.lastUploadedAt : null,
+lastUploadedBytes: Number.isFinite(session?.lastUploadedBytes) ? session.lastUploadedBytes : 0,
+uploadEvents: Number.isFinite(session?.uploadEvents) ? session.uploadEvents : 0,
+```
+
+把 `/seed/start` 和 `/seed/status` 响应里展开 `snapshot` 的显式字段列表同步补齐：
+
+```js
+uploadSpeed: snapshot.uploadSpeed,
+downloadSpeed: snapshot.downloadSpeed,
+lastUploadedAt: snapshot.lastUploadedAt,
+lastUploadedBytes: snapshot.lastUploadedBytes,
+uploadEvents: snapshot.uploadEvents,
+```
+
+在 `绑定会话日志(session)` 内增加：
+
+```js
+session.torrent.on("upload", (bytes) => {
+  记录做种上传事件(session, bytes);
+});
+```
+
+在 mock session 初始化时增加：
+
+```js
+lastUploadedAt: null,
+lastUploadedBytes: 0,
+uploadEvents: 0,
+```
+
+- [ ] **Step 4: Update declarations**
+
+在 `frontend/dev-seeder.d.mts` 的 `DevSeeder做种会话快照` 增加：
+
+```ts
+  uploadSpeed: number;
+  downloadSpeed: number;
+  lastUploadedAt: string | null;
+  lastUploadedBytes: number;
+  uploadEvents: number;
+```
+
+并增加：
+
+```ts
+export declare const 记录做种上传事件: (
+  session: Record<string, unknown>,
+  bytes: number,
+  now?: Date
+) => void;
+```
+
+- [ ] **Step 5: Verify GREEN**
+
+Run:
+
+```powershell
+pnpm --dir frontend test tests/dev-seeder做种续租测试.spec.ts
+pnpm --dir frontend typecheck
+```
+
+Expected: both PASS.
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add -- frontend/dev-seeder.mjs frontend/dev-seeder.d.mts frontend/tests/dev-seeder做种续租测试.spec.ts
+git commit -m "feat: 暴露sidecar强种子上传遥测"
+```
+
+---
+
+## Task 11: Full verification and same-slice cleanup
 
 **Files:**
 - Review only unless failures require fixes:
   - `src/外壳/协作分发做种.rs`
   - `src/外壳/mod.rs`
+  - `src/媒体/资产/外壳.rs`
   - `src/媒体/上传/外壳/完成上传.rs`
   - `src/媒体/上传/外壳/附件响应.rs`
   - `src/实时/外壳.rs`
@@ -1546,6 +1932,7 @@ git commit -m "test: complete不把sidecar未ready写成强种子"
 cargo test --test 集成测试 强种子 -- --nocapture
 cargo test --test 集成测试 做种对账 -- --nocapture
 cargo test --test 集成测试 视频complete会触发seeder_start命令 -- --nocapture
+pwsh -NoProfile -File tests/启动器脚本检查.ps1
 ```
 
 Expected: all PASS.
@@ -1581,17 +1968,22 @@ Check all of these before claiming done:
 
 ```powershell
 git grep -n "reqwest::Client::new()" -- src/外壳/协作分发做种.rs src/外壳/mod.rs
+git grep -n "Body::from_stream" -- src/媒体/资产/外壳.rs
+git grep -n "ReaderStream::new" -- src/媒体/资产/外壳.rs
 git grep -n "backend_strong_seed" -- src tests
 git grep -n "SWARM_SEEDER_FORCE_MOCK" -- frontend/dev-seeder.mjs tests/启动器脚本检查.ps1
 git grep -n "/seed/status" -- frontend/dev-seeder.mjs tests/启动器脚本检查.ps1
+git grep -n "lastUploadedAt\\|uploadSpeed\\|downloadSpeed" -- frontend/dev-seeder.mjs frontend/dev-seeder.d.mts
 ```
 
 Expected:
 
 - `src/外壳/协作分发做种.rs` no longer creates a new reqwest client per sidecar call.
+- `src/媒体/资产/外壳.rs` streams full WebSeed/canonical content and preserves Range reads.
 - Only reconcile Ready path writes `backend_strong_seed` presence.
 - mock mode is explicit and test-only.
 - `/seed/status` exists in sidecar and script check.
+- sidecar status exposes upload telemetry for real smoke proof.
 
 - [ ] **Step 6: GitNexus changed-flow check**
 
@@ -1606,13 +1998,13 @@ Expected: changed symbols match the planned Rust shell, sidecar, tests, and scri
 - [ ] **Step 7: Commit final verification state**
 
 ```powershell
-git add -- src/外壳/协作分发做种.rs src/外壳/mod.rs src/媒体/上传/外壳/完成上传.rs src/媒体/上传/外壳/附件响应.rs src/实时/外壳.rs frontend/dev-seeder.mjs frontend/dev-seeder.d.mts tests/协作分发测试/可用性裁决.rs tests/协作分发测试/可用性裁决_做种对账.rs tests/媒体上传测试/单文件主链.rs tests/启动器脚本检查.ps1 frontend/package.json frontend/pnpm-lock.yaml
+git add -- Cargo.toml Cargo.lock src/外壳/协作分发做种.rs src/外壳/mod.rs src/媒体/资产/外壳.rs src/媒体/上传/外壳/完成上传.rs src/媒体/上传/外壳/附件响应.rs src/实时/外壳.rs frontend/dev-seeder.mjs frontend/dev-seeder.d.mts tests/协作分发测试/可用性裁决.rs tests/协作分发测试/可用性裁决_做种对账.rs tests/媒体上传测试/单文件主链.rs tests/启动器脚本检查.ps1 frontend/package.json frontend/pnpm-lock.yaml
 git commit -m "test: 验证后端WebTorrent强种子闭环"
 ```
 
 ---
 
-## Task 10: Real smoke - 同链路体验闭环
+## Task 12: Real smoke - 同链路体验闭环与高速证明
 
 **Files:**
 - No source edits unless smoke exposes a root-cause bug.
@@ -1659,17 +2051,46 @@ browser-trace: capture page trace around receiver media startup and swarm entry.
 Expected:
 
 - Sender upload complete returns ready media asset with WebTorrent distribution hints.
-- Sidecar `/seed/status?infoHash=<hash>` eventually returns `ready: true`, `capability: "hybrid"`, `progress: 1`, `hasJoinTicket: true`.
+- Sidecar `/seed/status` for the uploaded media infoHash eventually returns `ready: true`, `capability: "hybrid"`, `progress: 1`, `hasJoinTicket: true`, `downloaded > 0`.
 - Receiver joins WebTorrent swarm path and media starts without direct HTTP formal playback path.
 
-- [ ] **Step 4: Verify database presence truth**
+- [ ] **Step 4: WebRTC strong seed proof with WebSeed blocked**
+
+先从 sidecar 当前活跃会话取出要验证的 `infoHash`：
+
+```powershell
+$seedHealth = Invoke-RestMethod "http://127.0.0.1:7073/health"
+$infoHash = @($seedHealth.sessions | Where-Object { $_.progress -eq 1 } | Select-Object -First 1).infoHash
+if ([string]::IsNullOrWhiteSpace($infoHash)) {
+  throw "sidecar 没有 progress=1 的活跃 WebTorrent 会话，不能执行 WebSeed-blocked 强种子证明。"
+}
+```
+
+Use `playwright-cli` to create a second receiver context and block the Rust WebSeed/content endpoint before joining the room:
+
+```text
+context.route("**/api/attachments/*/content**", route => route.abort())
+```
+
+Then open the same room and start the same media through the normal UI.
+
+Expected within 30 seconds:
+
+- Receiver still enters WebTorrent download/playback path.
+- `Invoke-RestMethod "http://127.0.0.1:7073/seed/status?infoHash=$infoHash" | ConvertTo-Json -Depth 8` shows `uploaded >= 1048576` or `uploadEvents >= 1`.
+- `lastUploadedAt` is not null.
+- Browser network panel has no successful `/api/attachments/*/content` media byte response in the blocked context.
+
+If this fails, do not claim server WebRTC strong seed works; inspect tracker join ticket, WebRTC signaling, TURN/STUN, and `webtorrent-hybrid` capability before continuing.
+
+- [ ] **Step 5: Verify database presence truth**
 
 Use the current local `DATABASE_URL` and query:
 
 ```sql
 SELECT attachment_id, peer_kind, session_id, last_seen_at
 FROM swarm_peer_presence
-WHERE peer_kind = 'backend_strong_seed'
+WHERE peer_kind IN ('backend_strong_seed', 'partial_peer', 'complete_peer')
 ORDER BY last_seen_at DESC
 LIMIT 10;
 ```
@@ -1678,9 +2099,32 @@ Expected:
 
 - The uploaded media has one recent `backend_strong_seed` presence.
 - `session_id` is `__backend_strong_seed__`.
+- The receiver session has recent `partial_peer` or `complete_peer` presence.
 - No presence exists for sidecar not-ready attempts.
 
-- [ ] **Step 5: Final git status**
+- [ ] **Step 6: Upload/load pressure smoke**
+
+Run the existing upload pressure harness with a local mp4 of 32 MiB or larger:
+
+```powershell
+$benchFile = Get-ChildItem -Path data\attachments,tmp,tests\fixtures -Recurse -File -Filter *.mp4 -ErrorAction SilentlyContinue |
+  Where-Object { $_.Length -ge 33554432 } |
+  Sort-Object Length -Descending |
+  Select-Object -First 1
+if ($null -eq $benchFile) {
+  throw "缺少 32MiB 以上本地 mp4 压测文件；先用真实视频放到 tmp\bench-media\large.mp4 后重跑。"
+}
+python scripts/媒体上传并发压测.py --upload-file $benchFile.FullName --concurrency-levels 1,2,4 --iterations-per-vu 1
+```
+
+Expected:
+
+- completion success rate is `100%`.
+- HTTP failure rate is `0%`.
+- launcher log has no `JavaScript heap out of memory`, Rust OOM, or `对象内容读取失败` burst.
+- After the run, sidecar `/health` remains responsive and reports `capability: "hybrid"`.
+
+- [ ] **Step 7: Final git status**
 
 ```powershell
 git status --short
@@ -1692,21 +2136,21 @@ Expected: no uncommitted code/test changes except intentionally updated smoke ar
 
 ## Self-review 1: 需求意图
 
-- **检查**: plan 是否从根因 owner 纠偏出发，而不是堆 timeout、retry、guard。
-- **修正点**: 把 Rust pure decision 放到 Task 1，not-ready RED 放到 Task 2，性能优化推迟到 Task 5。
-- **结论**: 通过。计划先证明 HTTP 200 不是 strong seed，再做性能收敛。
+- **检查**: plan 是否同时覆盖“强种子事实不撒谎”和“服务器确实能高速帮助群友”。
+- **修正点**: 把 Rust pure decision 放到 Task 1，not-ready RED 放到 Task 2；新增 Task 9 流式 WebSeed、Task 10 sidecar 上传遥测、Task 12 WebSeed-blocked 真实烟测与压力 smoke。
+- **结论**: 通过。计划不再只证明 `backend_strong_seed` presence 写得谨慎，也要求真实证明 sidecar 向群友上传过 WebTorrent 字节。
 
 ## Self-review 2: 架构边界
 
 - **检查**: 是否把 sidecar runtime 字段泄漏到 domain/application/contract。
-- **修正点**: 文件职责图明确 `SeedSessionSnapshot` 只存在 Rust shell 与 Node sidecar 控制面；room_event 和 shared contract 不改。
-- **结论**: 通过。domain/application 仍只认识附件 ready、torrent_info_hash、presence 类型等稳定事实。
+- **修正点**: 文件职责图明确 `SeedSessionSnapshot` 与上传遥测只存在 Rust shell 与 Node sidecar 控制面；room_event 和 shared contract 不改；WebSeed 仍只读 Rust `attachment_store` canonical bytes，不引入 sidecar 本地文件真相。
+- **结论**: 通过。domain/application 仍只认识附件 ready、torrent_info_hash、presence 类型等稳定事实；高速证明留在 adapter/smoke 层。
 
 ## Self-review 3: 执行路径与验证闭环
 
 - **检查**: 每个风险是否有 RED/GREEN、命令和 expected output。
-- **修正点**: 补齐 Rust unit、Rust integration、Node Vitest、PowerShell script、cargo check、frontend typecheck、真实双浏览器 smoke。
-- **结论**: 通过。CRITICAL Rust 函数按小提交推进，不允许一次性大改。
+- **修正点**: 补齐 Rust unit、Rust integration、Node Vitest、PowerShell script、cargo check、frontend typecheck、WebSeed streaming check、sidecar upload telemetry、WebSeed-blocked 双浏览器 smoke、32MiB+ 压力 smoke。
+- **结论**: 通过。CRITICAL Rust 函数按小提交推进；高速目标必须由 telemetry + blocked-WebSeed smoke 共同证明。
 
 ---
 
@@ -1740,4 +2184,28 @@ Expected: no uncommitted code/test changes except intentionally updated smoke ar
 
 问题：我对当前 plan 是否事实 100% 有信心？
 
-回答：现在有事实信心。计划把唯一根因切开：sidecar runtime 产生事实，Rust shell 只归纳并落库；所有入口和测试都围绕“未 Ready 不得写 Ready”闭环，没有新增第二媒体主链、第二强种子 owner 或 bypass object store 的本地文件真相。
+回答：不是。风险是原 plan 只证明 `backend_strong_seed` presence 不再由 HTTP 200 伪造，却没有证明“服务器暴力高速 WebTorrent 给群友供字节”。`ready=true` 只能证明 sidecar 完整持票，不等价于已经向浏览器 peer 上传过字节。
+
+修复：新增 Task 10 记录 WebTorrent `upload` 事件、`uploadSpeed`、`lastUploadedAt`、`uploadEvents`；Task 12 要求 WebSeed-blocked receiver 仍能通过 swarm 路径获得媒体，并用 `/seed/status` 证明 sidecar `uploaded` 增长。
+
+### Round 5
+
+问题：我对当前 plan 是否事实 100% 有信心？
+
+回答：不是。风险是大视频冷启动 WebSeed 当前无 Range 时 `get_result.bytes().await` 会整块读取 canonical 文件；这会把“服务器很强”变成内存放大，遇到多群友/大视频可能 OOM 或拖垮热路径。
+
+修复：新增 Task 9，用 `object_store::buffered::BufReader` + `ReaderStream::new` + `Body::from_stream` 流式输出无 Range 内容，同时保留 Range 请求走 `get_opts` + `with_range`，并把检查写进启动器脚本。
+
+### Round 6
+
+问题：我对当前 plan 是否事实 100% 有信心？
+
+回答：不是。风险是“高速”没有量化压力闭环，真实实现可能单样本烟测通过但并发上传、sidecar 下载、WebSeed 输出在 32MiB+ 文件下崩。
+
+修复：Task 12 增加本地 32MiB+ mp4 压力 smoke：`scripts/媒体上传并发压测.py --concurrency-levels 1,2,4`，要求 complete 成功率 100%、HTTP 失败率 0%、无 Node/Rust OOM、sidecar health 仍为 `hybrid`。
+
+### Round 7
+
+问题：我对当前 plan 是否事实 100% 有信心？
+
+回答：现在有事实信心。计划已分清三件事：`Ready presence` 是 sidecar 完整持票事实；`高速冷启动` 由流式 WebSeed 保证不整块吃内存；`服务器真的帮群友` 由 WebSeed-blocked browser smoke + sidecar upload telemetry 证明。仍不声称无限吞吐或公网 NAT 百分百成功；它把可验证边界写成失败即停止的测试门禁。
