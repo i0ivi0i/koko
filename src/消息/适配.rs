@@ -391,7 +391,8 @@ pub(super) async fn 提交统一消息事件_异步(
 
     tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
 
-    // realtime 广播路径丰富分发线索：tx 已提交，此处失败仅降级为无线索，不影响消息投递。
+    // realtime 广播路径丰富分发线索：tx 已提交，此处失败不中断消息投递。
+    // 首次失败 retry 一次；仍失败则 error 日志 + 降级为空映射，保证运维可追踪。
     let 附件标识列表: Vec<&str> = 附件
         .iter()
         .map(|a| match a {
@@ -399,9 +400,28 @@ pub(super) async fn 提交统一消息事件_异步(
             | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
         })
         .collect();
-    let 分发线索映射 = 查询附件分发线索批量_异步(pool, &附件标识列表)
-        .await
-        .unwrap_or_default();
+    let 分发线索映射 = match 查询附件分发线索批量_异步(pool, &附件标识列表).await {
+        Ok(map) => map,
+        Err(_) => {
+            tracing::warn!(
+                application = "创建消息",
+                adapter = "消息适配",
+                observation = "distribution_hint_query_retry",
+                "分发线索批量查询首次失败，正在重试"
+            );
+            查询附件分发线索批量_异步(pool, &附件标识列表)
+                .await
+                .unwrap_or_else(|_| {
+                    tracing::error!(
+                        application = "创建消息",
+                        adapter = "消息适配",
+                        observation = "distribution_hint_query_failed_after_retry",
+                        "分发线索批量查询重试仍失败，本次消息广播将不携带分发线索"
+                    );
+                    HashMap::new()
+                })
+        }
+    };
 
     let 附件快照列表: Vec<contract::附件快照> = 附件
         .iter()

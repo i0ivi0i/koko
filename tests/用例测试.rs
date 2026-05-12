@@ -453,6 +453,8 @@ impl koko::message::application::消息仓储端口 for 假仓储 {
     }
 
     /// 假实现：统一消息入口直接生成消息已创建事件并推进本地事件位置。
+    /// 附件参数不再忽略——转换为契约附件快照，视频附件携带假分发线索，
+    /// 确保用例层能断言 distribution_hint 不变量。
     fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
@@ -461,11 +463,44 @@ impl koko::message::application::消息仓储端口 for 假仓储 {
         文本: &str,
         附件: &[koko::domain::message::已校验附件引用],
     ) -> Result<koko::shared::contract::领域事件, koko::shared::contract::错误码> {
-        // 用例测试只关心“统一入口是否单路径提交”，这里保持最小可验证快照。
-        let _ = 附件;
         self.统一消息事件调用次数 += 1;
         self.消息计数 += 1;
         self.最新位置 += 1;
+        // 将已校验附件引用转换为契约附件快照，模拟真实 adapter 的行为：
+        // 视频附件必须携带分发线索，这是 P2P 互助的前提。
+        let 附件快照列表: Vec<koko::shared::contract::附件快照> = 附件
+            .iter()
+            .map(|a| match a {
+                koko::domain::message::已校验附件引用::图片 { 附件标识, 宽, 高, 有预览图 } => {
+                    koko::shared::contract::附件快照::图片(koko::shared::contract::图片附件快照 {
+                        附件标识: 附件标识.clone(),
+                        宽: *宽,
+                        高: *高,
+                        有预览图: *有预览图,
+                        分发线索: Some(koko::shared::contract::附件分发线索 {
+                            content_hash: format!("fake-hash-{附件标识}"),
+                            swarm_id: format!("fake-swarm-{附件标识}"),
+                            torrent_info_hash: format!("fake-ih-{附件标识}"),
+                            web_seed_until秒: 9999999999,
+                        }),
+                    })
+                }
+                koko::domain::message::已校验附件引用::视频 { 附件标识, 宽, 高, 有预览图 } => {
+                    koko::shared::contract::附件快照::视频(koko::shared::contract::视频附件快照 {
+                        附件标识: 附件标识.clone(),
+                        宽: *宽,
+                        高: *高,
+                        有预览图: *有预览图,
+                        分发线索: Some(koko::shared::contract::附件分发线索 {
+                            content_hash: format!("fake-hash-{附件标识}"),
+                            swarm_id: format!("fake-swarm-{附件标识}"),
+                            torrent_info_hash: format!("fake-ih-{附件标识}"),
+                            web_seed_until秒: 9999999999,
+                        }),
+                    })
+                }
+            })
+            .collect();
         Ok(koko::shared::contract::领域事件::消息已创建 {
             房间标识: 房间标识.to_string(),
             消息标识: format!("m-{}", self.消息计数),
@@ -473,7 +508,7 @@ impl koko::message::application::消息仓储端口 for 假仓储 {
             发送者会话标识: 会话标识.to_string(),
             发送者花名: "测试用户".to_string(),
             文本: 文本.to_string(),
-            附件: Vec::new(),
+            附件: 附件快照列表,
             事件位置: self.最新位置,
         })
     }
@@ -976,13 +1011,25 @@ async fn 异步ready视频附件也能进入统一消息主链() {
     .await
     .expect("ready 视频附件应能进入异步统一消息主链");
 
-    match event {
+    match &event {
         koko::shared::contract::领域事件::消息已创建 {
-            房间标识, 文本,
-        ..
+            房间标识, 文本, 附件, ..
         } => {
-            assert_eq!(房间标识, room_id);
+            assert_eq!(房间标识, &room_id);
             assert_eq!(文本, "");
+            // 视频附件必须携带分发线索——这是群友 P2P 互助的前提不变量。
+            let mut 找到视频 = false;
+            for att in 附件 {
+                if let koko::shared::contract::附件快照::视频(vid) = att {
+                    找到视频 = true;
+                    assert!(
+                        vid.分发线索.is_some(),
+                        "视频附件 {} 必须携带 distribution_hint，否则群友无法加入 swarm",
+                        vid.附件标识
+                    );
+                }
+            }
+            assert!(找到视频, "消息事件必须包含视频附件快照");
         }
     }
     assert_eq!(
