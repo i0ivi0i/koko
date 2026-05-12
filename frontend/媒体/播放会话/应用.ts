@@ -939,13 +939,24 @@ export function 创建媒体播放会话应用(
           performance.mark?.(`media_hint_ingested:${aid}`);
 
           // 丰富 hint 路径：广播携带 join_ticket + announce_urls，
-          // 直接写入 locator 缓存，消除后续 viewport/autoplay 触发的 HTTP locator 往返（80-200ms）。
-          // WebTorrent 会话在 viewport sync 时自然创建，无需提前启动。
+          // 写入 locator 缓存 + 立即以 prefetch 模式加入 swarm。
+          // prefetch 模式（deselect=true）只建立 WebRTC peer 连接，不下载 piece，
+          // 后续 viewport sync / autoplay 触发时消费者升权复用已有会话，实现"划到即播"。
           if (hint.join_ticket && hint.announce_urls?.length) {
-            console.debug("[SWARM_DIRECT_PREFETCH]", aid);
-            performance.mark?.(`swarm_direct_prefetch:${aid}`);
+            console.debug("[SWARM_IMMEDIATE_JOIN]", aid);
+            performance.mark?.(`swarm_immediate_join:${aid}`);
             const locator = 从丰富hint构造最小定位结果(attachment as 附件快照 & { distribution_hint: 附件分发线索 });
             媒体定位器.写入定位缓存(aid, locator);
+            // 立即以 prefetch 模式加入 swarm：只建立 peer 连接，不下载 piece
+            void 协作分发应用.解析协作分发源({
+              attachmentId: aid,
+              kind: attachment.kind === "video" ? "video" : "image",
+              locator,
+              consumerId: `prefetch:${aid}`,
+            }).catch(() => {
+              // prefetch 失败不阻塞任何链路，viewport sync 时仍会重试
+              console.debug("[SWARM_IMMEDIATE_JOIN_FAILED]", aid);
+            });
             continue;
           }
 
