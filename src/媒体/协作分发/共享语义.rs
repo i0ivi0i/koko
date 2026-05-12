@@ -76,6 +76,12 @@ pub struct 附件torrent元信息 {
     pub piece_length_bytes: i32,
 }
 
+/// 从 content_hash 和稳定扩展名推导 torrent 内部文件名。
+/// 必须与 `生成附件torrent元信息` 使用相同命名规则，characterization 测试锁定。
+pub fn 推导torrent内部文件名(content_hash: &str, 稳定扩展名: &str) -> String {
+    format!("content-{content_hash}{稳定扩展名}")
+}
+
 /// metainfo 必须只由权威字节派生，不依赖临时文件路径。
 /// 这里继续把 torrent 内文件名固定到 `content_hash + canonical 扩展名`：
 /// 1. 同内容同 canonical 媒体类型仍可共享同一 info hash；
@@ -717,5 +723,32 @@ mod tests {
             },
         );
         assert_eq!(result["ice_servers"], serde_json::json!([]), "无 TURN 时 ice_servers 应为空数组");
+    }
+
+    #[test]
+    fn 从content_hash和扩展名推导torrent内部文件名() {
+        assert_eq!(
+            推导torrent内部文件名("abcdef1234", ".mp4"),
+            "content-abcdef1234.mp4"
+        );
+        assert_eq!(
+            推导torrent内部文件名("abcdef1234", ".webp"),
+            "content-abcdef1234.webp"
+        );
+    }
+
+    #[test]
+    fn torrent内部文件名与生成附件torrent元信息一致() {
+        let content = b"koko-consistency-check";
+        let hash = 生成内容哈希(content);
+        let ext = ".mp4";
+        let metainfo = 生成附件torrent元信息(&hash, ext, content).unwrap();
+        // 从 torrent_bytes 用 bip_metainfo 解析实际内部文件名
+        // 单文件 torrent：directory() 为 None，文件名从 files() 迭代器取
+        let torrent = bip_metainfo::Metainfo::from_bytes(&metainfo.torrent_bytes).unwrap();
+        let first_file = torrent.info().files().next().expect("单文件 torrent 应有一个文件");
+        let actual_name = first_file.path().to_string_lossy();
+        let derived = 推导torrent内部文件名(&hash, ext);
+        assert_eq!(actual_name, derived, "推导结果必须与 metainfo 内部文件名一致");
     }
 }

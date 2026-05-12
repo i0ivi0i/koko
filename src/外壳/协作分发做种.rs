@@ -56,6 +56,18 @@ fn 归一化sidecar媒体地址(raw: Option<&str>) -> Option<String> {
     Some(format!("{base_url}/{}", value.trim_start_matches('/')))
 }
 
+/// 从 canonical storage key 提取稳定扩展名。
+/// 例：`media-assets/{hash}/canonical.mp4` → `.mp4`
+fn 提取storage_key扩展名(storage_key: &str) -> Option<&str> {
+    let dot_pos = storage_key.rfind('.')?;
+    let ext = &storage_key[dot_pos..];
+    if ext.len() > 1 && ext[1..].bytes().all(|b| b.is_ascii_alphanumeric()) {
+        Some(ext)
+    } else {
+        None
+    }
+}
+
 /// 把 runtime 分发响应收口成 sidecar 可执行命令。
 /// 约束：
 /// 1. 缺少 `torrent_info_hash` 时不能启动做种；
@@ -326,5 +338,13 @@ mod tests {
         .expect("有 info_hash 与 join_ticket 时应能构造做种命令");
 
         assert_eq!(命令.join_ticket.as_deref(), Some("ticket-valid"));
+    }
+
+    #[test]
+    fn 提取canonical_storage_key扩展名() {
+        assert_eq!(提取storage_key扩展名("media-assets/abc/canonical.mp4"), Some(".mp4"));
+        assert_eq!(提取storage_key扩展名("media-assets/abc/canonical.webp"), Some(".webp"));
+        assert_eq!(提取storage_key扩展名("no-extension"), None);
+        assert_eq!(提取storage_key扩展名("ends-with-dot."), None);
     }
 }
