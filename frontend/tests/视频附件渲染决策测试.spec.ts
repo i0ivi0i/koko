@@ -25,6 +25,10 @@ function 创建基础视频附件(): 时间线视频附件 {
     kind: "video",
     width: 1280,
     height: 720,
+    layoutX: 0,
+    layoutY: 0,
+    displayWidth: 360,
+    displayHeight: 640,
     posterSrc: "https://cdn.local/poster.jpg",
     durationSeconds: 60,
     fileSizeBytes: 10_000_000,
@@ -112,8 +116,7 @@ describe("视频附件渲染决策", () => {
       读取时间线视频预览状态: () => ({
         phase: "ready" as const,
         src: "data:image/png;base64,AAAA",
-        width: 1280,
-        height: 720,
+        source: "rvfc" as const,
       }),
     });
 
