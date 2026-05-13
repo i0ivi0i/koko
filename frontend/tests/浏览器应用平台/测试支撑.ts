@@ -10,6 +10,12 @@ export const 读取前端源码 = (relativePath: string): string =>
 export const 读取仓库脚本源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../../../${relativePath}`, import.meta.url)), "utf8");
 
+/** 剥离 TypeScript 单行和多行注释，只保留代码文本。 */
+export const 剥离TS注释 = (source: string): string =>
+  source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
 export const 仓库内存在 = (relativePath: string): boolean => existsSync(resolve(process.cwd(), relativePath));
 
 export const 创建假传输运行时 = (input: {

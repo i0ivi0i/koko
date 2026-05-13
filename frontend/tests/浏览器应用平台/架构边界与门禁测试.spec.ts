@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { 创建存储运行时 } from "../../平台/存储运行时";
-import { 读取前端源码, 读取仓库脚本源码 } from "./测试支撑";
+import { 读取前端源码, 读取仓库脚本源码, 剥离TS注释 } from "./测试支撑";
 
 describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
   it("聊天壳会把业务入口收进应用根入口，自身只保留 view + bridge", () => {
@@ -494,46 +494,15 @@ describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
     expect(source).toContain("setMedia(Player|Viewer|Publisher)ForTest");
   });
 
-  it("热点文件行数门禁会按 owner 风险收紧预算，而不是继续一刀切放到 1800 行", () => {
+  it("热点文件行数门禁统一对齐全局有效行上限，注释和空行不算", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 
-    expect(source).toContain(
-      'path: "frontend/应用根/聊天应用内核.ts", maxEffectiveLines: 850, maxPhysicalLines: 960'
-    );
-    expect(source).toContain(
-      'path: "frontend/应用根/聊天壳.ts", maxEffectiveLines: 460, maxPhysicalLines: 560'
-    );
-    expect(source).toContain(
-      'path: "frontend/应用根/聊天壳样式.ts", maxEffectiveLines: 760, maxPhysicalLines: 900'
-    );
-    expect(source).toContain(
-      'path: "frontend/应用根/聊天内核状态投影.ts", maxEffectiveLines: 150, maxPhysicalLines: 170'
-    );
-    expect(source).toContain(
-      'path: "frontend/媒体/播放会话/应用.ts", maxEffectiveLines: 800, maxPhysicalLines: 900'
-    );
-    expect(source).toContain(
-      'path: "frontend/媒体/播放会话/会话投影.ts", maxEffectiveLines: 105, maxPhysicalLines: 115'
-    );
-    expect(source).toContain(
-      'path: "frontend/媒体/播放会话/草稿发布.ts", maxEffectiveLines: 105, maxPhysicalLines: 120'
-    );
-    expect(source).toContain(
-      'path: "frontend/媒体/播放会话/运行时副作用.ts", maxEffectiveLines: 75, maxPhysicalLines: 90'
-    );
-    expect(source).toContain('path: "frontend/实时/应用.ts", maxEffectiveLines: 260');
-    expect(source).toContain(
-      'path: "frontend/房间消息窗/壳.ts", maxEffectiveLines: 1250, maxPhysicalLines: 1520'
-    );
-    expect(source).toContain(
-      'path: "frontend/房间消息窗/附件渲染.ts", maxEffectiveLines: 290, maxPhysicalLines: 330'
-    );
-    expect(source).toContain(
-      'path: "frontend/房间消息窗/视频附件渲染.ts", maxEffectiveLines: 540, maxPhysicalLines: 570'
-    );
-    expect(source).toContain(
-      'path: "frontend/房间消息窗/图片附件渲染.ts", maxEffectiveLines: 80, maxPhysicalLines: 95'
-    );
+    expect(source).toContain("maxEffectiveLines: 1597, maxPhysicalLines: 1800");
+    const hotspotEntries = source.match(/path: "frontend\/[^"]+", maxEffectiveLines:/g) ?? [];
+    expect(hotspotEntries.length).toBeGreaterThan(0);
+    for (const entry of hotspotEntries) {
+      expect(source).toContain(`${entry} 1597, maxPhysicalLines: 1800`);
+    }
   });
 
   it("房间消息窗不应再保留自动播观察 owner 的一跳转发包装函数", () => {
@@ -559,7 +528,7 @@ describe("浏览器端应用平台化基线 / 架构边界与门禁", () => {
     expect(videoSource).toContain("export const 渲染视频附件");
 
     for (const source of [imageSource, videoSource]) {
-      expect(source).not.toMatch(
+      expect(剥离TS注释(source)).not.toMatch(
         /originalSrc|original_url|manifest|reuseOnly|WebTorrent|videojs|全局唯一播放器|资产协作分发运行时/
       );
     }

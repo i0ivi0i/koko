@@ -139,8 +139,13 @@ export const 渲染视频附件 = (
     knownReadyTimelineFrameSrc;
   const videoBudget = context.读取时间线视频预算投影(attachment, timelinePreviewVideoSrcCandidate);
   const ownerCanonicalVideoSrc = videoBudget.canonicalVideoSrc;
+  /**
+   * preview missing_source 只说明"预览抓帧超时未拿到字节"，
+   * 不代表 swarm 字节永远不会到——WebTorrent peer 发现和 ICE 协商
+   * 在实时路径下通常需要 10-30 秒。
+   * canonical 挂上后浏览器自己等字节推进 readyState，由 shouldRevealCanonicalHost 门控揭帘。
+   */
   const shouldRenderInlineVideo =
-    !isPreviewMissingSource &&
     videoBudget.allowInlineCanonical &&
     Boolean(ownerCanonicalVideoSrc);
   /** 时间线先吃统一预算，再用同源续帧/已就绪首帧做本地连续性桥。 */
