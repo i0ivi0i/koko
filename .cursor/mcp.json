@@ -1,31 +1,25 @@
 {
   "mcpServers": {
-    "my-mcp-1": {
-      "command": "node",
+    "serena": {
+      "command": "C:\\Users\\home\\.local\\bin\\serena.exe",
       "args": [
-        "C:/Users/home/.cursor/my-mcp-server/index.mjs"
+        "start-mcp-server",
+        "--context=ide",
+        "--project",
+        "E:\\koko"
       ],
-      "env": {
-        "WUKONG_SESSION": "1"
-      }
+      "disabled": false
     },
-    "my-mcp-2": {
+    "bajie-mcp": {
       "command": "node",
       "args": [
-        "C:/Users/home/.cursor/my-mcp-server/index.mjs"
+        "C:/Users/home/.cursor/bajie-mcp-server/index.mjs"
       ],
       "env": {
-        "WUKONG_SESSION": "2"
-      }
-    },
-    "my-mcp-3": {
-      "command": "node",
-      "args": [
-        "C:/Users/home/.cursor/my-mcp-server/index.mjs"
-      ],
-      "env": {
-        "WUKONG_SESSION": "3"
-      }
+        "bajie_INSTANCE_ID": "bajie-win-2a0d43d3-cc57-4d91-8c8b-",
+        "bajie_QUEUE_ROOT": "C:\\Users\\home\\.cursor\\bajie-mcp-messages"
+      },
+      "disabled": false
     }
   }
 }
