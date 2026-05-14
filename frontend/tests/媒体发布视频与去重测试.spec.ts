@@ -42,7 +42,7 @@ describe("媒体发布器 / 视频与去重主链", () => {
       }),
     ]);
   });
-  it("source_hash 命中会直接写 ready 草稿并跳过预处理、prepare 和 Uppy 上传", async () => {
+  it("source_hash 命中会直接写 ready 草稿并跳过 prepare 和 Uppy 上传（预处理因并行已启动但结果被丢弃）", async () => {
     const preprocessVideo = vi.fn(async (file: File) => ({ file }));
     const reuseMediaBySourceHash = vi.fn(async () => ({
       status: "reused" as const,
@@ -75,7 +75,9 @@ describe("媒体发布器 / 视频与去重主链", () => {
       source_byte_size: 3,
       source_file_name: "hit.mp4",
     });
-    expect(preprocessVideo).not.toHaveBeenCalled();
+    // 并行化后预处理会与哈希同时启动，复用命中时预处理结果被丢弃（直通场景零开销）
+    expect(preprocessVideo).toHaveBeenCalledWith(sourceFile);
+    // 关键断言：复用命中后 prepare 和 Uppy 上传都不走
     expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
     expect(场景.默认上传器.addFileCalls).toEqual([]);
     expect(场景.drafts.readDrafts()).toEqual([
@@ -260,5 +262,41 @@ describe("媒体发布器 / 视频与去重主链", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("视频上传时哈希计算与预处理并行执行而非串行等待", async () => {
+    const callOrder: string[] = [];
+
+    const 场景 = 创建场景({
+      calculateSourceHash: async (file: File) => {
+        callOrder.push("hash-start");
+        await new Promise((r) => setTimeout(r, 30));
+        callOrder.push("hash-end");
+        return {
+          source_hash: "b".repeat(64),
+          source_byte_size: file.size,
+          source_file_name: file.name,
+        };
+      },
+      preprocessVideo: async (file: File) => {
+        callOrder.push("preprocess-start");
+        await new Promise((r) => setTimeout(r, 30));
+        callOrder.push("preprocess-end");
+        return { file, width: 1920, height: 1080 };
+      },
+    });
+
+    const videoFile = new File([new Uint8Array([1, 2, 3])], "parallel.mp4", {
+      type: "video/mp4",
+    });
+    await 场景.发布器.处理选择媒体文件([videoFile]);
+
+    // 并行：preprocess-start 出现在 hash-end 之前
+    // 串行：preprocess-start 出现在 hash-end 之后
+    const preprocessStartIdx = callOrder.indexOf("preprocess-start");
+    const hashEndIdx = callOrder.indexOf("hash-end");
+    expect(preprocessStartIdx).toBeGreaterThan(-1);
+    expect(hashEndIdx).toBeGreaterThan(-1);
+    expect(preprocessStartIdx).toBeLessThan(hashEndIdx);
   });
 });

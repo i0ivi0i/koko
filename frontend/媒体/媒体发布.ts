@@ -639,27 +639,30 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             }, 15 * 60 * 1000)
           : null;
       try {
-        const sourceHash = await 计算源文件SourceHash(SourceHash协作依赖, sourceFile);
-        const reuseResult = await 预检SourceHash媒体复用(SourceHash协作依赖, kind, sourceHash);
-        if (reuseResult.status === "reused") {
-          if (preprocessingDraftDelayTimer) {
-            globalThis.clearTimeout(preprocessingDraftDelayTimer);
-          }
-          if (preprocessingWaitTimer) {
-            globalThis.clearTimeout(preprocessingWaitTimer);
-          }
-          if (preprocessingDraftId) {
-            deps.removeDraft(preprocessingDraftId);
-          }
-          写入SourceHash命中草稿(SourceHash协作依赖, reuseResult.attachment, sourceFile);
-          continue;
-        }
-        const preparedFile = await 准备待上传媒体文件(kind, sourceFile);
+        // 并行启动哈希计算与媒体预处理：
+        // - 哈希读取原始 File 字节（纯读，Worker 线程），用于秒传复用检测
+        // - 预处理读取原始 File 并可能产出新 File（直通/无损整理/转码）
+        // - 两者无共享可变状态，File 是不可变浏览器对象，可安全并行
+        const [sourceHash, preparedFile] = await Promise.all([
+          计算源文件SourceHash(SourceHash协作依赖, sourceFile),
+          准备待上传媒体文件(kind, sourceFile),
+        ]);
+        // 哈希和预处理都已完成，清除预制等待计时器
         if (preprocessingDraftDelayTimer) {
           globalThis.clearTimeout(preprocessingDraftDelayTimer);
         }
         if (preprocessingWaitTimer) {
           globalThis.clearTimeout(preprocessingWaitTimer);
+        }
+        const reuseResult = await 预检SourceHash媒体复用(SourceHash协作依赖, kind, sourceHash);
+        if (reuseResult.status === "reused") {
+          // 复用命中：丢弃 preparedFile。
+          // 直通场景下预处理几乎零开销；转码场景秒传命中率极低，可接受的代价。
+          if (preprocessingDraftId) {
+            deps.removeDraft(preprocessingDraftId);
+          }
+          写入SourceHash命中草稿(SourceHash协作依赖, reuseResult.attachment, sourceFile);
+          continue;
         }
         if (preparedFile.file.size > maxFileSize) {
           if (preprocessingDraftId) {
