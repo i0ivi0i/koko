@@ -224,7 +224,7 @@ describe("媒体发布器 / 视频与去重主链", () => {
       }),
     ]);
   });
-  it("upload-stalled 后不会把 failed 草稿误删成空白", async () => {
+  it("upload-stalled 不会移除仍在 Tus 回调中的上传文件", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stalled.jpg", {
       type: "image/jpeg",
@@ -233,12 +233,13 @@ describe("媒体发布器 / 视频与去重主链", () => {
 
     await 场景.默认上传器.触发上传停滞("att-canonical.webp");
 
-    expect(场景.默认上传器.removeFileCalls).toEqual(["att-canonical.webp"]);
+    expect(场景.默认上传器.removeFileCalls).toEqual([]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-canonical.webp",
-        status: "failed",
-        errorCode: "attachment_upload_stalled",
+        attachmentId: "att-canonical.webp",
+        status: "transporting",
+        errorCode: "",
       }),
     ]);
   });

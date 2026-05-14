@@ -160,36 +160,14 @@ function 处理媒体上传移除事件(
 }
 
 function 处理媒体上传卡住事件(
-  deps: Pick<
-    媒体上传事件接线依赖,
-    "读取媒体草稿" | "createPreviewUrl" | "writeDraft" | "上传器表" | "草稿上传器键表"
-  >,
+  deps: Pick<媒体上传事件接线依赖, "草稿上传器键表">,
   uploaderKey: string,
   _error: { message: string },
   files: 媒体上传文件[]
 ): void {
-  const uploader = deps.上传器表.get(uploaderKey);
-  if (!uploader) {
-    return;
-  }
+  // upload-stalled 只是传输诊断，Tus 之后仍可能继续发 progress/error 回调。
   for (const file of files) {
-    const existingDraft = deps.读取媒体草稿(file.id);
-    const sourceFile = file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
-    const kind = existingDraft?.kind ?? 读取媒体种类(file);
-    uploader.removeFile(file.id);
-    deps.草稿上传器键表.delete(file.id);
-    deps.writeDraft({
-      localId: file.id,
-      kind,
-      attachmentId: "",
-      previewUrl: deps.createPreviewUrl(sourceFile),
-      width: existingDraft?.width ?? 0,
-      height: existingDraft?.height ?? 0,
-      status: "failed",
-      fileName: file.name ?? existingDraft?.fileName ?? 默认文件名(kind),
-      errorCode: "attachment_upload_stalled",
-      sourceFile,
-    });
+    deps.草稿上传器键表.set(file.id, uploaderKey);
   }
 }
 
