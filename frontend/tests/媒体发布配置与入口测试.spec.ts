@@ -216,17 +216,18 @@ describe("媒体发布器 / 配置与统一入口", () => {
       }),
     ]);
   });
-  it("统一媒体入口批量处理多文件时会主动让出主线程，避免连续重任务长时间卡住页面", async () => {
+  it("统一媒体入口批量处理多文件时会在批次之间让出主线程，避免连续重任务长时间卡住页面", async () => {
     const 场景 = 创建场景();
-    const firstFile = new File([new Uint8Array([1, 2, 3])], "first.jpg", {
-      type: "image/jpeg",
-    });
-    const secondFile = new File([new Uint8Array([4, 5, 6])], "second.mp4", {
-      type: "video/mp4",
-    });
+    // 3 个文件 → 2 批（2+1），批次之间让出 1 次
+    const files = [
+      new File([new Uint8Array([1, 2, 3])], "first.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([4, 5, 6])], "second.mp4", { type: "video/mp4" }),
+      new File([new Uint8Array([7, 8, 9])], "third.jpg", { type: "image/jpeg" }),
+    ];
 
-    await 场景.发布器.处理选择媒体文件([firstFile, secondFile]);
+    await 场景.发布器.处理选择媒体文件(files);
 
+    // 第一批（2个文件）不让出，第二批（1个文件）前让出 1 次
     expect(场景.yieldToMainThread).toHaveBeenCalledTimes(1);
   });
   it("统一媒体入口会在进入上传主链前按单条消息附件上限截断超量选择", async () => {
@@ -286,5 +287,35 @@ describe("媒体发布器 / 配置与统一入口", () => {
     expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
     expect(场景.默认上传器.addFileCalls).toEqual([]);
     expect(场景.drafts.readDrafts()).toEqual([]);
+  });
+
+  it("选择多个文件时以有限并发批处理，最大并发度为 2", async () => {
+    let concurrentCount = 0;
+    let maxConcurrent = 0;
+
+    const 场景 = 创建场景({
+      calculateSourceHash: async (file: File) => {
+        concurrentCount++;
+        maxConcurrent = Math.max(maxConcurrent, concurrentCount);
+        await new Promise((r) => setTimeout(r, 20));
+        concurrentCount--;
+        return {
+          source_hash: "c".repeat(64),
+          source_byte_size: file.size,
+          source_file_name: file.name,
+        };
+      },
+    });
+
+    const files = [
+      new File([new Uint8Array([1])], "a.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([2])], "b.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([3])], "c.jpg", { type: "image/jpeg" }),
+    ];
+    await 场景.发布器.处理选择媒体文件(files);
+
+    // 3 个文件应分成 2 批（2+1），最大并发度 = 2
+    expect(maxConcurrent).toBe(2);
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(3);
   });
 });

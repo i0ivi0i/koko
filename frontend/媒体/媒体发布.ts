@@ -777,21 +777,27 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           errorCode: "attachment_count_limit_exceeded",
         });
       }
-      for (const [index, sourceFile] of acceptedFiles.entries()) {
-        /**
-         * 某些移动浏览器在连续处理多张图/多个视频时，系统 picker 返回后马上进入一串重任务，
-         * 容易让页面长时间失去响应。这里在批量文件之间主动让出一次主线程，
-         * 让浏览器有机会先完成一轮绘制和交互回收。
-         */
-        if (index > 0) {
-          await yieldToMainThread();
-        }
+      // 有限并发批处理：每 2 个文件为一批并行启动 prepare + 上传，
+      // 减少多文件选择时的串行等待，同时避免过高并发挤爆网络连接。
+      // 批次之间让出主线程，保持 UI 响应性。
+      const UPLOAD_BATCH_CONCURRENCY = 2;
+      const pendingFiles: Array<{ kind: 媒体种类; file: File }> = [];
+      for (const sourceFile of acceptedFiles) {
         const kind = 识别待上传媒体种类(sourceFile);
         if (!kind) {
           记录不支持媒体文件(sourceFile);
           continue;
         }
-        await 处理选择同类媒体文件(kind, [sourceFile]);
+        pendingFiles.push({ kind, file: sourceFile });
+      }
+      for (let i = 0; i < pendingFiles.length; i += UPLOAD_BATCH_CONCURRENCY) {
+        if (i > 0) {
+          await yieldToMainThread();
+        }
+        const batch = pendingFiles.slice(i, i + UPLOAD_BATCH_CONCURRENCY);
+        await Promise.all(
+          batch.map(({ kind, file }) => 处理选择同类媒体文件(kind, [file]))
+        );
       }
     },
 
