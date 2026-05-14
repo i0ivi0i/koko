@@ -192,6 +192,13 @@ export function 确保媒体上传器(
     处理媒体上传卡住事件(deps, key, error, files)
   );
   nextUploader.on("file-removed", (file) => 处理媒体上传移除事件(deps, file));
+  // Golden Retriever 恢复文件后自动续传：刷新/崩溃后用户无感
+  nextUploader.on("restored", () => {
+    const files = nextUploader.getFiles();
+    if (files.length > 0) {
+      void nextUploader.upload().catch(() => {});
+    }
+  });
   deps.上传器表.set(key, nextUploader);
   return { key, uploader: nextUploader };
 }

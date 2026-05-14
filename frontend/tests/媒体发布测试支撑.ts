@@ -92,6 +92,17 @@ class 假媒体上传器 implements 媒体上传器 {
     }
   }
 
+  getFiles(): 媒体上传文件[] {
+    return Array.from(this.files.values());
+  }
+
+  readonly uploadCalls: number[] = [];
+
+  async upload(): Promise<unknown> {
+    this.uploadCalls.push(this.uploadCalls.length);
+    return { successful: [], failed: [] };
+  }
+
   cancelAll(): void {
     this.cancelAllCalls += 1;
   }

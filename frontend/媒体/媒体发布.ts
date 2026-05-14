@@ -106,6 +106,10 @@ export interface 媒体上传器 {
   getFile(id: string): 媒体上传文件 | undefined;
   removeFile(id: string): void;
   retryUpload(id: string): Promise<void>;
+  /** 获取当前所有文件，Golden Retriever restored 后检查可续传文件用 */
+  getFiles(): 媒体上传文件[];
+  /** 触发当前队列中所有文件的上传，Golden Retriever restored 后自动续传用 */
+  upload(): Promise<unknown>;
   cancelAll(): void;
   destroy(): void;
   on(event: string, handler: (...args: Array<any>) => void | Promise<void>): void;
@@ -250,7 +254,10 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
      */
     allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],
     headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
-  }).use(GoldenRetriever) as unknown as 媒体上传器;
+  }).use(GoldenRetriever, {
+    // 24 小时过期：防止旧指纹堆积导致新上传和过期 URL 冲突 → progress undefined
+    expires: 24 * 60 * 60 * 1000,
+  }) as unknown as 媒体上传器;
 }
 
 async function 默认让出主线程(): Promise<void> {
