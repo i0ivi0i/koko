@@ -90,6 +90,10 @@ type 媒体播放器依赖 = {
   probeAnchor?(url: string): Promise<void>;
   /** 降级重试延迟（毫秒），默认 [500, 1000, 2000]。测试时传 [] 跳过延迟。 */
   degradedRetryDelays?: number[];
+  /** swarm connecting 态轮询延迟（毫秒），默认 [300, 600, 1200]。
+   *  每轮先强刷 locator 获取 per-session web_seed_url，再重试 resolveSwarmSource。
+   *  测试时传 [] 跳过轮询。 */
+  swarmConnectingRetryDelays?: number[];
 };
 
 type 协作分发尝试结果 = {
@@ -563,6 +567,45 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       });
       if (!swarmSource) {
         if (处于连接群友态) {
+          // 广播路径的 locator 缺少 per-session web_seed_url（鉴权不能跨用户共享），
+          // 导致 torrent 没有 HTTP 源。轮询时强刷 locator 拿到 web_seed_url，
+          // torrent 内部 addWebSeed 后通过官方 Web Seed（BEP19）秒下载。
+          for (const delay of swarm连接态轮询延迟毫秒) {
+            await 延迟等待(计算带抖动的延迟(delay));
+            try {
+              const refreshed = await deps.locate(input.attachmentId, { forceRefresh: true });
+              if (refreshed.status === "ready") {
+                locator = refreshed;
+              }
+            } catch { /* locator 刷新失败不阻塞轮询 */ }
+            const retrySource = await resolveSwarmSource({
+              attachmentId: input.attachmentId,
+              kind: input.kind,
+              locator,
+              ...(input.consumerId ? { consumerId: input.consumerId } : {}),
+              ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+              ...(options.eagerCompleting ? { eagerCompleting: true } : {}),
+            });
+            if (retrySource) {
+              return {
+                locator,
+                playback: {
+                  mode: "swarm",
+                  attachmentId: input.attachmentId,
+                  kind: input.kind,
+                  src: retrySource.src,
+                  thumbnailUrl: 读取预览缩略图地址(locator),
+                  ...(读取播放内容哈希(locator) ? { contentHash: 读取播放内容哈希(locator) } : {}),
+                  formalByteSource: retrySource.formalByteSource ?? "webtorrent_official_stream",
+                  ...(locator.file_asset?.distribution || locator.blob_asset?.distribution
+                    ? { distribution: locator.file_asset?.distribution ?? locator.blob_asset?.distribution ?? null }
+                    : {}),
+                  hint: 过滤可播放媒体提示(retrySource.hint),
+                },
+                failureReason: null,
+              };
+            }
+          }
           释放协作分发占用(input);
           return {
             locator,
@@ -731,6 +774,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    * 测试时通过 deps.degradedRetryDelays = [] 跳过延迟。
    */
   const 降级重试延迟毫秒 = deps.degradedRetryDelays ?? [500, 1000, 2000];
+
+  /**
+   * swarm connecting 态下轮询延迟（毫秒）：
+   * 广播路径的 locator 缺少 per-session web_seed_url（鉴权不能跨用户共享），
+   * 导致 WebTorrent torrent 没有 HTTP 源。每轮轮询先强刷 locator 拿到
+   * per-session web_seed_url，torrent 内部 addWebSeed 后即可通过 HTTP 秒下载。
+   * 300ms → 600ms → 1200ms，总计最多 ~2.5 秒（含 20% jitter）。
+   */
+  const swarm连接态轮询延迟毫秒 = deps.swarmConnectingRetryDelays ?? [300, 600, 1200];
 
   const 计算带抖动的延迟 = (baseMs: number): number =>
     baseMs + Math.floor(Math.random() * baseMs * 0.2);

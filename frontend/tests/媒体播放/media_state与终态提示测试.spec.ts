@@ -31,6 +31,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
+      swarmConnectingRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -82,6 +83,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
+      swarmConnectingRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -165,6 +167,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
       },
     }));
     const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
+      swarmConnectingRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor: async () => undefined,
@@ -212,6 +215,109 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("media_state=MEDIA_CONNECTING_TO_PEERS 时轮询 resolveSwarmSource 并刷新 locator 获取 web_seed_url 后返回 swarm 播放", async () => {
+    let locateCallCount = 0;
+    const locate = vi.fn(async () => {
+      locateCallCount++;
+      return {
+        attachment_id: "att-img-ws-retry",
+        kind: "image" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/original",
+        thumbnail_url: "http://media.local/thumb",
+        distribution: {
+          content_id: "c-ws",
+          content_hash: "h-ws",
+          swarm_id: "s-ws",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent",
+          torrent_info_hash: "ih-ws",
+          announce_urls: ["wss://tracker.local/announce"],
+          web_seed_url: locateCallCount <= 1 ? null : "http://media.local/webseed/att-img-ws-retry",
+          join_ticket: null,
+          ticket_expires_at: null,
+          media_state: {
+            code: "MEDIA_CONNECTING_TO_PEERS" as const,
+            retry_after_ms: 2000,
+          },
+          survival_mode: "peer_only_after_expiry" as const,
+        },
+      };
+    });
+    let resolveCount = 0;
+    const resolveSwarmSource = vi.fn(async () => {
+      resolveCount++;
+      if (resolveCount <= 1) return null;
+      return {
+        src: "blob:http://localhost/webseed-blob",
+        formalByteSource: "webtorrent_official_stream" as const,
+        hint: null,
+      };
+    });
+    const 播放器 = 创建媒体播放器({
+      degradedRetryDelays: [],
+      swarmConnectingRetryDelays: [0],
+      locate,
+      resolveSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-img-ws-retry",
+      kind: "image",
+    });
+
+    expect(result.mode).toBe("swarm");
+    expect(result.src).toBe("blob:http://localhost/webseed-blob");
+    expect(locate).toHaveBeenCalledTimes(2);
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
+  });
+
+  it("media_state=MEDIA_CONNECTING_TO_PEERS 轮询全失败后降级为 connecting_to_peers", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-img-all-fail",
+      kind: "image" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "c-fail",
+        content_hash: "h-fail",
+        swarm_id: "s-fail",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-fail",
+        torrent_info_hash: "ih-fail",
+        announce_urls: ["wss://tracker.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_CONNECTING_TO_PEERS" as const,
+          retry_after_ms: 2000,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const 播放器 = 创建媒体播放器({
+      degradedRetryDelays: [],
+      swarmConnectingRetryDelays: [0, 0],
+      locate,
+      resolveSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-img-all-fail",
+      kind: "image",
+    });
+
+    expect(result).toMatchObject({
+      mode: "degraded",
+      reason: "connecting_to_peers",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(3);
+    expect(locate).toHaveBeenCalledTimes(3);
   });
 
   it("media_state=MEDIA_DELETED 时会直接落删除终态提示", async () => {
