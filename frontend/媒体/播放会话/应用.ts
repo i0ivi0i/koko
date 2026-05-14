@@ -921,14 +921,11 @@ export function 创建媒体播放会话应用(
       }
     },
 
-    预热权威消息媒体分发(events, currentSessionId): void {
+    预热权威消息媒体分发(events, _currentSessionId): void {
       // room_event 到达时立即触发，比 viewport sync → eagerPrefetch 早 50-200ms。
-      // 只预热他人消息：发送者自身不需要重复预热。
-      // fire-and-forget：利用 inflight 去重，后续 viewport/autoplay 会 piggyback 同一请求。
+      // 发送者和接收者统一走早期预热路径，确保发送者不慢于接收者。
+      // inflight 去重保证重复触发不会产生多余网络请求。
       for (const event of events) {
-        if (event.sender_session_id === currentSessionId) {
-          continue;
-        }
         for (const attachment of event.attachments ?? []) {
           if (!attachment.distribution_hint) {
             continue;

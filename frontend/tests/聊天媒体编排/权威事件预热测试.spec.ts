@@ -7,7 +7,7 @@ import type { 消息事件 } from "../../聊天共享/契约";
 /**
  * room_event 到达即触发 locator pre-fetch 测试：
  * 1. 他人的含 distribution_hint 的附件会立即触发 loadMediaLocator
- * 2. 发送者自身的消息不触发
+ * 2. 发送者自身的消息同样触发预热（统一早期路径，确保发送者不慢于接收者）
  * 3. 不含 distribution_hint 的附件不触发
  */
 describe("聊天媒体编排 - 权威事件到达即预热", () => {
@@ -113,9 +113,9 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     编排.销毁();
   });
 
-  it("发送者自身的消息不触发预热", async () => {
+  it("发送者自身的消息也触发预热（统一早期路径，发送者不慢于接收者）", async () => {
     const loadMediaLocator = vi.fn(async () => {
-      throw new Error("unused");
+      throw new Error("unused in prewarm");
     });
     const 编排 = 创建测试编排(loadMediaLocator);
 
@@ -125,7 +125,8 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     );
     await 刷新异步队列();
 
-    expect(loadMediaLocator).not.toHaveBeenCalled();
+    expect(loadMediaLocator).toHaveBeenCalledTimes(1);
+    expect(loadMediaLocator).toHaveBeenCalledWith(MY_SESSION, "att-self-1", expect.anything());
 
     编排.销毁();
   });
@@ -201,7 +202,7 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     编排.销毁();
   });
 
-  it("混合场景只预热他人的含 distribution_hint 附件", async () => {
+  it("混合场景预热所有含 distribution_hint 附件（含发送者自身）", async () => {
     const loadMediaLocator = vi.fn(async () => {
       throw new Error("unused in prewarm");
     });
@@ -217,9 +218,10 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     );
     await 刷新异步队列();
 
-    // 只有 att-other-2 应触发
-    expect(loadMediaLocator).toHaveBeenCalledTimes(1);
+    // att-other-2 和 att-self-2 都应触发，att-no-hint-2 无 distribution_hint 不触发
+    expect(loadMediaLocator).toHaveBeenCalledTimes(2);
     expect(loadMediaLocator).toHaveBeenCalledWith(MY_SESSION, "att-other-2", expect.anything());
+    expect(loadMediaLocator).toHaveBeenCalledWith(MY_SESSION, "att-self-2", expect.anything());
 
     编排.销毁();
   });
