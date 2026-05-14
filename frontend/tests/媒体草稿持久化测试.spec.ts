@@ -63,7 +63,7 @@ describe("媒体草稿持久化", () => {
     ]));
     const result = 从本地存储恢复媒体草稿();
     expect(result).toHaveLength(1);
-    expect(result[0].localId).toBe("ok");
+    expect(result[0]!.localId).toBe("ok");
   });
 
   it("不存储 sourceFile 和 previewUrl", () => {
