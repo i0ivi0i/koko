@@ -852,8 +852,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       if (剩余重试次数 > 0) {
         const delay = 降级重试延迟毫秒[降级重试延迟毫秒.length - 剩余重试次数] ?? 2000;
         await 延迟等待(计算带抖动的延迟(delay));
-        // 重试前尝试强制刷新 locator 缓存；fire-and-forget，不阻塞重试主链
-        try { void deps.locate(input.attachmentId, { forceRefresh: true })?.catch?.(() => {}); } catch { /* 测试桩可能不返回 Promise */ }
+        // 重试前 await 强制刷新 locator：获取 per-session web_seed_url，
+        // 下一轮 deps.locate() 读缓存时已含 web seed → torrent 可 HTTP 秒下载。
+        // 之前是 fire-and-forget 导致刷新结果来不及被下一轮使用 → 灰卡片根因。
+        try { await deps.locate(input.attachmentId, { forceRefresh: true }); } catch { /* locator 刷新失败不阻塞重试 */ }
         return 解析播放结果(input, 剩余重试次数 - 1);
       }
       return 创建降级结果(input, locator, "anchor_unavailable");
