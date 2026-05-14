@@ -30,6 +30,7 @@ const 前端根目录允许文件 = new Set([
   "tsconfig.json",
   "vitest.config.ts",
   "webtorrent.d.ts",
+  "run-test.mjs",
 ]);
 
 /**
