@@ -131,6 +131,25 @@ describe("消息视频自动播编排", () => {
     );
   });
 
+  it("群里新发视频明显更接近视口中心时，不能被旧 owner 粘性压住", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-current",
+        visibilityRatio: 0.92,
+        distanceToViewportCenter: 543,
+      },
+      {
+        attachmentId: "att-video-new-message",
+        visibilityRatio: 0.88,
+        distanceToViewportCenter: 62,
+      },
+    ];
+
+    expect(选择消息视频自动播Owner(candidates, undefined, "att-video-current")).toBe(
+      "att-video-new-message"
+    );
+  });
+
   it("有完整可见视频时，会优先在完整可见集合里裁决 owner，而不是继续让半屏候选抢走焦点", () => {
     const candidates: 消息视频自动播候选[] = [
       {

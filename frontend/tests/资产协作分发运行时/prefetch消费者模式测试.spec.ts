@@ -77,6 +77,188 @@ describe("prefetch 消费者模式", () => {
     );
   });
 
+  it("prefetch 的 streamURL 当前不可读时，只保留 swarm 会话而不暴露坏播放源", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-prefetch-unreadable-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/prefetch-unreadable-1.mp4")) {
+          return {
+            ok: false,
+            status: 404,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent("/webtorrent/prefetch-unreadable-1.mp4");
+    const add = vi.fn(
+      ((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+        onTorrent(torrent);
+        return torrent;
+      }) as WebTorrent浏览器客户端["add"]
+    );
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-prefetch-unreadable-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-prefetch-unreadable-1"),
+        consumerId: "prefetch:att-prefetch-unreadable-1",
+      })
+    ).resolves.toBeNull();
+
+    expect(读取协作分发会话状态("swarm-att-prefetch-unreadable-1")).toMatchObject({
+      eagerCompleting: false,
+      已获得帮助资格: false,
+      refs: 1,
+    });
+  });
+
+  it("prefetch 空源会话升级为 viewer 时，会重新交付同一 swarm 的播放源", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-prefetch-upgrade-readable-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/prefetch-upgrade-readable-1.mp4")) {
+          return {
+            ok: true,
+            status: 206,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent(
+      "/webtorrent/prefetch-upgrade-readable-1.mp4"
+    );
+    const add = vi.fn(
+      ((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+        onTorrent(torrent);
+        return torrent;
+      }) as WebTorrent浏览器客户端["add"]
+    );
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-prefetch-upgrade-readable-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-prefetch-upgrade-readable-1"),
+        consumerId: "prefetch:att-prefetch-upgrade-readable-1",
+      })
+    ).resolves.toBeNull();
+    const source = await 解析协作分发源({
+      attachmentId: "att-prefetch-upgrade-readable-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-prefetch-upgrade-readable-1"),
+      consumerId: "viewer:att-prefetch-upgrade-readable-1",
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(source).toEqual({
+      src: "/webtorrent/prefetch-upgrade-readable-1.mp4",
+      hint: "正在补块",
+      locallyComplete: false,
+      formalByteSource: "webtorrent_official_stream",
+    });
+  });
+
+
+  it("prefetch 无 web seed 会话升级为前台 reader 时，会把当前会话 web seed 补进同一 torrent", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-prefetch-webseed-upgrade-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/prefetch-webseed-upgrade-1.mp4")) {
+          return {
+            ok: true,
+            status: 206,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent(
+      "/webtorrent/prefetch-webseed-upgrade-1.mp4"
+    );
+    const addWebSeed = vi.fn();
+    (torrent as unknown as { addWebSeed: (url: string) => void }).addWebSeed = addWebSeed;
+    const add = vi.fn(
+      ((_torrentId: unknown, _options: unknown, onTorrent: (t: unknown) => void) => {
+        onTorrent(torrent);
+        return torrent;
+      }) as WebTorrent浏览器客户端["add"]
+    );
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+    const prefetchLocator = 准备好的定位结果("att-prefetch-webseed-upgrade-1");
+    prefetchLocator.distribution!.web_seed_url = null;
+    const foregroundLocator = 准备好的定位结果("att-prefetch-webseed-upgrade-1");
+
+    await 解析协作分发源({
+      attachmentId: "att-prefetch-webseed-upgrade-1",
+      kind: "video",
+      locator: prefetchLocator,
+      consumerId: "prefetch:att-prefetch-webseed-upgrade-1",
+    });
+    await 解析协作分发源({
+      attachmentId: "att-prefetch-webseed-upgrade-1",
+      kind: "video",
+      locator: foregroundLocator,
+      consumerId: "inline_autoplay:att-prefetch-webseed-upgrade-1",
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(addWebSeed).toHaveBeenCalledWith(
+      "http://media.local/web-seed-att-prefetch-webseed-upgrade-1"
+    );
+  });
   /**
    * prefetch→viewer 升级：
    * 1. prefetch 先建会话（join swarm，不下载）
@@ -122,3 +304,4 @@ describe("prefetch 消费者模式", () => {
     });
   });
 });
+

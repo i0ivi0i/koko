@@ -143,6 +143,7 @@ export type 底层协作分发会话 = Omit<协作分发底层会话, "consumerB
    */
   播放源已交付过: boolean;
   播放源复用探测Promise: Promise<void> | null;
+  已接入WebSeedUrls: Set<string>;
 };
 
 export type 资产协作分发会话快照 = {
@@ -395,6 +396,18 @@ const 确认协作分发会话播放源仍可读 = (
   });
   session.播放源复用探测Promise = probePromise;
   return probePromise;
+};
+
+const 接入当前定位WebSeed = (
+  session: 底层协作分发会话,
+  distribution: 协作分发定位片段
+): void => {
+  const webSeedUrl = distribution.web_seed_url?.trim();
+  if (!webSeedUrl || !session.torrent || session.已接入WebSeedUrls.has(webSeedUrl)) {
+    return;
+  }
+  session.已接入WebSeedUrls.add(webSeedUrl);
+  session.torrent?.addWebSeed?.(webSeedUrl);
 };
 
 function 绑定协作分发会话事件(
@@ -664,6 +677,11 @@ async function 确保协作分发会话(
     generation: 0,
     播放源已交付过: false,
     播放源复用探测Promise: null,
+    已接入WebSeedUrls: new Set(
+      input.distribution.web_seed_url?.trim()
+        ? [input.distribution.web_seed_url.trim()]
+        : []
+    ),
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
   安排协作分发会话票据续租(runtime, session, input.distribution);
@@ -713,6 +731,10 @@ async function 确保协作分发会话(
        * 3. 这样复用会自然保持幂等，不会额外重复发 BACKFILL_REQUESTED。
        */
       激活整附件补齐(runtime, session);
+    }
+    if (consumerBinding.mode === "prefetch") {
+      设置协作分发会话生命周期(runtime, session, 推导协作分发会话当前生命周期(session));
+      return null;
     }
     await 探测协作分发媒体源可读性(file.streamURL, {
       读取终止错误: () => session.terminalError,
@@ -839,8 +861,24 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       }
       const source = await session.sourcePromise;
       if (!source) {
+        if (consumerBinding.mode !== "prefetch" && session.file) {
+          接入当前定位WebSeed(session, distribution);
+          await 探测协作分发媒体源可读性(session.file.streamURL, {
+            读取终止错误: () => session.terminalError,
+          });
+          session.播放源已交付过 = true;
+          session.lifecycleState = 推导协作分发会话当前生命周期(session);
+          同步协作分发会话生命周期(runtime, session);
+          return {
+            src: 标记WebTorrent官方媒体源({ src: session.file.streamURL }).src,
+            hint: 推导协作分发提示(session),
+            locallyComplete: session.locallyComplete,
+            formalByteSource: "webtorrent_official_stream",
+          };
+        }
         return null;
       }
+      接入当前定位WebSeed(session, distribution);
       if (复用前为零引用会话 || 复用前为同消费者旧播放源) {
         try {
           await 确认协作分发会话播放源仍可读(session, source.src);

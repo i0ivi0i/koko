@@ -45,6 +45,7 @@ export interface WebTorrent种子 extends 可调监听器预算Emitter {
   critical?(start: number, end: number): void;
   select?(start: number, end: number, priority?: number): void;
   discovery?: WebTorrent发现运行时 | null;
+  addWebSeed?(url: string): void;
   on(event: "download", handler: (bytes: number) => void): void;
   on(event: "error", handler: (error: unknown) => void): void;
   on(event: "warning", handler: (warning: unknown) => void): void;
@@ -134,6 +135,7 @@ export type 协作分发会话事件 =
 const 协作分发存活上报间隔毫秒 = 60_000;
 const 协作分发媒体源探测最大尝试次数 = 16;
 const 协作分发媒体源探测重试间隔毫秒 = 80;
+const 协作分发媒体源首字节探测超时毫秒 = 250;
 const 服务工作线程接管等待超时毫秒 = 1_200;
 const 服务工作线程接管轮询间隔毫秒 = 50;
 type 协作分发存活类型 =
@@ -247,6 +249,7 @@ const 归一化协作分发错误 = (error: unknown): unknown =>
 
 type 协作分发媒体源探测选项 = {
   读取终止错误?: () => unknown | null;
+  首字节超时毫秒?: number;
 };
 
 export interface 协作分发JoinTicketRef {
@@ -259,6 +262,44 @@ const 读取探测终止错误 = (options: 协作分发媒体源探测选项): u
     return null;
   }
   return 归一化协作分发错误(raw);
+};
+
+const 读取协作分发媒体源探测首字节 = async (
+  response: Response,
+  timeoutMs: number
+): Promise<void> => {
+  const body = response.body;
+  if (!body) {
+    return;
+  }
+  const reader = body.getReader();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+  try {
+    const result = await Promise.race([
+      reader.read(),
+      new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error("探测协作分发媒体源首字节超时"));
+        }, timeoutMs);
+      }),
+    ]);
+    if (result.done || result.value.byteLength === 0) {
+      throw new Error("探测协作分发媒体源首字节为空");
+    }
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+    if (timedOut) {
+      await reader.cancel().catch(() => undefined);
+    }
+    try {
+      reader.releaseLock();
+    } catch {
+    }
+  }
 };
 
 export type 协作分发底层会话 = {
@@ -595,7 +636,7 @@ export async function 探测协作分发媒体源可读性(
    * - 命中 2xx/206，说明这条本地协作分发路径已经可读；
    * - 刚挂载时偶发 404 不立刻判死，给 stream server 一个短暂就绪窗口；
    * - 重试耗尽仍非 2xx，才视为当前不可用，让上层按既有锚点回退；
-   * - 不读取响应体，避免把探测放大成真正的数据下载。
+   * - 只读取首个响应块，避免把探测放大成真正的数据下载。
    */
   for (let attempt = 1; attempt <= 协作分发媒体源探测最大尝试次数; attempt += 1) {
     const terminalErrorBeforeFetch = 读取探测终止错误(options);
@@ -624,7 +665,25 @@ export async function 探测协作分发媒体源可读性(
       continue;
     }
     if (response.ok) {
-      return;
+      try {
+        await 读取协作分发媒体源探测首字节(
+          response,
+          options.首字节超时毫秒 ?? 协作分发媒体源首字节探测超时毫秒
+        );
+        return;
+      } catch (error) {
+        const terminalErrorAfterBody = 读取探测终止错误(options);
+        if (terminalErrorAfterBody) {
+          throw terminalErrorAfterBody;
+        }
+        if (attempt >= 协作分发媒体源探测最大尝试次数) {
+          throw error;
+        }
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 协作分发媒体源探测重试间隔毫秒);
+        });
+        continue;
+      }
     }
     const terminalErrorAfterResponse = 读取探测终止错误(options);
     if (terminalErrorAfterResponse) {

@@ -8,6 +8,7 @@ const 默认自动播可见阈值 = 0.6;
 const 默认自动播连续性可见阈值 = 0.35;
 const 默认完整可见阈值 = 0.98;
 const 默认自动播连续性交接最小可见优势 = 0.08;
+const 默认自动播粘性最大中心距离劣势 = 160;
 
 const 排序自动播候选 = (
   candidates: 消息视频自动播候选[],
@@ -32,6 +33,13 @@ const 排序自动播候选 = (
     const preferredCandidate = sortedCandidates.find(
       (candidate) => candidate.attachmentId === preferredAttachmentId
     );
+    const leadingCandidate = sortedCandidates[0];
+    const preferredCenterDistancePenalty =
+      (preferredCandidate?.distanceToViewportCenter ?? Infinity) -
+      (leadingCandidate?.distanceToViewportCenter ?? Infinity);
+    if (preferredCenterDistancePenalty > 默认自动播粘性最大中心距离劣势) {
+      return sortedCandidates;
+    }
     return preferredCandidate
       ? [
           preferredCandidate,

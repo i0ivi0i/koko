@@ -147,7 +147,8 @@ export class 自动播候选观察Owner {
             }
             this._自动播候选可见条目.set(currentAttachmentId, candidate);
           }
-          this.调度自动播候选(scrollContainer);
+          this.取消自动播候选调度();
+          this.dispatch自动播候选(scrollContainer);
         },
         {
           root: scrollContainer,

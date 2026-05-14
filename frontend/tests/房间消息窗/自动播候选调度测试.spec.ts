@@ -142,11 +142,6 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
         observerInstance as IntersectionObserver
       );
 
-      expect(observedEvents).toHaveLength(0);
-      expect(rafCallbacks.size).toBe(1);
-
-      flushAnimationFrame();
-
       expect(observedEvents).toHaveLength(1);
       expect(observedEvents[0]?.detail.candidates).toEqual([
         {
@@ -155,6 +150,7 @@ describe("房间消息窗媒体查看器 / 自动播候选调度", () => {
           distanceToViewportCenter: 460,
         },
       ]);
+      expect(rafCallbacks.size).toBe(0);
     } finally {
       pane.remove();
       vi.unstubAllGlobals();

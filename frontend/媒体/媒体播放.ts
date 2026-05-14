@@ -301,15 +301,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 是否为已删除定位结果 = (locator: 媒体定位结果): boolean =>
     locator.status === "deleted" || 读取媒体状态码(locator) === "MEDIA_DELETED";
 
-  const 是否值得为查看器视频强制刷新定位 = (
+  const 是否值得为前台视频强制刷新定位 = (
     input: 媒体播放输入,
     locator: 媒体定位结果
   ): boolean => {
-    if (input.kind !== "video" || (input.surface ?? "viewer") !== "viewer") {
+    if (input.kind !== "video") {
       return false;
     }
     /**
-     * viewer 首开前值不值得强刷，只看“正式 WebTorrent 相关事实是否已经存在”：
+     * 前台视频首开前值不值得强刷，只看“正式 WebTorrent 相关事实是否已经存在”：
      * 1. distribution / file_asset.distribution 说明这条视频已经有唯一主链线索；
      * 2. 真正的强刷节流继续由下面的冷却窗口兜住。
      */
@@ -320,13 +320,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     input: 媒体播放输入,
     locator: 媒体定位结果
   ): Promise<媒体定位结果> => {
-    if (!是否值得为查看器视频强制刷新定位(input, locator)) {
+    if (!是否值得为前台视频强制刷新定位(input, locator)) {
       return locator;
     }
     const now = Date.now();
     const lastRefreshAt = 查看器强刷定位时间戳.get(input.attachmentId) ?? 0;
     /**
-     * viewer 进入恢复窗口时会频繁触发解析：
+     * 前台视频进入恢复窗口时会频繁触发解析：
      * 1. ticket 失效/锚点失败等“真故障恢复”仍走各自专用 forceRefresh 分支；
      * 2. 这里只抑制“同附件短时间重复首开”的冗余强刷，避免 locator/torrent 被放大成风暴；
      * 3. 冷却期间继续复用当前 locator，让会话 owner 维持单一恢复节奏。
