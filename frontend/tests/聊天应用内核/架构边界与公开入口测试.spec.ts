@@ -18,6 +18,7 @@ const 前端根目录允许文件 = [
   "media-sw.ts",
   "package.json",
   "pnpm-lock.yaml",
+  "run-test.mjs",
   "tsconfig.json",
   "vitest.config.ts",
   "webtorrent.d.ts",
