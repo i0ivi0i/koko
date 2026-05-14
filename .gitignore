@@ -18,6 +18,7 @@ dist/
 # Keep real SQLx metadata when it exists, but do not track an empty placeholder.
 .sqlx/.gitkeep
 .env
+node_modules/
 frontend/node_modules/
 frontend/.tsbuildinfo
 
