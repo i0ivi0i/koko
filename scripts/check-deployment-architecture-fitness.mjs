@@ -50,7 +50,6 @@ const Dockerignore关键排除项 = [
   [".git"],
   ["docs"],
   ["tests"],
-  ["graphify-out"],
   [".codex-*.log", ".codex"],
   ["frontend/node_modules", "frontend/node_modules/"],
   ["frontend/dist", "frontend/dist/"],

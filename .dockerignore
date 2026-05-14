@@ -16,7 +16,6 @@ frontend/.tsbuildinfo
 .tmp
 tmp
 data
-graphify-out
 artifacts
 .playwright-cli
 .tmp-playwright-crash

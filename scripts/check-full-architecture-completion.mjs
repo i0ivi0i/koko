@@ -420,11 +420,6 @@ if (
   });
 }
 
-const 图谱报告 = 读取源码(join(仓库根目录, "graphify-out", "GRAPH_REPORT.md"));
-const 图谱摘要 =
-  图谱报告.match(/## God Nodes[\s\S]*?## Surprising Connections/)?.[0] ??
-  "未能提取 graphify 摘要";
-
 let 部署门禁结果 = { ok: true, output: "部署门禁通过" };
 try {
   const output = execFileSync(
@@ -454,7 +449,6 @@ const 输出 = {
   widePublicSurfaces: 宽公开表面清单,
   highRiskConvergencePoints: 高风险汇聚点,
   deploymentGate: 部署门禁结果,
-  graphifySummary: 图谱摘要,
 };
 
 console.log(JSON.stringify(输出, null, 2));

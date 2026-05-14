@@ -38,9 +38,6 @@ tmp/
 .tmp-run-*.log
 /artifacts/smoke/
 
-# Graphify output is local generated state and should not participate in version control.
-graphify-out/
-
 # Local trash directory for pre-upgrade backups and salvage.
 .trash/
 

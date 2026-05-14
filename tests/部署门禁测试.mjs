@@ -48,7 +48,6 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
         ".git",
         "docs",
         "tests",
-        "graphify-out",
         ".codex",
         "frontend/node_modules",
         "frontend/dist",
@@ -649,7 +648,6 @@ test("runtime 门禁会拦住 .dockerignore 漏掉关键打包排除项", () => 
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: tests/);
-  assert.match(result.output, /\.dockerignore 缺少关键排除项: graphify-out/);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/node_modules/);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/dist/);
   assert.match(result.output, /\.dockerignore 缺少关键排除项: frontend\/tests/);

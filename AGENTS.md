@@ -47,13 +47,13 @@ _此项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 - 校验、修 bug、重构都必须落到可证明动作：无效输入先有测试再TDD转绿，bug 先复现再修到通过，重构前后测试都通过；完成声明必须基于新鲜验证，证明什么就跑能直接证明它的命令，读完整输出和退出码。
 - 修改前必须重新读目标文件、调用链、相邻模块、拥有层，以及受影响或声称不变的 contract/test/log/comment 表面；存在多种理解、前提不明或更简单路径时，先讲清假设/取舍，二次编辑前重新读当前内容。
 - 编写/分析代码或维修 bug 时，先从宏观层面看项目结构、关键链路、数据流、性能热点、并发压力和边界约束，再落到局部；实现必须保持高性能代码逻辑，默认考虑高并发下的内存、CPU、IO、锁竞争、背压和退场成本，禁止为求快写低效率、重复扫描、阻塞热路径或放大资源消耗的代码。
-- 分析代码、编辑代码、查 bug、评估影响范围必须按顺序组合工具：先匹配并读取相关 skill；架构/代码库问题先用 graphify/wiki 做全局导航；再用 GitNexus 确认索引新鲜、查项目图谱、执行流、调用链、owner 与 blast radius（`list_repos/status/query/context/impact/detect_changes/cypher`）；最后用 Serena 做语义级符号搜索、引用关系分析、当前文件/相邻模块精读和精确编辑；纯文本/文件名快扫可用 `rg` 辅助，禁止退化成只 grep 或只看当前标签页。
+- 分析代码、编辑代码、查 bug、评估影响范围必须按顺序组合工具：先匹配并读取相关 skill；用 GitNexus 确认索引新鲜、查项目图谱、执行流、调用链、owner 与 blast radius（`list_repos/status/query/context/impact/detect_changes/cypher`）；再用 Serena 做语义级符号搜索、引用关系分析、当前文件/相邻模块精读和精确编辑；纯文本/文件名快扫可用 `rg` 辅助，禁止退化成只 grep 或只看当前标签页。
 - 发生 bug、维修 bug、查根因、卡住或重复失败时，必须调用 `supxcode`、`investigate`、`qa`、`superpowers:systematic-debugging` 等匹配的skill，先复现取证、追调用链/状态流/拥有层/逻辑层，抓到底层代码逻辑根因、破坏的不变量和唯一 owner/逻辑；修复强制从模型/架构/状态机/owner/数据流/逻辑等收口，优先改真正出错的层与逻辑，禁止连续打表面补丁、亡羊补牢、掩耳盗铃式 guard/timeout/mock 绿化；如果动手后才发现修法没有从底层逻辑收口，必须立刻止损，尽快回退或删除表面修补，重新回到逻辑根因路径上修复，必要时用 Context7 查官方文档与成熟实践。
 - 执行任何任务前先看一眼 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用(多个)，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent(也能使用skill)，子任务必须有读搜清单、写入边界和上下文约束。
 - 默认在当前 `main` 上完成；除非主人明确要求，不另开分支、worktree 或平行线路。
 - 本地 git 用 git；GitHub 平台操作用 GitHub skill / `gh`；本项目默认 Win11 原生环境，禁止 WSL2 开发。
 - 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，默认必须联用这三个 CLI skill：`playwright-cli`、`chrome-devtools-cli`、`browser-trace`；禁止只跑其中一条就自称闭环，禁止自造临时浏览器脚本或旁路乱测。
-- graphify/GitNexus/Serena 的顺序以上述链路为准；涉及架构或代码库问题先读 `graphify-out/GRAPH_REPORT.md`，若有 `graphify-out/wiki/index.md` 则优先按 wiki 导航；修改代码后运行 `graphify update .`，纯文档改动不强制。
+- GitNexus/Serena 的顺序以上述链路为准；涉及架构或代码库问题先用 GitNexus 查项目图谱和执行流。
 
 ## Discipline
 - 项目迭代、功能增删改、代码/逻辑修复、新增/替换代码时，必须先界定同链路、同职责、同 owner 范围，再眼观六路耳听八方地扫调用点、入口出口、测试、文档、日志和旧兼容面；主动删冗余、假状态、重复逻辑、旧入口、无意义包装、脏工作树、死代码、残留垃圾、无用调用点和旧兼容链，禁止“先留着”“以后再说”的垃圾长期共存。
@@ -77,16 +77,6 @@ _此项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 ---
 
 _这个文件属于你，也会随着你的成长继续提炼智慧。_
-
-## graphify
-
-This project has a graphify knowledge graph at graphify-out/.
-
-Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
