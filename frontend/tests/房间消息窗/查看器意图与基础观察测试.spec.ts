@@ -355,11 +355,8 @@ describe("房间消息窗媒体查看器 / 查看器意图与基础观察", () =
         observerInstance as IntersectionObserver
       );
 
-      expect(observedEvents).toHaveLength(0);
-      expect(rafCallbacks.size).toBe(1);
-
-      flushAnimationFrame();
-
+      // IntersectionObserver 回调中通过 dispatch自动播候选 立即派发（不走 RAF），
+      // 因为 IntersectionObserver 本身已在布局完成后触发，再延迟一帧没有意义。
       expect(observedEvents).toHaveLength(1);
       expect(observedEvents[0]?.detail.candidates).toEqual([
         {
