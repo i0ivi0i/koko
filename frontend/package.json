@@ -26,6 +26,7 @@
     "@chenglou/pretext": "0.0.5",
     "@tanstack/lit-virtual": "^3.13.24",
     "@uppy/core": "^5.2.0",
+    "@uppy/golden-retriever": "^5.2.1",
     "@uppy/tus": "^5.1.1",
     "debug": "^4.4.3",
     "events": "^3.3.0",

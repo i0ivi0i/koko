@@ -1,5 +1,6 @@
 import Uppy from "@uppy/core";
 import Tus from "@uppy/tus";
+import GoldenRetriever from "@uppy/golden-retriever";
 import type {
   媒体附件上传结果,
   媒体SourceHash复用结果,
@@ -41,6 +42,12 @@ import {
   识别待上传媒体种类,
   type 媒体发布器依赖,
 } from "./媒体发布基础语义.js";
+import {
+  保存媒体草稿到本地存储,
+  从本地存储恢复媒体草稿,
+  清除本地存储媒体草稿,
+  type 可持久化媒体草稿,
+} from "./媒体草稿持久化.js";
 
 export { 大视频高吞吐阈值字节数 } from "./媒体发布基础语义.js";
 
@@ -243,7 +250,7 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
      */
     allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],
     headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
-  }) as unknown as 媒体上传器;
+  }).use(GoldenRetriever) as unknown as 媒体上传器;
 }
 
 async function 默认让出主线程(): Promise<void> {
@@ -492,6 +499,41 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const 上传器表 = new Map<string, 媒体上传器>();
   const 草稿上传器键表 = new Map<string, string>();
 
+  /**
+   * 每次草稿变更后把当前列表快照同步到 localStorage。
+   * 刷新后由 `恢复未完成草稿()` 从 localStorage 读回。
+   */
+  const 同步草稿到本地存储 = (): void => {
+    const currentDrafts = deps.readDrafts();
+    const persistable: 可持久化媒体草稿[] = currentDrafts.map((d) => ({
+      localId: d.localId,
+      kind: d.kind,
+      attachmentId: d.attachmentId,
+      width: d.width,
+      height: d.height,
+      status: d.status,
+      fileName: d.fileName,
+      errorCode: d.errorCode,
+    }));
+    保存媒体草稿到本地存储(persistable);
+  };
+
+  /** 包装 writeDraft：写入后自动同步到 localStorage */
+  const 持久化writeDraft = (draft: 媒体附件草稿): void => {
+    deps.writeDraft(draft);
+    同步草稿到本地存储();
+  };
+  /** 包装 updateDraft：更新后自动同步到 localStorage */
+  const 持久化updateDraft: typeof deps.updateDraft = (localId, patch) => {
+    deps.updateDraft(localId, patch);
+    同步草稿到本地存储();
+  };
+  /** 包装 removeDraft：移除后自动同步到 localStorage */
+  const 持久化removeDraft = (localId: string): void => {
+    deps.removeDraft(localId);
+    同步草稿到本地存储();
+  };
+
   const 读取媒体草稿 = (localId: string): 媒体附件草稿 | undefined =>
     deps.readDrafts().find((item) => item.localId === localId);
 
@@ -510,9 +552,9 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     completeMediaUpload: deps.completeMediaUpload,
     getSessionId: deps.getSessionId,
     createPreviewUrl,
-    writeDraft: deps.writeDraft,
-    updateDraft: deps.updateDraft,
-    removeDraft: deps.removeDraft,
+    writeDraft: 持久化writeDraft,
+    updateDraft: 持久化updateDraft,
+    removeDraft: 持久化removeDraft,
     上传器表,
     草稿上传器键表,
     ...(deps.预取媒体定位 ? { 预取媒体定位: deps.预取媒体定位 } : {}),
@@ -560,7 +602,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   };
 
   const 写入超限失败草稿 = (kind: 媒体种类, file: File): void => {
-    deps.writeDraft({
+    持久化writeDraft({
       localId: 创建失败草稿标识(kind, "too-large", file),
       kind,
       attachmentId: "",
@@ -576,11 +618,10 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
 
   const 写入视频预制等待草稿 = (file: File): string => {
     const localId = 创建失败草稿标识("video", "preprocessing", file);
-    deps.writeDraft({
+    持久化writeDraft({
       localId,
       kind: "video",
       attachmentId: "",
-      // 预制等待态不使用视频 Blob 直连 `<img>`，避免无效解码导致的草稿闪烁占位。
       previewUrl: "",
       width: 0,
       height: 0,
@@ -598,7 +639,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     reuseMediaBySourceHash: deps.reuseMediaBySourceHash,
     getSessionId: deps.getSessionId,
     createPreviewUrl: (file: Blob | null) => createPreviewUrl(file),
-    writeDraft: deps.writeDraft,
+    writeDraft: 持久化writeDraft,
   };
 
   const 处理选择同类媒体文件 = async (
@@ -632,7 +673,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         kind === "video"
           ? globalThis.setTimeout(() => {
               // 超过 15 分钟只是提醒用户仍在本地预制；它不是失败，也绝不能触发 prepare。
-              deps.updateDraft(确保视频预制草稿(), {
+              持久化updateDraft(确保视频预制草稿(), {
                 status: "processing",
                 errorCode: "media_preprocess_waiting",
               });
@@ -659,14 +700,14 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           // 复用命中：丢弃 preparedFile。
           // 直通场景下预处理几乎零开销；转码场景秒传命中率极低，可接受的代价。
           if (preprocessingDraftId) {
-            deps.removeDraft(preprocessingDraftId);
+            持久化removeDraft(preprocessingDraftId);
           }
           写入SourceHash命中草稿(SourceHash协作依赖, reuseResult.attachment, sourceFile);
           continue;
         }
         if (preparedFile.file.size > maxFileSize) {
           if (preprocessingDraftId) {
-            deps.updateDraft(preprocessingDraftId, {
+            持久化updateDraft(preprocessingDraftId, {
               status: "failed",
               errorCode: "attachment_too_large",
               sourceFile: preparedFile.file,
@@ -708,7 +749,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         });
         草稿上传器键表.set(nextLocalId, uploaderKey);
         if (preprocessingDraftId) {
-          deps.removeDraft(preprocessingDraftId);
+          持久化removeDraft(preprocessingDraftId);
         }
       } catch (error: unknown) {
         if (preprocessingDraftDelayTimer) {
@@ -729,9 +770,9 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           sourceFile,
         };
         if (preprocessingDraftId) {
-          deps.updateDraft(preprocessingDraftId, failedPatch);
+          持久化updateDraft(preprocessingDraftId, failedPatch);
         } else {
-          deps.writeDraft({
+          持久化writeDraft({
             localId: 创建失败草稿标识(kind, "rejected", sourceFile),
             ...failedPatch,
           });
@@ -746,8 +787,8 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     getSessionId: deps.getSessionId,
     abandonMediaUpload: deps.abandonMediaUpload,
     prepareMediaUpload: deps.prepareMediaUpload,
-    updateDraft: deps.updateDraft,
-    removeDraft: deps.removeDraft,
+    updateDraft: 持久化updateDraft,
+    removeDraft: 持久化removeDraft,
     草稿上传器键表,
     读取或创建上传器,
     sourceHash协作依赖: SourceHash协作依赖,
@@ -806,7 +847,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       uploader?.removeFile(localId);
       if (!uploader?.getFile(localId)) {
         草稿上传器键表.delete(localId);
-        deps.removeDraft(localId);
+        持久化removeDraft(localId);
       }
     },
 
@@ -818,12 +859,41 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       await 重新开始失败草稿上传(失败草稿恢复依赖, localId);
     },
 
+    /**
+     * 刷新后从 localStorage 恢复上次保存的草稿 UI 状态。
+     * 壳层在创建媒体发布器后应立即调用一次。
+     *
+     * - ready 草稿：直接还原（上传已完成，不需要续传）
+     * - transporting/failed 草稿：还原 UI 状态，Tus + Golden Retriever 负责续传
+     * - processing 草稿：丢弃（预处理需要原始 File 对象，刷新后不可恢复）
+     * - previewUrl 置空：原始 Blob URL 刷新后失效，UI 显示占位图标
+     */
+    恢复未完成草稿(): void {
+      const savedDrafts = 从本地存储恢复媒体草稿();
+      for (const draft of savedDrafts) {
+        if (draft.status === "processing") continue;
+        deps.writeDraft({
+          localId: draft.localId,
+          kind: draft.kind,
+          attachmentId: draft.attachmentId,
+          previewUrl: "",
+          width: draft.width,
+          height: draft.height,
+          status: draft.status as "transporting" | "ready" | "failed",
+          fileName: draft.fileName,
+          errorCode: draft.errorCode,
+          sourceFile: null,
+        });
+      }
+    },
+
     清空(): void {
       for (const uploader of 上传器表.values()) {
         uploader.cancelAll();
       }
       草稿上传器键表.clear();
       deps.clearDrafts();
+      清除本地存储媒体草稿();
     },
 
     销毁(): void {

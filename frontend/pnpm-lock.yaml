@@ -17,6 +17,9 @@ importers:
       '@uppy/core':
         specifier: ^5.2.0
         version: 5.2.0
+      '@uppy/golden-retriever':
+        specifier: ^5.2.1
+        version: 5.2.1(@uppy/core@5.2.0)
       '@uppy/tus':
         specifier: ^5.1.1
         version: 5.1.1(@uppy/core@5.2.0)
@@ -1266,6 +1269,11 @@ packages:
 
   '@uppy/core@5.2.0':
     resolution: {integrity: sha512-uvfNyz4cnaplt7LYJmEZHuqOuav0tKp4a9WKJIaH6iIj7XiqYvS2J5SEByexAlUFlzefOAyjzj4Ja2dd/8aMrw==}
+
+  '@uppy/golden-retriever@5.2.1':
+    resolution: {integrity: sha512-R+Lzesfmgu35ViSOxqYxwOVo4ylkIS9xP2ClnhD8k2VTbqdc6RRimaPRqxxI3Vf42qWiRBm4WaG3uHls+wOCqQ==}
+    peerDependencies:
+      '@uppy/core': ^5.2.0
 
   '@uppy/store-default@5.0.0':
     resolution: {integrity: sha512-hQtCSQ1yGiaval/wVYUWquYGDJ+bpQ7e4FhUUAsRQz1x1K+o7NBtjfp63O9I4Ks1WRoKunpkarZ+as09l02cPw==}
@@ -4365,6 +4373,12 @@ snapshots:
       namespace-emitter: 2.0.1
       nanoid: 5.1.7
       preact: 10.29.1
+
+  '@uppy/golden-retriever@5.2.1(@uppy/core@5.2.0)':
+    dependencies:
+      '@uppy/core': 5.2.0
+      '@uppy/utils': 7.2.0
+      lodash: 4.18.1
 
   '@uppy/store-default@5.0.0': {}
 
