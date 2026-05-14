@@ -1,5 +1,11 @@
 {
   "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-75797c3e-dd4e-49f4-8bab-668abdb5bafc"
+      }
+    },
     "serena": {
       "command": "C:\\Users\\home\\.local\\bin\\serena.exe",
       "args": [

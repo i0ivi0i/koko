@@ -10,6 +10,7 @@ dist/
 !tests/
 
 # Editor-local workflow files should stay local, not in the shared repo.
+.cursor/
 .vscode/
 .kiro/
 .serena/
