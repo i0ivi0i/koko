@@ -32,7 +32,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const releaseSwarmSource = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -99,7 +99,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
     });
     const probeAnchor = vi.fn(async () => undefined);
     const releaseSwarmSource = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -164,7 +164,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const releaseSwarmSource = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -261,7 +261,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
       .fn()
       .mockRejectedValueOnce(new Error("expired"))
       .mockResolvedValueOnce(undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor,
@@ -294,7 +294,7 @@ describe("媒体播放器 / 过期与锚点降级", () => {
       thumbnail_url: null,
       distribution: null,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor: async () => {

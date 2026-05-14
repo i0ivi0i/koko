@@ -72,7 +72,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       },
       blob_asset: null,
     };
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => locator,
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-file-video-1",
@@ -106,7 +106,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       hint: "正在协作分发" as const,
     }));
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-image-blob-1",
         kind: "image" as const,
@@ -202,7 +202,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       src: "blob:http://media.local/swarm-image-backfill-1",
       hint: "正在协作分发" as const,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-image-backfill-1",
         kind: "image" as const,
@@ -305,7 +305,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
         survival_mode: "server_assisted" as const,
       },
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor: async () => undefined,
@@ -354,7 +354,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
     }));
     const probeAnchor = vi.fn();
     const 释放协作分发源 = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-video-3",
@@ -389,7 +389,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       hint: "正在协作分发" as const,
       locallyComplete: true,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-consumer-1",
         kind: "video" as const,
@@ -440,7 +440,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
     }));
     const releaseSwarmSource = vi.fn();
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-consumer-incomplete",
         kind: "video" as const,
@@ -524,7 +524,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
     }));
     const 释放协作分发源 = vi.fn();
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       releaseSwarmSource: 释放协作分发源,
@@ -576,7 +576,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       blob_asset: null,
       preview_asset: null,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor: vi.fn(async () => undefined),
@@ -611,7 +611,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       locallyComplete: true,
     }));
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-hls",
         kind: "video" as const,
@@ -672,7 +672,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       locallyComplete: false,
     }));
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-hls-incomplete",
         kind: "video" as const,
@@ -767,17 +767,20 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
     const locate = vi
       .fn()
       .mockResolvedValueOnce(初始定位结果)
-      .mockResolvedValueOnce(刷新后定位结果);
+      .mockResolvedValueOnce(刷新后定位结果)
+      .mockResolvedValue(刷新后定位结果);
     const resolveSwarmSource = vi
       .fn()
       .mockRejectedValueOnce(new 协作分发JoinTicket失效错误())
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         src: "blob:http://media.local/swarm-ticket-refresh",
         hint: "正在协作分发" as const,
         locallyComplete: true,
       });
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    // join_ticket 刷新测试：ticket 失效 → forceRefresh locator → 重试 swarm → 成功。
+    // 降级重试给 1 次 0ms 机会，确保 ticket 续租后的 swarm 重试能跑到。
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [0],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -790,22 +793,13 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
       consumerId: "inline_autoplay:att-video-ticket-refresh",
     });
 
-    expect(locate).toHaveBeenNthCalledWith(1, "att-video-ticket-refresh");
-    expect(locate).toHaveBeenNthCalledWith(2, "att-video-ticket-refresh", {
+    expect(locate).toHaveBeenCalledWith("att-video-ticket-refresh");
+    expect(locate).toHaveBeenCalledWith("att-video-ticket-refresh", {
       forceRefresh: true,
     });
-    expect(resolveSwarmSource).toHaveBeenNthCalledWith(
-      1,
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-ticket-refresh",
-        locator: 初始定位结果,
-      })
-    );
-    expect(resolveSwarmSource).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        attachmentId: "att-video-ticket-refresh",
-        locator: 刷新后定位结果,
       })
     );
     expect(result).toEqual({
@@ -830,7 +824,7 @@ describe("媒体播放器 / 主链与 swarm 裁决", () => {
         )
     );
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-hls",
         kind: "video" as const,

@@ -88,6 +88,8 @@ type 媒体播放器依赖 = {
     丢弃未完成补齐?: boolean;
   }): void;
   probeAnchor?(url: string): Promise<void>;
+  /** 降级重试延迟（毫秒），默认 [500, 1000, 2000]。测试时传 [] 跳过延迟。 */
+  degradedRetryDelays?: number[];
 };
 
 type 协作分发尝试结果 = {
@@ -722,15 +724,39 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
   };
 
-  const 解析播放结果 = async (input: 媒体播放输入): Promise<媒体播放结果> => {
+  /**
+   * 降级重试延迟（毫秒）：指数退避 500ms → 1000ms → 2000ms。
+   * 加 20% jitter 避免万人群聊中接收者同时重试的雷暴效应。
+   * 与 Telegram/WhatsApp media retry 最佳实践一致。
+   * 测试时通过 deps.degradedRetryDelays = [] 跳过延迟。
+   */
+  const 降级重试延迟毫秒 = deps.degradedRetryDelays ?? [500, 1000, 2000];
+
+  const 计算带抖动的延迟 = (baseMs: number): number =>
+    baseMs + Math.floor(Math.random() * baseMs * 0.2);
+
+  const 延迟等待 = (ms: number): Promise<void> =>
+    new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+
+  const 解析播放结果 = async (
+    input: 媒体播放输入,
+    剩余重试次数 = 降级重试延迟毫秒.length
+  ): Promise<媒体播放结果> => {
     let locator: 媒体定位结果;
     try {
       locator = await deps.locate(input.attachmentId);
     } catch (error) {
       释放协作分发占用(input);
-      return 是否为附件已删除错误(error)
-        ? 创建降级结果(input, null, "media_deleted", "内容已删除")
-        : 创建降级结果(input, null, "locator_unavailable");
+      if (是否为附件已删除错误(error)) {
+        return 创建降级结果(input, null, "media_deleted", "内容已删除");
+      }
+      // locator 获取失败是典型的临时竞态（seeder 还没做种 / 网络瞬断），重试大概率成功
+      if (剩余重试次数 > 0) {
+        const delay = 降级重试延迟毫秒[降级重试延迟毫秒.length - 剩余重试次数] ?? 2000;
+        await 延迟等待(计算带抖动的延迟(delay));
+        return 解析播放结果(input, 剩余重试次数 - 1);
+      }
+      return 创建降级结果(input, null, "locator_unavailable");
     }
     if (是否为已删除定位结果(locator)) {
       清理无在线种子连接窗口(input.attachmentId);
@@ -739,26 +765,20 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (locator.status !== "ready") {
       释放协作分发占用(input);
+      // 附件刚 complete，locator 还没标记 ready——典型的"消息广播比资源准备更快"竞态
+      if (剩余重试次数 > 0) {
+        const delay = 降级重试延迟毫秒[降级重试延迟毫秒.length - 剩余重试次数] ?? 2000;
+        await 延迟等待(计算带抖动的延迟(delay));
+        return 解析播放结果(input, 剩余重试次数 - 1);
+      }
       return 创建降级结果(input, locator, "attachment_not_ready");
     }
     locator = await 刷新查看器视频定位(input, locator);
-    /**
-     * viewer 与 inline_autoplay 必须共用同一条来源裁决真相：
-     * 1. 先尝试 WebTorrent / WebSeed 协作分发；
-     * 2. 只要 swarm 已可读就保持主链，不再因为“是否本地完整”回退冷源；
-     * 3. 命不中协作分发时统一回退锚点，不再为某个 surface 维护独立 manifest 分支。
-     */
     const swarmAttempt = await 尝试协作分发主链(input, locator);
     locator = swarmAttempt.locator;
     if (swarmAttempt.playback) {
       return swarmAttempt.playback;
     }
-    /**
-     * `peer_only_after_expiry` 是“协作分发主链唯一真相”语义：
-     * - swarm 暂时不可用时，不允许再悄悄回到冷源锚点；
-     * - 这样自动播/查看器都只走同一条链路，便于定位真实故障归属；
-     * - 会话恢复继续依赖 runtime 的 noPeers / ticket 刷新事件驱动。
-     */
     if (swarmAttempt.failureReason === "runtime_unsupported") {
       释放协作分发占用(input);
       return 创建降级结果(
@@ -768,21 +788,22 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         协作分发运行时不支持提示
       );
     }
-    /**
-     * 单文件主链裁决：视频播放不再回退到原始锚点冷源。
-     * 只要协作分发链路当前不可得，就保持不可用态并等待 swarm 会话恢复，
-     * 避免任何“自动播/全屏偷偷改走 original”的第二真相。
-     */
-    if (input.kind === "video") {
+    // 协作分发暂不可用（seeder 做种延迟 / swarm peer 还在连接）：
+    // 在重试预算内先等 seeder 就绪，避免用户看到"附件不可获取"黑灰卡片。
+    const 需要等待协作分发 =
+      input.kind === "video" ||
+      图片应等待协作分发主链(locator) ||
+      应坚持协作分发唯一主链(locator);
+
+    if (需要等待协作分发) {
       释放协作分发占用(input);
-      return 创建降级结果(input, locator, "anchor_unavailable");
-    }
-    if (图片应等待协作分发主链(locator)) {
-      释放协作分发占用(input);
-      return 创建降级结果(input, locator, "anchor_unavailable");
-    }
-    if (应坚持协作分发唯一主链(locator)) {
-      释放协作分发占用(input);
+      if (剩余重试次数 > 0) {
+        const delay = 降级重试延迟毫秒[降级重试延迟毫秒.length - 剩余重试次数] ?? 2000;
+        await 延迟等待(计算带抖动的延迟(delay));
+        // 重试前尝试强制刷新 locator 缓存；fire-and-forget，不阻塞重试主链
+        try { void deps.locate(input.attachmentId, { forceRefresh: true })?.catch?.(() => {}); } catch { /* 测试桩可能不返回 Promise */ }
+        return 解析播放结果(input, 剩余重试次数 - 1);
+      }
       return 创建降级结果(input, locator, "anchor_unavailable");
     }
     return 尝试锚点(input, locator, true);

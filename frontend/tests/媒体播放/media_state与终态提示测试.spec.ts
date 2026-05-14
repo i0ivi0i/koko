@@ -30,7 +30,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     }));
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -81,7 +81,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     }));
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -164,7 +164,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
         survival_mode: "peer_only_after_expiry" as const,
       },
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => null,
       probeAnchor: async () => undefined,
@@ -241,7 +241,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     }));
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -271,7 +271,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     });
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -325,7 +325,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     }));
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,
@@ -376,7 +376,7 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     }));
     const resolveSwarmSource = vi.fn();
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
       probeAnchor,

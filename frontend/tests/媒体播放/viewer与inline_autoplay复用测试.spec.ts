@@ -9,7 +9,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
       locallyComplete: true,
     }));
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-shared-truth",
         kind: "video" as const,
@@ -98,7 +98,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
       src: "blob:http://media.local/swarm-video-canonical-backfill",
       hint: "正在补块" as const,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-canonical-backfill",
         kind: "video" as const,
@@ -166,7 +166,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
       locallyComplete: true,
     }));
     const probeAnchor = vi.fn();
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-inline-hls",
         kind: "video" as const,
@@ -228,7 +228,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
       locallyComplete: false,
     }));
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-inline-partial",
         kind: "video" as const,
@@ -284,7 +284,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
   it("inline_autoplay 在没有可复用 swarm 时，会保持降级态而不是回退锚点冷源", async () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-video-inline-fallback",
         kind: "video" as const,
@@ -362,7 +362,7 @@ describe("媒体播放器 / viewer 与 inline_autoplay 复用", () => {
         survival_mode: "server_assisted" as const,
       },
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-video-4",

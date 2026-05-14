@@ -4,7 +4,7 @@ import { 创建媒体播放器 } from "../媒体/媒体播放";
 describe("Blob 媒体资产", () => {
   it("新附件图片即使返回 blob_asset，也不能再把 canonical 锚点当正式主链", async () => {
     const probeAnchor = vi.fn(async () => undefined);
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => ({
         attachment_id: "att-image-blob-1",
         kind: "image" as const,
@@ -119,7 +119,7 @@ describe("Blob 媒体资产", () => {
       src: "blob:http://media.local/swarm-att-image-blob-2",
       hint: "正在补块" as const,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => locator,
       resolveSwarmSource,
       probeAnchor: vi.fn(async () => undefined),
@@ -190,7 +190,7 @@ describe("Blob 媒体资产", () => {
       src: "blob:http://media.local/swarm-att-image-blob-3",
       hint: "正在协作分发" as const,
     }));
-    const 播放器 = 创建媒体播放器({
+    const 播放器 = 创建媒体播放器({ degradedRetryDelays: [],
       locate: async () => locator,
       resolveSwarmSource,
       probeAnchor: vi.fn(async () => undefined),

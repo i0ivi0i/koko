@@ -40,7 +40,7 @@ describe("媒体播放 locator 刷新", () => {
       hint: null,
       formalByteSource: "webtorrent_official_stream" as const,
     }));
-    const player = 创建媒体播放器({
+    const player = 创建媒体播放器({ degradedRetryDelays: [],
       locate,
       resolveSwarmSource,
     });
