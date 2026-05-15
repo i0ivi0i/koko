@@ -1,6 +1,6 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
 import type { 消息事件 } from "../聊天共享/契约.js";
-import { 推进房间时间线 } from "./领域.js";
+import { 推进房间时间线, type 附件升级补丁 } from "./领域.js";
 import type { 聊天时间线状态 } from "../应用根/聊天状态.js";
 
 export interface 房间时间线上下文 {
@@ -32,6 +32,12 @@ export type 房间时间线事件 =
     }
   | {
       type: "ROOM_SOFT_RESET";
+    }
+  | {
+      type: "ATTACHMENT_STATUS_UPGRADED";
+      messageId: string;
+      attachmentId: string;
+      patch: 附件升级补丁;
     };
 
 const 初始房间时间线上下文: 房间时间线上下文 = {
@@ -72,6 +78,9 @@ const 房间时间线机 = createMachine(
           },
           ROOM_SOFT_RESET: {
             actions: "重置时间线",
+          },
+          ATTACHMENT_STATUS_UPGRADED: {
+            actions: "升级附件槽位",
           },
         },
       },
@@ -133,6 +142,19 @@ const 房间时间线机 = createMachine(
         };
       }),
       重置时间线: assign(() => 初始房间时间线上下文),
+      升级附件槽位: assign(({ event, context }) => {
+        if (event.type !== "ATTACHMENT_STATUS_UPGRADED") {
+          return {};
+        }
+        return {
+          messages: 推进房间时间线(context.messages, {
+            type: "ATTACHMENT_UPGRADE",
+            messageId: event.messageId,
+            attachmentId: event.attachmentId,
+            patch: event.patch,
+          }),
+        };
+      }),
     },
   }
 );

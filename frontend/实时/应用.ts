@@ -1,5 +1,5 @@
 import type { Socket } from "socket.io-client";
-import type { 消息事件 } from "../聊天共享/契约.js";
+import type { 消息事件, 房间事件 } from "../聊天共享/契约.js";
 import type { 房间内核事件 } from "../房间/运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
 import type { 实时会话事件 } from "./会话运行时.js";
@@ -131,7 +131,27 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
     socket.on("room_events", (events: { latest_event_position: number; events: 消息事件[] }) => {
       applyAuthoritativeEvents(events.events, events.latest_event_position);
     });
-    socket.on("room_event", (event: 消息事件) => {
+    socket.on("room_event", (event: 房间事件) => {
+      if (event.type === "attachment_status_changed") {
+        deps.接收时间线事实({
+          type: "ATTACHMENT_STATUS_UPGRADED",
+          messageId: event.message_id,
+          attachmentId: event.attachment_id,
+          patch: {
+            status: event.status,
+            ...(event.attachment?.distribution_hint
+              ? { distribution_hint: event.attachment.distribution_hint }
+              : {}),
+            ...(event.attachment?.has_preview_asset !== undefined
+              ? { has_preview_asset: event.attachment.has_preview_asset }
+              : {}),
+            ...(event.attachment?.preview_asset !== undefined
+              ? { preview_asset: event.attachment.preview_asset }
+              : {}),
+          },
+        });
+        return;
+      }
       applyAuthoritativeEvents([event], event.event_position);
     });
     socket.on("control_result", (control: 实时控制面结果) => {

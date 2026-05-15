@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { 创建乐观房间消息, 推进房间时间线 } from "../时间线/领域";
 import { 提取可发送媒体附件元数据 } from "../媒体/媒体草稿";
-import type { 消息事件 } from "../聊天共享/契约";
+import type { 消息事件, 附件状态变更事件 } from "../聊天共享/契约";
 
 const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" | "event_position">): 消息事件 => ({
   type: "message_created",
@@ -177,7 +177,7 @@ describe("房间时间线", () => {
     expect(optimistic.attachments).toEqual([]);
   });
 
-  it("提取可发送媒体附件元数据只提取 ready 草稿的最小渲染事实", () => {
+  it("pending-first：transporting 有 attachmentId 时可发送，返回附件元数据含槽位状态", () => {
     const drafts = [
       {
         localId: "d1", kind: "video" as const, attachmentId: "att-v1",
@@ -190,7 +190,25 @@ describe("房间时间线", () => {
         status: "transporting" as const, fileName: "b.png", errorCode: "",
       },
     ];
-    // 含非 ready 草稿时返回 null（与 提取可发送媒体附件标识 保持一致的安全语义）
+    expect(提取可发送媒体附件元数据(drafts)).toEqual([
+      { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080, status: "ready" },
+      { kind: "image", attachment_id: "att-i1", width: 800, height: 600, status: "uploading" },
+    ]);
+  });
+
+  it("failed 草稿或无 attachmentId 草稿时返回 null", () => {
+    const drafts = [
+      {
+        localId: "d1", kind: "video" as const, attachmentId: "att-v1",
+        previewUrl: "", width: 1920, height: 1080,
+        status: "ready" as const, fileName: "a.mp4", errorCode: "",
+      },
+      {
+        localId: "d2", kind: "image" as const, attachmentId: "",
+        previewUrl: "", width: 800, height: 600,
+        status: "transporting" as const, fileName: "b.png", errorCode: "",
+      },
+    ];
     expect(提取可发送媒体附件元数据(drafts)).toBeNull();
   });
 
@@ -208,13 +226,127 @@ describe("房间时间线", () => {
       },
     ];
     expect(提取可发送媒体附件元数据(drafts)).toEqual([
-      { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080 },
-      { kind: "image", attachment_id: "att-i1", width: 800, height: 600 },
+      { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080, status: "ready" },
+      { kind: "image", attachment_id: "att-i1", width: 800, height: 600, status: "ready" },
     ]);
   });
 
   it("空草稿列表时提取可发送媒体附件元数据返回空数组", () => {
     expect(提取可发送媒体附件元数据([])).toEqual([]);
+  });
+
+  // ── pending-first Phase 3：附件槽位升级 ──
+
+  it("attachment_status_changed ready 时升级时间线中对应消息的附件槽位", () => {
+    const timeline = 推进房间时间线([], {
+      type: "REALTIME",
+      events: [
+        消息({
+          message_id: "m-1",
+          event_position: 1,
+          attachments: [
+            { kind: "video", attachment_id: "att-v1", width: 1920, height: 1080, status: "processing" },
+          ],
+        }),
+      ],
+    });
+    expect(timeline[0].attachments![0]).toMatchObject({ status: "processing" });
+
+    const upgraded = 推进房间时间线(timeline, {
+      type: "ATTACHMENT_UPGRADE",
+      messageId: "m-1",
+      attachmentId: "att-v1",
+      patch: {
+        status: "ready",
+        distribution_hint: {
+          content_hash: "hash1",
+          swarm_id: "swarm1",
+          torrent_info_hash: "ih1",
+          web_seed_until: 9999999,
+        },
+      },
+    });
+
+    expect(upgraded).toHaveLength(1);
+    expect(upgraded[0].attachments![0]).toMatchObject({
+      kind: "video",
+      attachment_id: "att-v1",
+      status: "ready",
+      distribution_hint: { torrent_info_hash: "ih1" },
+    });
+  });
+
+  it("attachment_status_changed failed 时更新状态但不覆盖宽高", () => {
+    const timeline = 推进房间时间线([], {
+      type: "REALTIME",
+      events: [
+        消息({
+          message_id: "m-2",
+          event_position: 2,
+          attachments: [
+            { kind: "image", attachment_id: "att-i1", width: 800, height: 600, status: "uploading" },
+          ],
+        }),
+      ],
+    });
+
+    const upgraded = 推进房间时间线(timeline, {
+      type: "ATTACHMENT_UPGRADE",
+      messageId: "m-2",
+      attachmentId: "att-i1",
+      patch: { status: "failed" },
+    });
+
+    expect(upgraded[0].attachments![0]).toMatchObject({
+      kind: "image",
+      attachment_id: "att-i1",
+      width: 800,
+      height: 600,
+      status: "failed",
+    });
+  });
+
+  it("attachment_upgrade 对不存在的 message_id 是幂等空操作", () => {
+    const timeline = 推进房间时间线([], {
+      type: "REALTIME",
+      events: [消息({ message_id: "m-1", event_position: 1 })],
+    });
+    const upgraded = 推进房间时间线(timeline, {
+      type: "ATTACHMENT_UPGRADE",
+      messageId: "m-nonexistent",
+      attachmentId: "att-x",
+      patch: { status: "ready" },
+    });
+    expect(upgraded).toEqual(timeline);
+  });
+
+  it("重复 ready 升级幂等：同一 patch 两次结果一致", () => {
+    const timeline = 推进房间时间线([], {
+      type: "REALTIME",
+      events: [
+        消息({
+          message_id: "m-3",
+          event_position: 3,
+          attachments: [
+            { kind: "video", attachment_id: "att-v2", width: 1280, height: 720, status: "processing" },
+          ],
+        }),
+      ],
+    });
+    const patch = { status: "ready" as const };
+    const first = 推进房间时间线(timeline, {
+      type: "ATTACHMENT_UPGRADE",
+      messageId: "m-3",
+      attachmentId: "att-v2",
+      patch,
+    });
+    const second = 推进房间时间线(first, {
+      type: "ATTACHMENT_UPGRADE",
+      messageId: "m-3",
+      attachmentId: "att-v2",
+      patch,
+    });
+    expect(second).toEqual(first);
   });
 
   it("恢复、实时、历史分页都只能把事实交给时间线 owner，不再各自手拼 messages 数组", () => {
