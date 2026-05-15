@@ -28,14 +28,26 @@ describe("媒体草稿", () => {
     expect(提取可发送媒体附件标识([])).toEqual([]);
   });
 
-  it("提取可发送媒体附件标识 遇到未 ready 草稿时返回 null", () => {
+  it("pending-first: transporting 有 attachmentId 时允许发送", () => {
     const drafts = [创建草稿({ status: "transporting" })];
+
+    expect(提取可发送媒体附件标识(drafts)).toEqual(["att-1"]);
+  });
+
+  it("pending-first: processing 有 attachmentId 时允许发送", () => {
+    const drafts = [创建草稿({ status: "processing" })];
+
+    expect(提取可发送媒体附件标识(drafts)).toEqual(["att-1"]);
+  });
+
+  it("pending-first: transporting 无 attachmentId 时仍阻止发送", () => {
+    const drafts = [创建草稿({ status: "transporting", attachmentId: "" })];
 
     expect(提取可发送媒体附件标识(drafts)).toBeNull();
   });
 
-  it("提取可发送媒体附件标识 遇到 processing 草稿时返回 null", () => {
-    const drafts = [创建草稿({ status: "processing" })];
+  it("pending-first: failed 草稿阻止发送", () => {
+    const drafts = [创建草稿({ status: "failed" })];
 
     expect(提取可发送媒体附件标识(drafts)).toBeNull();
   });

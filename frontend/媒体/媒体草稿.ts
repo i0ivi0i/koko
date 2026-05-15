@@ -1,7 +1,7 @@
 /**
  * 媒体草稿只表达前端发送区的本地体验态：
  * 1. 上传进度、失败码、预览地址都留在这里；
- * 2. 真正可发送时只认 ready + attachmentId；
+ * 2. pending-first：有 attachmentId 且非 failed 即可发送；
  * 3. 模块只做纯状态演算，不碰 DOM、不碰 URL API、不碰壳层副作用。
  */
 export interface 媒体附件草稿 {
@@ -50,21 +50,53 @@ function 需要回收旧预览地址(current: string, next?: string): string[] {
  * - 含非 ready 或缺 attachmentId → 返回 `null` 阻止发送；
  * - 空列表 → 返回 `[]`（纯文本消息合法）。
  */
+/**
+ * pending-first：草稿状态 → 共享契约附件槽位状态。
+ * transporting 映射为 uploading，failed 返回 null 表示不可发送。
+ */
+function 草稿状态转附件槽位状态(
+  status: 媒体附件草稿["status"]
+): "uploading" | "processing" | "ready" | null {
+  if (status === "transporting") return "uploading";
+  if (status === "processing") return "processing";
+  if (status === "ready") return "ready";
+  return null;
+}
+
+/** pending-first：有 attachmentId 且非 failed 才允许发送。 */
+function 草稿可发送(draft: 媒体附件草稿): boolean {
+  if (!draft.attachmentId) return false;
+  return 草稿状态转附件槽位状态(draft.status) !== null;
+}
+
 export function 提取可发送媒体附件元数据(
   草稿列表: 媒体附件草稿[]
-): { kind: "image" | "video"; attachment_id: string; width: number; height: number }[] | null {
+): import("../聊天共享/契约.js").附件快照[] | null {
   if (草稿列表.length === 0) {
     return [];
   }
-  if (草稿列表.some((draft) => draft.status !== "ready" || !draft.attachmentId)) {
+  if (草稿列表.some((draft) => !草稿可发送(draft))) {
     return null;
   }
-  return 草稿列表.map((draft) => ({
-    kind: draft.kind,
-    attachment_id: draft.attachmentId,
-    width: draft.width,
-    height: draft.height,
-  }));
+  return 草稿列表.map((draft) => {
+    const status = 草稿状态转附件槽位状态(draft.status) ?? "processing";
+    if (draft.kind === "image") {
+      return {
+        kind: "image" as const,
+        attachment_id: draft.attachmentId,
+        width: draft.width,
+        height: draft.height,
+        status,
+      };
+    }
+    return {
+      kind: "video" as const,
+      attachment_id: draft.attachmentId,
+      width: draft.width,
+      height: draft.height,
+      status,
+    };
+  });
 }
 
 export function 提取可发送媒体附件标识(草稿列表: 媒体附件草稿[]): string[] | null {
@@ -75,7 +107,7 @@ export function 提取可发送媒体附件标识(草稿列表: 媒体附件草�
    * 发送命令不能静默吞掉仍在上传或已经失败的媒体。
    * 这里宁可阻止发送，也不制造“文本发出去了，但附件被悄悄丢了”的假成功。
    */
-  if (草稿列表.some((draft) => draft.status !== "ready" || !draft.attachmentId)) {
+  if (草稿列表.some((draft) => !草稿可发送(draft))) {
     return null;
   }
   return 草稿列表.map((draft) => draft.attachmentId);

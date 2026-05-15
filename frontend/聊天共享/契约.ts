@@ -112,11 +112,16 @@ export interface 附件分发线索 {
   ice_servers?: unknown[];
 }
 
+/** pending-first：附件槽位可能的权威状态。 */
+export type 附件槽位状态 = "pending" | "uploading" | "processing" | "ready" | "failed";
+
 export interface 图片附件快照 {
   kind: "image";
   attachment_id: string;
   width: number;
   height: number;
+  /** pending-first：附件槽位的权威状态，ready 才允许消费 distribution_hint。 */
+  status?: 附件槽位状态;
   has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
   distribution_hint?: 附件分发线索;
@@ -131,12 +136,29 @@ export interface 视频附件快照 {
   attachment_id: string;
   width: number;
   height: number;
+  /** pending-first：附件槽位的权威状态，ready 才允许消费 distribution_hint。 */
+  status?: 附件槽位状态;
   has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
   distribution_hint?: 附件分发线索;
 }
 
 export type 附件快照 = 图片附件快照 | 视频附件快照;
+
+/** pending-first：complete 成功/失败后后端广播的附件状态升级事件。 */
+export interface 附件状态变更事件 {
+  type: "attachment_status_changed";
+  room_id: string;
+  message_id: string;
+  attachment_id: string;
+  status: 附件槽位状态;
+  attachment?: 附件快照;
+  error_code?: string;
+  event_position: number;
+}
+
+/** 房间事件 union：消息创建 + 附件状态升级。 */
+export type 房间事件 = 消息事件 | 附件状态变更事件;
 
 export type 媒体种类 = 附件快照["kind"];
 
