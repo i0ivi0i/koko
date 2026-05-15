@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { 创建乐观房间消息, 推进房间时间线 } from "../时间线/领域";
 import { 提取可发送媒体附件元数据 } from "../媒体/媒体草稿";
-import type { 消息事件, 附件状态变更事件 } from "../聊天共享/契约";
+import type { 消息事件 } from "../聊天共享/契约";
 
 const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" | "event_position">): 消息事件 => ({
   type: "message_created",
@@ -250,7 +250,7 @@ describe("房间时间线", () => {
         }),
       ],
     });
-    expect(timeline[0].attachments![0]).toMatchObject({ status: "processing" });
+    expect(timeline[0]!.attachments![0]).toMatchObject({ status: "processing" });
 
     const upgraded = 推进房间时间线(timeline, {
       type: "ATTACHMENT_UPGRADE",
@@ -268,7 +268,7 @@ describe("房间时间线", () => {
     });
 
     expect(upgraded).toHaveLength(1);
-    expect(upgraded[0].attachments![0]).toMatchObject({
+    expect(upgraded[0]!.attachments![0]).toMatchObject({
       kind: "video",
       attachment_id: "att-v1",
       status: "ready",
@@ -297,7 +297,7 @@ describe("房间时间线", () => {
       patch: { status: "failed" },
     });
 
-    expect(upgraded[0].attachments![0]).toMatchObject({
+    expect(upgraded[0]!.attachments![0]).toMatchObject({
       kind: "image",
       attachment_id: "att-i1",
       width: 800,
