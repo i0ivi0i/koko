@@ -671,6 +671,22 @@ pub(super) async fn complete_media_upload(
                 duration_ms = complete_heavy_work_started_at.elapsed().as_millis() as u64,
                 "媒体上传 complete 重活完成"
             );
+            // pending-first：complete 成功后广播 attachment_status_changed ready 到房间。
+            // fire-and-forget：广播失败不阻断 HTTP 响应，客户端可通过恢复/增量拉取补偿。
+            if let Some(ref io) = state.realtime_io {
+                let io = io.clone();
+                let pool = state.pool.clone();
+                let aid = attachment_id.clone();
+                let tracker_url = state.swarm_tracker_public_url.clone();
+                let ticket_secret = state.swarm_ticket_secret.clone();
+                let ticket_ttl = state.swarm_ticket_ttl_seconds;
+                tokio::spawn(async move {
+                    广播附件状态升级事件(
+                        &io, &pool, &aid, &tracker_url,
+                        ticket_secret.as_deref(), ticket_ttl,
+                    ).await;
+                });
+            }
             (
                 StatusCode::OK,
                 Json(super::媒体资产外壳::媒体附件快照转响应体(
@@ -900,4 +916,148 @@ mod tests {
         released.notify_one();
         waiter.await.expect("waiter 应能正常结束");
     }
+}
+
+/// pending-first：complete 成功后查询附件绑定的消息，广播 ready 升级事件到房间。
+/// 广播失败只记日志不中断：客户端可通过恢复/增量拉取补偿。
+async fn 广播附件状态升级事件(
+    io: &socketioxide::SocketIo,
+    pool: &sqlx::PgPool,
+    attachment_id: &str,
+    tracker_public_url: &str,
+    ticket_secret: Option<&str>,
+    ticket_ttl_seconds: i64,
+) {
+    // 查询该附件绑定到哪些消息（通常为 1 条，但设计上允许多条）
+    let rows = match sqlx::query(
+        "SELECT mar.message_id, r.room_id, r.latest_event_position, \
+                a.kind, a.status, a.width, a.height, \
+                a.thumbnail_storage_key IS NOT NULL AS has_preview, \
+                adm.content_hash, adm.swarm_id, adm.torrent_info_hash, \
+                EXTRACT(EPOCH FROM adm.web_seed_until)::BIGINT AS web_seed_until_epoch \
+         FROM message_attachment_refs mar \
+         JOIN attachments a ON a.id = mar.attachment_id \
+         JOIN messages m ON m.message_id = mar.message_id \
+         JOIN rooms r ON r.id = m.room_id \
+         LEFT JOIN attachment_distribution_metadata adm ON adm.attachment_id = a.attachment_id \
+         WHERE a.attachment_id = $1",
+    )
+    .bind(attachment_id)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::warn!(
+                application = "附件状态升级",
+                attachment_id,
+                error = %err,
+                "查询附件消息绑定失败，跳过广播"
+            );
+            return;
+        }
+    };
+    if rows.is_empty() {
+        // 附件尚未绑定到任何消息（用户可能未点发送），不需要广播
+        return;
+    }
+    for row in &rows {
+        use sqlx::Row;
+        let room_id: String = row.get("room_id");
+        let message_id: String = row.get("message_id");
+        let kind: String = row.get("kind");
+        let status: String = row.get("status");
+        let width: Option<i32> = row.get("width");
+        let height: Option<i32> = row.get("height");
+        let has_preview: bool = row.get("has_preview");
+        // 构造契约附件快照
+        let contract_status = match status.as_str() {
+            "ready" => "ready",
+            "processing" => "processing",
+            "uploading" => "uploading",
+            "prepared" => "pending",
+            _ => "failed",
+        };
+        let mut attachment_json = serde_json::json!({
+            "kind": kind,
+            "attachment_id": attachment_id,
+            "width": width,
+            "height": height,
+            "status": contract_status,
+            "has_preview_asset": has_preview,
+        });
+        // ready 时附带分发线索
+        if contract_status == "ready" {
+            let ch: Option<String> = row.get("content_hash");
+            let si: Option<String> = row.get("swarm_id");
+            let ih: Option<String> = row.get("torrent_info_hash");
+            let ws: Option<i64> = row.get("web_seed_until_epoch");
+            if let (Some(ch), Some(si), Some(ih), Some(ws)) = (ch, si, ih, ws) {
+                if !ih.is_empty() {
+                    let mut hint = serde_json::json!({
+                        "content_hash": ch,
+                        "swarm_id": si,
+                        "torrent_info_hash": ih,
+                        "web_seed_until": ws,
+                    });
+                    // 签发 join_ticket
+                    if let Some(secret) = ticket_secret {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        let exp = now + ticket_ttl_seconds;
+                        let claims = serde_json::json!({
+                            "sub": "__room_broadcast__",
+                            "aid": attachment_id,
+                            "ih": ih,
+                            "iat": now as usize,
+                            "exp": exp as usize,
+                        });
+                        if let Ok(ticket) = jsonwebtoken::encode(
+                            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+                            &claims,
+                            &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()),
+                        ) {
+                            hint["join_ticket"] = serde_json::Value::String(ticket.clone());
+                            hint["torrent_url"] = serde_json::Value::String(
+                                format!("/api/media/{}/torrent?ticket={}", attachment_id, ticket),
+                            );
+                        }
+                    }
+                    hint["announce_urls"] = serde_json::json!([tracker_public_url]);
+                    hint["web_seed_url"] = serde_json::Value::Null;
+                    attachment_json["distribution_hint"] = hint;
+                }
+            }
+        }
+        let event_json = serde_json::json!({
+            "type": "attachment_status_changed",
+            "room_id": room_id,
+            "message_id": message_id,
+            "attachment_id": attachment_id,
+            "status": contract_status,
+            "attachment": attachment_json,
+            "event_position": row.get::<i64, _>("latest_event_position"),
+        });
+        // 广播到房间：socketioxide 按 room_id 寻址
+        if let Some(ns) = io.of("/") {
+            if let Err(errs) = ns.to(room_id.clone()).emit("room_event", &[event_json.clone()]).await {
+                tracing::warn!(
+                    application = "附件状态升级",
+                    attachment_id,
+                    room_id = room_id.as_str(),
+                    message_id = message_id.as_str(),
+                    error = %errs,
+                    "广播附件升级事件部分失败"
+                );
+            }
+        }
+    }
+    tracing::info!(
+        application = "附件状态升级",
+        attachment_id,
+        broadcast_count = rows.len(),
+        "附件状态升级事件已广播"
+    );
 }

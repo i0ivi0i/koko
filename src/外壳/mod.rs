@@ -129,6 +129,9 @@ pub struct 应用状态 {
     pub defense: Option<连接门禁::防御状态>,
     /// 媒体存储驱动（本地/S3），决定做种对账是否下发 localSeed hint。
     pub media_storage_driver: crate::assembly::媒体存储驱动,
+    /// pending-first：complete 后需要通过 socketioxide 广播附件状态升级事件。
+    /// 启动时写入一次，后续只读。Option 兜底测试/CLI 等不带 realtime 的入口。
+    pub realtime_io: Option<socketioxide::SocketIo>,
 }
 
 /// Cloudflare Realtime TURN 凭证缓存（TTL 24h，半衰期刷新）。
@@ -257,6 +260,7 @@ pub async fn 构建应用状态(
         media_complete_max_concurrency,
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
         media_storage_driver: media_storage.驱动.clone(),
+        realtime_io: None,
         defense: match crate::assembly::读取PoW配置() {
             Ok(pow_config) => {
                 tracing::info!(
@@ -376,6 +380,11 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .transports([TransportType::Websocket])
         .build_layer();
     注册realtime命名空间(&io, state.clone());
+    // pending-first：把 SocketIo 引用注入共享状态，供 complete 后广播。
+    // 这里用 Arc::get_mut 不行（state 已被 clone），所以直接 field mutation。
+    // 由于 应用状态 是 Clone，这里 clone 一份带 io 的新 state 给后面用。
+    let mut state = state;
+    state.realtime_io = Some(io.clone());
     let normalized_tus_base_path =
         媒体_tus代理外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
     let tus_resource_proxy_path = format!("{normalized_tus_base_path}/{{*tus_upload_tail}}");
