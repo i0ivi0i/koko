@@ -6,6 +6,7 @@ type Fetch监听器 = (event: {
   request: Request;
   respondWith(response: Promise<Response> | Response): void;
 }) => void;
+type 消息监听器 = (event: { data?: unknown }) => void;
 
 type 假缓存对象 = {
   match: ReturnType<typeof vi.fn>;
@@ -36,10 +37,16 @@ const 创建假缓存 = (初始响应: Array<[string, Response]> = []): 假缓�
 async function 准备媒体服务工作线程(input?: {
   缓存?: 假缓存对象 & { store: Map<string, Response> };
   fetch?: ReturnType<typeof vi.fn>;
+  clients?: { matchAll: ReturnType<typeof vi.fn> };
 }) {
   vi.resetModules();
-  const 监听器表 = new Map<string, Fetch监听器[]>();
+  const 监听器表 = new Map<string, Array<Fetch监听器 | 消息监听器>>();
   const 缓存 = input?.缓存 ?? 创建假缓存();
+  const clientsMock =
+    input?.clients ??
+    ({
+      matchAll: vi.fn(async () => []),
+    } as { matchAll: ReturnType<typeof vi.fn> });
   const fetchMock =
     input?.fetch ??
     vi.fn(async () => new Response("network", { status: 200, headers: { "content-type": "text/plain" } }));
@@ -47,8 +54,9 @@ async function 准备媒体服务工作线程(input?: {
     open: vi.fn(async () => 缓存),
   });
   vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("clients", clientsMock);
   vi.stubGlobal("self", globalThis);
-  vi.stubGlobal("addEventListener", ((type: string, listener: Fetch监听器) => {
+  vi.stubGlobal("addEventListener", ((type: string, listener: Fetch监听器 | 消息监听器) => {
     const listeners = 监听器表.get(type) ?? [];
     listeners.push(listener);
     监听器表.set(type, listeners);
@@ -59,8 +67,13 @@ async function 准备媒体服务工作线程(input?: {
   return {
     缓存,
     fetchMock,
+    执行消息(data: unknown): void {
+      for (const listener of 监听器表.get("message") ?? []) {
+        (listener as 消息监听器)({ data });
+      }
+    },
     async 执行请求(request: Request): Promise<Response> {
-      const fetchHandler = 监听器表.get("fetch")?.at(-1);
+      const fetchHandler = 监听器表.get("fetch")?.at(-1) as Fetch监听器 | undefined;
       let responsePromise: Promise<Response> | null = null;
       fetchHandler?.({
         request,
@@ -141,5 +154,57 @@ describe("媒体服务工作线程", () => {
       )
     ).rejects.toThrow("media-sw 未接管请求");
     expect(runtime.fetchMock).not.toHaveBeenCalled();
+  });
+  it("会接入 Golden Retriever 文件缓存消息协议，同时忽略 app shell 自己的 worker 消息", async () => {
+    const postMessage = vi.fn();
+    const clients = {
+      matchAll: vi.fn(async () => [{ postMessage }]),
+    };
+    const runtime = await 准备媒体服务工作线程({ clients });
+    const fileBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "video/mp4" });
+
+    runtime.执行消息({
+      type: "uppy/ADD_FILE",
+      store: "koko-upload",
+      file: { id: "file-1", data: fileBlob },
+    });
+    expect(() => runtime.执行消息({ type: "SKIP_WAITING" })).not.toThrow();
+    runtime.执行消息({
+      type: "uppy/GET_FILES",
+      store: "koko-upload",
+    });
+    await Promise.resolve();
+
+    expect(clients.matchAll).toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "uppy/ALL_FILES",
+        store: "koko-upload",
+        files: expect.objectContaining({
+          "file-1": fileBlob,
+        }),
+      })
+    );
+
+    runtime.执行消息({
+      type: "uppy/REMOVE_FILE",
+      store: "koko-upload",
+      fileID: "file-1",
+    });
+    runtime.执行消息({
+      type: "uppy/GET_FILES",
+      store: "koko-upload",
+    });
+    await Promise.resolve();
+
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "uppy/ALL_FILES",
+        store: "koko-upload",
+        files: expect.not.objectContaining({
+          "file-1": fileBlob,
+        }),
+      })
+    );
   });
 });

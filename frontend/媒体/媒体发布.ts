@@ -257,6 +257,7 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
   }).use(GoldenRetriever, {
     // 24 小时过期：防止旧指纹堆积导致新上传和过期 URL 冲突 → progress undefined
     expires: 24 * 60 * 60 * 1000,
+    serviceWorker: true,
   }) as unknown as 媒体上传器;
 }
 
