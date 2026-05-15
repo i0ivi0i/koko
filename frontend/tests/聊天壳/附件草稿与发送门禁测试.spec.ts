@@ -131,7 +131,7 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
     el.remove();
   });
 
-  it("processing 草稿存在时发送按钮会被禁用并显示正在处理", async () => {
+  it("pending-first: processing 草稿已有 attachmentId 时发送按钮可点击并仍提示后台处理中", async () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-processing",
@@ -146,7 +146,7 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
     });
     await 等待组件稳定(el);
 
-    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(读取操作台主动作(el).disabled).toBe(false);
     expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在处理");
 
     el.remove();

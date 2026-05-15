@@ -522,8 +522,13 @@ export function 派生壳级操作台状态(input: {
             ? `正在处理 ${处理中的媒体数} 个媒体附件`
           : input.statusText;
     const statusAttention = 失败媒体数 > 0 || Boolean(input.statusAttention);
+    // pending-first：processing/transporting 只要有 attachmentId 就不阻塞发送。
+    // 阻塞条件：选择中过渡、失败、或 transporting 但没拿到 attachmentId。
+    const 无attachmentId的传输中数 = 媒体草稿列表.filter(
+      (draft) => draft.status === "transporting" && !draft.attachmentId
+    ).length;
     const hasBlockingDraft =
-      媒体选择中过渡数 > 0 || 运输中的媒体数 > 0 || 处理中的媒体数 > 0 || 失败媒体数 > 0;
+      媒体选择中过渡数 > 0 || 无attachmentId的传输中数 > 0 || 失败媒体数 > 0;
     return {
       mode: "message",
       ...baseState,
