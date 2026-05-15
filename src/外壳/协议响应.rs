@@ -102,6 +102,17 @@ fn build_distribution_hint(
     json
 }
 
+/// 附件槽位状态 → JSON 字符串。
+fn 附件槽位状态_to_json(状态: &contract::附件槽位状态) -> &'static str {
+    match 状态 {
+        contract::附件槽位状态::待上传 => "pending",
+        contract::附件槽位状态::上传中 => "uploading",
+        contract::附件槽位状态::处理中 => "processing",
+        contract::附件槽位状态::已就绪 => "ready",
+        contract::附件槽位状态::失败 => "failed",
+    }
+}
+
 fn attachments_to_json(
     attachments: &[contract::附件快照],
     session_id: Option<&str>,
@@ -116,6 +127,7 @@ fn attachments_to_json(
                     "attachment_id": image.附件标识,
                     "width": image.宽,
                     "height": image.高,
+                    "status": 附件槽位状态_to_json(&image.状态),
                     "has_preview_asset": false
                 });
                 if let Some(ref hint) = image.分发线索 {
@@ -129,6 +141,7 @@ fn attachments_to_json(
                     "attachment_id": video.附件标识,
                     "width": video.宽,
                     "height": video.高,
+                    "status": 附件槽位状态_to_json(&video.状态),
                     "has_preview_asset": video.有预览图
                 });
                 if let Some(ref hint) = video.分发线索 {
@@ -176,6 +189,35 @@ pub(crate) fn event_to_json(
             "attachments": attachments_to_json(&附件, session_id, swarm_ctx),
             "event_position": 事件位置
         }),
+        contract::领域事件::附件状态已变更 {
+            房间标识,
+            消息标识,
+            附件标识,
+            状态,
+            附件,
+            错误码,
+            事件位置,
+        } => {
+            let mut payload = serde_json::json!({
+                "type": "attachment_status_changed",
+                "room_id": 房间标识,
+                "message_id": 消息标识,
+                "attachment_id": 附件标识,
+                "status": 附件槽位状态_to_json(&状态),
+                "event_position": 事件位置
+            });
+            if let Some(att) = 附件 {
+                payload["attachment"] = attachments_to_json(&[att], session_id, swarm_ctx)
+                    .into_iter()
+                    .next()
+                    .unwrap_or(serde_json::Value::Null);
+            }
+            if let Some(code) = 错误码 {
+                let (_, code_str, _) = map_domain_err_tuple(code);
+                payload["error_code"] = serde_json::Value::String(code_str.to_string());
+            }
+            payload
+        }
     }
 }
 

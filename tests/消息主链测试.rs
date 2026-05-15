@@ -100,6 +100,7 @@ fn 发送消息事务性顺序成立() {
             assert_eq!(事件位置, 1, "第一条消息事件位置应为 1");
             assert_eq!(文本, "hello", "事件文本应保持一致");
         }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
     }
 
     let (latest, events, messages) = repo
@@ -183,6 +184,7 @@ async fn 图片消息会把附件引用和事件一起持久化() {
                 ));
                 (room_id, 消息标识)
             }
+            _ => panic!("此测试不应遇到附件状态已变更事件"),
         }
     })
     .await
@@ -311,6 +313,7 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
                                 if 图片.附件标识 == attachment_id_for_worker
                         ));
                     }
+                    _ => panic!("此测试不应遇到附件状态已变更事件"),
                 }
             }
             _ => panic!("应返回房间快照"),
@@ -442,6 +445,7 @@ fn ready视频附件可以进入create_message主链() {
                     if 视频.附件标识 == attachment_id
             ));
         }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
     }
 }
 
@@ -499,5 +503,6 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
             assert_eq!(文本, "hello async create_message");
             assert_eq!(事件位置, 1);
         }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
     }
 }

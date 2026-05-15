@@ -185,6 +185,17 @@ fn 房间事件行转消息事件(
     }
 }
 
+/// DB 字符串状态 → 契约附件槽位状态。
+fn 解析数据库附件槽位状态(raw: &str) -> contract::附件槽位状态 {
+    match raw {
+        "prepared" => contract::附件槽位状态::待上传,
+        "uploading" => contract::附件槽位状态::上传中,
+        "processing" => contract::附件槽位状态::处理中,
+        "ready" => contract::附件槽位状态::已就绪,
+        _ => contract::附件槽位状态::失败,
+    }
+}
+
 /// 房间快照、历史页、增量页都要把附件引用一并读全。
 /// 这里按消息批量聚合，避免三个冷路径入口各自长出 N+1 查询。
 async fn 查询房间消息附件映射_异步(
@@ -202,6 +213,7 @@ async fn 查询房间消息附件映射_异步(
                 mar.sort_order,
                 a.attachment_id,
                 a.kind,
+                a.status,
                 a.width,
                 a.height,
                 a.thumbnail_storage_key IS NOT NULL AS has_preview_asset,
@@ -224,7 +236,9 @@ async fn 查询房间消息附件映射_异步(
     for row in rows {
         let message_id: String = row.get("message_id");
         let kind: String = row.get("kind");
-        // 从 LEFT JOIN 结果提取分发线索：四字段全到齐且 info_hash 非空才有效
+        let 状态 = 解析数据库附件槽位状态(
+            row.get::<String, _>("status").as_str(),
+        );
         let 分发线索 = {
             let ch: Option<String> = row.get("dist_content_hash");
             let si: Option<String> = row.get("dist_swarm_id");
@@ -242,6 +256,12 @@ async fn 查询房间消息附件映射_异步(
                 _ => None,
             }
         };
+        // 只有已就绪状态才允许携带分发线索
+        let 有效分发线索 = if 状态 == contract::附件槽位状态::已就绪 {
+            分发线索
+        } else {
+            None
+        };
         let attachment = match kind.as_str() {
             "image" => contract::附件快照::图片(contract::图片附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -252,7 +272,8 @@ async fn 查询房间消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: false,
-                分发线索,
+                状态,
+                分发线索: 有效分发线索,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -263,7 +284,8 @@ async fn 查询房间消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: row.get("has_preview_asset"),
-                分发线索,
+                状态,
+                分发线索: 有效分发线索,
             }),
             _ => return Err(contract::错误码::系统错误),
         };

@@ -29,6 +29,7 @@ fn 纯图片附件消息允许文本为空() {
             宽: 320,
             高: 240,
             有预览图: true,
+            状态: koko::domain::message::附件槽位状态::已就绪,
         }],
     );
     assert!(result.is_ok());
@@ -45,6 +46,7 @@ fn 纯视频附件消息允许文本为空() {
             宽: 1280,
             高: 720,
             有预览图: true,
+            状态: koko::domain::message::附件槽位状态::已就绪,
         }],
     );
     assert!(result.is_ok());
@@ -61,6 +63,7 @@ fn 当前仍不允许语音附件进入消息() {
             宽: 0,
             高: 0,
             有预览图: false,
+            状态: koko::domain::message::附件槽位状态::已就绪,
         }],
     );
     assert_eq!(result, Err(koko::domain::领域错误::附件类型不支持));

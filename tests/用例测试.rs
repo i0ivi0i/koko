@@ -211,6 +211,17 @@ impl 假仓储 {
     }
 }
 
+/// 领域附件槽位状态 → 契约附件槽位状态，假仓储专用翻译。
+fn 假仓储映射领域状态(状态: &koko::domain::message::附件槽位状态) -> koko::shared::contract::附件槽位状态 {
+    match 状态 {
+        koko::domain::message::附件槽位状态::待上传 => koko::shared::contract::附件槽位状态::待上传,
+        koko::domain::message::附件槽位状态::上传中 => koko::shared::contract::附件槽位状态::上传中,
+        koko::domain::message::附件槽位状态::处理中 => koko::shared::contract::附件槽位状态::处理中,
+        koko::domain::message::附件槽位状态::已就绪 => koko::shared::contract::附件槽位状态::已就绪,
+        koko::domain::message::附件槽位状态::失败 => koko::shared::contract::附件槽位状态::失败,
+    }
+}
+
 impl koko::identity::application::会话身份读取端口 for 假仓储 {
     fn 查询会话所属匿名身份(
         &self,
@@ -471,32 +482,47 @@ impl koko::message::application::消息仓储端口 for 假仓储 {
         let 附件快照列表: Vec<koko::shared::contract::附件快照> = 附件
             .iter()
             .map(|a| match a {
-                koko::domain::message::已校验附件引用::图片 { 附件标识, 宽, 高, 有预览图 } => {
+                koko::domain::message::已校验附件引用::图片 { 附件标识, 宽, 高, 有预览图, 状态 } => {
+                    let contract_状态 = 假仓储映射领域状态(状态);
+                    // pending-first：只有已就绪附件才携带分发线索
+                    let 分发线索 = if contract_状态 == koko::shared::contract::附件槽位状态::已就绪 {
+                        Some(koko::shared::contract::附件分发线索 {
+                            content_hash: format!("fake-hash-{附件标识}"),
+                            swarm_id: format!("fake-swarm-{附件标识}"),
+                            torrent_info_hash: format!("fake-ih-{附件标识}"),
+                            web_seed_until秒: 9999999999,
+                        })
+                    } else {
+                        None
+                    };
                     koko::shared::contract::附件快照::图片(koko::shared::contract::图片附件快照 {
                         附件标识: 附件标识.clone(),
                         宽: *宽,
                         高: *高,
                         有预览图: *有预览图,
-                        分发线索: Some(koko::shared::contract::附件分发线索 {
+                        状态: contract_状态,
+                        分发线索,
+                    })
+                }
+                koko::domain::message::已校验附件引用::视频 { 附件标识, 宽, 高, 有预览图, 状态 } => {
+                    let contract_状态 = 假仓储映射领域状态(状态);
+                    let 分发线索 = if contract_状态 == koko::shared::contract::附件槽位状态::已就绪 {
+                        Some(koko::shared::contract::附件分发线索 {
                             content_hash: format!("fake-hash-{附件标识}"),
                             swarm_id: format!("fake-swarm-{附件标识}"),
                             torrent_info_hash: format!("fake-ih-{附件标识}"),
                             web_seed_until秒: 9999999999,
-                        }),
-                    })
-                }
-                koko::domain::message::已校验附件引用::视频 { 附件标识, 宽, 高, 有预览图 } => {
+                        })
+                    } else {
+                        None
+                    };
                     koko::shared::contract::附件快照::视频(koko::shared::contract::视频附件快照 {
                         附件标识: 附件标识.clone(),
                         宽: *宽,
                         高: *高,
                         有预览图: *有预览图,
-                        分发线索: Some(koko::shared::contract::附件分发线索 {
-                            content_hash: format!("fake-hash-{附件标识}"),
-                            swarm_id: format!("fake-swarm-{附件标识}"),
-                            torrent_info_hash: format!("fake-ih-{附件标识}"),
-                            web_seed_until秒: 9999999999,
-                        }),
+                        状态: contract_状态,
+                        分发线索,
                     })
                 }
             })
@@ -859,8 +885,10 @@ fn 发送文本消息返回权威事件() {
     );
 }
 
+/// pending-first：processing 附件属于发送者时允许创建消息，
+/// 附件槽位状态为 processing，不带分发线索。
 #[test]
-fn 非ready附件不能创建消息() {
+fn processing附件属于发送者时可以创建pending附件消息() {
     let mut repo = 假仓储::default();
     let identity =
         koko::identity::application::引导匿名身份(&mut repo, "device-attachment-processing")
@@ -887,13 +915,67 @@ fn 非ready附件不能创建消息() {
         koko::media::模型::附件状态读取结果::处理中,
     );
 
-    let result = koko::message::application::创建消息(
+    let event = koko::message::application::创建消息(
         &mut repo,
         &room_id,
         &identity.会话标识,
         "c-attachment-processing",
         "",
         &["att-1".to_string()],
+    )
+    .expect("processing 附件属于发送者时应创建 pending 附件消息");
+
+    match event {
+        koko::shared::contract::领域事件::消息已创建 { 附件, .. } => {
+            assert_eq!(附件.len(), 1);
+            assert!(matches!(
+                附件.first(),
+                Some(koko::shared::contract::附件快照::图片(image))
+                    if image.附件标识 == "att-1"
+                        && image.状态 == koko::shared::contract::附件槽位状态::处理中
+                        && image.分发线索.is_none()
+            ));
+        }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
+    }
+}
+
+/// pending-first：失败附件仍拒绝进入消息主链。
+#[test]
+fn 失败附件不能创建消息() {
+    let mut repo = 假仓储::default();
+    let identity =
+        koko::identity::application::引导匿名身份(&mut repo, "device-attachment-failed")
+            .expect("应能引导匿名身份");
+    let room = koko::room::application::按短码进房或建房(
+        &mut repo,
+        &identity.会话标识,
+        "ROOM0012",
+    )
+    .expect("应成功");
+    let room_id = match room {
+        koko::shared::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+    let sender_identity = repo
+        .会话到匿名身份
+        .get(&identity.会话标识)
+        .expect("引导匿名身份后应能通过会话查到内部身份")
+        .clone();
+    repo.放入附件(
+        "att-failed",
+        &sender_identity,
+        koko::media::模型::附件种类读取结果::图片,
+        koko::media::模型::附件状态读取结果::失败,
+    );
+
+    let result = koko::message::application::创建消息(
+        &mut repo,
+        &room_id,
+        &identity.会话标识,
+        "c-attachment-failed",
+        "",
+        &["att-failed".to_string()],
     );
 
     assert!(matches!(
@@ -1031,6 +1113,7 @@ async fn 异步ready视频附件也能进入统一消息主链() {
             }
             assert!(找到视频, "消息事件必须包含视频附件快照");
         }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
     }
     assert_eq!(
         repo.统一消息事件调用次数, 1,
@@ -1100,6 +1183,7 @@ async fn 统一消息异步用例仍返回权威消息事件() {
             assert_eq!(房间标识, room_id);
             assert_eq!(文本, "hello async");
         }
+        _ => panic!("此测试不应遇到附件状态已变更事件"),
     }
     assert_eq!(
         repo.统一消息事件调用次数, 1,

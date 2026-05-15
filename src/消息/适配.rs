@@ -38,6 +38,18 @@ fn 行转消息事件(
 }
 
 /// 领域层已经校验通过的附件引用，在共享契约里只保留渲染所需的稳定事实。
+/// 领域附件槽位状态 → 契约附件槽位状态。
+/// 这是 adapter 层唯一的 domain→contract 状态翻译点。
+fn 领域状态转契约状态(状态: &domain::message::附件槽位状态) -> contract::附件槽位状态 {
+    match 状态 {
+        domain::message::附件槽位状态::待上传 => contract::附件槽位状态::待上传,
+        domain::message::附件槽位状态::上传中 => contract::附件槽位状态::上传中,
+        domain::message::附件槽位状态::处理中 => contract::附件槽位状态::处理中,
+        domain::message::附件槽位状态::已就绪 => contract::附件槽位状态::已就绪,
+        domain::message::附件槽位状态::失败 => contract::附件槽位状态::失败,
+    }
+}
+
 fn 已校验附件转契约快照(
     附件: &domain::message::已校验附件引用,
 ) -> contract::附件快照 {
@@ -47,11 +59,13 @@ fn 已校验附件转契约快照(
             宽,
             高,
             有预览图,
+            状态,
         } => contract::附件快照::图片(contract::图片附件快照 {
             附件标识: 附件标识.clone(),
             宽: *宽,
             高: *高,
             有预览图: *有预览图,
+            状态: 领域状态转契约状态(状态),
             分发线索: None,
         }),
         domain::message::已校验附件引用::视频 {
@@ -59,11 +73,13 @@ fn 已校验附件转契约快照(
             宽,
             高,
             有预览图,
+            状态,
         } => contract::附件快照::视频(contract::视频附件快照 {
             附件标识: 附件标识.clone(),
             宽: *宽,
             高: *高,
             有预览图: *有预览图,
+            状态: 领域状态转契约状态(状态),
             分发线索: None,
         }),
     }
@@ -117,6 +133,19 @@ async fn 查询附件分发线索批量_异步(
     Ok(map)
 }
 
+/// DB 字符串状态 → 契约附件槽位状态。
+/// 与 `src/媒体/适配.rs` 的 `解析附件状态` 同源，但投影目标不同。
+fn 解析数据库附件槽位状态(raw: &str) -> contract::附件槽位状态 {
+    match raw {
+        "prepared" => contract::附件槽位状态::待上传,
+        "uploading" => contract::附件槽位状态::上传中,
+        "processing" => contract::附件槽位状态::处理中,
+        "ready" => contract::附件槽位状态::已就绪,
+        // failed / expired / canceled / abandoned 都映射为失败
+        _ => contract::附件槽位状态::失败,
+    }
+}
+
 /// 房间快照、历史页、增量页都会读消息附件引用。
 /// 这里一次批量拉齐，避免三个入口各自长 N+1 查询。
 async fn 查询消息附件映射_异步(
@@ -134,6 +163,7 @@ async fn 查询消息附件映射_异步(
                 mar.sort_order,
                 a.attachment_id,
                 a.kind,
+                a.status,
                 a.width,
                 a.height,
                 a.thumbnail_storage_key IS NOT NULL AS has_preview_asset,
@@ -174,6 +204,15 @@ async fn 查询消息附件映射_异步(
                 _ => None,
             }
         };
+        let 状态 = 解析数据库附件槽位状态(
+            row.get::<String, _>("status").as_str(),
+        );
+        // 只有已就绪状态才允许携带分发线索
+        let 有效分发线索 = if 状态 == contract::附件槽位状态::已就绪 {
+            分发线索
+        } else {
+            None
+        };
         let attachment = match kind.as_str() {
             "image" => contract::附件快照::图片(contract::图片附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -184,7 +223,8 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: false,
-                分发线索,
+                状态,
+                分发线索: 有效分发线索,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -195,7 +235,8 @@ async fn 查询消息附件映射_异步(
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
                 有预览图: row.get("has_preview_asset"),
-                分发线索,
+                状态,
+                分发线索: 有效分发线索,
             }),
             _ => return Err(contract::错误码::系统错误),
         };
@@ -431,32 +472,39 @@ pub(super) async fn 提交统一消息事件_异步(
                 domain::message::已校验附件引用::图片 { 附件标识, .. }
                 | domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识.as_str(),
             };
-            if let Some(hint) = 分发线索映射.get(aid) {
-                match &mut snapshot {
-                    contract::附件快照::图片(img) => img.分发线索 = Some(hint.clone()),
-                    contract::附件快照::视频(vid) => vid.分发线索 = Some(hint.clone()),
+            // pending-first：只有已就绪附件才允许携带分发线索
+            let is_ready = match &snapshot {
+                contract::附件快照::图片(img) => img.状态 == contract::附件槽位状态::已就绪,
+                contract::附件快照::视频(vid) => vid.状态 == contract::附件槽位状态::已就绪,
+            };
+            if is_ready {
+                if let Some(hint) = 分发线索映射.get(aid) {
+                    match &mut snapshot {
+                        contract::附件快照::图片(img) => img.分发线索 = Some(hint.clone()),
+                        contract::附件快照::视频(vid) => vid.分发线索 = Some(hint.clone()),
+                    }
+                    tracing::info!(
+                        application = "创建消息",
+                        adapter = "消息适配",
+                        observation = "message_media_distribution_hint_attached",
+                        room_id = 房间标识,
+                        message_id = message_id.as_str(),
+                        attachment_id = aid,
+                        torrent_info_hash = hint.torrent_info_hash.as_str(),
+                        "媒体附件分发线索已附加到消息事件"
+                    );
+                } else {
+                    tracing::warn!(
+                        application = "创建消息",
+                        adapter = "消息适配",
+                        observation = "message_media_distribution_hint_missing",
+                        room_id = 房间标识,
+                        message_id = message_id.as_str(),
+                        attachment_id = aid,
+                        reason = "distribution_metadata_not_found",
+                        "已就绪附件缺少分发线索，接收者将无法提前预热"
+                    );
                 }
-                tracing::info!(
-                    application = "创建消息",
-                    adapter = "消息适配",
-                    observation = "message_media_distribution_hint_attached",
-                    room_id = 房间标识,
-                    message_id = message_id.as_str(),
-                    attachment_id = aid,
-                    torrent_info_hash = hint.torrent_info_hash.as_str(),
-                    "媒体附件分发线索已附加到消息事件"
-                );
-            } else {
-                tracing::warn!(
-                    application = "创建消息",
-                    adapter = "消息适配",
-                    observation = "message_media_distribution_hint_missing",
-                    room_id = 房间标识,
-                    message_id = message_id.as_str(),
-                    attachment_id = aid,
-                    reason = "distribution_metadata_not_found",
-                    "媒体附件缺少分发线索，接收者将无法提前预热"
-                );
             }
             snapshot
         })

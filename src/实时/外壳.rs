@@ -830,6 +830,19 @@ pub(crate) async fn handle_realtime_create_message(
                             hints,
                         )
                     }
+                    contract::领域事件::附件状态已变更 {
+                        房间标识,
+                        消息标识,
+                        附件标识: _,
+                        事件位置,
+                        ..
+                    } => (
+                        房间标识.clone(),
+                        消息标识.clone(),
+                        String::new(),
+                        *事件位置,
+                        Vec::new(),
+                    ),
                 };
             // 广播路径：含分发线索附件时构造 SwarmBroadcastContext，
             // 让 event_to_json 自动在 distribution_hint 里签发 join_ticket + 运行态字段。
@@ -1141,6 +1154,7 @@ mod 实时外壳测试 {
                     宽: 1280,
                     高: 720,
                     有预览图: true,
+                    状态: contract::附件槽位状态::已就绪,
                     分发线索: None,
                 })],
                 事件位置: 1,
@@ -1152,6 +1166,7 @@ mod 实时外壳测试 {
         assert_eq!(payload["attachments"][0]["kind"], "video");
         assert_eq!(payload["attachments"][0]["attachment_id"], "att-video-1");
         assert_eq!(payload["attachments"][0]["has_preview_asset"], true);
+        assert_eq!(payload["attachments"][0]["status"], "ready");
         assert!(
             payload["attachments"][0].get("preview_asset").is_none(),
             "没有逐连接会话上下文时，不应在 room_event 里伪造 still_url"
@@ -1173,6 +1188,7 @@ mod 实时外壳测试 {
                     宽: 1920,
                     高: 1080,
                     有预览图: false,
+                    状态: contract::附件槽位状态::已就绪,
                     分发线索: Some(contract::附件分发线索 {
                         content_hash: "hash123".to_string(),
                         swarm_id: "swarm123".to_string(),
@@ -1208,6 +1224,7 @@ mod 实时外壳测试 {
                     宽: 1920,
                     高: 1080,
                     有预览图: false,
+                    状态: contract::附件槽位状态::已就绪,
                     分发线索: Some(contract::附件分发线索 {
                         content_hash: "sha256-abc".into(),
                         swarm_id: "swarm-1".into(),
