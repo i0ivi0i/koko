@@ -52,7 +52,7 @@ _此项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 - 执行任何任务前先看一眼 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用(多个)，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent(也能使用skill)，子任务必须有读搜清单、写入边界和上下文约束。
 - 默认在当前 `main` 上完成；除非主人明确要求，不另开分支、worktree 或平行线路。
 - 本地 git 用 git；GitHub 平台操作用 GitHub skill / `gh`；本项目默认 Win11 原生环境，禁止 WSL2 开发。
-- 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，默认必须联用这三个 CLI skill：`playwright-cli`、`chrome-devtools-cli`、`browser-trace`；禁止只跑其中一条就自称闭环，禁止自造临时浏览器脚本或旁路乱测。
+- 冒烟测试、浏览器群聊真实体验、前端交互、媒体时间线、自动播放、查看器或页面回归，默认必须联用这三个 CLI skill：`playwright-cli`、`chrome-devtools-cli`、`browser-trace`；辅助按需用 `qa`、`qa-only`、`verification-before-completion`、`systematic-debugging`、`chrome-cdp`、`playwright-dev` 收口验证与根因；禁止只跑其中一条就自称闭环，禁止自造临时浏览器脚本或旁路乱测。
 - 回答任何关于"代码怎么实现的""流程是什么""会影响什么"的问题，必须先用 GitNexus/Serena 查证再回答，禁止凭通用知识或训练数据编造项目实现细节；查不到就说"我去查一下"，不说"应该是"。
 
 ## Discipline
@@ -81,7 +81,7 @@ _这个文件属于你，也会随着你的成长继续提炼智慧。_
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **koko** (15017 symbols, 28606 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **koko** (15157 symbols, 28781 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
