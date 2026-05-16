@@ -238,7 +238,7 @@ function 记录不支持媒体文件(sourceFile: File): void {
  */
 function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体上传器 {
   const tusOptions = 构造媒体Tus传输选项(input);
-  return new Uppy<媒体上传Meta, 媒体上传响应体>({
+  const uppy = new Uppy<媒体上传Meta, 媒体上传响应体>({
     autoProceed: true,
     allowMultipleUploadBatches: true,
     restrictions: {
@@ -248,17 +248,23 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
     },
   }).use(Tus, {
     ...tusOptions,
-    /**
-     * Tus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
-     * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
-     */
     allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],
     headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
   }).use(GoldenRetriever, {
-    // 24 小时过期：防止旧指纹堆积导致新上传和过期 URL 冲突 → progress undefined
     expires: 24 * 60 * 60 * 1000,
     serviceWorker: true,
-  }) as unknown as 媒体上传器;
+  });
+
+  // GoldenRetriever 恢复旧上传时，部署后数据格式变化可能导致 progress undefined 崩溃。
+  // 守卫：恢复失败时清除旧缓存，不让旧缓存阻断新上传。
+  uppy.on("error", (error: Error) => {
+    if (error?.message?.includes("progress") || error?.message?.includes("undefined")) {
+      console.warn("[koko:golden-retriever:restore-guard] 旧缓存恢复失败，清除", error.message);
+      try { uppy.cancelAll(); } catch { /* 忽略 */ }
+    }
+  });
+
+  return uppy as unknown as 媒体上传器;
 }
 
 async function 默认让出主线程(): Promise<void> {

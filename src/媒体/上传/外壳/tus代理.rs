@@ -50,7 +50,7 @@ pub(super) async fn proxy_tus_upload_transport(
             );
         }
     };
-    let mut upstream_request = reqwest::Client::new().request(upstream_method, &upstream_url);
+    let mut upstream_request = state.http_client.request(upstream_method, &upstream_url);
     for (name, value) in &parts.headers {
         if name.as_str().eq_ignore_ascii_case("host") {
             continue;
@@ -141,8 +141,7 @@ pub(super) async fn 尝试终止媒体_tus上传(
         internal_delete_endpoint.trim_end_matches('/'),
         upload_id.trim()
     );
-    let client = reqwest::Client::new();
-    let mut request = client
+    let mut request = state.http_client
         .delete(delete_url.as_str())
         .header("Tus-Resumable", TUS协议版本_HEADER值)
         .header(

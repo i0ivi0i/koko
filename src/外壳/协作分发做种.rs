@@ -161,7 +161,7 @@ pub(crate) async fn 尝试启动协作分发做种(
         "localSeed": 命令.local_seed,
         "readinessWaitMs": 1500,
     });
-    let response = reqwest::Client::new()
+    let response = state.http_client
         .post(url.as_str())
         .json(&payload)
         .send()
@@ -328,7 +328,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
         "activeInfoHashes": active_info_hashes
     });
     let reconcile_url = format!("{}/seed/reconcile", state.swarm_seeder_control_base_url);
-    let reconcile_response = reqwest::Client::new()
+    let reconcile_response = state.http_client
         .post(reconcile_url.as_str())
         .json(&reconcile_payload)
         .send()

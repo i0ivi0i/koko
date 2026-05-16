@@ -132,6 +132,9 @@ pub struct 应用状态 {
     /// pending-first：complete 后需要通过 socketioxide 广播附件状态升级事件。
     /// 启动时写入一次，后续只读。Option 兜底测试/CLI 等不带 realtime 的入口。
     pub realtime_io: Option<socketioxide::SocketIo>,
+    /// 全局共享 HTTP Client，所有对外 HTTP 调用复用此连接池。
+    /// reqwest 官方要求 Client 创建一次复用，每次 new() 都会重建连接池和 TLS 会话。
+    pub http_client: reqwest::Client,
 }
 
 /// Cloudflare Realtime TURN 凭证缓存（TTL 24h，半衰期刷新）。
@@ -168,7 +171,7 @@ impl 应用状态 {
         let url = format!(
             "https://rtc.live.cloudflare.com/v1/turn/keys/{key_id}/credentials/generate-ice-servers"
         );
-        let res = reqwest::Client::new()
+        let res = self.http_client
             .post(&url).bearer_auth(api_token)
             .json(&serde_json::json!({ "ttl": TURN_CREDENTIAL_TTL }))
             .send().await;
@@ -229,6 +232,14 @@ pub async fn 构建应用状态(
     .map_err(|_| std::io::Error::other("连接数据库超时"))?
     .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
 
+    let http_client = reqwest::Client::builder()
+        .pool_max_idle_per_host(20)
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|err| std::io::Error::other(format!("构建共享 HTTP Client 失败: {err}")))?;
+
     Ok(应用状态 {
         pool,
         runtime_handle: tokio::runtime::Handle::current(),
@@ -261,6 +272,7 @@ pub async fn 构建应用状态(
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
         media_storage_driver: media_storage.驱动.clone(),
         realtime_io: None,
+        http_client,
         defense: match crate::assembly::读取PoW配置() {
             Ok(pow_config) => {
                 tracing::info!(

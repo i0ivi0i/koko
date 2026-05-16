@@ -265,33 +265,29 @@ pub(super) async fn complete_media_upload(
                         协作分发共享载荷.字节,
                         ready_epoch秒,
                     );
-                let torrent = match media_distribution::生成附件torrent元信息(
-                    distribution_request.content_hash.as_str(),
-                    协作分发共享载荷.稳定扩展名,
-                    协作分发共享载荷.字节,
-                ) {
-                    Ok(torrent) => torrent,
-                    Err(message) => {
-                        return 记录并返回complete重活失败(
-                            &complete失败上下文,
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "system_error",
-                            message.clone(),
-                            "generate_torrent_failed",
-                            message,
-                        );
-                    }
-                };
+                let torrent_bytes_for_blocking = 协作分发共享载荷.字节.to_vec();
+                let torrent_hash_for_blocking = distribution_request.content_hash.clone();
+                let torrent_ext_for_blocking = 协作分发共享载荷.稳定扩展名.to_string();
                 let canonical_storage_key = 构造canonical内容寻址存储键(
                     distribution_request.content_hash.as_str(),
                     协作分发共享载荷.稳定扩展名,
                 );
                 let canonical_path = ObjectPath::from(canonical_storage_key.clone());
-                if let Err(err) = state
-                    .attachment_store
-                    .put(&canonical_path, original_bytes.clone().into())
-                    .await
-                {
+                drop(协作分发共享载荷);
+                let image_byte_size = original_bytes.len() as i64;
+                let (put_result, torrent_result) = tokio::join!(
+                    state
+                        .attachment_store
+                        .put(&canonical_path, original_bytes.into()),
+                    task::spawn_blocking(move || {
+                        media_distribution::生成附件torrent元信息(
+                            &torrent_hash_for_blocking,
+                            &torrent_ext_for_blocking,
+                            &torrent_bytes_for_blocking,
+                        )
+                    })
+                );
+                if let Err(err) = put_result {
                     return 记录并返回complete重活失败(
                         &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -301,11 +297,34 @@ pub(super) async fn complete_media_upload(
                         format!("写入 canonical 图片对象失败: {err}"),
                     );
                 }
+                let torrent = match torrent_result {
+                    Ok(Ok(t)) => t,
+                    Ok(Err(message)) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            message.clone(),
+                            "generate_torrent_failed",
+                            message,
+                        );
+                    }
+                    Err(join_err) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "torrent 生成任务执行失败",
+                            "generate_torrent_join_failed",
+                            format!("spawn_blocking join 失败: {join_err}"),
+                        );
+                    }
+                };
                 let ready_request = crate::media::模型::媒体附件写入请求 {
                     附件标识: attachment_id.clone(),
                     种类: prepared.种类.clone(),
                     mime_type: parsed.mime_type,
-                    字节大小: original_bytes.len() as i64,
+                    字节大小: image_byte_size,
                     宽: parsed.宽,
                     高: parsed.高,
                     // 图片主链已前移到客户端预制；后端只保存一份 canonical.webp。
@@ -420,33 +439,37 @@ pub(super) async fn complete_media_upload(
                     协作分发共享载荷.稳定扩展名,
                 );
                 let canonical_video_path = ObjectPath::from(canonical_video_storage_key.clone());
-                let 视频canonical写入开始 = Instant::now();
-                if let Err(err) = state
-                    .attachment_store
-                    .put(
+                let canonical_torrent并行开始 = Instant::now();
+                let torrent_bytes_for_blocking = 协作分发共享载荷.字节.to_vec();
+                let torrent_hash_for_blocking = distribution_request.content_hash.clone();
+                let torrent_ext_for_blocking = 协作分发共享载荷.稳定扩展名.to_string();
+                let (canonical_result, torrent_result) = tokio::join!(
+                    流式写入对象存储(
+                        &state.attachment_store,
                         &canonical_video_path,
-                        canonical_video_mapping.as_ref().to_vec().into(),
-                    )
-                    .await
-                {
+                        canonical_video_mapping.as_ref(),
+                    ),
+                    task::spawn_blocking(move || {
+                        media_distribution::生成附件torrent元信息(
+                            &torrent_hash_for_blocking,
+                            &torrent_ext_for_blocking,
+                            &torrent_bytes_for_blocking,
+                        )
+                    })
+                );
+                if let Err(err) = canonical_result {
                     return 记录并返回complete重活失败(
                         &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         "写入 canonical 视频对象失败",
                         "put_video_canonical_failed",
-                        format!("写入 canonical 视频对象失败: {err}"),
+                        format!("流式写入 canonical 视频对象失败: {err}"),
                     );
                 }
-                记录complete阶段耗时("put_canonical_video", 视频canonical写入开始);
-                let torrent生成开始 = Instant::now();
-                let torrent = match media_distribution::生成附件torrent元信息(
-                    distribution_request.content_hash.as_str(),
-                    协作分发共享载荷.稳定扩展名,
-                    协作分发共享载荷.字节,
-                ) {
-                    Ok(torrent) => torrent,
-                    Err(message) => {
+                let torrent = match torrent_result {
+                    Ok(Ok(t)) => t,
+                    Ok(Err(message)) => {
                         return 记录并返回complete重活失败(
                             &complete失败上下文,
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -456,8 +479,18 @@ pub(super) async fn complete_media_upload(
                             message,
                         );
                     }
+                    Err(join_err) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "torrent 生成任务执行失败",
+                            "generate_torrent_join_failed",
+                            format!("spawn_blocking join 失败: {join_err}"),
+                        );
+                    }
                 };
-                记录complete阶段耗时("generate_torrent", torrent生成开始);
+                记录complete阶段耗时("canonical_and_torrent_parallel", canonical_torrent并行开始);
                 drop(canonical_video_mapping);
                 let ready_request = crate::media::模型::媒体附件写入请求 {
                     附件标识: attachment_id.clone(),
@@ -857,6 +890,29 @@ fn 记录并返回complete重活失败(
         );
     }
     err_resp(status, code, response_message)
+}
+
+/// 4 MB 分片流式写入，避免视频等大文件一次性 `to_vec()` 的全量堆拷贝。
+async fn 流式写入对象存储(
+    store: &std::sync::Arc<dyn object_store::ObjectStore>,
+    path: &ObjectPath,
+    data: &[u8],
+) -> Result<(), String> {
+    let mut upload = store
+        .put_multipart(path)
+        .await
+        .map_err(|err| format!("创建流式写入失败: {err}"))?;
+    for chunk in data.chunks(4 * 1024 * 1024) {
+        if let Err(err) = upload.put_part(chunk.to_vec().into()).await {
+            let _ = upload.abort().await;
+            return Err(format!("写入分片失败: {err}"));
+        }
+    }
+    upload
+        .complete()
+        .await
+        .map(|_| ())
+        .map_err(|err| format!("完成流式写入失败: {err}"))
 }
 
 #[cfg(test)]
