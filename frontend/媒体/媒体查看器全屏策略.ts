@@ -54,9 +54,11 @@ const 退出原生视频真全屏 = (video: 可原生全屏视频元素): boolea
 
 export const 映射PhotoSwipe图片 = (item: 媒体查看器图片项目): PhotoSwipe数据源项目 => ({
   src: item.src,
+  msrc: item.src,
   width: Math.max(1, item.width),
   height: Math.max(1, item.height),
   alt: item.alt,
+  attachmentId: item.attachmentId,
 });
 
 export const 创建默认PhotoSwipeLightbox: PhotoSwipe查看器工厂 = async (options) => {

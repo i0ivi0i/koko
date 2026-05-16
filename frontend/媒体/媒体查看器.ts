@@ -51,9 +51,12 @@ type 媒体查看器图片项目 = Extract<媒体查看器项目, { kind: "image
 
 export type PhotoSwipe数据源项目 = {
   src: string;
+  msrc?: string;
   width: number;
   height: number;
   alt: string;
+  /** 用于 thumbEl filter 从时间线 DOM 查找对应缩略图元素 */
+  attachmentId?: string;
 };
 
 export type PhotoSwipe查看器选项 = {
@@ -74,6 +77,11 @@ export type 媒体查看器实例 = {
   on?(
     eventName: "close" | "destroy" | "change" | "loadComplete",
     callback: (payload?: { slide?: { index?: number }; isError?: boolean }) => void
+  ): void;
+  addFilter?(
+    name: string,
+    fn: (...args: unknown[]) => unknown,
+    priority?: number
   ): void;
 };
 
@@ -391,6 +399,11 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
    * 导致壳创建跨出手势窗口、后续容器全屏请求被浏览器按“无激活”拒绝。
    */
   void 预热默认VideoJs元素().catch(() => undefined);
+  /**
+   * PhotoSwipe 预加载：把 lightbox + core 两个异步模块提前拉入浏览器缓存，
+   * 用户点击图片时 await 的是已 resolve 的 Promise，消除冷启动灰卡片延迟。
+   */
+  void import("photoswipe/lightbox").then(() => import("photoswipe")).catch(() => undefined);
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
   const globalVideoPlayer =
@@ -663,6 +676,31 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
             }
             通知图片补齐中(loadedIndex);
             通知图片补齐完成(loadedIndex);
+          });
+          /**
+           * thumbEl / placeholderSrc filter：
+           * 让 PhotoSwipe 从时间线已渲染的缩略图"就地放大"，消除灰色占位区域。
+           * 根据 attachmentId 从 DOM 查找对应 <img>，找到则用它做动画起点和即时占位。
+           */
+          lightbox.addFilter?.("thumbEl", (thumbEl: unknown, data: unknown, _index: unknown) => {
+            const itemData = data as PhotoSwipe数据源项目 | undefined;
+            if (!itemData?.attachmentId) {
+              return thumbEl;
+            }
+            const img = document.querySelector<HTMLImageElement>(
+              `img[data-attachment-id="${itemData.attachmentId}"]`
+            );
+            return img ?? thumbEl;
+          });
+          lightbox.addFilter?.("placeholderSrc", (placeholderSrc: unknown, slide: unknown) => {
+            const slideData = (slide as { data?: PhotoSwipe数据源项目 } | undefined)?.data;
+            if (!slideData?.attachmentId) {
+              return placeholderSrc;
+            }
+            const img = document.querySelector<HTMLImageElement>(
+              `img[data-attachment-id="${slideData.attachmentId}"]`
+            );
+            return img?.src ?? placeholderSrc;
           });
           历史接管.接管();
           lightbox.init?.();

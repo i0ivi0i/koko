@@ -59,15 +59,19 @@ describe("媒体查看器适配器 - 图片 PhotoSwipe 会话", () => {
         dataSource: [
           {
             src: "http://media.local/original-image-1",
+            msrc: "http://media.local/original-image-1",
             alt: "图片附件原图",
             width: 1200,
             height: 800,
+            attachmentId: "att-image-1",
           },
           {
             src: "http://media.local/original-image-2",
+            msrc: "http://media.local/original-image-2",
             alt: "第二张图片附件原图",
             width: 900,
             height: 1200,
+            attachmentId: "att-image-2",
           },
         ],
       })
