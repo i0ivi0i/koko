@@ -11,7 +11,12 @@
   # `/files` 是浏览器公开上传/读取 contract；
   # 它必须继续先进入 Rust 后端，再由后端决定如何转给内部 tusd。
   handle /files* {
-    reverse_proxy app:8080
+    reverse_proxy app:8080 {
+      flush_interval -1
+      transport http {
+        versions 1.1
+      }
+    }
   }
 
   # `/api/swarm/announce` 是浏览器唯一公开 announce contract；

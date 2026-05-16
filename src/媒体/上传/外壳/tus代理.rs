@@ -10,6 +10,7 @@ use axum::{
     },
     response::Response,
 };
+use http_body_util::BodyExt;
 /// 官方 termination 仍只是 transport 删除能力：
 /// 1. 只有 business abandon 已经成功之后，shell 才会来协调它；
 /// 2. 没配置内部 guard 时，继续退回本地残留清理兜底，不让取消主链直接失败；
@@ -57,13 +58,53 @@ pub(super) async fn proxy_tus_upload_transport(
         }
         upstream_request = upstream_request.header(name, value);
     }
+    let body_bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(err) => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "media_tus_request_body_read_failed",
+                format!("读取上传请求体失败: {err}"),
+            );
+        }
+    };
+    let content_length = body_bytes.len();
+    let forward_start = std::time::Instant::now();
     let upstream_response = match upstream_request
-        .body(reqwest::Body::wrap_stream(body.into_data_stream()))
+        .body(reqwest::Body::from(body_bytes))
         .send()
         .await
     {
-        Ok(response) => response,
+        Ok(response) => {
+            let duration = forward_start.elapsed();
+            if content_length > 0 {
+                let throughput_mib_s =
+                    (content_length as f64 / 1_048_576.0) / duration.as_secs_f64().max(0.001);
+                tracing::info!(
+                    adapter = "tus_proxy",
+                    outcome = "forwarded",
+                    method = %parts.method,
+                    path = %parts.uri.path(),
+                    content_length_bytes = content_length,
+                    duration_ms = duration.as_millis() as u64,
+                    throughput_mib_s = format!("{throughput_mib_s:.2}"),
+                    "Tus PATCH 转发完成"
+                );
+            }
+            response
+        }
         Err(err) => {
+            let duration = forward_start.elapsed();
+            tracing::warn!(
+                adapter = "tus_proxy",
+                outcome = "upstream_unreachable",
+                method = %parts.method,
+                path = %parts.uri.path(),
+                content_length_bytes = content_length,
+                duration_ms = duration.as_millis() as u64,
+                error = %err,
+                "Tus sidecar 不可达"
+            );
             return err_resp(
                 StatusCode::BAD_GATEWAY,
                 "media_tus_upstream_unreachable",

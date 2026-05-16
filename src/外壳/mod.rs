@@ -233,6 +233,7 @@ pub async fn 构建应用状态(
     .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
 
     let http_client = reqwest::Client::builder()
+        .http1_only()
         .pool_max_idle_per_host(20)
         .pool_idle_timeout(std::time::Duration::from_secs(90))
         .connect_timeout(std::time::Duration::from_secs(5))
