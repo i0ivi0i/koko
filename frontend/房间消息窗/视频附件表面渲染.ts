@@ -4,6 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { 视频地址属于旧流媒体清单 } from "../媒体/媒体播放.js";
 import {
   绘制时间线冻结帧到画布,
+  挂载冻结帧画布守卫,
   type 时间线自动播冻结帧,
 } from "./视频桥接帧.js";
 import { 默认视频清单占位Poster } from "./视频表面占位.js";
@@ -144,6 +145,7 @@ export const 渲染时间线视频表面卡片 = (input: 时间线视频表面�
                 return;
               }
               绘制时间线冻结帧到画布(frozenTimelineFrame, canvas);
+              挂载冻结帧画布守卫(canvas, frozenTimelineFrame);
             })}
           ></canvas>
         `

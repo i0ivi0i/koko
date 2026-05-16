@@ -298,6 +298,8 @@ describe("媒体查看器适配器 - 桌面全屏与显示阶段", () => {
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
     expect(document.fullscreenElement).toBeNull();
     expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
+    // overlay 使用延迟移除（防全屏退出黑闪），需等 rAF + setTimeout(200) 完成
+    await new Promise((r) => setTimeout(r, 250));
     expect(document.body.querySelector("video")).toBeNull();
   });
 });

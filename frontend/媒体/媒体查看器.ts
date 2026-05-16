@@ -293,8 +293,21 @@ const 创建默认VideoJs播放器层 = async (
       切换关闭按钮宿主(overlay);
       当前查看器会话?.关闭();
       video.pause();
-      overlay.remove();
+      /**
+       * overlay 不立即移除，先透明化 + 禁交互 + 撤销 ARIA 语义：
+       * 1. 同步 remove 会在 Lit re-render 之前暴露时间线卡片，
+       *    此时冻结帧 canvas 可能因 GPU context loss 而内容为空 → 黑闪；
+       * 2. 透明 overlay 保持覆盖 2-3 帧，给 Lit 足够时间重绘冻结帧/切换 autoplay 表面；
+       * 3. ARIA 属性必须同步移除，否则 iOS Safari VoiceOver 会继续拦截焦点。
+       */
+      overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;opacity:0;pointer-events:none;";
+      overlay.removeAttribute("role");
+      overlay.removeAttribute("aria-modal");
+      overlay.removeAttribute("aria-label");
       lifecycle.结束视口占用();
+      const 安全移除overlay = (): void => { overlay.remove(); };
+      requestAnimationFrame(() => { requestAnimationFrame(安全移除overlay); });
+      setTimeout(安全移除overlay, 200);
     };
     清理全屏策略.请求关闭 = cleanup;
     const 请求关闭 = (): void => {

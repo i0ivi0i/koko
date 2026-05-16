@@ -122,3 +122,40 @@ export const 绘制时间线冻结帧到画布 = (
     // 此时 canvas 保持透明，底层 poster 安全网会兜住卡片视觉。
   }
 };
+
+/**
+ * 已挂载守卫的 canvas 与其当前冻结帧引用。
+ * WeakMap 保证 canvas 被 GC 时条目自动清理，无泄漏风险。
+ * 监听器读 WeakMap 中的最新帧引用，而非闭包捕获的旧帧——
+ * 解决 Lit 复用同一 canvas 但冻结帧已换代时的陈旧重绘问题。
+ */
+const 冻结帧守卫表 = new WeakMap<HTMLCanvasElement, 时间线自动播冻结帧>();
+
+/**
+ * 为 canvas 挂载 GPU context loss 自愈守卫。
+ * 全屏进退、标签页切换、内存压力等场景下浏览器可能重置 GPU 上下文，
+ * 导致 canvas 2D 渲染面被清空为透明像素。
+ *
+ * 兼容性说明：contextlost/contextrestored 在 Chrome 99+、Firefox 125+ 支持，
+ * Safari 不支持。Safari 上的黑闪由 overlay 延迟移除（Phase 2）兜住。
+ */
+export const 挂载冻结帧画布守卫 = (
+  canvas: HTMLCanvasElement,
+  frame: 时间线自动播冻结帧
+): void => {
+  const 已有守卫 = 冻结帧守卫表.has(canvas);
+  冻结帧守卫表.set(canvas, frame);
+  if (已有守卫) {
+    return;
+  }
+  canvas.addEventListener("contextlost", (e: Event) => {
+    e.preventDefault();
+  });
+  canvas.addEventListener("contextrestored", () => {
+    const 当前帧 = 冻结帧守卫表.get(canvas);
+    if (!当前帧) {
+      return;
+    }
+    绘制时间线冻结帧到画布(当前帧, canvas);
+  });
+};
