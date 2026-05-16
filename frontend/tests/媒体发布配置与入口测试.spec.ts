@@ -181,29 +181,30 @@ describe("媒体发布器 / 配置与统一入口", () => {
 
     await 场景.发布器.处理选择媒体文件([imageFile, videoFile]);
 
-    expect(场景.prepareMediaUpload.mock.calls).toEqual([
-      [
-        "image",
-        "s-test",
-        expect.objectContaining({ name: "canonical.webp", type: "image/webp" }),
-        {
-          source_hash: "a".repeat(64),
-          source_byte_size: 3,
-          source_file_name: "mixed.jpg",
-        },
-      ],
-      [
-        "video",
-        "s-test",
-        videoFile,
-        {
-          source_hash: "a".repeat(64),
-          source_byte_size: 3,
-          source_file_name: "mixed.mp4",
-        },
-      ],
-    ]);
-    expect(场景.drafts.readDrafts()).toEqual([
+    // 并行批处理下 prepare 调用顺序不确定，只验证两者都被调用
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(2);
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith(
+      "image",
+      "s-test",
+      expect.objectContaining({ name: "canonical.webp", type: "image/webp" }),
+      {
+        source_hash: "a".repeat(64),
+        source_byte_size: 3,
+        source_file_name: "mixed.jpg",
+      },
+    );
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith(
+      "video",
+      "s-test",
+      videoFile,
+      {
+        source_hash: "a".repeat(64),
+        source_byte_size: 3,
+        source_file_name: "mixed.mp4",
+      },
+    );
+    // 并行批处理下草稿写入顺序不确定
+    expect(场景.drafts.readDrafts()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         localId: "att-canonical.webp",
         kind: "image",
@@ -214,7 +215,7 @@ describe("媒体发布器 / 配置与统一入口", () => {
         kind: "video",
         status: "transporting",
       }),
-    ]);
+    ]));
   });
   it("统一媒体入口批量处理多文件时会在批次之间让出主线程，避免连续重任务长时间卡住页面", async () => {
     const 场景 = 创建场景();

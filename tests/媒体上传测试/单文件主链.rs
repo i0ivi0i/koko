@@ -345,6 +345,11 @@ async fn 视频complete会触发seeder_start命令() {
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
+    // 显式设置 tracker URL，防止 dotenvy 从 .env 加载旧值覆盖 APP_PORT 派生的默认值
+    env::set_var(
+        "SWARM_SEEDER_TRACKER_URL",
+        "ws://127.0.0.1:18080/api/swarm/announce",
+    );
     env::set_var("SWARM_TICKET_SECRET", "single-file-video-seeder-ticket-secret");
 
     let env = 准备complete测试环境("single-file-video-seeder-start").await;
@@ -354,6 +359,8 @@ async fn 视频complete会触发seeder_start命令() {
     let (complete_status, complete_body) = 完成媒体上传(&env, &attachment_id).await;
 
     assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    // fire-and-forget tokio::spawn 需要至少一次 runtime 调度才能执行完成
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let requests = seeder_requests
         .lock()
         .expect("seeder 请求记录锁不应中毒")

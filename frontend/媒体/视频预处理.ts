@@ -53,12 +53,42 @@ async function 读取Mp4主Brand(file: File): Promise<string | null> {
   return String.fromCharCode(...bytes.slice(4, 8));
 }
 
+/**
+ * 检测 moov box 是否在文件前 1MB 内（fast-start 友好）。
+ * WebTorrent 播放需要 moov 靠前，否则需要整文件下载后才能播放。
+ */
+async function moov在文件前部(file: File): Promise<boolean> {
+  const scanLimit = Math.min(file.size, 1024 * 1024);
+  const bytes = new Uint8Array(await file.slice(0, scanLimit).arrayBuffer());
+  let offset = 0;
+  while (offset + 8 <= bytes.length) {
+    const view = new DataView(bytes.buffer, offset, 8);
+    const size = view.getUint32(0);
+    const type = String.fromCharCode(
+      view.getUint8(4),
+      view.getUint8(5),
+      view.getUint8(6),
+      view.getUint8(7)
+    );
+    if (type === "moov") {
+      return true;
+    }
+    if (size < 8) break;
+    offset += size;
+  }
+  return false;
+}
+
 async function 文件可作为后端CanonicalMp4直通(file: File): Promise<boolean> {
   if (!文件看起来是Mp4(file)) {
     return false;
   }
-  // 后端 canonical 视频校验看真实容器，不看扩展名；QuickTime brand 必须先预制。
-  return (await 读取Mp4主Brand(file)) !== "qt  ";
+  const brand = await 读取Mp4主Brand(file);
+  if (brand === "qt  ") {
+    return false;
+  }
+  // moov 必须靠前（fast-start），否则 WebTorrent 流式播放无法秒开
+  return moov在文件前部(file);
 }
 
 async function 默认可直通(file: File): Promise<boolean> {
@@ -163,14 +193,40 @@ export async function 预处理待上传视频文件(
   overrides: Partial<视频预处理依赖> = {}
 ): Promise<视频预处理结果> {
   const deps = { ...默认视频预处理依赖(), ...overrides };
+  const startMs = performance.now();
   if (await deps.可直通(file)) {
+    const elapsedMs = Math.round(performance.now() - startMs);
+    console.info("[koko:video-preprocess]", {
+      inputBytes: file.size,
+      outputBytes: file.size,
+      strategy: "passthrough",
+      elapsedMs,
+    });
     return { file, strategy: "passthrough" };
   }
   if (await deps.Mediabunny可无损整理(file)) {
-    return deps.使用Mediabunny无损整理(file);
+    const result = await deps.使用Mediabunny无损整理(file);
+    const elapsedMs = Math.round(performance.now() - startMs);
+    console.info("[koko:video-preprocess]", {
+      inputBytes: file.size,
+      outputBytes: result.file.size,
+      strategy: "mediabunny_remux",
+      elapsedMs,
+      memoryPeakEstimateMiB: Math.round(result.file.size / 1048576),
+    });
+    return result;
   }
   if (await deps.Mediabunny与WebCodecs可转码(file)) {
-    return deps.使用Mediabunny与WebCodecs转码(file);
+    const result = await deps.使用Mediabunny与WebCodecs转码(file);
+    const elapsedMs = Math.round(performance.now() - startMs);
+    console.info("[koko:video-preprocess]", {
+      inputBytes: file.size,
+      outputBytes: result.file.size,
+      strategy: "mediabunny_webcodecs_transcode",
+      elapsedMs,
+      memoryPeakEstimateMiB: Math.round(result.file.size / 1048576),
+    });
+    return result;
   }
   throw new Error("media_preprocess_failed");
 }

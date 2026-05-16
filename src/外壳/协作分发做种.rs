@@ -75,7 +75,7 @@ fn 提取storage_key扩展名(storage_key: &str) -> Option<&str> {
 
 /// 本地存储模式下构造 localSeed 控制面 hint。
 /// S3 模式或参数不完整时返回 None——sidecar 自然降级到 WebSeed fallback。
-fn 构造本地做种提示(
+pub(crate) fn 构造本地做种提示(
     media_storage_driver: &crate::assembly::媒体存储驱动,
     attachment_storage_dir: &str,
     storage_key: &str,

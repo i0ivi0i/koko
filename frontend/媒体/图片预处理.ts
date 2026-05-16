@@ -173,16 +173,33 @@ export async function 准备待上传图片文件(file: File): Promise<File> {
   if (!是图片文件(file)) {
     throw new Error("attachment_type_not_allowed");
   }
+  const startMs = performance.now();
+  const inputMime = 推导图片Mime类型(file);
+  const isWebpPassthrough = inputMime === "image/webp";
+  const useOffscreen = typeof OffscreenCanvas === "function";
   try {
-    return await 预制图片为CanonicalWebp(file);
+    const result = await 预制图片为CanonicalWebp(file);
+    const elapsedMs = Math.round(performance.now() - startMs);
+    console.info("[koko:image-preprocess]", {
+      inputBytes: file.size,
+      outputBytes: result.size,
+      inputMime,
+      webpPassthrough: isWebpPassthrough,
+      offscreenCanvas: useOffscreen,
+      heicNormalize: 是需要前端转码的手机图片(file),
+      elapsedMs,
+    });
+    return result;
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "attachment_type_not_allowed") {
       throw error;
     }
-    console.warn("[koko:image-upload:prepare]", {
+    const elapsedMs = Math.round(performance.now() - startMs);
+    console.warn("[koko:image-preprocess:failed]", {
       fileName: file.name,
       fileType: file.type,
       fileByteSize: file.size,
+      elapsedMs,
       error:
         error instanceof Error && error.message.trim()
           ? error.message.trim()

@@ -1,5 +1,6 @@
 use super::媒体上传共享外壳::推导原始内容扩展名;
 use super::{tus_hook外壳, 媒体内容解析, 应用状态, 构建共享仓储};
+use base64::Engine as _;
 use crate::adapter::媒体上传运输记录;
 use crate::media::distribution::application as 协作分发应用;
 use crate::media::upload::application as 上传应用;
@@ -544,6 +545,8 @@ pub(super) async fn complete_media_upload(
     let distribution_request_for_write = distribution_request.clone();
     let torrent_request_for_write = torrent_request.clone();
     let canonical_asset_request_for_write = canonical_asset_request.clone();
+    // spawn_blocking 会 move ready_request，先保存做种所需的存储键
+    let 原始内容存储键_for_seed = ready_request.原始内容存储键.clone();
     let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
@@ -650,16 +653,22 @@ pub(super) async fn complete_media_upload(
                     ice_servers: state.get_turn_ice_servers().await,
                 },
             );
-            // complete 成功后 fire-and-forget 触发 sidecar 做种：
-            // 1. 不再阻塞 complete 响应（省 ~50-200ms），让前端更早拿到 ready 快照；
-            // 2. 命令载荷严格来自同一份 runtime_distribution，不长第二套 transport 真相；
-            // 3. 失败只记告警并交给后台对账周期性补偿，不影响 ready 真相。
-            if let Some(启动命令) =
+            if let Some(mut 启动命令) =
                 super::协作分发做种::从协作分发响应构造做种启动命令(
                     &runtime_distribution,
                     state.swarm_seeder_tracker_url.as_str(),
                 )
             {
+                启动命令.torrent_bytes_base64 = Some(
+                    base64::engine::general_purpose::STANDARD
+                        .encode(&torrent_request.torrent_bytes),
+                );
+                启动命令.local_seed = super::协作分发做种::构造本地做种提示(
+                    &state.media_storage_driver,
+                    &state.attachment_storage_dir,
+                    &原始内容存储键_for_seed,
+                    &distribution_request.content_hash,
+                );
                 let spawn_state = state.clone();
                 let spawn_attachment_id = attachment_id.clone();
                 tokio::spawn(async move {

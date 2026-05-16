@@ -324,11 +324,13 @@ function 创建场景(overrides: {
       height: 720,
       previewUrl: `blob:poster-${file.name}`,
     })),
-    /**
-     * 这是一条面向新视频预制 owner 的测试注入 seam。
-     * 当前实现尚未消费它，红测会证明发布器仍会把原始视频直接送进 prepare。
-     */
-    preprocessVideo: overrides.preprocessVideo,
+    preprocessVideo: overrides.preprocessVideo ?? (async (file: File) => ({
+      file,
+      strategy: "passthrough" as const,
+      width: 1280,
+      height: 720,
+      previewUrl: `blob:poster-${file.name}`,
+    })),
     createPreviewUrl: (file: Blob | null) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
     yieldToMainThread,
     ...(overrides.预取媒体定位 ? { 预取媒体定位: overrides.预取媒体定位 } : {}),
