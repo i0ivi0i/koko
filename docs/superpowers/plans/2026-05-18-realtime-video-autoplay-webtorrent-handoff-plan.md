@@ -36,6 +36,9 @@ prefetch_ready
 - `frontend/tests/媒体播放定位刷新测试.spec.ts` 已覆盖 locator force-refresh 和 await-refresh retry。
 - `frontend/tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts` 已覆盖 prefetch-to-foreground 复用和同 torrent `addWebSeed`。
 - `frontend/tests/媒体协作分发源探测测试.spec.ts` 已覆盖 body chunk timeout，但未覆盖 missing body 和成功后 reader cancel。
+- `frontend/tests/聊天媒体编排/权威事件预热测试.spec.ts` 已覆盖 room_event rich distribution hint 立即触发 `prefetch` swarm join。
+- `frontend/tests/聊天应用内核/消息流自动播测试.spec.ts` 已覆盖 inline autoplay 首轮 `connecting_to_peers` 后继续低频重试直到真实 `swarm`。
+- `frontend/tests/媒体协作分发/定位与运行时引导测试.spec.ts` 与 `frontend/tests/媒体协作分发/接入与票据门禁测试.spec.ts` 已覆盖 Service Worker / WebTorrent stream server 引导、可用 media_state、受控 announce 和 join ticket 门禁。
 
 ## Root Gap This Plan Fixes
 
@@ -50,6 +53,16 @@ HTTP 206 / ok response
 
 这和 design spec 的 `stream_first_chunk_ready` 不一致，也是实时自动播黑灰占位最危险的假成功边界。本计划先用 RED 测试钉住这个缺口，再做最小实现。
 
+## Confidence Loop Findings Added on 2026-05-18
+
+第一次追问“是否 100% 有信心”时，答案是：**不是**。原 plan 只完整覆盖了 streamURL 首字节和 timeline reveal，但“群内媒体收发丝滑自动播放”还必须证明三条入口不会断：
+
+1. **群内实时接收入口**：`room_event -> rich distribution_hint -> prefetch swarm join` 必须进入 targeted suite，否则可能只修了查看器/历史路径，没修在线群聊实时路径。
+2. **自动播重试入口**：`inline_autoplay -> connecting_to_peers -> 2s retry -> swarm` 必须进入 targeted suite，否则可能把黑灰占位换成“owner 还在但永远没有 playback”。
+3. **假 ready 的临时不可读入口**：`MEDIA_READY -> streamURL 暂无 body chunk -> source_unreadable -> forceRefresh + retry -> swarm` 必须有 characterization test，否则严格探测可能把一次 Service Worker/WebTorrent 接管抖动升级成永久 `anchor_unavailable`。
+
+这些不是新架构，也不是扩 scope；它们是同一条用户链路上的缺失证明。本 plan 已把这三条补成 Task 1.5 和 Task 4 的必跑门禁。
+
 ## Scope
 
 ### In Scope
@@ -58,6 +71,7 @@ HTTP 206 / ok response
 - 首字节探测读到 chunk 后也要取消 reader，不能让探测继续拉流。
 - 增加运行时级测试：前台 reader 已 `addWebSeed` 但 `streamURL` 没有 body chunk 时，不交付坏播放源。
 - 更新测试 stub，让应当“可读”的 streamURL 分支返回真实 `Response` body。
+- 增加/运行 group realtime ingress 与 autoplay retry coverage，确保修复对象是真正的群内实时新视频。
 - 跑 targeted frontend tests、typecheck、build、GitNexus `detect_changes` 和 HTTPS 双客户端真实烟测。
 
 ### Out of Scope
@@ -107,6 +121,18 @@ Execution requirement: before editing any production symbol, rerun `mcp1_impact`
   - Converts readable streamURL stubs from header-only objects to actual `Response` bodies.
 - Modify: `frontend/tests/资产协作分发运行时/测试支撑.ts:83-97`
   - Makes the shared activated-Service-Worker fetch stub return a real body.
+- Modify: `frontend/tests/媒体播放/media_state与终态提示测试.spec.ts`
+  - Adds characterization that a temporary `source_unreadable` under `MEDIA_READY` uses force-refresh retry and recovers to `swarm` instead of dead-ending autoplay.
+- Verify only: `frontend/tests/聊天媒体编排/权威事件预热测试.spec.ts`
+  - Confirms group room_event rich hint immediately enters the prefetch swarm path.
+- Verify only: `frontend/tests/聊天应用内核/消息流自动播测试.spec.ts`
+  - Confirms inline autoplay keeps retrying from `connecting_to_peers` to `swarm`.
+- Verify only: `frontend/tests/媒体运行时自动播稳定表面测试.spec.ts`
+  - Confirms runtime still gates owner promotion on stable surface readiness.
+- Verify only: `frontend/tests/媒体协作分发/定位与运行时引导测试.spec.ts`
+  - Confirms media_state and WebTorrent runtime bootstrap assumptions.
+- Verify only: `frontend/tests/媒体协作分发/接入与票据门禁测试.spec.ts`
+  - Confirms Service Worker stream server path, controlled announce, and join ticket gate still hold.
 - Verify only: `frontend/tests/媒体播放定位刷新测试.spec.ts`
   - Confirms foreground locator force-refresh and await-refresh retry still hold.
 - Verify only: `frontend/tests/房间消息窗/自动播露出门禁测试.spec.ts`
@@ -161,7 +187,7 @@ Expected:
 Run:
 
 ```powershell
-pnpm --dir frontend vitest run --exclude dist/** tests/媒体协作分发源探测测试.spec.ts tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts tests/媒体播放定位刷新测试.spec.ts
+pnpm --dir frontend vitest run --exclude dist/** tests/媒体协作分发源探测测试.spec.ts tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts tests/媒体播放定位刷新测试.spec.ts tests/聊天媒体编排/权威事件预热测试.spec.ts tests/聊天应用内核/消息流自动播测试.spec.ts tests/媒体协作分发/定位与运行时引导测试.spec.ts tests/媒体协作分发/接入与票据门禁测试.spec.ts
 ```
 
 Expected: PASS. If this baseline fails, stop and investigate the existing failure before writing new tests.
@@ -470,6 +496,123 @@ git commit -m "fix: 收紧 WebTorrent streamURL 首字节探测" -m "让协作�
 
 ---
 
+### Task 1.5: Characterize Temporary `source_unreadable` Recovery
+
+**Files:**
+
+- Modify: `frontend/tests/媒体播放/media_state与终态提示测试.spec.ts`
+- Modify only if test fails: `frontend/媒体/媒体播放.ts`
+
+- [ ] **Step 1: Add characterization for `MEDIA_READY` but temporarily unreadable streamURL**
+
+Append this test inside `describe("媒体播放器 / media_state 与终态提示", ...)` in `frontend/tests/媒体播放/media_state与终态提示测试.spec.ts`:
+
+```ts
+  it("MEDIA_READY 下 streamURL 临时不可读时，会强刷 locator 后重试 swarm，而不是让自动播永久失败", async () => {
+    const attachmentId = "att-video-source-unreadable-retry";
+    const locator = {
+      attachment_id: attachmentId,
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: null,
+      thumbnail_url: null,
+      distribution: {
+        content_id: `content_${attachmentId}`,
+        content_hash: "hash-source-unreadable-retry",
+        swarm_id: "swarm-source-unreadable-retry",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-source-unreadable-retry",
+        torrent_info_hash: "torrent-info-hash-source-unreadable-retry",
+        announce_urls: ["wss://tracker.media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-source-unreadable-retry",
+        join_ticket: "ticket-source-unreadable-retry",
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted" as const,
+      },
+    };
+    const locate = vi.fn(async () => locator);
+    const resolveSwarmSource = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("探测协作分发媒体源缺少响应 body"))
+      .mockResolvedValueOnce({
+        src: "/webtorrent/source-unreadable-retry/content.mp4",
+        hint: null,
+        locallyComplete: false,
+        formalByteSource: "webtorrent_official_stream" as const,
+      });
+    const releaseSwarmSource = vi.fn();
+    const probeAnchor = vi.fn(async () => {
+      throw new Error("不应回退锚点");
+    });
+    const 播放器 = 创建媒体播放器({
+      degradedRetryDelays: [0],
+      locate,
+      resolveSwarmSource,
+      releaseSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId,
+      kind: "video",
+      surface: "inline_autoplay",
+      consumerId: `inline_autoplay:${attachmentId}`,
+    });
+
+    expect(result).toMatchObject({
+      mode: "swarm",
+      attachmentId,
+      kind: "video",
+      src: "/webtorrent/source-unreadable-retry/content.mp4",
+      formalByteSource: "webtorrent_official_stream",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
+    expect(locate).toHaveBeenCalledWith(attachmentId, { forceRefresh: true });
+    expect(releaseSwarmSource).toHaveBeenCalledWith({
+      attachmentId,
+      consumerId: `inline_autoplay:${attachmentId}`,
+    });
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+```
+
+- [ ] **Step 2: Run the characterization test**
+
+Run:
+
+```powershell
+pnpm --dir frontend vitest run --exclude dist/** tests/媒体播放/media_state与终态提示测试.spec.ts -t "MEDIA_READY 下 streamURL 临时不可读"
+```
+
+Expected: PASS on current code. If it fails, do not weaken the assertion. Fix `frontend/媒体/媒体播放.ts` so `source_unreadable` from the WebTorrent stream probe remains inside the existing协作分发 retry budget and force-refresh path, instead of resolving a permanent autoplay failure or falling back to anchor.
+
+- [ ] **Step 3: Run the surrounding autoplay ingress suite**
+
+Run:
+
+```powershell
+pnpm --dir frontend vitest run --exclude dist/** tests/媒体播放/media_state与终态提示测试.spec.ts tests/聊天媒体编排/权威事件预热测试.spec.ts tests/聊天应用内核/消息流自动播测试.spec.ts tests/媒体运行时自动播稳定表面测试.spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit Task 1.5**
+
+Run:
+
+```powershell
+git add frontend/tests/媒体播放/media_state与终态提示测试.spec.ts frontend/媒体/媒体播放.ts
+git commit -m "test: 钉住自动播临时不可读后的恢复路径" -m "补充 MEDIA_READY 但 streamURL 首字节临时不可读时的 characterization，要求媒体播放器强刷 locator 并在协作分发 retry budget 内恢复到 swarm，不把实时自动播打成永久失败。"
+```
+
+If `frontend/媒体/媒体播放.ts` did not change, the `git add` command is still safe; only the new test will be staged.
+
+---
+
 ### Task 2: Verify Foreground Locator Relay and No Second Source Path
 
 **Files:**
@@ -590,7 +733,7 @@ Expected if no code changes: no commit for this task.
 Run:
 
 ```powershell
-pnpm --dir frontend vitest run --exclude dist/** tests/媒体协作分发源探测测试.spec.ts tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts tests/资产协作分发运行时/释放与预算边界测试.spec.ts tests/媒体播放定位刷新测试.spec.ts tests/媒体播放/viewer与inline_autoplay复用测试.spec.ts tests/媒体播放/主链与swarm裁决测试.spec.ts tests/房间消息窗/自动播露出门禁测试.spec.ts tests/视频附件渲染决策测试.spec.ts tests/信息流视频预算测试.spec.ts
+pnpm --dir frontend vitest run --exclude dist/** tests/媒体协作分发源探测测试.spec.ts tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts tests/资产协作分发运行时/释放与预算边界测试.spec.ts tests/媒体播放定位刷新测试.spec.ts tests/媒体播放/media_state与终态提示测试.spec.ts tests/媒体播放/viewer与inline_autoplay复用测试.spec.ts tests/媒体播放/主链与swarm裁决测试.spec.ts tests/聊天媒体编排/权威事件预热测试.spec.ts tests/聊天应用内核/消息流自动播测试.spec.ts tests/媒体运行时自动播稳定表面测试.spec.ts tests/媒体协作分发/定位与运行时引导测试.spec.ts tests/媒体协作分发/接入与票据门禁测试.spec.ts tests/房间消息窗/自动播露出门禁测试.spec.ts tests/视频附件渲染决策测试.spec.ts tests/信息流视频预算测试.spec.ts
 ```
 
 Expected: PASS.
@@ -625,7 +768,7 @@ mcp1_detect_changes(repo="koko", scope="all")
 
 Expected:
 
-- Changed symbols are limited to the source probe and tests unless Task 2 or Task 3 found real failures.
+- Changed symbols are limited to the source probe, media playback recovery characterization, and tests unless Task 2 or Task 3 found real failures.
 - No unexpected process appears outside media/collaborative-distribution/timeline playback.
 - If unexpected affected processes appear, stop and inspect with `mcp1_context` before continuing.
 
@@ -634,7 +777,7 @@ Expected:
 If Task 4 required test fixture cleanups or formatting after build, commit only those files:
 
 ```powershell
-git add frontend/tests/媒体协作分发源探测测试.spec.ts frontend/tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts frontend/tests/资产协作分发运行时/释放与预算边界测试.spec.ts frontend/tests/资产协作分发运行时/测试支撑.ts
+git add frontend/tests/媒体协作分发源探测测试.spec.ts frontend/tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts frontend/tests/资产协作分发运行时/释放与预算边界测试.spec.ts frontend/tests/资产协作分发运行时/测试支撑.ts frontend/tests/媒体播放/media_state与终态提示测试.spec.ts frontend/tests/聊天媒体编排/权威事件预热测试.spec.ts frontend/tests/聊天应用内核/消息流自动播测试.spec.ts frontend/tests/媒体运行时自动播稳定表面测试.spec.ts frontend/tests/媒体协作分发/定位与运行时引导测试.spec.ts frontend/tests/媒体协作分发/接入与票据门禁测试.spec.ts
 git commit -m "test: 收口实时视频自动播验证夹具" -m "清理 WebTorrent 自动播接力相关测试夹具，使 targeted media suite、typecheck 和 build 在严格 streamURL body 探测后保持一致。"
 ```
 
@@ -802,7 +945,7 @@ Expected:
 If `git status --short` still shows intended implementation changes after Task 1-5 commits, commit them:
 
 ```powershell
-git add frontend/媒体/媒体协作分发.ts frontend/媒体/资产协作分发运行时.ts frontend/媒体/媒体播放.ts frontend/房间消息窗/视频附件渲染.ts frontend/房间消息窗/视频附件表面渲染.ts frontend/媒体/信息流视频预算.ts frontend/tests/媒体协作分发源探测测试.spec.ts frontend/tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts frontend/tests/资产协作分发运行时/释放与预算边界测试.spec.ts frontend/tests/资产协作分发运行时/测试支撑.ts frontend/tests/媒体播放定位刷新测试.spec.ts frontend/tests/媒体播放/viewer与inline_autoplay复用测试.spec.ts frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/房间消息窗/自动播露出门禁测试.spec.ts frontend/tests/视频附件渲染决策测试.spec.ts frontend/tests/信息流视频预算测试.spec.ts
+git add frontend/媒体/媒体协作分发.ts frontend/媒体/资产协作分发运行时.ts frontend/媒体/媒体播放.ts frontend/房间消息窗/视频附件渲染.ts frontend/房间消息窗/视频附件表面渲染.ts frontend/媒体/信息流视频预算.ts frontend/tests/媒体协作分发源探测测试.spec.ts frontend/tests/资产协作分发运行时/prefetch消费者模式测试.spec.ts frontend/tests/资产协作分发运行时/释放与预算边界测试.spec.ts frontend/tests/资产协作分发运行时/测试支撑.ts frontend/tests/媒体播放定位刷新测试.spec.ts frontend/tests/媒体播放/media_state与终态提示测试.spec.ts frontend/tests/媒体播放/viewer与inline_autoplay复用测试.spec.ts frontend/tests/媒体播放/主链与swarm裁决测试.spec.ts frontend/tests/聊天媒体编排/权威事件预热测试.spec.ts frontend/tests/聊天应用内核/消息流自动播测试.spec.ts frontend/tests/媒体运行时自动播稳定表面测试.spec.ts frontend/tests/媒体协作分发/定位与运行时引导测试.spec.ts frontend/tests/媒体协作分发/接入与票据门禁测试.spec.ts frontend/tests/房间消息窗/自动播露出门禁测试.spec.ts frontend/tests/视频附件渲染决策测试.spec.ts frontend/tests/信息流视频预算测试.spec.ts
 git commit -m "fix: 完成实时视频自动播 WebTorrent 接力" -m "按前台播放接力协议收紧 streamURL 首字节、locator forceRefresh、web seed 注入和 canonical 首帧揭帘验证，保证实时新视频不靠刷新或点击恢复播放。" -m "验证：targeted Vitest、pnpm typecheck、pnpm build、GitNexus detect_changes、HTTPS 双客户端自动播烟测。"
 ```
 
@@ -816,6 +959,8 @@ Report:
 Implemented:
 - strict streamURL first-body-chunk probe
 - same-torrent web seed handoff guard
+- group room_event prefetch ingress remains active
+- temporary source_unreadable recovers through forceRefresh retry
 - no second source path
 - canonical reveal remains frame-gated
 
@@ -850,7 +995,8 @@ Checked against the design spec sections:
 - `foreground_locator_refreshing`: Task 2 verifies existing force-refresh and retry ordering.
 - `web_seed_attached`: Task 1 runtime regression verifies same-torrent `addWebSeed` happens before foreground probe.
 - `stream_first_chunk_ready`: Task 1 adds missing-body and reader-cancel RED tests, then tightens the probe.
-- `playback_resolved`: Task 1/2 targeted suites verify `mode: "swarm"` is only published after official WebTorrent stream readiness.
+- `playback_resolved`: Task 1/1.5/2 targeted suites verify `mode: "swarm"` is only published after official WebTorrent stream readiness and temporary source unreadability recovers through force-refresh retry.
+- group realtime ingress: Task 1.5/4 verify room_event rich hints still enter immediate prefetch and inline autoplay retries from `connecting_to_peers` to `swarm`.
 - `canonical_frame_committed`: Task 3 verifies timeline reveal remains current-frame gated.
 - HTTPS real experience: Task 5 requires dual-client HTTPS smoke with `playwright-cli`, `chrome-devtools-cli`, and `browser-trace`.
 
@@ -874,6 +1020,7 @@ The plan does not introduce a second media source, second player owner, or shell
 Checked execution discipline:
 
 - Task 1 starts with RED tests and expects specific failures before production edits.
+- Task 1.5 adds characterization for the exact user-visible risk introduced by stricter probing: temporary source unreadability must recover, not kill autoplay.
 - Task 2 and Task 3 are verification-first; they only allow code edits if existing guarantees fail.
 - Every command has a concrete expected result.
 - Commit commands use exact file paths, not glob staging.
@@ -883,13 +1030,15 @@ The only `placeholder` word in this plan refers to UI placeholder surfaces, not 
 
 ## 100% Confidence Loop
 
-Question: am I 100% confident this plan can be executed without implementation drift?
+Question: am I 100% confident this plan can implement the intended bug fix without plan-level blind spots?
 
-Answer: yes for the plan layer.
+Answer after the second confidence loop: yes for the plan layer.
 
 Why:
 
 - The plan fixes the only uncovered causal gap found during reread: `response.body === null` being treated as stream readiness.
+- The plan now also covers the true group media receive path: room_event rich hint, immediate prefetch, inline autoplay retry, stable surface gate, and canonical reveal.
+- The plan now guards the main risk of the stricter probe itself: temporary WebTorrent/Service Worker unreadability must remain recoverable through existing force-refresh retry.
 - It does not over-expand into backend, protocol, or player rewrites.
 - It preserves the existing working owner graph instead of replacing it.
 - It turns every remaining uncertainty into a verification gate or an explicit stop condition.
