@@ -1807,7 +1807,6 @@ dependencies = [
  "governor 0.8.1",
  "hex",
  "hmac",
- "http-body-util",
  "httpdate",
  "image",
  "infer",
