@@ -250,19 +250,19 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
     ...tusOptions,
     allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],
     headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
-  }).use(GoldenRetriever, {
-    expires: 24 * 60 * 60 * 1000,
-    serviceWorker: true,
   });
 
-  // GoldenRetriever 恢复旧上传时，部署后数据格式变化可能导致 progress undefined 崩溃。
-  // 守卫：恢复失败时清除旧缓存，不让旧缓存阻断新上传。
-  uppy.on("error", (error: Error) => {
-    if (error?.message?.includes("progress") || error?.message?.includes("undefined")) {
-      console.warn("[koko:golden-retriever:restore-guard] 旧缓存恢复失败，清除", error.message);
-      try { uppy.cancelAll(); } catch { /* 忽略 */ }
-    }
-  });
+  // GoldenRetriever (断点续传持久化) 只在 default 档位启用：
+  // large-video 使用 parallelUploads/Concatenation，GoldenRetriever 无法正确持久化
+  // 内部 partial sub-upload 状态；恢复时会触发 progress undefined 崩溃并通过
+  // cancelAll() 摧毁所有活跃上传。large-video 上传器本身是 per-attachment 实例，
+  // 刷新后由草稿持久化层 + 失败重传入口兜底。
+  if (input.profile !== "large-video") {
+    uppy.use(GoldenRetriever, {
+      expires: 24 * 60 * 60 * 1000,
+      serviceWorker: true,
+    });
+  }
 
   return uppy as unknown as 媒体上传器;
 }
