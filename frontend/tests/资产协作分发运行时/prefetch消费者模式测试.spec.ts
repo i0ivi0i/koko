@@ -148,10 +148,13 @@ describe("prefetch 消费者模式", () => {
           };
         }
         if (url.includes("/webtorrent/prefetch-upgrade-readable-1.mp4")) {
-          return {
-            ok: true,
-            status: 206,
-          };
+          // 返回带真实 body 的 Response，首字节探测需要从 body 读到至少一个字节
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([0xff]));
+            },
+          });
+          return new Response(body, { status: 206 });
         }
         return {
           ok: true,
@@ -213,10 +216,13 @@ describe("prefetch 消费者模式", () => {
           };
         }
         if (url.includes("/webtorrent/prefetch-webseed-upgrade-1.mp4")) {
-          return {
-            ok: true,
-            status: 206,
-          };
+          // 返回带真实 body 的 Response，首字节探测需要从 body 读到至少一个字节
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([0xff]));
+            },
+          });
+          return new Response(body, { status: 206 });
         }
         return {
           ok: true,

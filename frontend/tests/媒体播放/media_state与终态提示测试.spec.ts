@@ -455,6 +455,73 @@ describe("媒体播放器 / media_state 与终态提示", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  /**
+   * MEDIA_READY + 临时 streamURL 不可读恢复路径 characterization：
+   * 1. locator 已经 MEDIA_READY，但首次 resolveSwarmSource 因 SW/stream 暂未就绪
+   *    抛出 source_unreadable（模拟收紧后的首字节探测失败）；
+   * 2. 解析播放结果 检测到"需要等待协作分发"（视频），在重试预算内用 forceRefresh 刷新 locator；
+   * 3. 第二次 resolveSwarmSource 拿到可用流，返回 swarm 播放而非永久 anchor_unavailable。
+   *
+   * 这个测试钉住"临时不可读 ≠ 永久失败"这条不变量，
+   * 防止收紧首字节探测后把临时异常升级为最终降级。
+   */
+  it("MEDIA_READY 下 streamURL 临时不可读时，重试恢复为 swarm 播放而非永久 anchor_unavailable", async () => {
+    let resolveCount = 0;
+    const resolveSwarmSource = vi.fn(async () => {
+      resolveCount++;
+      if (resolveCount <= 1) {
+        // 模拟首字节探测失败：session 被 drop，抛出 source_unreadable
+        throw new Error("探测协作分发媒体源缺少响应 body");
+      }
+      return {
+        src: "blob:http://localhost/recovered-stream",
+        formalByteSource: "webtorrent_official_stream" as const,
+        hint: null,
+      };
+    });
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-temp-unreadable",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-temp-unreadable",
+        content_hash: "hash-video-temp-unreadable",
+        swarm_id: "swarm-hash-video-temp-unreadable",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-temp-unreadable",
+        torrent_info_hash: "torrent-info-hash-video-temp-unreadable",
+        announce_urls: ["wss://tracker.media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-temp-unreadable",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted" as const,
+      },
+    }));
+    const 播放器 = 创建媒体播放器({
+      degradedRetryDelays: [0],
+      locate,
+      resolveSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-temp-unreadable",
+      kind: "video",
+    });
+
+    // 核心断言：恢复为 swarm 模式，而非 anchor_unavailable 降级
+    expect(result.mode).toBe("swarm");
+    expect(result.src).toBe("blob:http://localhost/recovered-stream");
+    // 第一次失败 + 第二次成功 = 2 次调用
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
+    // locate 被调用至少 2 次（初始 + forceRefresh 重试）
+    expect(locate.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("没有可播放锚点时，会回到统一的 anchor_unavailable 降级结果", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-expired",

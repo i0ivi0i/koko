@@ -264,23 +264,27 @@ const 读取探测终止错误 = (options: 协作分发媒体源探测选项): u
   return 归一化协作分发错误(raw);
 };
 
+/**
+ * 从 streamURL 响应中读取首个字节块，验证 WebTorrent stream 真正可读：
+ * 1. body 为 null 直接判定失败——HTTP 头成功不等于流就绪；
+ * 2. 读到首字节后立即 cancel reader，避免探测变成悄悄拉流；
+ * 3. 超时也 cancel，防止 Service Worker 挂起时 reader 永不释放。
+ */
 const 读取协作分发媒体源探测首字节 = async (
   response: Response,
   timeoutMs: number
 ): Promise<void> => {
   const body = response.body;
   if (!body) {
-    return;
+    throw new Error("探测协作分发媒体源缺少响应 body");
   }
   const reader = body.getReader();
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let timedOut = false;
   try {
     const result = await Promise.race([
       reader.read(),
       new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
         timeoutId = setTimeout(() => {
-          timedOut = true;
           reject(new Error("探测协作分发媒体源首字节超时"));
         }, timeoutMs);
       }),
@@ -292,9 +296,8 @@ const 读取协作分发媒体源探测首字节 = async (
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
-    if (timedOut) {
-      await reader.cancel().catch(() => undefined);
-    }
+    // 无论成功、超时还是异常，都必须 cancel reader 释放底层连接
+    await reader.cancel().catch(() => undefined);
     try {
       reader.releaseLock();
     } catch {
