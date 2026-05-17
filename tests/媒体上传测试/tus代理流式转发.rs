@@ -10,27 +10,37 @@ use futures_util::StreamExt;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tower::ServiceExt;
 
+/// 前缀累计目标：fake tusd 累计收到此字节数后即发送信号
+const 前缀累计目标: usize = 512 * 1024;
+
 struct 流式假Tus上游 {
     内部上传入口: String,
     handle: JoinHandle<()>,
 }
 
-async fn 启动会记录首块的假_tus上游(
-    first_chunk_tx: tokio::sync::oneshot::Sender<Vec<u8>>,
+/// 启动一个 fake tusd，累计请求体字节直到 ≥512KiB 后通过 oneshot 发送已收前缀。
+/// 不依赖单个 TCP/Hyper frame 边界，只看累计字节数。
+async fn 启动会记录首个前缀的假_tus上游(
+    prefix_tx: tokio::sync::oneshot::Sender<Vec<u8>>,
 ) -> 流式假Tus上游 {
-    let first_chunk_tx = std::sync::Arc::new(tokio::sync::Mutex::new(Some(first_chunk_tx)));
+    let prefix_tx = std::sync::Arc::new(tokio::sync::Mutex::new(Some(prefix_tx)));
     let app = Router::new().route(
         "/files/upload-1",
         any(move |request: AxumRequest| {
-            let first_chunk_tx = first_chunk_tx.clone();
+            let prefix_tx = prefix_tx.clone();
             async move {
                 let mut stream = request.into_body().into_data_stream();
-                if let Some(Ok(chunk)) = stream.next().await {
-                    if let Some(tx) = first_chunk_tx.lock().await.take() {
-                        let _ = tx.send(chunk.to_vec());
+                let mut accumulated = Vec::new();
+                let mut signaled = false;
+                while let Some(Ok(chunk)) = stream.next().await {
+                    accumulated.extend_from_slice(&chunk);
+                    if !signaled && accumulated.len() >= 前缀累计目标 {
+                        if let Some(tx) = prefix_tx.lock().await.take() {
+                            let _ = tx.send(accumulated[..前缀累计目标].to_vec());
+                        }
+                        signaled = true;
                     }
                 }
-                while stream.next().await.is_some() {}
                 Response::builder()
                     .status(StatusCode::NO_CONTENT)
                     .header("tus-resumable", "1.0.0")
@@ -67,8 +77,8 @@ async fn 媒体Tus代理会在客户端请求体结束前把首块流式转发�
     ]);
     env::set_var("MEDIA_TUS_SERVER_PORT", "1081");
     env::set_var("MEDIA_TUS_BASE_PATH", "/files");
-    let (first_chunk_tx, first_chunk_rx) = tokio::sync::oneshot::channel::<Vec<u8>>();
-    let fake_upstream = 启动会记录首块的假_tus上游(first_chunk_tx).await;
+    let (prefix_tx, prefix_rx) = tokio::sync::oneshot::channel::<Vec<u8>>();
+    let fake_upstream = 启动会记录首个前缀的假_tus上游(prefix_tx).await;
     env::set_var(
         "MEDIA_TUS_INTERNAL_BASE_URL",
         fake_upstream.内部上传入口.as_str(),
@@ -83,13 +93,16 @@ async fn 媒体Tus代理会在客户端请求体结束前把首块流式转发�
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state);
 
+    // 首段发送 1MiB（填充 0x07），tail 阻塞直到信号释放
+    let first_segment = Bytes::from(vec![0x07u8; 1024 * 1024]);
     let (release_tail_tx, release_tail_rx) = tokio::sync::oneshot::channel::<()>();
-    let body_stream = futures_util::stream::once(async {
-        Ok::<Bytes, std::io::Error>(Bytes::from_static(b"first-chunk"))
+    let body_stream = futures_util::stream::once({
+        let first_segment = first_segment.clone();
+        async move { Ok::<Bytes, std::io::Error>(first_segment) }
     })
     .chain(futures_util::stream::once(async move {
         let _ = release_tail_rx.await;
-        Ok::<Bytes, std::io::Error>(Bytes::from_static(b"second-chunk"))
+        Ok::<Bytes, std::io::Error>(Bytes::from(vec![0x08u8; 1024]))
     }));
     let request = axum::http::Request::builder()
         .method(Method::PATCH)
@@ -102,8 +115,8 @@ async fn 媒体Tus代理会在客户端请求体结束前把首块流式转发�
 
     let request_task =
         tokio::spawn(async move { app.oneshot(request).await.expect("proxy response") });
-    let first_chunk_result =
-        tokio::time::timeout(Duration::from_millis(500), first_chunk_rx).await;
+    let prefix_result =
+        tokio::time::timeout(Duration::from_secs(2), prefix_rx).await;
     let _ = release_tail_tx.send(());
     let response = tokio::time::timeout(Duration::from_secs(3), request_task)
         .await
@@ -112,9 +125,13 @@ async fn 媒体Tus代理会在客户端请求体结束前把首块流式转发�
     fake_upstream.handle.abort();
     恢复环境变量(backup);
 
-    let first_chunk = first_chunk_result
-        .expect("Tus 代理必须在客户端 body 未结束前把首块流式送到 sidecar")
-        .expect("fake sidecar 应收到首块");
-    assert_eq!(first_chunk, b"first-chunk".to_vec());
+    let prefix = prefix_result
+        .expect("Tus 代理必须在客户端 body 未结束前把首个 512KiB 前缀流式送到 sidecar")
+        .expect("fake sidecar 应收到前缀");
+    assert_eq!(prefix.len(), 前缀累计目标, "前缀应恰好 512KiB");
+    assert!(
+        prefix.iter().all(|b| *b == 0x07),
+        "前缀全部字节应为 0x07，验证字节顺序未被破坏"
+    );
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
