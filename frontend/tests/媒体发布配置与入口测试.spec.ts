@@ -319,4 +319,20 @@ describe("媒体发布器 / 配置与统一入口", () => {
     expect(maxConcurrent).toBe(2);
     expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(3);
   });
+  it("清空草稿会释放会话隔离上传器，避免 Golden Retriever owner 长期滞留", async () => {
+    const 场景 = 创建场景();
+    const files = [
+      new File([new Uint8Array([1])], "clear-a.mp4", { type: "video/mp4" }),
+      new File([new Uint8Array([2])], "clear-b.mp4", { type: "video/mp4" }),
+    ];
+    await 场景.发布器.处理选择媒体文件(files);
+
+    expect(场景.createUploaderCalls).toHaveLength(2);
+
+    场景.发布器.清空();
+
+    expect(场景.默认上传器.cancelAllCalls).toBe(0);
+    expect(场景.默认上传器.destroyCalls).toBe(1);
+    expect(场景.drafts.readDrafts()).toEqual([]);
+  });
 });

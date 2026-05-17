@@ -143,13 +143,10 @@ export function 读取媒体上传档位(kind: 媒体种类, file: File): "defau
 
 export function 构造媒体上传器键(input: 媒体上传器创建参数): string {
   /**
-   * default 档位仍然可以按 endpoint 复用上传器；
-   * large-video 的 partial metadata 绑定到单个 attachment/session，不能让多个大视频共用 uploader。
+   * Uppy / GoldenRetriever 的恢复仓库跟 uploader 实例绑定。
+   * 即便是 default 档位，也不能只按 endpoint 复用，否则旧恢复 state 会覆盖新文件队列。
    */
-  if (input.profile === "large-video") {
-    return `${input.profile}@${input.tusEndpoint}@${input.uploadSessionId ?? "missing-session"}`;
-  }
-  return `${input.profile}@${input.tusEndpoint}`;
+  return `${input.profile}@${input.tusEndpoint}@${input.uploadSessionId ?? input.attachmentId ?? "missing-session"}`;
 }
 
 export async function 默认计算源文件SourceHash(file: File): Promise<媒体SourceHash信息> {

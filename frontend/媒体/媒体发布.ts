@@ -35,6 +35,7 @@ import {
   默认文件名,
   默认计算源文件SourceHash,
   构造SourceHash复用请求,
+  构造媒体上传器键,
   构造媒体上传Meta,
   读取媒体Tus请求头,
   读取媒体上传上限,
@@ -236,9 +237,18 @@ function 记录不支持媒体文件(sourceFile: File): void {
  * 这里的职责只有“把媒体文件稳定送进 prepare -> tus -> complete 主链”，
  * 不再额外长第二套私有上传器。
  */
+function 构造媒体上传器实例标识(input: 媒体上传器创建参数): string {
+  const normalized = 构造媒体上传器键(input)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `koko-media-upload-${normalized || "default"}`;
+}
+
 function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体上传器 {
   const tusOptions = 构造媒体Tus传输选项(input);
   const uppy = new Uppy<媒体上传Meta, 媒体上传响应体>({
+    id: 构造媒体上传器实例标识(input),
     autoProceed: true,
     allowMultipleUploadBatches: true,
     restrictions: {
@@ -559,6 +569,18 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     return 上传器表.get(uploaderKey) ?? null;
   };
 
+  const 释放上传器 = (uploaderKey: string | undefined): void => {
+    if (!uploaderKey) {
+      return;
+    }
+    const uploader = 上传器表.get(uploaderKey);
+    if (!uploader || uploader.getFiles().length > 0) {
+      return;
+    }
+    uploader.destroy();
+    上传器表.delete(uploaderKey);
+  };
+
   const 上传事件接线依赖: 媒体上传事件接线依赖 = {
     读取媒体草稿,
     读取草稿所属上传器,
@@ -857,12 +879,14 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     移除草稿(localId: string): void {
+      const uploaderKey = 草稿上传器键表.get(localId);
       const uploader = 读取草稿所属上传器(localId);
       uploader?.removeFile(localId);
       if (!uploader?.getFile(localId)) {
         草稿上传器键表.delete(localId);
         持久化removeDraft(localId);
       }
+      释放上传器(uploaderKey);
     },
 
     async 继续上传草稿(localId: string): Promise<void> {
@@ -902,9 +926,10 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     清空(): void {
-      for (const uploader of 上传器表.values()) {
-        uploader.cancelAll();
+      for (const uploader of new Set(上传器表.values())) {
+        uploader.destroy();
       }
+      上传器表.clear();
       草稿上传器键表.clear();
       deps.clearDrafts();
       清除本地存储媒体草稿();

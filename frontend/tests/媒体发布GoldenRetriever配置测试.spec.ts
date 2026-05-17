@@ -6,6 +6,7 @@ type 插件调用 = {
 };
 
 const 捕获 = vi.hoisted(() => ({
+  constructorCalls: [] as Array<Record<string, unknown> | undefined>,
   useCalls: [] as 插件调用[],
 }));
 
@@ -19,6 +20,10 @@ vi.mock("@uppy/golden-retriever", () => ({
 
 vi.mock("@uppy/core", () => ({
   default: class FakeUppy {
+    constructor(options?: Record<string, unknown>) {
+      捕获.constructorCalls.push(options);
+    }
+
     use(plugin: unknown, options: Record<string, unknown>): this {
       捕获.useCalls.push({ plugin, options });
       return this;
@@ -54,8 +59,67 @@ vi.mock("@uppy/core", () => ({
 
 describe("媒体发布器 / Golden Retriever 配置", () => {
   afterEach(() => {
+    捕获.constructorCalls.length = 0;
     捕获.useCalls.length = 0;
     vi.resetModules();
+  });
+
+  it("默认上传器必须使用按上传会话隔离的 Uppy 实例 id，避免 Golden Retriever 恢复仓库串仓", async () => {
+    const { 创建媒体发布器 } = await import("../媒体/媒体发布");
+    const drafts: unknown[] = [];
+    const 发布器 = 创建媒体发布器({
+      getSessionId: () => "s-test",
+      prepareMediaUpload: vi.fn(async (_kind, _sessionId, file: File) => ({
+        attachment_id: `att-${file.name}`,
+        upload_session_id: `upl-${file.name}`,
+        upload_method: "tus" as const,
+        tus_endpoint: "http://storage.local/files",
+        tus_headers: {},
+        tus_metadata: {
+          attachment_id: `att-${file.name}`,
+          upload_session_id: `upl-${file.name}`,
+          file_name: file.name,
+          mime_type: file.type,
+          byte_size: String(file.size),
+        },
+        expires_at: "2026-05-15T00:00:00Z",
+      })),
+      completeMediaUpload: vi.fn(),
+      abandonMediaUpload: vi.fn(),
+      readDrafts: () => drafts as never[],
+      writeDraft: vi.fn((draft) => {
+        drafts.push(draft);
+      }),
+      updateDraft: vi.fn(),
+      removeDraft: vi.fn(),
+      clearDrafts: vi.fn(() => {
+        drafts.length = 0;
+      }),
+      readVideoMetadata: vi.fn(async () => ({
+        width: 1280,
+        height: 720,
+      })),
+      preprocessVideo: vi.fn(async (file: File) => ({ file, strategy: "passthrough" as const })),
+      calculateSourceHash: vi.fn(async (file: File) => ({
+        source_hash: "a".repeat(64),
+        source_byte_size: file.size,
+        source_file_name: file.name,
+      })),
+      createPreviewUrl: () => "",
+      yieldToMainThread: vi.fn(async () => {}),
+    });
+
+    await 发布器.处理选择媒体文件([
+      new File([new Uint8Array([1, 2, 3])], "isolated.mp4", {
+        type: "video/mp4",
+      }),
+    ]);
+
+    expect(捕获.constructorCalls[0]).toEqual(
+      expect.objectContaining({
+        id: "koko-media-upload-default-http-storage-local-files-upl-isolated-mp4",
+      }),
+    );
   });
 
   it("默认上传器必须启用 Golden Retriever Service Worker 文件缓存，避免大附件刷新后恢复成幽灵文件", async () => {
