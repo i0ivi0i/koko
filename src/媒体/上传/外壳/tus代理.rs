@@ -265,6 +265,7 @@ pub(super) async fn proxy_tus_upload_transport(
             if let Some(content_length) = declared_content_length.filter(|value| *value > 0) {
                 let throughput_mib_s =
                     (content_length as f64 / 1_048_576.0) / duration.as_secs_f64().max(0.001);
+                let cs = 读取媒体_tus代理合并块统计(&coalesce_stats);
                 tracing::info!(
                     adapter = "tus_proxy",
                     outcome = "forwarded",
@@ -273,9 +274,10 @@ pub(super) async fn proxy_tus_upload_transport(
                     declared_content_length_bytes = content_length,
                     duration_ms = duration.as_millis() as u64,
                     throughput_mib_s = format!("{throughput_mib_s:.2}"),
-                    coalesced_chunks = 读取媒体_tus代理合并块统计(&coalesce_stats).chunk_count,
-                    avg_chunk_bytes = 读取媒体_tus代理合并块统计(&coalesce_stats).平均块字节数(),
-                    max_chunk_bytes = 读取媒体_tus代理合并块统计(&coalesce_stats).max_chunk_bytes,
+                    coalesced_chunks = cs.chunk_count,
+                    min_chunk_bytes = cs.min_chunk_bytes,
+                    avg_chunk_bytes = cs.平均块字节数(),
+                    max_chunk_bytes = cs.max_chunk_bytes,
                     body_error = body_error_seen.load(Ordering::Relaxed),
                     "Tus 请求体已合并流式转发"
                 );
@@ -287,7 +289,7 @@ pub(super) async fn proxy_tus_upload_transport(
                     path = %parts.uri.path(),
                     duration_ms = duration.as_millis() as u64,
                     coalesced_chunks = 读取媒体_tus代理合并块统计(&coalesce_stats).chunk_count,
-                    "Tus 请求体已合并流式转发"
+                    "Tus 请求体已合并流式转发(无content-length)"
                 );
             }
             response
