@@ -16,6 +16,8 @@ mod upload_slice_support;
 mod prepare_tests;
 #[path = "媒体上传测试/公网地址推导.rs"]
 mod public_endpoint_tests;
+#[path = "媒体上传测试/tus代理流式转发.rs"]
+mod tus_streaming_proxy_tests;
 #[path = "媒体上传测试/source_hash.rs"]
 mod source_hash_tests;
 #[path = "媒体上传测试/tus回调.rs"]
