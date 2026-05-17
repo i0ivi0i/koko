@@ -17,7 +17,7 @@
 
 ## 1. 目标
 
-把媒体 Tus `/files` 上传数据面从“27KiB 级小块原样转发”修成“有界合并后流式转发”，让真实浏览器客户端在公网/局域网条件下能吃满可用上行，而不是被 Rust proxy 的小 chunk poll/write 成本压到约 900KB/s。
+把媒体 Tus `/files` 上传数据面从“27KiB 级小块原样转发”修成“有界合并后流式转发”，并用同一浏览器、同一文件、同一 HTTPS/Caddy 入口下的 direct tusd / raw sink 对照证明 Rust proxy 路径接近最大吞吐，而不是只从约 900KB/s 变快一点就提前收工。
 
 本 spec 只设计修复，不直接实施代码。
 
@@ -86,6 +86,17 @@ Git 历史显示同一问题已经发生过一次：
 - 后端日志单流约 11MiB/s，4 路聚合约 44MiB/s。
 
 这只能证明同机低 RTT 场景可以跑快。它不能否定真实设备/公网路径下，小 chunk + HTTP/2 flow control + backpressure 被放大成 900KB/s。
+
+### 2.5 前端 Tus 参数校准
+
+Uppy/tus-js-client 官方文档明确：
+
+- `chunkSize` 默认是 `Infinity`，即尽量用一个 PATCH 上传剩余字节。
+- 除非输入是 reader/readable stream，或服务器/代理有请求体大小上限，否则不要设置 `chunkSize`。
+- 小 chunk 会因为更多 PATCH 请求显著伤害吞吐。
+- `parallelUploads` 依赖 tus concatenation 扩展，会把单文件拆成多个 partial upload 并行上传。
+
+当前本轮仍先修 Rust proxy 小 chunk 转发，不顺手修改 `frontend/媒体/媒体发布.ts`；但性能冒烟必须记录运行时 `chunkSize`、`parallelUploads` 和 `Upload-Concat` 形态。如果 proxy 已达到 direct tusd 对照吞吐而真实设备仍慢，下一轮才单独 A/B 前端 Tus 参数。
 
 ---
 
@@ -191,14 +202,14 @@ Git 历史显示同一问题已经发生过一次：
 
 ```text
 当前：27KiB, 27KiB, 27KiB, ... -> reqwest 原样发送
-目标：27KiB 小块进入 Rust -> 合并到约 512KiB -> reqwest 流式发送
+目标：27KiB 小块进入 Rust -> 合并到经实测选定的 512KiB/1MiB/2MiB 级输出块 -> reqwest 流式发送
 ```
 
 优点：
 
 - 保留流式，不等待完整 32MiB PATCH。
-- 每个请求只持有一个有界合并缓冲，不会整块 OOM。
-- 把约 1200 次小块发送降到约 64 次 512KiB 级发送。
+- 每个请求额外复制内存只限一个有界合并缓冲；最多再短暂持有一个上游已交付 `Bytes` 引用，不会整块 OOM。
+- 把约 1200 次小块发送降到几十次大块发送。
 - 仍走 Rust app `/files`，不破坏统一入口和 Location 改写。
 - 可用纯 stream 单元测试证明输出 chunk size，不依赖网络栈是否保留帧边界。
 
@@ -220,30 +231,32 @@ Git 历史显示同一问题已经发生过一次：
 ```text
 输入：Stream<Item = Result<Bytes, E>>
 输出：Stream<Item = Result<Bytes, E>>
-目标输出块：512KiB
-内存上限：单请求只持有当前合并 buffer；遇到大于目标的输入块时直接透传。
+初始目标输出块：1MiB
+候选目标输出块：512KiB / 1MiB / 2MiB
+内存上限：单请求额外复制内存只限当前合并 buffer；遇到大于目标的输入块时直接透传，最多短暂 pending 一个上游已交付 `Bytes` 引用。
 ```
 
 规则：
 
-1. 如果当前 buffer 为空，且输入 chunk 大于等于 512KiB，直接输出该 chunk，不复制。
-2. 如果输入 chunk 小于 512KiB，追加到当前 buffer。
-3. 当前 buffer 达到或超过 512KiB 后输出一个 `Bytes`。
+1. 如果当前 buffer 为空，且输入 chunk 大于等于目标输出块，直接输出该 chunk，不复制。
+2. 如果输入 chunk 小于目标输出块，追加到当前 buffer。
+3. 当前 buffer 达到或超过目标输出块后输出一个 `Bytes`。
 4. 上游结束时，输出剩余 tail。
-5. 上游读 body 出错时，立刻把错误传给 reqwest body stream。
+5. 上游读 body 出错时，立刻把错误传给 reqwest body stream，并丢弃已经缓存但未输出的 tail，不再 flush 半个失败请求体。
 6. 不创建后台任务、不建队列、不写临时文件、不缓存完整 PATCH。
 
 建议常量名：
 
 ```rust
-const TUS_PROXY_FORWARD_CHUNK_TARGET_BYTES: usize = 512 * 1024;
+const TUS_PROXY_FORWARD_CHUNK_TARGET_BYTES: usize = 1024 * 1024;
 ```
 
-512KiB 的取舍：
+目标块大小的取舍：
 
-- 比 27KiB 小块大约 19 倍，能把 32MiB PATCH 的转发次数压到约 64 次。
-- 比 1MiB 更早把首个合并块送到 tusd，慢网下首块等待时间更短。
-- 单请求额外内存上限足够低，8 个并发请求也只增加约 4MiB 合并缓冲。
+- 512KiB：首个上游块更早到达，32MiB PATCH 约 64 次输出。
+- 1MiB：默认起点，32MiB PATCH 约 32 次输出，内存仍低。
+- 2MiB：更少 poll/write，32MiB PATCH 约 16 次输出，但首块等待更长。
+- 最终常量必须通过真实 HTTPS 浏览器 benchmark 在 512KiB / 1MiB / 2MiB 中选择：取吞吐距最佳值 5% 内的最小目标块。
 
 命名可在实施时按现有中文风格调整，但语义必须保持：这是 adapter/shell 的传输块合并目标，不是业务分片大小。
 
@@ -291,7 +304,7 @@ Caddy 直连作为正式路径
 
 这些统计只在内存里维护几个整数，不记录每个 chunk，不产生日志风暴。
 
-成功目标：32MiB PATCH 的 `coalesced_chunk_count` 应接近 64，而不是约 1200。
+成功目标：32MiB PATCH 的 `coalesced_chunk_count` 应接近 `32MiB / selected_target_bytes`，而不是约 1200。
 
 ### 7.4 错误语义
 
@@ -322,7 +335,9 @@ Caddy 直连作为正式路径
 ```text
 输出总字节数仍为 32MiB
 输出 chunk 数 <= 80
-除最后一个 tail 外，每个输出 chunk >= 512KiB
+除最后一个 tail 外，每个输出 chunk >= TUS_PROXY_FORWARD_CHUNK_TARGET_BYTES
+小块合并输出不超过 TUS_PROXY_FORWARD_CHUNK_TARGET_BYTES + 单个输入 chunk 大小
+遇到客户端 body stream 错误时，返回错误且不 flush 已缓存 tail
 内存不需要完整收集 32MiB
 ```
 
@@ -335,9 +350,9 @@ Caddy 直连作为正式路径
 要求：
 
 - 测试输入的第一段必须达到 `TUS_PROXY_FORWARD_CHUNK_TARGET_BYTES`，然后人为阻塞第二段。
-- fake tusd 必须在第二段释放前收到第一段合并输出。
+- fake tusd 必须在第二段释放前累计收到首个 512KiB 前缀。
 - 这证明方案没有退化回 `body.collect().await`。
-- 不能继续用 11 字节首块做早到断言；小于合并阈值的小文件允许在 body 结束时 flush tail。
+- 不能继续用 11 字节首块做早到断言，也不能断言 Hyper/TCP 保留单个 512KiB 或 1MiB frame；小于合并阈值的小文件允许在 body 结束时 flush tail。
 
 ### 8.3 GREEN：proxy 行为不变
 
@@ -360,9 +375,12 @@ Caddy 直连作为正式路径
    - `throughput_mib_s`
    - `coalesced_chunk_count`
    - `coalesced_avg_chunk_bytes`
-4. 对比旧数据：
+4. 对 512KiB / 1MiB / 2MiB 候选目标块分别跑同一套上传，选择吞吐距最佳值 5% 内的最小目标块。
+5. 用临时本地 Caddyfile 保持同一 HTTPS origin，只把 `/files*` 直连 tusd，跑 direct tusd 对照；该配置只用于测试，不进入正式架构。
+6. 同时记录运行时 `chunkSize`、`parallelUploads`、`Upload-Concat` partial/final 形态，供后续前端 Tus 参数 A/B 判断。
+7. 对比旧数据和 direct tusd baseline：
    - 旧：单流约 11MiB/s，本机 4 路聚合约 44MiB/s，但真实设备约 900KB/s。
-   - 新：真实设备链路不应再稳定卡在 900KB/s；如果仍卡住，进入 Caddy/tusd 直连对照测试。
+   - 新：Rust proxy PATCH 吞吐应达到 direct tusd 对照的至少 90%，优先达到 95%；如果仍卡住，进入 raw sink / Caddy / tusd / frontend gap 分层对照。
 
 ---
 
@@ -405,12 +423,13 @@ Caddy 直连作为正式路径
 
 1. 代码中不再出现 `body.collect().await` 或 `Body::from(body_bytes)` 作为 Tus PATCH 主路径。
 2. 代码中不再把 `body.into_data_stream()` 原样直接传给 `reqwest::Body::wrap_stream()`。
-3. 存在有界合并流，目标输出块约 512KiB，单请求不完整持有 32MiB PATCH。
-4. 单元测试证明 27KiB 输入被合并成大块输出，且字节总量不变。
-5. 集成测试证明 sidecar 在客户端请求体结束前收到数据，未退化为完整 buffering。
+3. 存在有界合并流，目标输出块通过 512KiB / 1MiB / 2MiB 实测选定，单请求不完整持有 32MiB PATCH。
+4. 单元测试证明 27KiB 输入被合并成大块输出，字节顺序与总量不变，客户端 body stream 错误后不 flush 缓存 tail。
+5. 集成测试证明 sidecar 在客户端请求体结束前累计收到首个 512KiB 前缀，未退化为完整 buffering，且不依赖单个 TCP/Hyper frame 边界。
 6. 现有 Tus proxy 路由、Location 改写、header 透传、sidecar 错误转码测试通过。
-7. HTTPS 真实浏览器上传冒烟完成，并拿到 PATCH 日志中的合并块统计。
-8. 如果真实设备仍卡 900KB/s，必须按第 9 节继续分层对照，而不是直接宣称修复完成。
+7. HTTPS 真实浏览器上传冒烟完成，并拿到 PATCH 日志中的合并块统计、候选目标块吞吐表和 direct tusd 同入口对照结果。
+8. 冒烟记录运行时 `chunkSize`、`parallelUploads`、`Upload-Concat` 形态；本轮不修改前端 Tus 参数。
+9. Rust proxy PATCH 中位吞吐达到 direct tusd 同入口对照的至少 90%，优先达到 95%；否则必须按第 9 节继续分层对照，而不是直接宣称修复完成。
 
 ---
 
@@ -418,12 +437,12 @@ Caddy 直连作为正式路径
 
 | 风险 | 防线 |
 |---|---|
-| 合并 buffer 变成完整 PATCH 缓冲 | 常量固定 512KiB，测试断言输出 chunk 数和早到行为。 |
+| 合并 buffer 变成完整 PATCH 缓冲 | 常量限定在 512KiB/1MiB/2MiB 候选区间，测试断言输出 chunk 数、最大块大小、字节顺序和早到前缀行为。 |
 | 为吞吐牺牲内存安全 | 禁止 `collect()`，禁止无界 Vec，禁止后台队列。 |
 | 网络栈重新切小块导致测试不稳定 | chunk size 测试放在合并流单元层，不依赖 TCP frame。 |
 | 错误都被报成 tusd 不可达 | 日志分类区分 client body stream error 和 upstream unreachable。 |
-| Caddy/tusd 才是真瓶颈 | 保留 raw sink 和 tusd direct 对照测试。 |
-| 计划再次把“流式”误判为“高吞吐” | 完成标准同时要求早到、chunk 合并统计、真实浏览器 HTTPS 冒烟。 |
+| Caddy/tusd 才是真瓶颈 | same-entry direct tusd 是完成门槛；raw sink 是下一层定位手段。 |
+| 计划再次把“流式”误判为“高吞吐” | 完成标准同时要求早到、chunk 合并统计、真实浏览器 HTTPS 冒烟和 direct tusd 对照比例。 |
 
 ---
 
@@ -433,9 +452,9 @@ Caddy 直连作为正式路径
 
 新的 plan 应按 TDD 顺序组织：
 
-1. RED：新增合并流单元测试。
-2. RED：保留/升级首块早到集成测试。
+1. RED：新增合并流单元测试，包含字节顺序与 body stream 错误不 flush tail。
+2. RED：保留/升级首个 512KiB 前缀早到集成测试。
 3. GREEN：实现有界合并流并接入 `proxy_tus_upload_transport`。
 4. REFACTOR：收敛日志统计和错误分类。
-5. VERIFY：cargo targeted tests、Tus 相关回归、HTTPS 真实浏览器上传冒烟、日志证据。
+5. VERIFY：cargo targeted tests、Tus 相关回归、512KiB/1MiB/2MiB 目标块 benchmark、HTTPS 真实浏览器上传冒烟、same-entry direct tusd 对照比例、日志证据。
 6. COMMIT：只提交本次 spec/plan/代码改动，不带入已有 `AGENTS.md`、`CLAUDE.md` 脏改。
