@@ -49,20 +49,22 @@ function 读取恢复错误代码(error: unknown): string | undefined {
 /**
  * connect_error 只负责把 socket 级异常翻译成稳定的恢复信号，
  * 不在这里刷新会话，也不在这里偷做房间恢复。
+ *
+ * 调用前提：调用方已通过 socket.active 确认这是服务端拒绝（非传输层暂时失败）。
+ * 因此此函数对所有错误码统一升级到 session refresh 路径。
  */
 export async function 处理连接错误(
   error: unknown,
   deps: 处理连接错误依赖
 ): Promise<void> {
-  if (读取恢复错误代码(error) !== "invalid_session") {
-    return;
-  }
+  const code = 读取恢复错误代码(error) || "unknown_rejection";
   deps.接收实时会话事实({
     type: "SOCKET_DISCONNECTED",
-    code: "invalid_session",
+    code,
   });
   await deps.上报Transport异常({
     kind: "invalid_session",
+    keepRoomVisible: true,
   });
 }
 

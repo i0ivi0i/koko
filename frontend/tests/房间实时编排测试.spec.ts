@@ -66,9 +66,11 @@ describe("房间实时编排", () => {
     };
 
     编排.ensureRealtimeSocket("s-test");
+    // 模拟服务端拒绝：active=false 才会触发处理连接错误
+    场景.transport.socket.active = false;
     场景.transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
 
-    expect(场景.transportErrors).toEqual([{ kind: "invalid_session" }]);
+    expect(场景.transportErrors).toEqual([{ kind: "invalid_session", keepRoomVisible: true }]);
     expect(场景.realtimeSessionEvents).toContainEqual({
       type: "SOCKET_DISCONNECTED",
       code: "invalid_session",
@@ -630,6 +632,189 @@ describe("房间实时编排", () => {
 
     expect(场景.transport.socket.sentEvents).toEqual([]);
   });
+
+  it("ensureRealtimeSocket 在 socket.connected=false 时应释放旧 socket 并重建", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): Promise<void>;
+    };
+
+    // 第一次建连
+    await 编排.ensureRealtimeSocket("s-test");
+    expect(场景.transport.socketSessionIds).toHaveLength(1);
+
+    // 模拟 socket 已断开（connected=false），如后台超时被服务端踢掉
+    场景.transport.socket.connected = false;
+
+    // 再次 ensure：应释放旧 socket 并创建新 socket
+    await 编排.ensureRealtimeSocket("s-test");
+    expect(场景.transport.释放Socket调用次数).toBe(1);
+    expect(场景.transport.socketSessionIds).toHaveLength(2);
+  });
+
+  it("connect_error 且 socket.active=false 时应升级到 Transport 异常", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    // 模拟服务端拒绝（非 invalid_session），socket.active=false
+    场景.transport.socket.active = false;
+    场景.transport.socket.trigger("connect_error", 创建传输错误(500, "system_error"));
+
+    // 应上报 Transport 异常（走 session refresh 路径）
+    expect(场景.transportErrors.length).toBeGreaterThan(0);
+    expect(场景.realtimeSessionEvents).toContainEqual(
+      expect.objectContaining({ type: "SOCKET_DISCONNECTED", code: "system_error" })
+    );
+  });
 });
 
+describe("createSocket reconnection 硬编码", () => {
+  it("实时连接适配 createSocket 始终传 reconnection:true，不受运行时策略影响", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "聊天实时/适配/实时连接适配.ts"),
+      "utf8"
+    );
+    // createSocket 方法体中必须硬编码 reconnection: true，
+    // 而不是引用 this.当前运行时策略.reconnection
+    const createSocketBody = source.slice(
+      source.indexOf("createSocket("),
+      source.indexOf("}", source.indexOf("createSocket(") + 200) + 1
+    );
+    expect(createSocketBody).toContain("reconnection: true");
+    expect(createSocketBody).not.toContain("this.当前运行时策略.reconnection");
+  });
+});
 
+describe("session refresh 门闩", () => {
+  it("sessionRefreshInProgress 为 true 时 处理实时会话变化 不触发重订阅", async () => {
+    const { 聊天应用编排协调器 } = await import("../应用根/聊天应用编排协调器.js");
+
+    let ensureSocketCalled = false;
+    const mockDeps = {
+      创建恢复编排依赖: () => ({}),
+      创建实时编排依赖: () => ({}),
+      创建阅读推进依赖: () => ({}),
+    };
+    const coordinator = new 聊天应用编排协调器(mockDeps as any);
+
+    // 替换 ensureRealtimeSocket 以检测是否被调用
+    (coordinator as any).读取实时编排 = () => ({
+      ensureRealtimeSocket: async () => { ensureSocketCalled = true; },
+      subscribeRoom: () => { ensureSocketCalled = true; },
+    });
+
+    // 模拟 needsResubscribe 变为 true 的快照对
+    const before = { context: { needsResubscribe: false, roomId: "r1", sessionId: "s1", latestEventPosition: 5, backgroundDrainPending: false } };
+    const after = { context: { needsResubscribe: true, roomId: "r1", sessionId: "s1", latestEventPosition: 5, backgroundDrainPending: false } };
+
+    // 设置 session refresh 门闩
+    coordinator.标记SessionRefresh进行中(true);
+    await coordinator.处理实时会话变化(before as any, after as any);
+
+    // 断言：不应触发 ensureRealtimeSocket/subscribeRoom
+    expect(ensureSocketCalled).toBe(false);
+  });
+});
+
+describe("房间编排机超时退出", () => {
+  it("重连中状态收到 RECONNECT_TIMEOUT 应转入可重试失败", async () => {
+    const { 创建房间内核 } = await import("../房间/运行时.js");
+    const actor = 创建房间内核();
+
+    // 推进到"重连中"：引导成功 → 恢复中 → RECONNECTING_STARTED → 重连中
+    actor.send({
+      type: "BOOTSTRAP_SUCCEEDED",
+      sessionId: "s1",
+      displayAlias: "user1",
+      roomId: "r1",
+    });
+    actor.send({ type: "RECONNECTING_STARTED", code: "transport_close" });
+    expect(actor.getSnapshot().value).toBe("重连中");
+
+    // 发送超时事件
+    actor.send({ type: "RECONNECT_TIMEOUT" } as any);
+    expect(actor.getSnapshot().value).toBe("可重试失败");
+    expect(actor.getSnapshot().context.lastRecoveryErrorCode).toBe("reconnect_timeout");
+  });
+
+  it("重连超时看门狗：进入重连中 15s 后自动派发 RECONNECT_TIMEOUT", async () => {
+    vi.useFakeTimers();
+    try {
+      const { 创建房间内核 } = await import("../房间/运行时.js");
+      const { 创建重连超时看门狗 } = await import("../房间/重连超时看门狗.js");
+      const actor = 创建房间内核();
+      const watchdog = 创建重连超时看门狗(actor, 15_000);
+
+      // 引导 → 恢复中
+      actor.send({
+        type: "BOOTSTRAP_SUCCEEDED",
+        sessionId: "s1",
+        displayAlias: "user1",
+        roomId: "r1",
+      });
+      // 进入重连中 → 看门狗应启动
+      actor.send({ type: "RECONNECTING_STARTED", code: "transport_close" });
+      watchdog.进入重连中();
+      expect(actor.getSnapshot().value).toBe("重连中");
+
+      // 14s 后仍在重连中
+      vi.advanceTimersByTime(14_000);
+      expect(actor.getSnapshot().value).toBe("重连中");
+
+      // 15s 后应自动转入可重试失败
+      vi.advanceTimersByTime(1_000);
+      expect(actor.getSnapshot().value).toBe("可重试失败");
+      expect(actor.getSnapshot().context.lastRecoveryErrorCode).toBe("reconnect_timeout");
+
+      watchdog.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("重连中恢复成功时看门狗应清除计时器", async () => {
+    vi.useFakeTimers();
+    try {
+      const { 创建房间内核 } = await import("../房间/运行时.js");
+      const { 创建重连超时看门狗 } = await import("../房间/重连超时看门狗.js");
+      const actor = 创建房间内核();
+      const watchdog = 创建重连超时看门狗(actor, 15_000);
+
+      actor.send({
+        type: "BOOTSTRAP_SUCCEEDED",
+        sessionId: "s1",
+        displayAlias: "user1",
+        roomId: "r1",
+      });
+      actor.send({ type: "RECONNECTING_STARTED", code: "transport_close" });
+      watchdog.进入重连中();
+
+      // 5s 后恢复成功
+      vi.advanceTimersByTime(5_000);
+      actor.send({
+        type: "SUBSCRIPTION_ESTABLISHED",
+        latestEventPosition: 10,
+      });
+      watchdog.离开重连中();
+
+      // 继续推进到 15s，不应该再触发超时
+      vi.advanceTimersByTime(10_000);
+      expect(actor.getSnapshot().value).toBe("在线会话中");
+
+      watchdog.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

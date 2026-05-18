@@ -33,9 +33,15 @@ export class 聊天应用编排协调器 {
   private 恢复编排: 房间恢复编排端口 | null = null;
   private 实时编排: 房间实时编排端口 | null = null;
   private 阅读推进编排: 阅读推进编排端口 | null = null;
+  // session refresh 门闩：刷新进行中时阻止对旧 socket 的重订阅操作
+  private sessionRefreshInProgress = false;
 
   constructor(deps: 聊天应用编排协调器依赖) {
     this.deps = deps;
+  }
+
+  标记SessionRefresh进行中(value: boolean): void {
+    this.sessionRefreshInProgress = value;
   }
 
   async bootstrap(): Promise<void> {
@@ -93,7 +99,12 @@ export class 聊天应用编排协调器 {
   async 接收Transport异常(
     error: Parameters<房间恢复编排端口["接收Transport异常"]>[0]
   ): Promise<void> {
-    await this.读取恢复编排().接收Transport异常(error);
+    this.sessionRefreshInProgress = true;
+    try {
+      await this.读取恢复编排().接收Transport异常(error);
+    } finally {
+      this.sessionRefreshInProgress = false;
+    }
   }
 
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void {
@@ -121,7 +132,8 @@ export class 聊天应用编排协调器 {
       nextContext.needsResubscribe &&
       !beforeContext.needsResubscribe &&
       nextContext.roomId &&
-      nextContext.sessionId
+      nextContext.sessionId &&
+      !this.sessionRefreshInProgress
     ) {
       await this.ensureRealtimeSocket(nextContext.sessionId);
       this.subscribeRoom(nextContext.latestEventPosition);

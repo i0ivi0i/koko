@@ -207,6 +207,7 @@ describe("聊天壳集成 / 恢复失败与会话刷新", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
+    transport.socket.active = false;
     transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
     await 等待组件稳定(el);
     await 等待组件稳定(el);
@@ -244,6 +245,7 @@ describe("聊天壳集成 / 恢复失败与会话刷新", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
+    transport.socket.active = false;
     transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
     await 等待组件稳定(el);
     await 等待组件稳定(el);

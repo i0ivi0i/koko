@@ -6,6 +6,9 @@ export class 假Socket {
   private handlers = new Map<string, Array<(payload: unknown) => void>>();
   public sentEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
   public subscribeResults: Array<Record<string, unknown>> = [];
+  /** 模拟 Socket.IO 的 connected 和 active 属性 */
+  public connected = true;
+  public active = true;
 
   on(event: string, handler: (payload: unknown) => void): this {
     const list = this.handlers.get(event) ?? [];

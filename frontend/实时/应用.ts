@@ -93,6 +93,14 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
   }
 
   async function ensureRealtimeSocket(sessionId: string): Promise<void> {
+    // 死 socket 检测：引用存在但底层连接已断 → 释放并重建，避免 emit 到死通道
+    if (realtimeSocket) {
+      const connected = (realtimeSocket as Socket & { connected?: boolean }).connected;
+      if (connected === false) {
+        deps.transport.释放Socket?.(realtimeSocket);
+        realtimeSocket = null;
+      }
+    }
     if (realtimeSocket) {
       return;
     }
@@ -120,6 +128,11 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
       }
     });
     socket.on("connect_error", (error: unknown) => {
+      // Socket.IO v4 官方语义：socket.active=true 表示传输层暂时失败、会自动重连；
+      // socket.active=false 表示服务端中间件拒绝、不会自动重连，必须手动恢复。
+      if ((socket as Socket & { active?: boolean }).active) {
+        return;
+      }
       void 处理连接错误(error, {
         接收实时会话事实: deps.接收实时会话事实,
         上报Transport异常: deps.上报Transport异常,

@@ -66,6 +66,7 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
+  释放Socket调用次数 = 0;
   获取PowToken?: () => Promise<string>;
   实时运行时策略: 实时连接运行时策略 = {
     intent: "resume",
@@ -435,6 +436,7 @@ export class 假传输 implements 前端传输端口 {
 
   释放Socket(socket: Socket): void {
     // 测试桩也要走和正式传输端口一致的释放协议，避免房间退出场景退化成“只清引用不真正断链”。
+    this.释放Socket调用次数 += 1;
     socket.disconnect();
   }
 }

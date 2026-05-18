@@ -24,12 +24,11 @@ export class 实时连接适配 {
   constructor(private readonly baseUrl: string) {}
 
   createSocket(sessionId: string, powToken?: string): Socket {
-    // 这里只显式启用当前主链可安全承受的 Socket.IO 选项。
-    // `retries / ackTimeout` 仍不能开，因为服务端还没有成功 ack 协议；
-    // 可靠性继续由 snapshot + 增量补洞主链保证，而不是让客户端私自重放命令。
+    // reconnection 强制 true：Socket.IO 的自动重连是传输层健壮性基石，
+    // 运行时策略只能通过 suspend/resume 控制连接行为，不能关闭自动重连能力。
     const socket = io(this.baseUrl, {
       transports: ["websocket"],
-      reconnection: this.当前运行时策略.reconnection,
+      reconnection: true,
       autoConnect: this.当前运行时策略.intent !== "suspend",
       auth: { session_id: sessionId, pow_token: powToken },
     });

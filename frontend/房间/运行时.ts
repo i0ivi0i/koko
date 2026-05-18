@@ -74,6 +74,9 @@ export type 房间内核事件 =
       roomInvalidated: boolean;
     }
   | {
+      type: "RECONNECT_TIMEOUT";
+    }
+  | {
       type: "SOFT_LEAVE_REQUESTED";
     };
 
@@ -303,6 +306,10 @@ const 房间编排机 = createMachine(
             target: "在线会话中",
             actions: "记录订阅已建立",
           },
+          RECONNECT_TIMEOUT: {
+            target: "可重试失败",
+            actions: "记录超时失败",
+          },
           RECOVERY_FAILED: [
             {
               guard: ({ event }) => event.keepRoomVisible,
@@ -453,6 +460,9 @@ const 房间编排机 = createMachine(
           lastRecoveryErrorCode: event.code,
         };
       }),
+      记录超时失败: assign(() => ({
+        lastRecoveryErrorCode: "reconnect_timeout",
+      })),
       保留房间并记录失败: assign(({ event }) => {
         if (event.type !== "RECOVERY_FAILED") {
           return {};

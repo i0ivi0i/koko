@@ -4,6 +4,7 @@ import {
   type 房间内核事件,
   type 房间壳外观,
 } from "../房间/运行时.js";
+import { 创建重连超时看门狗 } from "../房间/重连超时看门狗.js";
 import {
   创建聊天内核平台桥接,
   type 聊天内核平台端口,
@@ -221,6 +222,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 它不是聊天室业务真相，所以继续留在聊天应用内核内部，不往壳层外冒。
    */
   private shouldPrimeReadAnchorAfterInitialSettle = false;
+  private readonly 重连看门狗 = 创建重连超时看门狗(this.roomKernel);
   private readonly 编排协调器: 聊天应用编排协调器;
 
   /**
@@ -499,6 +501,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   dispose(): void {
     this.编排协调器.dispose();
+    this.重连看门狗.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.销毁();
@@ -506,7 +509,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomTimeline.stop();
     this.roomViewport.stop();
     this.appLifecycle.stop();
-    // 显式 dispose 时补刷一次，作为页面隐藏路径以外的兑底。
     this.flush仓库();
   }
 
@@ -731,6 +733,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 发送房间事件(event: 房间内核事件): void {
     const realtimeBefore = this.realtimeSession.getSnapshot();
     const 当前房间壳 = 派生房间壳外观(this.roomKernel.getSnapshot());
+    const beforePhase = this.roomKernel.getSnapshot().value;
     if (event.type === "SNAPSHOT_LOADED") {
       this.realtimeSession.send({
         type: "CONNECT_REQUESTED",
@@ -754,6 +757,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       this.realtimeSession.send({ type: "ROOM_VIEW_EXITED" });
     }
     this.roomKernel.send(event);
+    const afterPhase = this.roomKernel.getSnapshot().value;
+    // 重连超时看门狗：检测进入/离开"重连中"状态的转换
+    if (afterPhase === "重连中" && beforePhase !== "重连中") {
+      this.重连看门狗.进入重连中();
+    } else if (beforePhase === "重连中" && afterPhase !== "重连中") {
+      this.重连看门狗.离开重连中();
+    }
     this.deps.渲染桥.请求重渲染();
     void this.处理实时会话变化(realtimeBefore);
   }
