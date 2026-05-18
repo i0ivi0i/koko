@@ -4,7 +4,7 @@ import {
   type 房间内核事件,
   type 房间壳外观,
 } from "../房间/运行时.js";
-import { 创建重连超时看门狗 } from "../房间/重连超时看门狗.js";
+import { 创建重连超时看门狗, type 重连超时看门狗端口 } from "../房间/重连超时看门狗.js";
 import {
   创建聊天内核平台桥接,
   type 聊天内核平台端口,
@@ -222,8 +222,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 它不是聊天室业务真相，所以继续留在聊天应用内核内部，不往壳层外冒。
    */
   private shouldPrimeReadAnchorAfterInitialSettle = false;
-  private readonly 重连看门狗 = 创建重连超时看门狗(this.roomKernel);
   private readonly 编排协调器: 聊天应用编排协调器;
+  private readonly 重连看门狗: 重连超时看门狗端口;
 
   /**
    * 视口 owner 需要 DOM 查询能力，但 owner 本身仍属于聊天应用内核。
@@ -407,6 +407,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         排空到期任务: this.平台桥接.排空到期任务,
       })
     );
+    this.重连看门狗 = 创建重连超时看门狗(this.roomKernel, {
+      timeoutMs: 30_000,
+      是否在刷新会话: () => this.编排协调器.读取SessionRefresh进行中(),
+    });
     this.媒体编排 = 创建聊天应用媒体编排({
       读取媒体传输: () => this.媒体传输,
       读取会话编号: () => this.回填房间壳补丁().sessionId,

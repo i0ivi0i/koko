@@ -44,6 +44,10 @@ export class 聊天应用编排协调器 {
     this.sessionRefreshInProgress = value;
   }
 
+  读取SessionRefresh进行中(): boolean {
+    return this.sessionRefreshInProgress;
+  }
+
   async bootstrap(): Promise<void> {
     await this.读取恢复编排().bootstrap();
   }

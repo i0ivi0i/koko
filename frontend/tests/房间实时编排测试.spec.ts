@@ -754,7 +754,7 @@ describe("房间编排机超时退出", () => {
       const { 创建房间内核 } = await import("../房间/运行时.js");
       const { 创建重连超时看门狗 } = await import("../房间/重连超时看门狗.js");
       const actor = 创建房间内核();
-      const watchdog = 创建重连超时看门狗(actor, 15_000);
+      const watchdog = 创建重连超时看门狗(actor, { timeoutMs: 15_000 });
 
       // 引导 → 恢复中
       actor.send({
@@ -789,7 +789,7 @@ describe("房间编排机超时退出", () => {
       const { 创建房间内核 } = await import("../房间/运行时.js");
       const { 创建重连超时看门狗 } = await import("../房间/重连超时看门狗.js");
       const actor = 创建房间内核();
-      const watchdog = 创建重连超时看门狗(actor, 15_000);
+      const watchdog = 创建重连超时看门狗(actor, { timeoutMs: 15_000 });
 
       actor.send({
         type: "BOOTSTRAP_SUCCEEDED",
@@ -811,6 +811,45 @@ describe("房间编排机超时退出", () => {
       // 继续推进到 15s，不应该再触发超时
       vi.advanceTimersByTime(10_000);
       expect(actor.getSnapshot().value).toBe("在线会话中");
+
+      watchdog.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("session refresh 进行中时看门狗续等而非触发超时", async () => {
+    vi.useFakeTimers();
+    try {
+      const { 创建房间内核 } = await import("../房间/运行时.js");
+      const { 创建重连超时看门狗 } = await import("../房间/重连超时看门狗.js");
+      const actor = 创建房间内核();
+      let refreshing = true;
+      const watchdog = 创建重连超时看门狗(actor, {
+        timeoutMs: 15_000,
+        是否在刷新会话: () => refreshing,
+      });
+
+      actor.send({
+        type: "BOOTSTRAP_SUCCEEDED",
+        sessionId: "s1",
+        displayAlias: "user1",
+        roomId: "r1",
+      });
+      actor.send({ type: "RECONNECTING_STARTED", code: "transport_close" });
+      watchdog.进入重连中();
+
+      // 第一轮 15s 到期 — session refresh 进行中，应续等
+      vi.advanceTimersByTime(15_000);
+      expect(actor.getSnapshot().value).toBe("重连中");
+
+      // 第二轮中途 session refresh 完成
+      vi.advanceTimersByTime(5_000);
+      refreshing = false;
+
+      // 剩余 10s 到期 — 此时才真正触发 RECONNECT_TIMEOUT
+      vi.advanceTimersByTime(10_000);
+      expect(actor.getSnapshot().value).toBe("可重试失败");
 
       watchdog.dispose();
     } finally {
