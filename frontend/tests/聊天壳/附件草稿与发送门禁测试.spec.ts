@@ -221,6 +221,9 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
       status: "failed",
       fileName: "retry.png",
       errorCode: "attachment_upload_failed",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "retry.png", {
+        type: "image/png",
+      }),
     });
     await 等待组件稳定(el);
 
@@ -245,6 +248,9 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
       status: "failed",
       fileName: "retry-split.png",
       errorCode: "attachment_upload_failed",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "retry-split.png", {
+        type: "image/png",
+      }),
     });
     await 等待组件稳定(el);
 
@@ -271,6 +277,9 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
       status: "failed",
       fileName: "retry-actions.png",
       errorCode: "attachment_upload_failed",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "retry-actions.png", {
+        type: "image/png",
+      }),
     });
     await 等待组件稳定(el);
 
@@ -338,6 +347,45 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
     );
     expect(fake媒体发布器.处理选择媒体文件).not.toHaveBeenCalled();
     expect(input.value).toBe("");
+    el.remove();
+  });
+
+  it("刷新后源文件丢失的中断草稿必须重新选择文件，不能继续调用无 owner 重试", async () => {
+    const el = await 创建已入房聊天壳();
+    const fake媒体发布器 = 创建假媒体发布器();
+    注入媒体发布器供测试(el, fake媒体发布器);
+    注入图片草稿(el, {
+      localId: "draft-interrupted-no-file",
+      kind: "image",
+      attachmentId: "att-interrupted-no-file",
+      previewUrl: "",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "interrupted.jpg",
+      errorCode: "attachment_upload_interrupted",
+      sourceFile: null,
+    });
+    await 等待组件稳定(el);
+
+    expect(
+      el.shadowRoot!.querySelector('[data-draft-resume-id="draft-interrupted-no-file"]')
+    ).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('[data-draft-restart-id="draft-interrupted-no-file"]')
+    ).toBeNull();
+
+    const input = 读取统一媒体文件输入(el);
+    const clickSpy = vi.spyOn(input, "click");
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-reselect-id="draft-interrupted-no-file"]'
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(fake媒体发布器.继续上传草稿).not.toHaveBeenCalled();
+    expect(fake媒体发布器.重新上传草稿).not.toHaveBeenCalled();
     el.remove();
   });
 

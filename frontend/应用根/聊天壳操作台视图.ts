@@ -29,6 +29,8 @@ type 聊天壳操作台视图输入 = {
   重新选择媒体草稿(localId: string): void | Promise<void>;
 };
 
+type 操作台媒体草稿 = 聊天应用快照["composerMediaDrafts"][number];
+
 function 派生媒体草稿失败文案(errorCode: string): string {
   switch (errorCode) {
     case "attachment_too_large":
@@ -56,6 +58,35 @@ function 派生媒体草稿失败文案(errorCode: string): string {
     default:
       return `失败：${errorCode || "attachment_upload_failed"}`;
   }
+}
+
+function 失败媒体草稿需要重新选择文件(draft: 操作台媒体草稿): boolean {
+  if (draft.status !== "failed") {
+    return false;
+  }
+  if (draft.errorCode === "attachment_file_needs_reselect") {
+    return true;
+  }
+  if (
+    draft.errorCode === "attachment_too_large" ||
+    draft.errorCode === "attachment_type_not_allowed"
+  ) {
+    return false;
+  }
+  return !draft.sourceFile;
+}
+
+function 失败媒体草稿可直接重试(draft: 操作台媒体草稿): boolean {
+  if (draft.status !== "failed") {
+    return false;
+  }
+  if (失败媒体草稿需要重新选择文件(draft)) {
+    return false;
+  }
+  return (
+    draft.errorCode !== "attachment_too_large" &&
+    draft.errorCode !== "attachment_type_not_allowed"
+  );
 }
 
 function 读取操作台主输入高度(input: {
@@ -186,8 +217,7 @@ export function 渲染聊天壳操作台(input: 聊天壳操作台视图输入) 
                     >
                       移除
                     </button>
-                    ${draft.status === "failed" &&
-                    draft.errorCode === "attachment_file_needs_reselect"
+                    ${失败媒体草稿需要重新选择文件(draft)
                       ? html`
                           <button
                             type="button"
@@ -199,10 +229,7 @@ export function 渲染聊天壳操作台(input: 聊天壳操作台视图输入) 
                           </button>
                         `
                       : null}
-                    ${draft.status === "failed" &&
-                    draft.errorCode !== "attachment_file_needs_reselect" &&
-                    draft.errorCode !== "attachment_too_large" &&
-                    draft.errorCode !== "attachment_type_not_allowed"
+                    ${失败媒体草稿可直接重试(draft)
                       ? html`
                           <button
                             type="button"
