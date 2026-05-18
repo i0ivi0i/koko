@@ -298,6 +298,15 @@ export const 启动做种会话 = async (payload) => {
       announce,
       urlList,
       ...(stagingDir ? { path: stagingDir } : {}),
+      // 硬链接成功时跳过 piece 验证：文件已由 Rust canonical 写入验证，
+      // skipVerify 让 WebTorrent 直接标记所有 piece 为 done，省去 ~1500ms 验证延迟。
+      // 硬链接失败时 stagingDir 为 null，不会设置此项。
+      ...(stagingDir ? { skipVerify: true } : {}),
+      // 万人群做种：同时给 64 个 peer 上传（默认 10 远不够）
+      uploads: 64,
+      // 内存缓存 500 个 piece（默认 20），减少磁盘随机读 IO，
+      // 多 peer 并发拉取时上传吞吐量显著提升。500 × 256KB ≈ 125MB/torrent。
+      storeCacheSlots: 500,
       /**
        * seeder 也必须按统一 swarm 门禁入场：
        * - tracker 开启 join ticket 时，announce 请求要带 ticket；
@@ -501,7 +510,19 @@ const main = async () => {
       "[dev-seeder] 当前未加载 webtorrent-hybrid；浏览器 WebRTC 互通能力可能受限（仅用于开发兜底）。"
     );
   }
-  client = WebTorrentCtor ? new WebTorrentCtor() : null;
+  // 万人群服务器做种：默认 maxConns=55 / uploads=10 远不够。
+  // 参数全部经 WebTorrent 官方 API 验证（docs/api.md）：
+  //   maxConns=512    ── 每个 torrent 允许 512 peer 并发连接
+  //   seedOutgoingConnections=true ── 做种时主动建立出站连接（v2.4.0+ 默认 true，显式声明防未来变更）
+  //   uploadLimit/downloadLimit=-1 ── 不限速（默认 -1，显式声明防未来变更）
+  client = WebTorrentCtor
+    ? new WebTorrentCtor({
+        maxConns: 512,
+        seedOutgoingConnections: true,
+        uploadLimit: -1,
+        downloadLimit: -1,
+      })
+    : null;
 
   process.once("SIGINT", () => {
     void 优雅退出();

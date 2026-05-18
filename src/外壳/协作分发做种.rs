@@ -159,7 +159,8 @@ pub(crate) async fn 尝试启动协作分发做种(
         "joinTicket": 命令.join_ticket,
         "torrentBytesBase64": 命令.torrent_bytes_base64,
         "localSeed": 命令.local_seed,
-        "readinessWaitMs": 1500,
+        // skipVerify 启用后 piece 验证延迟消除，300ms 仅作 sidecar 内部初始化兜底
+        "readinessWaitMs": 300,
     });
     let response = state.http_client
         .post(url.as_str())

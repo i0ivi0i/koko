@@ -653,7 +653,8 @@ pub(super) async fn complete_media_upload(
                     ice_servers: state.get_turn_ice_servers().await,
                 },
             );
-            if let Some(mut 启动命令) =
+            // 做种启动命令暂存，后续与广播合并为串行编排（消除竞态）
+            let 做种启动命令_for_broadcast = if let Some(mut 启动命令) =
                 super::协作分发做种::从协作分发响应构造做种启动命令(
                     &runtime_distribution,
                     state.swarm_seeder_tracker_url.as_str(),
@@ -669,23 +670,10 @@ pub(super) async fn complete_media_upload(
                     &原始内容存储键_for_seed,
                     &distribution_request.content_hash,
                 );
-                let spawn_state = state.clone();
-                let spawn_attachment_id = attachment_id.clone();
-                tokio::spawn(async move {
-                    if let Err(err) =
-                        super::协作分发做种::尝试启动协作分发做种(&spawn_state, &启动命令).await
-                    {
-                        tracing::warn!(
-                            application = "完成媒体上传",
-                            phase = "seed_start_failed",
-                            attachment_id = spawn_attachment_id.as_str(),
-                            info_hash = 启动命令.info_hash.as_str(),
-                            error = %err,
-                            "complete 成功后触发 sidecar 做种失败，等待后台对账重试"
-                        );
-                    }
-                });
-            }
+                Some(启动命令)
+            } else {
+                None
+            };
             let media_asset = super::媒体资产外壳::构造媒体资产响应体(
                 &snapshot,
                 super::媒体资产外壳::媒体资产响应上下文 {
@@ -713,21 +701,80 @@ pub(super) async fn complete_media_upload(
                 duration_ms = complete_heavy_work_started_at.elapsed().as_millis() as u64,
                 "媒体上传 complete 重活完成"
             );
-            // pending-first：complete 成功后广播 attachment_status_changed ready 到房间。
-            // fire-and-forget：广播失败不阻断 HTTP 响应，客户端可通过恢复/增量拉取补偿。
-            if let Some(ref io) = state.realtime_io {
-                let io = io.clone();
-                let pool = state.pool.clone();
-                let aid = attachment_id.clone();
-                let tracker_url = state.swarm_tracker_public_url.clone();
-                let ticket_secret = state.swarm_ticket_secret.clone();
-                let ticket_ttl = state.swarm_ticket_ttl_seconds;
-                tokio::spawn(async move {
-                    广播附件状态升级事件(
-                        &io, &pool, &aid, &tracker_url,
-                        ticket_secret.as_deref(), ticket_ttl,
-                    ).await;
-                });
+            // 做种→广播串行编排：先等做种就绪（5s 超时兜底），再广播给群友。
+            // 消除竞态：原来做种和广播各自 fire-and-forget 并行赛跑，广播(ms级)
+            // 总是快于做种(1-2s)，导致接收者收到通知时服务器还没入群。
+            // 整体仍在 spawn 中，不阻塞 complete HTTP 响应返回给发送者。
+            {
+                let has_io = state.realtime_io.is_some();
+                let seed_cmd = 做种启动命令_for_broadcast;
+                if seed_cmd.is_some() || has_io {
+                    let spawn_state = state.clone();
+                    let spawn_aid = attachment_id.clone();
+                    let io_opt = state.realtime_io.clone();
+                    let pool = state.pool.clone();
+                    let tracker_url = state.swarm_tracker_public_url.clone();
+                    let ticket_secret = state.swarm_ticket_secret.clone();
+                    let ticket_ttl = state.swarm_ticket_ttl_seconds;
+                    tokio::spawn(async move {
+                        // Phase 1: 带超时的做种启动（如有启动命令）
+                        if let Some(ref cmd) = seed_cmd {
+                            match tokio::time::timeout(
+                                Duration::from_secs(5),
+                                super::协作分发做种::尝试启动协作分发做种(&spawn_state, cmd),
+                            ).await {
+                                Ok(Ok(resp)) => {
+                                    let done = resp.get("done")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false);
+                                    if done {
+                                        tracing::info!(
+                                            application = "完成媒体上传",
+                                            phase = "seed_ready_before_broadcast",
+                                            attachment_id = spawn_aid.as_str(),
+                                            info_hash = cmd.info_hash.as_str(),
+                                            "做种就绪，开始广播"
+                                        );
+                                    } else {
+                                        tracing::info!(
+                                            application = "完成媒体上传",
+                                            phase = "seed_not_done_yet",
+                                            attachment_id = spawn_aid.as_str(),
+                                            info_hash = cmd.info_hash.as_str(),
+                                            "做种启动但 done=false，降级广播（对账会重试）"
+                                        );
+                                    }
+                                }
+                                Ok(Err(err)) => {
+                                    tracing::warn!(
+                                        application = "完成媒体上传",
+                                        phase = "seed_start_failed",
+                                        attachment_id = spawn_aid.as_str(),
+                                        info_hash = cmd.info_hash.as_str(),
+                                        error = %err,
+                                        "做种启动失败，降级广播（等待对账重试）"
+                                    );
+                                }
+                                Err(_elapsed) => {
+                                    tracing::warn!(
+                                        application = "完成媒体上传",
+                                        phase = "seed_start_timeout",
+                                        attachment_id = spawn_aid.as_str(),
+                                        info_hash = cmd.info_hash.as_str(),
+                                        "做种启动超时(5s)，降级广播"
+                                    );
+                                }
+                            }
+                        }
+                        // Phase 2: 广播（如有 io）——无论做种成败都广播，最差与修复前一致
+                        if let Some(ref io) = io_opt {
+                            广播附件状态升级事件(
+                                io, &pool, &spawn_aid, &tracker_url,
+                                ticket_secret.as_deref(), ticket_ttl,
+                            ).await;
+                        }
+                    });
+                }
             }
             (
                 StatusCode::OK,
