@@ -666,6 +666,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     if (
       nextContext.needsResubscribe &&
       !beforeContext.needsResubscribe &&
+      nextContext.resubscribeMode === "visible" &&
       nextContext.roomId &&
       nextContext.sessionId
     ) {

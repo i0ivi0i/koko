@@ -125,4 +125,94 @@ describe("实时会话运行时", () => {
       needsResubscribe: true,
     });
   });
+
+  it("运行时主动挂起 socket 时不要求用户可见重订阅", async () => {
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
+
+    const actor = 创建实时会话Actor();
+
+    actor.send({
+      type: "CONNECT_REQUESTED",
+      roomId: "r-test",
+      sessionId: "s-test",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SUBSCRIPTION_ESTABLISHED",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SOCKET_DISCONNECTED",
+      code: "io client disconnect",
+      source: "runtime_suspend",
+    });
+
+    expect(actor.getSnapshot().context).toMatchObject({
+      connectionState: "suspended",
+      lastDisconnectCode: "io client disconnect",
+      needsResubscribe: false,
+      resubscribeMode: "none",
+    });
+  });
+
+  it("从后台恢复到 normal 时会静默要求补订阅", async () => {
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
+
+    const actor = 创建实时会话Actor();
+
+    actor.send({
+      type: "CONNECT_REQUESTED",
+      roomId: "r-test",
+      sessionId: "s-test",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SUBSCRIPTION_ESTABLISHED",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SOCKET_DISCONNECTED",
+      code: "io client disconnect",
+      source: "runtime_suspend",
+    });
+    actor.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "normal",
+    });
+
+    expect(actor.getSnapshot().context).toMatchObject({
+      connectionState: "reconnecting",
+      needsResubscribe: true,
+      resubscribeMode: "silent",
+    });
+  });
+
+  it("普通临时断线仍要求用户可见重订阅", async () => {
+    const { 创建实时会话Actor } = await import("../实时/会话运行时");
+
+    const actor = 创建实时会话Actor();
+
+    actor.send({
+      type: "CONNECT_REQUESTED",
+      roomId: "r-test",
+      sessionId: "s-test",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SUBSCRIPTION_ESTABLISHED",
+      latestEventPosition: 8,
+    });
+    actor.send({
+      type: "SOCKET_DISCONNECTED",
+      code: "transport close",
+      source: "temporary_transport",
+    });
+
+    expect(actor.getSnapshot().context).toMatchObject({
+      connectionState: "reconnecting",
+      lastDisconnectCode: "transport close",
+      needsResubscribe: true,
+      resubscribeMode: "visible",
+    });
+  });
 });

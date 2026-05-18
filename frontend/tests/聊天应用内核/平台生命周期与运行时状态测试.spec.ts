@@ -4,8 +4,66 @@ import { createFakeStorage, 假传输 } from "../common/聊天测试支架";
 import { 创建聊天应用内核 } from "../../应用根/聊天应用内核";
 import { 创建内核依赖, 读取媒体编排供测试 } from "../common/聊天应用内核支架";
 import type { 浏览器应用平台快照 } from "../../平台/浏览器应用平台";
+import type { 实时会话事件, 实时会话快照 } from "../../实时/会话运行时";
 
 describe("聊天应用内核 - 平台生命周期与运行时状态", () => {
+  it("静默重订阅会补订阅但不会被提升成房间可见重连提示", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 内核内部 = kernel as unknown as {
+      realtimeSession: {
+        send(event: 实时会话事件): void;
+        getSnapshot(): 实时会话快照;
+      };
+      编排协调器: {
+        ensureRealtimeSocket(sessionId: string): Promise<void>;
+        subscribeRoom(from: number): void;
+      };
+      处理实时会话变化(before?: 实时会话快照): Promise<void>;
+      发送房间事件(event: unknown): void;
+    };
+    const ensureRealtimeSocket = vi
+      .spyOn(内核内部.编排协调器, "ensureRealtimeSocket")
+      .mockResolvedValue(undefined);
+    const subscribeRoom = vi
+      .spyOn(内核内部.编排协调器, "subscribeRoom")
+      .mockImplementation(() => {});
+    const 发送房间事件 = vi.spyOn(内核内部, "发送房间事件");
+
+    内核内部.realtimeSession.send({
+      type: "CONNECT_REQUESTED",
+      roomId: "r-silent",
+      sessionId: "s-silent",
+      latestEventPosition: 42,
+    });
+    内核内部.realtimeSession.send({
+      type: "SUBSCRIPTION_ESTABLISHED",
+      latestEventPosition: 42,
+    });
+    内核内部.realtimeSession.send({
+      type: "SOCKET_DISCONNECTED",
+      code: "io client disconnect",
+      source: "runtime_suspend",
+    });
+    const 挂起前快照 = 内核内部.realtimeSession.getSnapshot();
+    内核内部.realtimeSession.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "normal",
+    });
+
+    await 内核内部.处理实时会话变化(挂起前快照);
+
+    expect(ensureRealtimeSocket).toHaveBeenCalledWith("s-silent");
+    expect(subscribeRoom).toHaveBeenCalledWith(42);
+    expect(发送房间事件).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "RECONNECTING_STARTED" })
+    );
+    expect(kernel.snapshot().recoveryState).toBe("idle");
+  });
+
   it("frozen/page_hidden 会把重型工作意图降到 suspended，并投影到运行时快照", async () => {
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),

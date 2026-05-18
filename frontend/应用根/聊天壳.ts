@@ -304,6 +304,7 @@ export class 聊天壳 extends LitElement {
       recoveryState: 聊天快照.recoveryState,
       roomId: 聊天快照.roomId,
       displayAlias: 聊天快照.displayAlias,
+      lastRecoveryErrorCode: 聊天快照.lastRecoveryErrorCode,
     });
     const { historyHint } = 派生消息窗口提示文案({
       historyLoading: 聊天快照.historyLoading,

@@ -77,6 +77,50 @@ describe("房间实时编排", () => {
     expect(场景.recoveryFailures).toEqual([]);
   });
 
+  it("运行时挂起导致的 socket disconnect 会标记为 runtime_suspend", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const transport = 场景.transport as typeof 场景.transport & {
+      读取Socket运行时挂起状态?(socket: unknown): boolean;
+    };
+    transport.读取Socket运行时挂起状态 = () => true;
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    场景.transport.socket.trigger("disconnect", "io client disconnect");
+
+    expect(场景.realtimeSessionEvents).toContainEqual({
+      type: "SOCKET_DISCONNECTED",
+      code: "io client disconnect",
+      source: "runtime_suspend",
+    });
+  });
+
+  it("普通 socket disconnect 会标记为 temporary_transport", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    场景.transport.socket.trigger("disconnect", "transport close");
+
+    expect(场景.realtimeSessionEvents).toContainEqual({
+      type: "SOCKET_DISCONNECTED",
+      code: "transport close",
+      source: "temporary_transport",
+    });
+  });
+
   it("control_result subscribed 会推进订阅建立事件", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({

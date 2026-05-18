@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach,describe,expect,it,vi } from "vitest";
 import { 聊天壳 } from "../应用根/聊天壳";
+import { 派生房间壳提示文案 } from "../房间消息窗/视图";
 import {
 createFakeStorage,
 假传输,
@@ -31,6 +32,24 @@ describe("聊天壳集成 / 恢复失败与会话刷新", () => {
     expect(source).not.toContain("bootstrapAnonymousIdentity(");
     expect(source).not.toContain("loadRoomSnapshot(");
     expect(source).not.toContain("joinOrCreateRoom(");
+  });
+  it("普通重连只显示同步提示，invalid_session 才显示会话刷新", () => {
+    expect(
+      派生房间壳提示文案({
+        recoveryState: "reconnecting",
+        roomId: "r-1",
+        displayAlias: "小猴",
+        lastRecoveryErrorCode: "transport close",
+      }).recoveryHint
+    ).toBe("正在同步最新消息");
+    expect(
+      派生房间壳提示文案({
+        recoveryState: "reconnecting",
+        roomId: "r-1",
+        displayAlias: "小猴",
+        lastRecoveryErrorCode: "invalid_session",
+      }).recoveryHint
+    ).toBe("会话已刷新，正在重新恢复");
   });
   it("room_not_found 会清掉 current_room_id、删除对应历史并回到首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");

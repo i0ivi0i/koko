@@ -406,6 +406,10 @@ export class 假传输 implements 前端传输端口 {
     return { ...this.实时运行时策略 };
   }
 
+  读取Socket运行时挂起状态(): boolean {
+    return this.实时运行时策略.intent === "suspend";
+  }
+
   释放Socket(socket: Socket): void {
     // 测试桩也要走和正式传输端口一致的释放协议，避免房间退出场景退化成“只清引用不真正断链”。
     socket.disconnect();

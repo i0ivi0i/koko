@@ -591,6 +591,7 @@ export interface 房间壳提示文案输入 {
   recoveryState: "idle" | "retryable_failure" | "reconnecting";
   roomId: string;
   displayAlias: string;
+  lastRecoveryErrorCode?: string;
 }
 
 export interface 消息窗口提示文案输入 {
@@ -609,7 +610,11 @@ export function 派生房间壳提示文案(input: 房间壳提示文案输入):
   recoveryHint: string;
   subtitle: string;
 } {
-  const recoveryHint = 派生恢复提示文案(input.recoveryState, input.roomId);
+  const recoveryHint = 派生恢复提示文案(
+    input.recoveryState,
+    input.roomId,
+    input.lastRecoveryErrorCode
+  );
   if (recoveryHint) {
     return { recoveryHint, subtitle: recoveryHint };
   }
@@ -634,10 +639,13 @@ export function 派生消息窗口提示文案(input: 消息窗口提示文案�
 
 function 派生恢复提示文案(
   recoveryState: 房间壳提示文案输入["recoveryState"],
-  roomId: string
+  roomId: string,
+  lastRecoveryErrorCode = ""
 ): string {
   if (recoveryState === "reconnecting") {
-    return "会话已刷新，正在重新恢复";
+    return lastRecoveryErrorCode === "invalid_session"
+      ? "会话已刷新，正在重新恢复"
+      : "正在同步最新消息";
   }
   if (recoveryState !== "retryable_failure") {
     return "";

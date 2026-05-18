@@ -297,6 +297,8 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
       实时连接.接收运行时策略(policy);
     },
     读取运行时策略: () => 实时连接.读取运行时策略(),
+    读取Socket运行时挂起状态: (socket) =>
+      实时连接.读取Socket运行时挂起状态(socket),
     释放Socket: (socket) => {
       实时连接.释放Socket(socket);
     },

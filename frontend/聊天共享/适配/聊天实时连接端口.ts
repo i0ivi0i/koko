@@ -9,6 +9,7 @@ export interface 聊天实时连接端口 {
   createSocket(sessionId: string, powToken?: string): Socket;
   接收运行时策略?(policy: 实时连接运行时策略): void;
   读取运行时策略?(): 实时连接运行时策略;
+  读取Socket运行时挂起状态?(socket: Socket): boolean;
   释放Socket?(socket: Socket): void;
   /** PoW 门禁令牌获取（防御启用时由组合根注入）。 */
   获取PowToken?(): Promise<string>;

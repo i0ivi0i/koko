@@ -50,20 +50,24 @@ describe("传输 / 会话与房间链路", () => {
         reconnection: boolean;
         reason: "active" | "background" | "page_hidden";
       };
+      读取Socket运行时挂起状态?(socket: unknown): boolean;
       释放Socket(socket: unknown): void;
     };
 
     const socket = transport.createSocket("s-auth");
+    expect(realtimeTransport.读取Socket运行时挂起状态?.(socket)).toBe(false);
     realtimeTransport.接收运行时策略({
       intent: "suspend",
       reconnection: false,
       reason: "page_hidden",
     });
+    expect(realtimeTransport.读取Socket运行时挂起状态?.(socket)).toBe(true);
     realtimeTransport.接收运行时策略({
       intent: "resume",
       reconnection: true,
       reason: "active",
     });
+    expect(realtimeTransport.读取Socket运行时挂起状态?.(socket)).toBe(false);
     realtimeTransport.释放Socket(socket);
 
     expect(disconnect).toHaveBeenCalledTimes(2);

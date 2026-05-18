@@ -107,6 +107,7 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
         deps.接收实时会话事实({
           type: "SOCKET_DISCONNECTED",
           code: "pow_failed",
+          source: "server_or_auth",
         });
         return;
       }
@@ -125,9 +126,13 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
       });
     });
     socket.on("disconnect", (reason: string) => {
+      const code = String(reason || "disconnect");
       deps.接收实时会话事实({
         type: "SOCKET_DISCONNECTED",
-        code: String(reason || "disconnect"),
+        code,
+        source: deps.transport.读取Socket运行时挂起状态?.(socket)
+          ? "runtime_suspend"
+          : "temporary_transport",
       });
     });
     socket.on("room_events", (events: { latest_event_position: number; events: 消息事件[] }) => {

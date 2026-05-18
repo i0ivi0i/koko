@@ -8,6 +8,14 @@ export type 实时连接状态 =
   | "subscribing"
   | "reconnecting";
 
+export type 实时断线来源 =
+  | "runtime_suspend"
+  | "temporary_transport"
+  | "server_or_auth"
+  | "manual_release";
+
+type 实时重订阅模式 = "none" | "silent" | "visible";
+
 export interface 实时会话上下文 {
   roomId: string;
   sessionId: string;
@@ -16,6 +24,7 @@ export interface 实时会话上下文 {
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   connectionState: 实时连接状态;
   needsResubscribe: boolean;
+  resubscribeMode: 实时重订阅模式;
   backgroundDrainPending: boolean;
   lastDisconnectCode: string;
 }
@@ -37,6 +46,7 @@ export type 实时会话事件 =
   | {
       type: "SOCKET_DISCONNECTED";
       code: string;
+      source?: 实时断线来源;
     }
   | {
       type: "OFFLINE_STATUS_CHANGED";
@@ -64,6 +74,7 @@ const 初始实时会话上下文: 实时会话上下文 = {
   heavyWorkPolicy: "normal",
   connectionState: "idle",
   needsResubscribe: false,
+  resubscribeMode: "none",
   backgroundDrainPending: false,
   lastDisconnectCode: "",
 };
@@ -155,6 +166,7 @@ const 实时会话机 = createMachine(
           sessionId: event.sessionId,
           latestEventPosition: event.latestEventPosition,
           needsResubscribe: false,
+          resubscribeMode: "none",
           lastDisconnectCode: "",
         };
         return {
@@ -169,6 +181,7 @@ const 实时会话机 = createMachine(
         return {
           connectionState: context.heavyWorkPolicy === "suspended" ? "suspended" : "subscribing",
           needsResubscribe: false,
+          resubscribeMode: "none",
         };
       }),
       记录订阅已建立: assign(({ event, context }) => {
@@ -182,6 +195,7 @@ const 实时会话机 = createMachine(
             event.latestEventPosition
           ),
           needsResubscribe: false,
+          resubscribeMode: "none",
           lastDisconnectCode: "",
         };
         return {
@@ -195,12 +209,23 @@ const 实时会话机 = createMachine(
         }
         if (!房间已绑定(context)) {
           return {
+            resubscribeMode: "none" as const,
             lastDisconnectCode: event.code,
           };
         }
+        if (event.source === "runtime_suspend") {
+          return {
+            connectionState: "suspended" as const,
+            needsResubscribe: false,
+            resubscribeMode: "none" as const,
+            lastDisconnectCode: event.code,
+          };
+        }
+        const needsResubscribe = context.online && context.heavyWorkPolicy !== "suspended";
         return {
           connectionState: context.heavyWorkPolicy === "suspended" ? "suspended" : "reconnecting",
-          needsResubscribe: context.online && context.heavyWorkPolicy !== "suspended",
+          needsResubscribe,
+          resubscribeMode: needsResubscribe ? "visible" : "none",
           lastDisconnectCode: event.code,
         };
       }),
@@ -217,6 +242,7 @@ const 实时会话机 = createMachine(
             online: event.online,
             connectionState: "idle" as const,
             needsResubscribe: false,
+            resubscribeMode: "none" as const,
           };
         }
         if (!event.online) {
@@ -225,13 +251,16 @@ const 实时会话机 = createMachine(
             connectionState:
               nextContext.heavyWorkPolicy === "suspended" ? "suspended" : "reconnecting",
             needsResubscribe: false,
+            resubscribeMode: "none" as const,
           };
         }
+        const needsResubscribe = nextContext.heavyWorkPolicy !== "suspended";
         return {
           online: true,
           connectionState:
             nextContext.heavyWorkPolicy === "suspended" ? "suspended" : "reconnecting",
-          needsResubscribe: nextContext.heavyWorkPolicy !== "suspended",
+          needsResubscribe,
+          resubscribeMode: needsResubscribe ? "visible" as const : "none" as const,
         };
       }),
       同步生命周期策略: assign(({ event, context }) => {
@@ -247,6 +276,7 @@ const 实时会话机 = createMachine(
             heavyWorkPolicy: event.heavyWorkPolicy,
             connectionState: "idle" as const,
             needsResubscribe: false,
+            resubscribeMode: "none" as const,
           };
         }
         if (event.heavyWorkPolicy === "suspended") {
@@ -254,6 +284,7 @@ const 实时会话机 = createMachine(
             heavyWorkPolicy: "suspended" as const,
             connectionState: "suspended" as const,
             needsResubscribe: false,
+            resubscribeMode: "none" as const,
           };
         }
         if (event.heavyWorkPolicy === "reduced") {
@@ -261,12 +292,23 @@ const 实时会话机 = createMachine(
             heavyWorkPolicy: "reduced" as const,
             connectionState: "reduced" as const,
             needsResubscribe: false,
+            resubscribeMode: "none" as const,
           };
         }
+        if (context.connectionState === "suspended") {
+          return {
+            heavyWorkPolicy: "normal" as const,
+            connectionState: "reconnecting" as const,
+            needsResubscribe: context.online,
+            resubscribeMode: context.online ? "silent" as const : "none" as const,
+          };
+        }
+        const needsResubscribe = context.connectionState === "active" ? false : context.online;
         return {
           heavyWorkPolicy: "normal" as const,
           connectionState: context.connectionState === "active" ? "active" : "reconnecting",
-          needsResubscribe: context.connectionState === "active" ? false : context.online,
+          needsResubscribe,
+          resubscribeMode: needsResubscribe ? "visible" as const : "none" as const,
         };
       }),
       挂起后台排空请求: assign(() => ({

@@ -58,6 +58,10 @@ export class 实时连接适配 {
     return { ...this.当前运行时策略 };
   }
 
+  读取Socket运行时挂起状态(socket: Socket): boolean {
+    return this.活跃Socket表.get(socket)?.由运行时挂起 === true;
+  }
+
   释放Socket(socket: Socket): void {
     this.活跃Socket表.delete(socket);
     socket.disconnect();
