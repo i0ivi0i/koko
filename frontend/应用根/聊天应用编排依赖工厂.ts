@@ -4,7 +4,7 @@ import type {
 } from "../恢复/壳层/房间恢复编排.js";
 import type { 阅读推进编排依赖 } from "../房间/壳层/阅读推进.js";
 import type { 房间内核事件 } from "../房间/运行时.js";
-import type { 消息事件 } from "../聊天共享/契约.js";
+import type { 附件状态变更事件, 消息事件 } from "../聊天共享/契约.js";
 import type { 平台离线任务 } from "../平台/index.js";
 import type { 实时会话事件 } from "../实时/会话运行时.js";
 import type { 房间时间线事件 } from "../时间线/运行时.js";
@@ -37,6 +37,7 @@ export interface 聊天应用编排依赖工厂输入 {
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;
   跟随最新消息追加后刷新视口(): Promise<void>;
   接收权威事件后副作用(events: 消息事件[]): void;
+  接收附件升级后副作用(event: 附件状态变更事件): void;
   登记待补发任务?(task: 平台离线任务): Promise<boolean>;
   请求后台补发同步?(tag: string): Promise<boolean>;
   读取当前时间(): number;
@@ -100,6 +101,9 @@ export function 创建聊天应用编排协调器依赖(
       },
       接收权威事件后副作用: (events) => {
         input.接收权威事件后副作用(events);
+      },
+      接收附件升级后副作用: (event: 附件状态变更事件) => {
+        input.接收附件升级后副作用(event);
       },
       登记待补发任务: input.登记待补发任务,
       请求后台补发同步: input.请求后台补发同步,

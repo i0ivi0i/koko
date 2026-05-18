@@ -54,6 +54,7 @@ import {
 import { 处理权威新消息平台副作用 } from "./聊天内核通知副作用.js";
 import { 创建IndexedDB消息仓库 } from "../聊天本地缓存/IndexedDB消息仓库.js";
 import type { 消息仓库端口 } from "../聊天本地缓存/消息仓库端口.js";
+import type { 附件状态变更事件 } from "../聊天共享/契约.js";
 import { 时间线事实派发到本地缓存 } from "./时间线事实派发到本地缓存.js";
 import { 创建应用生命周期Actor } from "../平台/应用生命周期.js";
 import {
@@ -381,6 +382,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
             平台桥接: this.平台桥接,
           });
         },
+        接收附件升级后副作用: (event) => {
+          this.预热附件升级媒体分发(event);
+        },
         登记待补发任务: async (task) => {
           return (await this.平台桥接.登记待补发任务?.(task)) ?? false;
         },
@@ -633,6 +637,17 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         latestEventPosition: snapshot.latestEventPosition,
       });
     }
+  }
+
+  private 预热附件升级媒体分发(event: 附件状态变更事件): void {
+    const attachment = event.attachment;
+    if (event.status !== "ready" || !attachment?.distribution_hint) {
+      return;
+    }
+    this.媒体编排.预热附件分发线索(
+      [attachment],
+      this.回填房间壳补丁().sessionId
+    );
   }
 
   private 接收实时会话事实(event: 实时会话事件): void {

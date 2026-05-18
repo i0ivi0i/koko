@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放会话应用 } from "../../媒体/播放会话/应用";
 import { 刷新异步队列 } from "../common/聊天媒体编排支架";
 import type { 前端传输端口 } from "../../平台/传输";
-import type { 消息事件 } from "../../聊天共享/契约";
+import type { 附件快照, 消息事件 } from "../../聊天共享/契约";
 
 /**
  * room_event 到达即触发 locator pre-fetch 测试：
@@ -197,6 +197,45 @@ describe("聊天媒体编排 - 权威事件到达即预热", () => {
     expect(immediateJoinCalls[0]?.[1]).toBe("att-enriched-1");
     // 注：prefetch 内部的 refreshJoinTicket 可能触发 loadMediaLocator，
     // 这是正常的 join ticket 续租行为，不作为失败条件。
+
+    debugSpy.mockRestore();
+    编排.销毁();
+  });
+
+  it("附件级丰富hint可直接复用即时swarm预热", async () => {
+    const loadMediaLocator = vi.fn(async () => {
+      throw new Error("should not be called for enriched hint");
+    });
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const 编排 = 创建测试编排(loadMediaLocator);
+    const attachment: 附件快照 = {
+      attachment_id: "att-upgrade-1",
+      kind: "video",
+      width: 1920,
+      height: 1080,
+      has_preview_asset: false,
+      distribution_hint: {
+        content_hash: "sha256-upgrade",
+        swarm_id: "swarm-upgrade",
+        torrent_info_hash: "ih-upgrade",
+        web_seed_until: 9999999999,
+        join_ticket: "eyJhbGciOiJIUzI1NiJ9.test-ticket",
+        ticket_expires_at: "2099-01-01T00:00:00Z",
+        announce_urls: ["wss://tracker.example.com/announce"],
+        torrent_url: "/api/media/att-upgrade-1/torrent?ticket=eyJhbGciOiJIUzI1NiJ9.test-ticket",
+        web_seed_url: null,
+        ice_servers: [],
+      },
+    };
+
+    编排.预热附件分发线索([attachment], MY_SESSION);
+    await 刷新异步队列();
+
+    const immediateJoinCalls = debugSpy.mock.calls.filter(
+      (args) => args[0] === "[SWARM_IMMEDIATE_JOIN]"
+    );
+    expect(immediateJoinCalls.length).toBe(1);
+    expect(immediateJoinCalls[0]?.[1]).toBe("att-upgrade-1");
 
     debugSpy.mockRestore();
     编排.销毁();

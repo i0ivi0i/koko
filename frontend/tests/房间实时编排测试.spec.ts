@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   创建传输错误,
   创建实时编排测试场景,
@@ -155,6 +155,88 @@ describe("房间实时编排", () => {
     });
 
     expect(场景.读取状态().messages.map((message) => message.message_id)).toEqual(["m-1", "m-2"]);
+  });
+
+  it("附件ready升级事件会在更新时间线后触发升级副作用", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+      messages: [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-video",
+          client_message_id: "c-video",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          text: "",
+          event_position: 1,
+          attachments: [
+            {
+              kind: "video",
+              attachment_id: "att-video",
+              width: 1920,
+              height: 1080,
+              status: "processing",
+            },
+          ],
+        },
+      ],
+    });
+    const 接收附件升级后副作用 = vi.fn();
+    const 编排 = 创建房间实时编排({
+      ...场景.deps,
+      接收附件升级后副作用,
+    }) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    场景.transport.socket.trigger("room_event", {
+      type: "attachment_status_changed",
+      room_id: "r-test",
+      message_id: "m-video",
+      attachment_id: "att-video",
+      status: "ready",
+      event_position: 2,
+      attachment: {
+        kind: "video",
+        attachment_id: "att-video",
+        width: 1920,
+        height: 1080,
+        status: "ready",
+        has_preview_asset: false,
+        distribution_hint: {
+          content_hash: "hash-att-video",
+          swarm_id: "swarm-att-video",
+          torrent_info_hash: "ih-att-video",
+          web_seed_until: 9999999999,
+          join_ticket: "test-ticket",
+          announce_urls: ["wss://tracker.example.test/announce"],
+          torrent_url: "/api/media/att-video/torrent?ticket=test-ticket",
+          web_seed_url: null,
+          ice_servers: [],
+        },
+      },
+    });
+
+    expect(场景.读取状态().messages[0]?.attachments?.[0]).toMatchObject({
+      attachment_id: "att-video",
+      status: "ready",
+      distribution_hint: expect.objectContaining({
+        join_ticket: "test-ticket",
+        announce_urls: ["wss://tracker.example.test/announce"],
+      }),
+    });
+    expect(接收附件升级后副作用).toHaveBeenCalledTimes(1);
+    expect(接收附件升级后副作用).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "attachment_status_changed",
+        attachment_id: "att-video",
+        status: "ready",
+      })
+    );
   });
 
   it("纯文本发送会发 create_message，而不是旧的 send_text_message", async () => {

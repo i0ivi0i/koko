@@ -119,7 +119,9 @@ export interface 媒体播放会话应用端口 {
     heavyWorkPolicy: "normal" | "reduced" | "suspended";
   }): void;
   处理平台在线状态变化(online: boolean): void;
-  /** room_event 到达即触发：过滤掉 sender=self，为含 distribution_hint 的附件 fire-and-forget locator pre-fetch。 */
+  /** room_event 到达即触发：为含 distribution_hint 的附件 fire-and-forget locator / swarm prefetch。 */
+  预热附件分发线索(attachments: 附件快照[], currentSessionId: string): void;
+  /** room_event 到达即触发：从权威消息事件中提取附件后复用附件级预热入口。 */
   预热权威消息媒体分发(events: 消息事件[], currentSessionId: string): void;
   清空(): void;
   销毁(): void;
@@ -771,6 +773,47 @@ export function 创建媒体播放会话应用(
     },
   };
 
+  const 预热附件分发线索 = (attachments: 附件快照[], _currentSessionId: string): void => {
+    // 预热只负责提前加入 swarm，不声明“已播放”；播放成功仍由 Video.js/play() 与首帧事实裁决。
+    for (const attachment of attachments) {
+      if (!attachment.distribution_hint) {
+        continue;
+      }
+      const aid = attachment.attachment_id;
+      const hint = attachment.distribution_hint;
+      console.debug("[MEDIA_HINT_INGESTED]", aid, hint.torrent_info_hash);
+      performance.mark?.(`media_hint_ingested:${aid}`);
+
+      // 丰富 hint 路径：广播携带 join_ticket + announce_urls，
+      // 写入 locator 缓存 + 立即以 prefetch 模式加入 swarm。
+      // prefetch 模式（deselect=true）只建立 WebRTC peer 连接，不下载 piece，
+      // 后续 viewport sync / autoplay 触发时消费者升权复用已有会话，实现"划到即播"。
+      if (hint.join_ticket && hint.announce_urls?.length) {
+        console.debug("[SWARM_IMMEDIATE_JOIN]", aid);
+        performance.mark?.(`swarm_immediate_join:${aid}`);
+        const locator = 从丰富hint构造最小定位结果(attachment as 附件快照 & { distribution_hint: 附件分发线索 });
+        媒体定位器.写入定位缓存(aid, locator);
+        void 协作分发应用.解析协作分发源({
+          attachmentId: aid,
+          kind: attachment.kind === "video" ? "video" : "image",
+          locator,
+          consumerId: `prefetch:${aid}`,
+        }).catch(() => {
+          console.debug("[SWARM_IMMEDIATE_JOIN_FAILED]", aid);
+        });
+        continue;
+      }
+
+      // 降级：hint 无运行态字段（历史/重播路径），走旧的 locator HTTP prefetch。
+      console.debug("[SWARM_PREWARM_TICKET_FETCHING]", aid);
+      performance.mark?.(`swarm_prewarm_ticket_fetching:${aid}`);
+      void 媒体定位器.获取定位(aid).then(() => {
+        console.debug("[LOCATOR_REFRESH_RESOLVED]", aid);
+        performance.mark?.(`locator_refresh_resolved:${aid}`);
+      }).catch(() => {});
+    }
+  };
+
   const 应用端口: 媒体播放会话应用端口 & { 内部桥: 媒体播放会话内部桥 } = {
     snapshot(): 媒体播放会话快照 {
       return 投影媒体播放会话快照({
@@ -922,51 +965,18 @@ export function 创建媒体播放会话应用(
       }
     },
 
-    预热权威消息媒体分发(events, _currentSessionId): void {
+    预热附件分发线索(attachments, currentSessionId): void {
+      预热附件分发线索(attachments, currentSessionId);
+    },
+
+    预热权威消息媒体分发(events, currentSessionId): void {
       // room_event 到达时立即触发，比 viewport sync → eagerPrefetch 早 50-200ms。
       // 发送者和接收者统一走早期预热路径，确保发送者不慢于接收者。
       // inflight 去重保证重复触发不会产生多余网络请求。
-      for (const event of events) {
-        for (const attachment of event.attachments ?? []) {
-          if (!attachment.distribution_hint) {
-            continue;
-          }
-          const aid = attachment.attachment_id;
-          const hint = attachment.distribution_hint;
-          console.debug("[MEDIA_HINT_INGESTED]", aid, hint.torrent_info_hash);
-          performance.mark?.(`media_hint_ingested:${aid}`);
-
-          // 丰富 hint 路径：广播携带 join_ticket + announce_urls，
-          // 写入 locator 缓存 + 立即以 prefetch 模式加入 swarm。
-          // prefetch 模式（deselect=true）只建立 WebRTC peer 连接，不下载 piece，
-          // 后续 viewport sync / autoplay 触发时消费者升权复用已有会话，实现"划到即播"。
-          if (hint.join_ticket && hint.announce_urls?.length) {
-            console.debug("[SWARM_IMMEDIATE_JOIN]", aid);
-            performance.mark?.(`swarm_immediate_join:${aid}`);
-            const locator = 从丰富hint构造最小定位结果(attachment as 附件快照 & { distribution_hint: 附件分发线索 });
-            媒体定位器.写入定位缓存(aid, locator);
-            // 立即以 prefetch 模式加入 swarm：只建立 peer 连接，不下载 piece
-            void 协作分发应用.解析协作分发源({
-              attachmentId: aid,
-              kind: attachment.kind === "video" ? "video" : "image",
-              locator,
-              consumerId: `prefetch:${aid}`,
-            }).catch(() => {
-              // prefetch 失败不阻塞任何链路，viewport sync 时仍会重试
-              console.debug("[SWARM_IMMEDIATE_JOIN_FAILED]", aid);
-            });
-            continue;
-          }
-
-          // 降级：hint 无运行态字段（历史/重播路径），走旧的 locator HTTP prefetch
-          console.debug("[SWARM_PREWARM_TICKET_FETCHING]", aid);
-          performance.mark?.(`swarm_prewarm_ticket_fetching:${aid}`);
-          void 媒体定位器.获取定位(aid).then(() => {
-            console.debug("[LOCATOR_REFRESH_RESOLVED]", aid);
-            performance.mark?.(`locator_refresh_resolved:${aid}`);
-          }).catch(() => {});
-        }
-      }
+      预热附件分发线索(
+        events.flatMap((event) => event.attachments ?? []),
+        currentSessionId
+      );
     },
 
     清空(): void {
