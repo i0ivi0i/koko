@@ -284,6 +284,9 @@ function 收集脚本主链内容问题(rootDir) {
     if (!/^CLOUDFLARE_API_TOKEN=/m.test(source)) {
       issues.push("ops/env.production.example 缺少 CLOUDFLARE_API_TOKEN");
     }
+    if (!/^KOKO_POW_ENABLED=true$/m.test(source)) {
+      issues.push("ops/env.production.example 缺少 KOKO_POW_ENABLED=true");
+    }
   }
 
   const packageReleasePath = join(rootDir, "ops", "package-release.sh");
@@ -370,6 +373,9 @@ function 收集脚本主链内容问题(rootDir) {
     if (!有tusd共享目录权限准备(source)) {
       issues.push("ops/deploy.sh 缺少 tusd 共享目录权限修复");
     }
+    if (!/KOKO_POW_ENABLED/.test(source) || !/KOKO_POW_SECRET/.test(source) || !/generate_pow_secret/.test(source)) {
+      issues.push("ops/deploy.sh 缺少 PoW 默认启用和密钥自动生成");
+    }
     if (!有staleComposeReplacement清理(source)) {
       issues.push("ops/deploy.sh 缺少 stale compose replacement 清理");
     }
@@ -408,6 +414,7 @@ function 收集脚本主链内容问题(rootDir) {
       { label: "tusd", patterns: ["tusd", "1081"] },
       { label: "tusd 存储可写", patterns: ["test -w /data/tus"] },
       { label: "tracker", patterns: ["tracker", "7072"] },
+      { label: "PoW contract", patterns: ['"pow_required"', "/api/session/bootstrap"] },
     ];
     for (const probeRule of probeRules) {
       const matched = probeRule.patterns.some((pattern) => source.includes(pattern));

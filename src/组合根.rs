@@ -816,6 +816,16 @@ pub fn 读取PoW配置_with<F>(mut read: F) -> io::Result<PoW配置>
 where
     F: FnMut(&str) -> Option<String>,
 {
+    let enabled = read("KOKO_POW_ENABLED")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .map(|value| !matches!(value.as_str(), "0" | "false" | "no" | "off"))
+        .unwrap_or(true);
+    if !enabled {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "KOKO_POW_ENABLED=false，PoW 防御已显式关闭",
+        ));
+    }
     let secret_str = read("KOKO_POW_SECRET").ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

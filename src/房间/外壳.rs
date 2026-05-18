@@ -190,6 +190,7 @@ pub(super) async fn bootstrap_session(
         request_kind = "匿名身份引导",
         "HTTP 请求已受理"
     );
+    let pow_required = state.defense.is_some();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
         身份应用::引导匿名身份(&mut repo, &device_anonymous_token)
@@ -230,6 +231,7 @@ pub(super) async fn bootstrap_session(
                 Json(serde_json::json!({
                     "display_alias": out.展示花名,
                     "session_id": out.会话标识,
+                    "pow_required": pow_required,
                 })),
             )
                 .into_response()

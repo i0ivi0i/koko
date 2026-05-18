@@ -88,6 +88,7 @@ describe("传输 / 会话与房间链路", () => {
         JSON.stringify({
           display_alias: "暴躁的企鹅",
           session_id: "s-1",
+          pow_required: false,
         }),
         {
           status: 200,
@@ -106,6 +107,21 @@ describe("传输 / 会话与房间链路", () => {
     });
     expect(result.display_alias).toBe("暴躁的企鹅");
     expect(result.session_id).toBe("s-1");
+    expect(result.pow_required).toBe(false);
+    expect(transport.读取运行时策略?.()).toEqual(
+      expect.objectContaining({ powRequired: false })
+    );
+    transport.接收运行时策略?.({
+      intent: "suspend",
+      reconnection: false,
+      reason: "background",
+    });
+    expect(transport.读取运行时策略?.()).toEqual(
+      expect.objectContaining({
+        intent: "suspend",
+        powRequired: false,
+      })
+    );
     expect("anonymous_identity_id" in result).toBe(false);
   });
   it("loadRoomEvents 会把 session_id 和 from 一起编码进 query string", async () => {

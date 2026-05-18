@@ -284,6 +284,19 @@ fn pow密钥缺失时应返回错误() {
 }
 
 #[test]
+fn pow显式关闭时不要求密钥() {
+    let result = 读取PoW配置_with(|key| match key {
+        "KOKO_POW_ENABLED" => Some("false".to_string()),
+        _ => None,
+    });
+    assert!(result.is_err(), "显式关闭时应通过错误语义让外壳禁用 PoW");
+    assert!(
+        result.unwrap_err().to_string().contains("KOKO_POW_ENABLED=false"),
+        "错误信息应说明是显式关闭，而不是密钥缺失"
+    );
+}
+
+#[test]
 fn pow密钥过短时应返回错误() {
     let result = 读取PoW配置_with(|key| match key {
         "KOKO_POW_SECRET" => Some("too-short".to_string()),

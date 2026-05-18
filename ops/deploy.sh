@@ -12,6 +12,7 @@ readonly RELEASES_DIR="/opt/koko/releases"
 readonly CURRENT_LINK="/opt/koko/current"
 readonly DEFAULT_BUNDLE_DIR="/opt/koko/shared/incoming"
 readonly SHARED_TUS_DIR="/opt/koko/shared/tus"
+readonly ENV_FILE="${KOKO_ENV_FILE:-/opt/koko/env/production.env}"
 
 version="${1:?请传入部署版本号，例如 v0.1.0}"
 bundle_input="${2:-${DEFAULT_BUNDLE_DIR}/${version}.tar.gz}"
@@ -69,6 +70,40 @@ prepare_tusd_storage() {
   chmod 0775 "${SHARED_TUS_DIR}"
 }
 
+upsert_env_value() {
+  local key="$1"
+  local value="$2"
+  local tmp_file
+
+  mkdir -p "$(dirname "${ENV_FILE}")"
+  touch "${ENV_FILE}"
+  tmp_file="$(mktemp)"
+  awk -F= -v key="${key}" '$1 != key { print }' "${ENV_FILE}" > "${tmp_file}"
+  printf '%s=%s\n' "${key}" "${value}" >> "${tmp_file}"
+  install -m 600 "${tmp_file}" "${ENV_FILE}"
+  rm -f "${tmp_file}"
+}
+
+generate_pow_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+  od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_pow_defaults() {
+  local enabled="${KOKO_POW_ENABLED:-true}"
+  upsert_env_value "KOKO_POW_ENABLED" "${enabled}"
+  upsert_env_value "KOKO_TRUSTED_PROXY" "true"
+  if [[ "${enabled}" == "false" || "${enabled}" == "0" || "${enabled}" == "off" ]]; then
+    return
+  fi
+  if ! grep -q '^KOKO_POW_SECRET=' "${ENV_FILE}"; then
+    upsert_env_value "KOKO_POW_SECRET" "$(generate_pow_secret)"
+  fi
+}
+
 cleanup_stale_compose_replacements() {
   # Docker Compose 在 recreate 中断时会留下 `<hash>_koko-<service>-1` 这种 replacement 容器。
   # 下次再升级时，如果不先清掉这些 `Created` 残留，`up -d` 会直接因为重名冲突失败。
@@ -105,6 +140,7 @@ main() {
   materialize_release
   assert_release_shape
   prepare_tusd_storage
+  ensure_pow_defaults
   build_release
   switch_current
   start_release

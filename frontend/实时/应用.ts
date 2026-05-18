@@ -99,7 +99,8 @@ export function 创建实时应用(deps: 实时应用依赖): 实时应用端口
     // PoW 门禁：防御启用时先获取 token，再建连。
     // 正常用户首次 ~20-100ms（Worker 解题），后续复用缓存 token 零开销。
     let powToken: string | undefined;
-    if (deps.transport.获取PowToken) {
+    const powRequired = deps.transport.读取运行时策略?.().powRequired === true;
+    if (powRequired && deps.transport.获取PowToken) {
       try {
         powToken = await deps.transport.获取PowToken();
       } catch (err) {

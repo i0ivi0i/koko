@@ -69,4 +69,9 @@ async fn bootstrap接口会返回稳定花名快照() {
         second["session_id"].as_str(),
         "当前 MVP 下同一设备 token 应恢复同一个稳定会话"
     );
+    assert_eq!(
+        first["pow_required"].as_bool(),
+        Some(false),
+        "未配置 KOKO_POW_SECRET 时 bootstrap 应明确告诉前端不需要 PoW"
+    );
 }

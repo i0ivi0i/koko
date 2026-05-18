@@ -4,6 +4,7 @@ export interface 实时连接运行时策略 {
   intent: "resume" | "suspend";
   reconnection: boolean;
   reason: "active" | "background" | "page_hidden";
+  powRequired?: boolean;
 }
 
 export const 默认实时连接运行时策略: 实时连接运行时策略 = {
@@ -37,7 +38,7 @@ export class 实时连接适配 {
   }
 
   接收运行时策略(policy: 实时连接运行时策略): void {
-    this.当前运行时策略 = { ...policy };
+    this.当前运行时策略 = { ...this.当前运行时策略, ...policy };
     for (const [socket, state] of this.活跃Socket表.entries()) {
       if (policy.intent === "suspend") {
         if (!state.由运行时挂起) {

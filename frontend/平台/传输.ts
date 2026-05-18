@@ -256,6 +256,14 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
 
   return {
     ...房间传输,
+    bootstrapAnonymousIdentity: async (deviceToken) => {
+      const result = await 房间传输.bootstrapAnonymousIdentity(deviceToken);
+      实时连接.接收运行时策略({
+        ...实时连接.读取运行时策略(),
+        powRequired: result.pow_required === true,
+      });
+      return result;
+    },
     prepareMediaUpload: (kind, sessionId, file, sourceHash) =>
       媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash),
     reuseMediaBySourceHash: (kind, input) =>

@@ -24,6 +24,8 @@ export interface 匿名身份快照 {
  */
 export interface 匿名身份引导结果 extends 匿名身份快照 {
   session_id: string;
+  /** 当前服务端是否要求 realtime 建连前完成 PoW。 */
+  pow_required?: boolean;
 }
 
 export interface 房间快照 {

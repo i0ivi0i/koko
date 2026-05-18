@@ -130,6 +130,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
       [
         "KOKO_DOMAIN=example.com",
         "CLOUDFLARE_API_TOKEN=change-me",
+        "KOKO_POW_ENABLED=true",
         "DATABASE_URL=postgres://postgres:postgres@postgres:5432/koko",
         "ADMIN_PASSWORD=change-me",
         "POSTGRES_DB=koko",
@@ -182,6 +183,9 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         'mkdir -p /opt/koko/shared/tus',
         'chown 1000:1000 /opt/koko/shared/tus',
         'chmod 0775 /opt/koko/shared/tus',
+        'generate_pow_secret() { openssl rand -hex 32; }',
+        'upsert_env_value "KOKO_POW_ENABLED" "${KOKO_POW_ENABLED:-true}"',
+        'upsert_env_value "KOKO_POW_SECRET" "$(generate_pow_secret)"',
         'ln -sfn \"$release_dir\" /opt/koko/current',
         'docker compose -f /opt/koko/current/ops/compose.yaml build',
         'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
@@ -215,6 +219,7 @@ function 创建合法脚本主链夹具(rootDir, extra = {}) {
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         'curl -fsS --retry 20 --retry-delay 2 --retry-all-errors \"https://${KOKO_DOMAIN}/\" >/dev/null',
+        'curl -fsS \"https://${KOKO_DOMAIN}/api/session/bootstrap\" -H "content-type: application/json" --data \'{"device_anonymous_token":"healthcheck-pow"}\' | grep -q \'"pow_required"\'',
         'docker compose -f /opt/koko/current/ops/compose.yaml ps app >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml exec -T postgres pg_isready >/dev/null',
         'docker compose -f /opt/koko/current/ops/compose.yaml exec -T tusd sh -lc \'test -w /data/tus\'',
@@ -782,6 +787,25 @@ test("scripts 门禁会拦住 env.production.example 漏掉 Cloudflare DNS token
   assert.match(result.output, /ops\/env\.production\.example 缺少 CLOUDFLARE_API_TOKEN/);
 });
 
+test("scripts 门禁会拦住 env.production.example 漏掉 PoW 默认开启开关", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    envExample: [
+      "KOKO_DOMAIN=example.com",
+      "CLOUDFLARE_API_TOKEN=change-me",
+      "DATABASE_URL=postgres://postgres:postgres@postgres:5432/koko",
+      "POSTGRES_DB=koko",
+      "POSTGRES_USER=postgres",
+      "POSTGRES_PASSWORD=postgres",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/env\.production\.example 缺少 KOKO_POW_ENABLED=true/);
+});
+
 test("scripts 门禁会拦住 install.sh 没有把 tus 共享目录准备成 tusd 可写", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -855,6 +879,30 @@ test("scripts 门禁会拦住 deploy.sh 没有修复 tus 共享目录写权限",
   assert.match(result.output, /ops\/deploy\.sh 缺少 tusd 共享目录权限修复/);
 });
 
+test("scripts 门禁会拦住 deploy.sh 没有自动生成 PoW 密钥", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法脚本主链夹具(fixtureDir, {
+    deploySh: [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'version="${1:?missing version}"',
+      'release_dir="/opt/koko/releases/${version}"',
+      'mkdir -p /opt/koko/shared/tus',
+      'chown 1000:1000 /opt/koko/shared/tus',
+      'chmod 0775 /opt/koko/shared/tus',
+      'ln -sfn "$release_dir" /opt/koko/current',
+      'docker compose -f /opt/koko/current/ops/compose.yaml build',
+      'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
+      'bash /opt/koko/current/ops/healthcheck.sh',
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "scripts");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/deploy\.sh 缺少 PoW 默认启用和密钥自动生成/);
+});
+
 test("scripts 门禁会拦住 deploy.sh 没有清理 stale compose replacement 容器", () => {
   const fixtureDir = 创建临时夹具目录();
   创建合法脚本主链夹具(fixtureDir, {
@@ -913,6 +961,9 @@ test("scripts 门禁会放行 deploy.sh 使用 ln -sfnT 切换 current", () => {
       'mkdir -p /opt/koko/shared/tus',
       'chown 1000:1000 /opt/koko/shared/tus',
       'chmod 0775 /opt/koko/shared/tus',
+      'generate_pow_secret() { openssl rand -hex 32; }',
+      'upsert_env_value "KOKO_POW_ENABLED" "${KOKO_POW_ENABLED:-true}"',
+      'upsert_env_value "KOKO_POW_SECRET" "$(generate_pow_secret)"',
       'ln -sfnT "$release_dir" /opt/koko/current',
       'docker compose -f /opt/koko/current/ops/compose.yaml build',
       'docker compose -f /opt/koko/current/ops/compose.yaml up -d',
@@ -1012,6 +1063,7 @@ test("scripts 门禁会拦住 healthcheck.sh 漏掉关键探针", () => {
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tusd 存储可写/);
   assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: tracker/);
+  assert.match(result.output, /ops\/healthcheck\.sh 缺少检查目标: PoW contract/);
 });
 
 test("scripts 门禁会拦住 healthcheck.sh 没有公网入口重试", () => {

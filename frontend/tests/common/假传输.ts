@@ -1,5 +1,5 @@
 import type { Socket } from "socket.io-client";
-import type { 前端传输端口 } from "../../平台/传输";
+import type { 前端传输端口, 实时连接运行时策略 } from "../../平台/传输";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -65,6 +65,12 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
+  获取PowToken?: () => Promise<string>;
+  实时运行时策略: 实时连接运行时策略 = {
+    intent: "resume",
+    reconnection: true,
+    reason: "active",
+  };
   prepareMediaCalls: Array<{
     kind: "image" | "video";
     sessionId: string;
@@ -83,6 +89,7 @@ export class 假传输 implements 前端传输端口 {
   bootstrapResult: 匿名身份引导结果 = {
     display_alias: "暴躁的企鹅",
     session_id: "s-test",
+    pow_required: false,
   };
   bootstrapQueue: Array<匿名身份引导结果 | Error> = [];
   joinQueue: Array<房间快照 | Error> = [];
@@ -389,6 +396,14 @@ export class 假传输 implements 前端传输端口 {
   createSocket(sessionId: string, _powToken?: string): Socket {
     this.socketSessionIds.push(sessionId);
     return this.socket as unknown as Socket;
+  }
+
+  接收运行时策略(policy: 实时连接运行时策略): void {
+    this.实时运行时策略 = { ...this.实时运行时策略, ...policy };
+  }
+
+  读取运行时策略(): 实时连接运行时策略 {
+    return { ...this.实时运行时策略 };
   }
 
   释放Socket(socket: Socket): void {

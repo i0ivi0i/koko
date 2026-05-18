@@ -47,6 +47,14 @@ check_public_domain() {
     "https://${KOKO_DOMAIN}/" >/dev/null
 }
 
+check_pow_contract() {
+  curl -fsS \
+    "https://${KOKO_DOMAIN}/api/session/bootstrap" \
+    -H "content-type: application/json" \
+    --data '{"device_anonymous_token":"healthcheck-pow"}' \
+    | grep -q '"pow_required"'
+}
+
 check_app_internal() {
   require_running_service "app"
   probe_with_seeder_node "http://app:8080/"
@@ -80,6 +88,7 @@ check_seeder() {
 
 main() {
   check_public_domain
+  check_pow_contract
   check_app_internal
   check_postgres
   check_tusd

@@ -239,6 +239,60 @@ describe("房间实时编排", () => {
     );
   });
 
+  it("powRequired=false 时建连不请求 PoW token", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 获取PowToken = vi.fn(async () => "should-not-be-used");
+    const createSocket = vi.spyOn(场景.transport, "createSocket");
+    场景.transport.获取PowToken = 获取PowToken;
+    场景.transport.读取运行时策略 = () => ({
+      intent: "resume",
+      reconnection: true,
+      reason: "active",
+      powRequired: false,
+    });
+    const 编排 = 创建房间实时编排({
+      ...场景.deps,
+    }) as {
+      ensureRealtimeSocket(sessionId: string): Promise<void>;
+    };
+
+    await 编排.ensureRealtimeSocket("s-test");
+
+    expect(获取PowToken).not.toHaveBeenCalled();
+    expect(createSocket).toHaveBeenCalledWith("s-test", undefined);
+  });
+
+  it("powRequired=true 时建连会带 PoW token", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 获取PowToken = vi.fn(async () => "pow-token-1");
+    const createSocket = vi.spyOn(场景.transport, "createSocket");
+    场景.transport.获取PowToken = 获取PowToken;
+    场景.transport.读取运行时策略 = () => ({
+      intent: "resume",
+      reconnection: true,
+      reason: "active",
+      powRequired: true,
+    });
+    const 编排 = 创建房间实时编排({
+      ...场景.deps,
+    }) as {
+      ensureRealtimeSocket(sessionId: string): Promise<void>;
+    };
+
+    await 编排.ensureRealtimeSocket("s-test");
+
+    expect(获取PowToken).toHaveBeenCalledTimes(1);
+    expect(createSocket).toHaveBeenCalledWith("s-test", "pow-token-1");
+  });
+
   it("纯文本发送会发 create_message，而不是旧的 send_text_message", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({
