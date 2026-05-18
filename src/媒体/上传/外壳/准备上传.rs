@@ -1,7 +1,7 @@
 use super::媒体_tus代理外壳::读取媒体_tus对外地址;
 use super::媒体上传共享外壳::{
-    推导原始内容扩展名, 校验媒体准备请求, 生成媒体上传令牌, 生成媒体上传会话标识, 生成附件标识,
-    解析媒体类型,
+    媒体上传授权有效期秒数, 推导原始内容扩展名, 校验媒体准备请求, 生成媒体上传令牌,
+    生成媒体上传会话标识, 生成附件标识, 解析媒体类型,
 };
 use super::{媒体上传运输方式_TUS, 应用状态, 构建共享仓储};
 use crate::adapter::媒体上传会话授权写入请求;
@@ -18,8 +18,6 @@ use serde::Deserialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::task;
 
-/// 上传授权只服务 prepare 返回值，不属于房间真相或资产读取真相。
-const 媒体上传授权有效期秒数: u64 = 15 * 60;
 /// 媒体 prepare 请求体。
 #[derive(Deserialize)]
 pub(super) struct PrepareMediaUploadBody {

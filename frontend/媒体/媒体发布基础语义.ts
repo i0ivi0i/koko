@@ -4,6 +4,7 @@ import type {
   媒体SourceHash复用结果,
   媒体SourceHash信息,
   媒体上传准备结果,
+  媒体上传恢复结果,
   媒体种类,
 } from "../聊天共享/契约.js";
 import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
@@ -38,6 +39,11 @@ export type 媒体发布器依赖 = {
   ): Promise<媒体上传准备结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
+  resumeMediaUpload?(
+    sessionId: string,
+    attachmentId: string,
+    uploadSessionId: string
+  ): Promise<媒体上传恢复结果>;
   readDrafts(): 媒体附件草稿[];
   writeDraft(draft: 媒体附件草稿): void;
   updateDraft(localId: string, patch: 媒体草稿状态补丁): void;

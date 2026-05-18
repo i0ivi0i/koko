@@ -17,6 +17,8 @@ pub(super) fn 生成媒体上传令牌() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("tus-{}", raw)
 }
+
+pub(super) const 媒体上传授权有效期秒数: u64 = 15 * 60;
 pub(super) fn 解析媒体类型(
     raw_kind: &str,
 ) -> Result<crate::media::模型::媒体附件类型, (StatusCode, &'static str, &'static str)> {

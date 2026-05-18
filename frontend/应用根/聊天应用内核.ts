@@ -118,6 +118,7 @@ export type 聊天应用命令 =
   | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
   | { type: "MEDIA_DRAFT_RESUME_REQUESTED"; localId: string }
   | { type: "MEDIA_DRAFT_RESTART_REQUESTED"; localId: string }
+  | { type: "MEDIA_DRAFT_FILE_RESELECTED"; localId: string; file: File }
   | 平台桥接命令;
 
 interface 聊天应用渲染桥 {

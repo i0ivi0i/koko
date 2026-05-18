@@ -142,6 +142,9 @@ export async function 处理聊天应用命令(
     case "MEDIA_DRAFT_RESTART_REQUESTED":
       await deps.媒体编排.重新上传媒体草稿(command.localId);
       return;
+    case "MEDIA_DRAFT_FILE_RESELECTED":
+      await deps.媒体编排.重新选择上传媒体草稿(command.localId, command.file);
+      return;
     case "PLATFORM_LIFECYCLE_CHANGED":
     case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
     case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":

@@ -44,9 +44,13 @@ import {
   type 媒体发布器依赖,
 } from "./媒体发布基础语义.js";
 import {
+  读取媒体发送任务恢复记录,
+  追加或更新媒体发送任务恢复记录,
   保存媒体草稿到本地存储,
   从本地存储恢复媒体草稿,
+  删除媒体发送任务恢复记录,
   清除本地存储媒体草稿,
+  清除媒体发送任务恢复记录,
   type 可持久化媒体草稿,
 } from "./媒体草稿持久化.js";
 
@@ -784,6 +788,29 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           }),
         });
         草稿上传器键表.set(nextLocalId, uploaderKey);
+        追加或更新媒体发送任务恢复记录({
+          localId: nextLocalId,
+          roomId: deps.getCurrentRoomId?.() ?? null,
+          attachmentId: prepared.attachment_id,
+          uploadSessionId: prepared.upload_session_id,
+          kind,
+          fileName: preparedFile.file.name,
+          mimeType: preparedFile.file.type || "application/octet-stream",
+          byteSize: preparedFile.file.size,
+          ...(sourceHash
+            ? {
+                sourceHash: sourceHash.source_hash,
+                sourceByteSize: sourceHash.source_byte_size,
+                ...(sourceHash.source_file_name ? { sourceFileName: sourceHash.source_file_name } : {}),
+              }
+            : {}),
+          width: preparedFile.width,
+          height: preparedFile.height,
+          uploadProfile: uploaderInput.profile,
+          status: "transporting",
+          createdAtMs: Date.now(),
+          expiresAt: prepared.expires_at,
+        });
         if (preprocessingDraftId) {
           持久化removeDraft(preprocessingDraftId);
         }
@@ -884,6 +911,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       uploader?.removeFile(localId);
       if (!uploader?.getFile(localId)) {
         草稿上传器键表.delete(localId);
+        删除媒体发送任务恢复记录(localId);
         持久化removeDraft(localId);
       }
       释放上传器(uploaderKey);
@@ -897,29 +925,190 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       await 重新开始失败草稿上传(失败草稿恢复依赖, localId);
     },
 
+    async 重新选择上传草稿(localId: string, file: File): Promise<void> {
+      const draft = 读取媒体草稿(localId);
+      const recoveryRecord = 读取媒体发送任务恢复记录().find((record) => record.localId === localId);
+      if (!draft || !recoveryRecord || !deps.resumeMediaUpload) {
+        持久化updateDraft(localId, {
+          status: "failed",
+          errorCode: "attachment_upload_interrupted",
+        });
+        return;
+      }
+      持久化updateDraft(localId, {
+        status: "transporting",
+        errorCode: "",
+      });
+      const resumed = await deps.resumeMediaUpload(
+        deps.getSessionId(),
+        recoveryRecord.attachmentId,
+        recoveryRecord.uploadSessionId
+      );
+      if (resumed.status === "completed") {
+        持久化updateDraft(localId, {
+          kind: resumed.attachment.kind,
+          attachmentId: resumed.attachment.attachment_id,
+          width: resumed.attachment.width,
+          height: resumed.attachment.height,
+          status: "ready",
+          errorCode: "",
+        });
+        return;
+      }
+      if (resumed.status !== "resumable") {
+        持久化updateDraft(localId, {
+          status: "failed",
+          errorCode:
+            resumed.status === "expired"
+              ? "attachment_upload_expired"
+              : "attachment_file_needs_reselect",
+        });
+        return;
+      }
+      const uploaderInput: 媒体上传器创建参数 = {
+        tusEndpoint: resumed.tus_endpoint,
+        profile: recoveryRecord.uploadProfile,
+        attachmentId: resumed.attachment_id,
+        uploadSessionId: resumed.upload_session_id,
+      };
+      const { key: uploaderKey, uploader } = 读取或创建上传器(uploaderInput);
+      const nextLocalId = uploader.addFile({
+        id: localId,
+        name: file.name,
+        type: file.type,
+        data: file,
+        meta: 构造媒体上传Meta({
+          sessionId: deps.getSessionId(),
+          kind: draft.kind,
+          prepared: {
+            attachment_id: resumed.attachment_id,
+            upload_session_id: resumed.upload_session_id,
+            upload_method: "tus",
+            tus_endpoint: resumed.tus_endpoint,
+            tus_headers: resumed.tus_headers,
+            tus_metadata: resumed.tus_metadata,
+            expires_at: resumed.expires_at,
+          },
+          previewWidth: draft.width,
+          previewHeight: draft.height,
+        }),
+      });
+      草稿上传器键表.set(nextLocalId, uploaderKey);
+      if (nextLocalId !== localId) {
+        草稿上传器键表.delete(localId);
+        持久化removeDraft(localId);
+      }
+    },
+
     /**
      * 刷新后从 localStorage 恢复上次保存的草稿 UI 状态。
      * 壳层在创建媒体发布器后应立即调用一次。
      *
      * - ready 草稿：直接还原（上传已完成，不需要续传）
-     * - transporting/failed 草稿：还原 UI 状态，Tus + Golden Retriever 负责续传
-     * - processing 草稿：丢弃（预处理需要原始 File 对象，刷新后不可恢复）
+     * - failed 草稿：直接还原，保留用户可操作的失败入口
+     * - transporting/processing 草稿：刷新后没有 uploader/File owner 证据，必须失败收口
      * - previewUrl 置空：原始 Blob URL 刷新后失效，UI 显示占位图标
      */
     恢复未完成草稿(): void {
+      const recoveryRecords = 读取媒体发送任务恢复记录();
+      const activeRecoveryIds = new Set<string>();
+      if (deps.resumeMediaUpload) {
+        for (const record of recoveryRecords) {
+          activeRecoveryIds.add(record.localId);
+          void deps
+            .resumeMediaUpload(deps.getSessionId(), record.attachmentId, record.uploadSessionId)
+            .then((result) => {
+              if (result.status === "completed") {
+                持久化writeDraft({
+                  localId: record.localId,
+                  kind: result.attachment.kind,
+                  attachmentId: result.attachment.attachment_id,
+                  previewUrl: "",
+                  width: result.attachment.width,
+                  height: result.attachment.height,
+                  status: "ready",
+                  fileName: record.fileName,
+                  errorCode: "",
+                  sourceFile: null,
+                });
+                return;
+              }
+              if (result.status !== "resumable") {
+                const errorCode =
+                  result.status === "expired"
+                    ? "attachment_upload_expired"
+                    : "attachment_file_needs_reselect";
+                持久化writeDraft({
+                  localId: record.localId,
+                  kind: record.kind,
+                  attachmentId: record.attachmentId,
+                  previewUrl: "",
+                  width: record.width,
+                  height: record.height,
+                  status: "failed",
+                  fileName: record.fileName,
+                  errorCode,
+                  sourceFile: null,
+                });
+                return;
+              }
+              const { key } = 读取或创建上传器({
+                tusEndpoint: result.tus_endpoint,
+                profile: record.uploadProfile,
+                attachmentId: result.attachment_id,
+                uploadSessionId: result.upload_session_id,
+              });
+              草稿上传器键表.set(record.localId, key);
+              持久化writeDraft({
+                localId: record.localId,
+                kind: record.kind,
+                attachmentId: result.attachment_id,
+                previewUrl: "",
+                width: record.width,
+                height: record.height,
+                status: "transporting",
+                fileName: record.fileName,
+                errorCode: "",
+                sourceFile: null,
+              });
+            })
+            .catch(() => {
+              持久化writeDraft({
+                localId: record.localId,
+                kind: record.kind,
+                attachmentId: record.attachmentId,
+                previewUrl: "",
+                width: record.width,
+                height: record.height,
+                status: "failed",
+                fileName: record.fileName,
+                errorCode: "attachment_file_needs_reselect",
+                sourceFile: null,
+              });
+            });
+        }
+      }
       const savedDrafts = 从本地存储恢复媒体草稿();
       for (const draft of savedDrafts) {
-        if (draft.status === "processing") continue;
-        deps.writeDraft({
+        if (activeRecoveryIds.has(draft.localId)) {
+          continue;
+        }
+        const restoredStatus =
+          draft.status === "ready" || draft.status === "failed" ? draft.status : "failed";
+        const restoredErrorCode =
+          restoredStatus === "failed" && !draft.errorCode
+            ? "attachment_upload_interrupted"
+            : draft.errorCode;
+        持久化writeDraft({
           localId: draft.localId,
           kind: draft.kind,
           attachmentId: draft.attachmentId,
           previewUrl: "",
           width: draft.width,
           height: draft.height,
-          status: draft.status as "transporting" | "ready" | "failed",
+          status: restoredStatus as "ready" | "failed",
           fileName: draft.fileName,
-          errorCode: draft.errorCode,
+          errorCode: restoredErrorCode,
           sourceFile: null,
         });
       }
@@ -933,6 +1122,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       草稿上传器键表.clear();
       deps.clearDrafts();
       清除本地存储媒体草稿();
+      清除媒体发送任务恢复记录();
     },
 
     销毁(): void {

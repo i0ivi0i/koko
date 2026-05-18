@@ -1,5 +1,6 @@
 import type { 媒体附件上传结果 } from "../聊天共享/契约.js";
 import type { 媒体附件草稿 } from "./媒体草稿.js";
+import { 删除媒体发送任务恢复记录 } from "./媒体草稿持久化.js";
 import type {
   媒体上传器,
   媒体上传器创建参数,
@@ -107,6 +108,7 @@ async function 处理媒体上传成功事件(
       status: "ready",
       errorCode: "",
     });
+    删除媒体发送任务恢复记录(file.id);
     // complete 成功后 fire-and-forget 预取 locator：
     // 用户还在看 composer，发送前 locator 缓存已热，视频秒播。
     deps.预取媒体定位?.(ready.attachment_id);
@@ -156,6 +158,7 @@ function 处理媒体上传移除事件(
   file: 媒体上传文件
 ): void {
   deps.草稿上传器键表.delete(file.id);
+  删除媒体发送任务恢复记录(file.id);
   deps.removeDraft(file.id);
 }
 
@@ -197,6 +200,16 @@ export function 确保媒体上传器(
     const files = nextUploader.getFiles();
     if (files.length > 0) {
       void nextUploader.upload().catch(() => {});
+      return;
+    }
+    for (const [localId, mappedUploaderKey] of deps.草稿上传器键表.entries()) {
+      if (mappedUploaderKey !== key) {
+        continue;
+      }
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: "attachment_file_needs_reselect",
+      });
     }
   });
   deps.上传器表.set(key, nextUploader);

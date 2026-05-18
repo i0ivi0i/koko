@@ -45,6 +45,7 @@ export class 聊天壳 extends LitElement {
   });
   private 操作台输入组宽度缓存 = Math.min(globalThis.innerWidth || 390, 560);
   private 消息文本布局宽度缓存 = Math.max(1, globalThis.innerWidth || 1024);
+  private 待重新选择媒体草稿Id = "";
   private 消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(
     this.消息文本布局宽度缓存
   );
@@ -148,6 +149,13 @@ export class 聊天壳 extends LitElement {
 
   private async restartComposerDraft(localId: string): Promise<void> {
     await this.kernel.dispatch({ type: "MEDIA_DRAFT_RESTART_REQUESTED", localId });
+  }
+
+  private reselectComposerDraft(localId: string): void {
+    this.待重新选择媒体草稿Id = localId;
+    this.shadowRoot
+      ?.querySelector<HTMLInputElement>('#shellConsoleAuxSlot input[type="file"]')
+      ?.click();
   }
 
   override connectedCallback(): void {
@@ -343,7 +351,17 @@ export class 聊天壳 extends LitElement {
         this.shadowRoot?.querySelector<HTMLInputElement>('#shellConsoleAuxSlot input[type="file"]') ??
         null,
       处理选择媒体文件: async (files) => {
-        await this.kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files });
+        const selectedFiles = Array.from(files);
+        if (this.待重新选择媒体草稿Id) {
+          const localId = this.待重新选择媒体草稿Id;
+          this.待重新选择媒体草稿Id = "";
+          const [file] = selectedFiles;
+          if (file) {
+            await this.kernel.dispatch({ type: "MEDIA_DRAFT_FILE_RESELECTED", localId, file });
+          }
+          return;
+        }
+        await this.kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files: selectedFiles });
       },
       提交操作台: (event) => this.submitShellConsole(event),
       处理主输入: (event, isMessageMode) =>
@@ -353,6 +371,7 @@ export class 聊天壳 extends LitElement {
       移除媒体草稿: (localId) => this.removeComposerDraft(localId),
       继续上传媒体草稿: (localId) => this.resumeComposerDraft(localId),
       重新上传媒体草稿: (localId) => this.restartComposerDraft(localId),
+      重新选择媒体草稿: (localId) => this.reselectComposerDraft(localId),
     });
     if (shellView === "boot") {
       return html`

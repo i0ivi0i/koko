@@ -1,9 +1,12 @@
+// @vitest-environment happy-dom
 import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
+import { 保存媒体发送任务恢复记录 } from "../媒体/媒体草稿持久化";
 import { 创建场景,模拟浏览器Webp编码 } from "./媒体发布测试支撑";
 
 describe("媒体发布器 / 失败恢复", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
     模拟浏览器Webp编码();
   });
 
@@ -149,6 +152,82 @@ describe("媒体发布器 / 失败恢复", () => {
 
     expect(场景.abandonMediaUpload).not.toHaveBeenCalled();
     expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it("重新选择同一文件会复用旧 attachmentId 和 uploadSessionId 继续上传", async () => {
+    const resumeMediaUpload = vi.fn(async () => ({
+      status: "resumable" as const,
+      attachment_id: "att-canonical.webp",
+      upload_session_id: "upl-canonical.webp",
+      upload_method: "tus" as const,
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: { Authorization: "Bearer renewed" },
+      tus_metadata: {
+        attachment_id: "att-canonical.webp",
+        upload_session_id: "upl-canonical.webp",
+        file_name: "canonical.webp",
+        mime_type: "image/webp",
+        byte_size: "3",
+      },
+      expires_at: "2026-05-18T10:00:00Z",
+    }));
+    const 场景 = 创建场景({ resumeMediaUpload });
+    场景.drafts.writeDraft({
+      localId: "att-canonical.webp",
+      kind: "image",
+      attachmentId: "att-canonical.webp",
+      previewUrl: "",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "picked.jpg",
+      errorCode: "attachment_file_needs_reselect",
+      sourceFile: null,
+    });
+    保存媒体发送任务恢复记录([
+      {
+        localId: "att-canonical.webp",
+        roomId: "room-1",
+        attachmentId: "att-canonical.webp",
+        uploadSessionId: "upl-canonical.webp",
+        kind: "image",
+        fileName: "picked.jpg",
+        mimeType: "image/jpeg",
+        byteSize: 3,
+        width: 120,
+        height: 90,
+        uploadProfile: "default",
+        status: "failed",
+        createdAtMs: 1,
+        expiresAt: "2026-05-18T10:00:00Z",
+      },
+    ]);
+
+    await (
+      场景.发布器 as unknown as {
+        重新选择上传草稿(localId: string, file: File): Promise<void>;
+      }
+    ).重新选择上传草稿(
+      "att-canonical.webp",
+      new File([new Uint8Array([1, 2, 3])], "picked.jpg", { type: "image/jpeg" })
+    );
+
+    expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
+    expect(场景.默认上传器.addFileCalls).toEqual([
+      expect.objectContaining({
+        id: "att-canonical.webp",
+        meta: expect.objectContaining({
+          attachment_id: "att-canonical.webp",
+          upload_session_id: "upl-canonical.webp",
+          relativePath: "att-canonical.webp",
+        }),
+      }),
+    ]);
+    expect(场景.drafts.readDrafts()[0]).toMatchObject({
+      localId: "att-canonical.webp",
+      status: "transporting",
+      errorCode: "",
+    });
   });
 });
 

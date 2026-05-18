@@ -12,6 +12,7 @@ import type {
   媒体SourceHash复用结果,
   媒体SourceHash信息,
   媒体上传准备结果,
+  媒体上传恢复结果,
   媒体种类,
   预览资源描述,
 } from "../../聊天共享/契约.js";
@@ -159,6 +160,27 @@ export class 媒体HTTP接口 {
       }
     );
     return this.解析媒体上传结果(result);
+  }
+
+  async resumeMediaUpload(
+    sessionId: string,
+    attachmentId: string,
+    uploadSessionId: string
+  ): Promise<媒体上传恢复结果> {
+    const result = await this.deps.post<媒体上传恢复结果>(
+      `/api/media/${attachmentId}/resume`,
+      {
+        session_id: sessionId,
+        upload_session_id: uploadSessionId,
+      }
+    );
+    if (result.status !== "resumable") {
+      return result;
+    }
+    return {
+      ...result,
+      tus_endpoint: this.deps.解析绝对地址(result.tus_endpoint),
+    };
   }
 
   async loadMediaLocator(

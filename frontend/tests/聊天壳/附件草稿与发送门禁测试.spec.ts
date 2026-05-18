@@ -291,6 +291,56 @@ describe("聊天壳集成 / 附件草稿与发送门禁", () => {
     el.remove();
   });
 
+  it("需要重新选择文件的失败草稿会用同一个文件输入继续同一草稿", async () => {
+    const el = await 创建已入房聊天壳();
+    const fake媒体发布器 = 创建假媒体发布器();
+    注入媒体发布器供测试(el, fake媒体发布器);
+    注入图片草稿(el, {
+      localId: "draft-needs-file",
+      kind: "image",
+      attachmentId: "att-needs-file",
+      previewUrl: "",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "needs-file.jpg",
+      errorCode: "attachment_file_needs_reselect",
+    });
+    await 等待组件稳定(el);
+
+    const input = 读取统一媒体文件输入(el);
+    const clickSpy = vi.spyOn(input, "click");
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-reselect-id="draft-needs-file"]'
+      ) as HTMLButtonElement
+    ).click();
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+
+    const file = new File([new Uint8Array([1, 2, 3])], "needs-file.jpg", {
+      type: "image/jpeg",
+    });
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    });
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      writable: true,
+      value: "selected",
+    });
+    input.dispatchEvent(new Event("change"));
+    await 等待组件稳定(el);
+
+    expect(fake媒体发布器.重新选择上传草稿).toHaveBeenCalledWith(
+      "draft-needs-file",
+      file
+    );
+    expect(fake媒体发布器.处理选择媒体文件).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
+    el.remove();
+  });
+
   it("统一媒体文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();

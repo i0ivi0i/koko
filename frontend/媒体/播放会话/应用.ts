@@ -102,6 +102,7 @@ export interface 媒体播放会话应用端口 {
   移除媒体草稿(localId: string): void;
   继续上传媒体草稿(localId: string): Promise<void>;
   重新上传媒体草稿(localId: string): Promise<void>;
+  重新选择上传媒体草稿(localId: string, file: File): Promise<void>;
   清空草稿(): void;
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
@@ -130,7 +131,7 @@ export interface 媒体播放会话应用端口 {
 type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢弃未完成补齐?: boolean };
 type 可替换媒体播放器 = { 解析播放结果(input: { attachmentId: string; kind: "image" | "video"; surface?: "viewer" | "inline_autoplay"; consumerId?: string }): Promise<媒体播放结果>; 激活协作补齐?(input: { attachmentId: string; kind: "image" | "video"; consumerId?: string; onSessionEvent?: (event: 协作分发会话事件) => void }): Promise<void>; 释放附件播放资源?(input: 媒体播放释放请求): void; };
 type 可替换媒体查看器 = { 打开(input: 媒体查看器打开请求): void; 同步?(input: 媒体查看器打开请求): void; 销毁(): void; };
-type 可替换媒体发布器 = { 处理选择媒体文件(files: Iterable<File>): Promise<void>; 移除草稿(localId: string): void; 继续上传草稿(localId: string): Promise<void>; 重新上传草稿(localId: string): Promise<void>; 恢复未完成草稿(): void; 清空(): void; 销毁(): void; };
+type 可替换媒体发布器 = { 处理选择媒体文件(files: Iterable<File>): Promise<void>; 移除草稿(localId: string): void; 继续上传草稿(localId: string): Promise<void>; 重新上传草稿(localId: string): Promise<void>; 重新选择上传草稿(localId: string, file: File): Promise<void>; 恢复未完成草稿(): void; 清空(): void; 销毁(): void; };
 type 媒体播放会话内部桥 = { 替换媒体播放器(player: 可替换媒体播放器): void; 替换媒体查看器(viewer: 可替换媒体查看器): void; 关闭媒体查看器(): void; 替换媒体发布器(publisher: 可替换媒体发布器): void; 替换媒体草稿列表(drafts: 媒体附件草稿[]): void; };
 
 /** 从广播路径丰富 hint 构造最小 locator 结果，供直接缓存和 prefetch 使用。
@@ -870,6 +871,10 @@ export function 创建媒体播放会话应用(
 
     async 重新上传媒体草稿(localId: string): Promise<void> {
       await 媒体发布器.重新上传草稿(localId);
+    },
+
+    async 重新选择上传媒体草稿(localId: string, file: File): Promise<void> {
+      await 媒体发布器.重新选择上传草稿(localId, file);
     },
 
     清空草稿(): void {

@@ -85,6 +85,10 @@ class 假媒体上传器 implements 媒体上传器 {
     this.files.delete(id);
   }
 
+  注入恢复文件(file: 媒体上传文件): void {
+    this.files.set(file.id, file);
+  }
+
   async retryUpload(id: string): Promise<void> {
     this.retryUploadCalls.push(id);
     if (this.retryUploadError) {
@@ -133,6 +137,10 @@ class 假媒体上传器 implements 媒体上传器 {
   async 触发上传停滞(id: string, error: { message: string } = { message: "upload stalled" }): Promise<void> {
     const file = this.files.get(id);
     await this.emit("upload-stalled", error, file ? [file] : []);
+  }
+
+  async 触发恢复完成(): Promise<void> {
+    await this.emit("restored");
   }
 
   async 触发上传进度(id: string): Promise<void> {
@@ -235,6 +243,11 @@ function 创建场景(overrides: {
         };
       }
   >;
+  resumeMediaUpload?: (
+    sessionId: string,
+    attachmentId: string,
+    uploadSessionId: string
+  ) => Promise<import("../聊天共享/契约").媒体上传恢复结果>;
   预取媒体定位?: (attachmentId: string) => void;
 } = {}) {
   const 默认上传器 = new 假媒体上传器();
@@ -298,6 +311,7 @@ function 创建场景(overrides: {
     getCurrentRoomId: overrides.getCurrentRoomId ?? (() => null),
     calculateSourceHash,
     reuseMediaBySourceHash,
+    ...(overrides.resumeMediaUpload ? { resumeMediaUpload: overrides.resumeMediaUpload } : {}),
     prepareMediaUpload,
     abandonMediaUpload,
     completeMediaUpload,

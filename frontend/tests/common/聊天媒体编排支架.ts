@@ -21,6 +21,7 @@ type 测试媒体发布器 = {
   移除草稿(localId: string): void;
   继续上传草稿(localId: string): Promise<void>;
   重新上传草稿(localId: string): Promise<void>;
+  重新选择上传草稿(localId: string, file: File): Promise<void>;
   清空(): void;
   销毁(): void;
 };

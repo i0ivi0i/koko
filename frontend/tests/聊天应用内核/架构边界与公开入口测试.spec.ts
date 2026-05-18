@@ -284,6 +284,7 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
       移除草稿: vi.fn(),
       继续上传草稿: vi.fn().mockResolvedValue(undefined),
       重新上传草稿: vi.fn().mockResolvedValue(undefined),
+      重新选择上传草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
       销毁: vi.fn(),
     };
@@ -364,6 +365,7 @@ describe("聊天应用内核 - 架构边界与公开入口", () => {
       移除草稿: vi.fn(),
       继续上传草稿: vi.fn().mockResolvedValue(undefined),
       重新上传草稿: vi.fn().mockResolvedValue(undefined),
+      重新选择上传草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
       销毁: vi.fn(),
     };

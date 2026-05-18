@@ -136,6 +136,7 @@ export const 创建假媒体发布器 = () => ({
   移除草稿: vi.fn(),
   继续上传草稿: vi.fn().mockResolvedValue(undefined),
   重新上传草稿: vi.fn().mockResolvedValue(undefined),
+  重新选择上传草稿: vi.fn().mockResolvedValue(undefined),
   清空: vi.fn(),
   销毁: vi.fn(),
 });

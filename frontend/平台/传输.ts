@@ -10,6 +10,7 @@ import type {
   媒体SourceHash复用结果,
   媒体SourceHash信息,
   媒体上传准备结果,
+  媒体上传恢复结果,
   媒体种类,
   预览资源描述,
   后台概览,
@@ -71,6 +72,11 @@ export interface 媒体传输端口 {
   ): Promise<媒体附件转发结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
+  resumeMediaUpload?(
+    sessionId: string,
+    attachmentId: string,
+    uploadSessionId: string
+  ): Promise<媒体上传恢复结果>;
   loadMediaLocator(
     sessionId: string,
     attachmentId: string,

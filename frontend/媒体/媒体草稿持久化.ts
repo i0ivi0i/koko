@@ -15,6 +15,7 @@
  */
 
 const 存储键 = "koko_media_drafts";
+const 发送任务存储键 = "koko_media_upload_recovery_tasks";
 
 /** SSR / 测试环境可能没有 localStorage */
 const 可用localStorage = (): Storage | null => {
@@ -37,6 +38,46 @@ export type 可持久化媒体草稿 = {
   status: string;
   fileName: string;
   errorCode: string;
+};
+
+export type 媒体发送任务恢复记录 = {
+  localId: string;
+  roomId: string | null;
+  messageId?: string;
+  clientMessageId?: string;
+  attachmentId: string;
+  uploadSessionId: string;
+  kind: "image" | "video";
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  sourceHash?: string;
+  sourceByteSize?: number;
+  sourceFileName?: string;
+  width: number;
+  height: number;
+  uploadProfile: "default" | "large-video";
+  status: "transporting" | "published_uploading" | "processing" | "ready" | "failed";
+  createdAtMs: number;
+  expiresAt: string;
+};
+
+const 是媒体发送任务恢复记录 = (item: unknown): item is 媒体发送任务恢复记录 => {
+  if (typeof item !== "object" || item === null) {
+    return false;
+  }
+  const record = item as Record<string, unknown>;
+  return (
+    typeof record.localId === "string" &&
+    typeof record.attachmentId === "string" &&
+    typeof record.uploadSessionId === "string" &&
+    (record.kind === "image" || record.kind === "video") &&
+    typeof record.fileName === "string" &&
+    typeof record.mimeType === "string" &&
+    typeof record.byteSize === "number" &&
+    (record.uploadProfile === "default" || record.uploadProfile === "large-video") &&
+    typeof record.status === "string"
+  );
 };
 
 /**
@@ -87,4 +128,49 @@ export function 从本地存储恢复媒体草稿(): 可持久化媒体草稿[] 
  */
 export function 清除本地存储媒体草稿(): void {
   可用localStorage()?.removeItem(存储键);
+}
+
+export function 保存媒体发送任务恢复记录(records: 媒体发送任务恢复记录[]): void {
+  const storage = 可用localStorage();
+  if (!storage) return;
+  if (records.length === 0) {
+    storage.removeItem(发送任务存储键);
+    return;
+  }
+  try {
+    storage.setItem(发送任务存储键, JSON.stringify(records));
+  } catch {
+    // 恢复索引丢失不能中断当前上传；恢复入口会降级为失败可重试。
+  }
+}
+
+export function 读取媒体发送任务恢复记录(): 媒体发送任务恢复记录[] {
+  const storage = 可用localStorage();
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(发送任务存储键);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(是媒体发送任务恢复记录) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function 清除媒体发送任务恢复记录(): void {
+  可用localStorage()?.removeItem(发送任务存储键);
+}
+
+export function 追加或更新媒体发送任务恢复记录(record: 媒体发送任务恢复记录): void {
+  const records = 读取媒体发送任务恢复记录();
+  保存媒体发送任务恢复记录([
+    ...records.filter((item) => item.localId !== record.localId),
+    record,
+  ]);
+}
+
+export function 删除媒体发送任务恢复记录(localId: string): void {
+  保存媒体发送任务恢复记录(
+    读取媒体发送任务恢复记录().filter((item) => item.localId !== localId)
+  );
 }

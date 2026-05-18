@@ -2,8 +2,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   保存媒体草稿到本地存储,
+  保存媒体发送任务恢复记录,
   从本地存储恢复媒体草稿,
+  读取媒体发送任务恢复记录,
   清除本地存储媒体草稿,
+  清除媒体发送任务恢复记录,
   type 可持久化媒体草稿,
 } from "../媒体/媒体草稿持久化.js";
 
@@ -84,5 +87,42 @@ describe("媒体草稿持久化", () => {
     ];
     保存媒体草稿到本地存储(drafts);
     expect(从本地存储恢复媒体草稿()).toEqual(drafts);
+  });
+
+  it("媒体发送任务恢复记录保存 transport 身份但不保存 Tus header", () => {
+    保存媒体发送任务恢复记录([
+      {
+        localId: "att-1",
+        roomId: "room-1",
+        attachmentId: "att-1",
+        uploadSessionId: "upl-1",
+        kind: "video",
+        fileName: "clip.mp4",
+        mimeType: "video/mp4",
+        byteSize: 128,
+        sourceHash: "f".repeat(64),
+        sourceByteSize: 128,
+        sourceFileName: "clip.mp4",
+        width: 1920,
+        height: 1080,
+        uploadProfile: "default",
+        status: "transporting",
+        createdAtMs: 1,
+        expiresAt: "2026-05-18T09:00:00Z",
+      },
+    ]);
+
+    const restored = 读取媒体发送任务恢复记录();
+    expect(restored).toEqual([
+      expect.objectContaining({
+        attachmentId: "att-1",
+        uploadSessionId: "upl-1",
+        uploadProfile: "default",
+      }),
+    ]);
+    expect(JSON.stringify(restored)).not.toContain("Authorization");
+
+    清除媒体发送任务恢复记录();
+    expect(读取媒体发送任务恢复记录()).toEqual([]);
   });
 });

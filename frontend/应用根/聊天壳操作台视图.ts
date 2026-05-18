@@ -26,6 +26,7 @@ type 聊天壳操作台视图输入 = {
   移除媒体草稿(localId: string): void;
   继续上传媒体草稿(localId: string): void | Promise<void>;
   重新上传媒体草稿(localId: string): void | Promise<void>;
+  重新选择媒体草稿(localId: string): void | Promise<void>;
 };
 
 function 派生媒体草稿失败文案(errorCode: string): string {
@@ -36,6 +37,12 @@ function 派生媒体草稿失败文案(errorCode: string): string {
       return "失败：上传超时，请重试";
     case "attachment_upload_network_error":
       return "失败：网络中断或浏览器拦截了上传";
+    case "attachment_upload_interrupted":
+      return "失败：上传已中断，请重新选择或重试";
+    case "attachment_upload_expired":
+      return "失败：上传会话已过期，请重新选择文件";
+    case "attachment_file_needs_reselect":
+      return "失败：刷新后需要重新选择原文件";
     case "attachment_type_not_allowed":
       return "失败：不支持的媒体类型";
     case "invalid_session":
@@ -180,6 +187,20 @@ export function 渲染聊天壳操作台(input: 聊天壳操作台视图输入) 
                       移除
                     </button>
                     ${draft.status === "failed" &&
+                    draft.errorCode === "attachment_file_needs_reselect"
+                      ? html`
+                          <button
+                            type="button"
+                            class="composer-draft-remove"
+                            data-draft-reselect-id=${draft.localId}
+                            @click=${() => input.重新选择媒体草稿(draft.localId)}
+                          >
+                            重新选择文件
+                          </button>
+                        `
+                      : null}
+                    ${draft.status === "failed" &&
+                    draft.errorCode !== "attachment_file_needs_reselect" &&
                     draft.errorCode !== "attachment_too_large" &&
                     draft.errorCode !== "attachment_type_not_allowed"
                       ? html`

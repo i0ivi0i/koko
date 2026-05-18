@@ -51,6 +51,8 @@ mod 媒体内容解析;
 mod 媒体准备上传外壳;
 #[path = "../媒体/上传/外壳/完成上传.rs"]
 mod 媒体完成上传外壳;
+#[path = "../媒体/上传/外壳/恢复上传.rs"]
+mod 媒体恢复上传外壳;
 #[path = "../媒体/上传/外壳/放弃上传.rs"]
 mod 媒体放弃上传外壳;
 #[path = "媒体清理.rs"]
@@ -445,6 +447,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_id}/complete",
             post(媒体完成上传外壳::complete_media_upload),
+        )
+        .route(
+            "/api/media/{attachment_id}/resume",
+            post(媒体恢复上传外壳::resume_media_upload),
         )
         .route(
             "/api/media/{attachment_id}/abandon",

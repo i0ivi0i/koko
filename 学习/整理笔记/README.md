@@ -60,6 +60,8 @@
     只看当前 Web 阶段，把 WebTorrent、WebRTC、HLS、DASH、CMAF、hls.js、p2p-media-loader、Video.js v10 的官方边界和 `koko` 的直接工程裁决一次压清。
   - [群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md](./群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md)
     把群聊媒体上传当前配置、官方建议和生产前缺口收成一张清单。
+  - [群聊媒体上传恢复-Uppy-GoldenRetriever-WebTorrent官方实践清单-2026-05-18.md](./群聊媒体上传恢复-Uppy-GoldenRetriever-WebTorrent官方实践清单-2026-05-18.md)
+    专门收口刷新、后台恢复、文件找回、断点续传和 WebTorrent 主链下“永远上传中”不可接受的状态机裁决。
   - [Video.js-v10-beta-播放器候选笔记.md](./Video.js-v10-beta-播放器候选笔记.md)
     跟进 Video.js v10 beta 的可组合播放器、SPF、React/HTML 表面与当前项目暂不迁移判断。
   - [socketioxide-多节点部署与门禁笔记.md](./socketioxide-多节点部署与门禁笔记.md)
