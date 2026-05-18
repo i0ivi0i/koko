@@ -82,6 +82,28 @@ function 有CloudflareDns01Caddy配置(source) {
   );
 }
 
+function 有Cloudflare真实客户端IP透传(source) {
+  const appProxyCount = source.match(/reverse_proxy\s+app:8080\b/g)?.length ?? 0;
+  const appProxyBlocks = source.match(/reverse_proxy\s+app:8080\s*\{(?:.|\n)*?\}/g) ?? [];
+  return (
+    appProxyCount > 0 &&
+    appProxyBlocks.length === appProxyCount &&
+    appProxyBlocks.every((block) =>
+      /header_up\s+X-Forwarded-For\s+\{http\.request\.header\.CF-Connecting-IP\}/.test(block)
+    )
+  );
+}
+
+function 有Cloudflare源站直连防伪门禁(source) {
+  return (
+    /remote_ip(?:.|\n)*173\.245\.48\.0\/20/.test(source) &&
+    /remote_ip(?:.|\n)*131\.0\.72\.0\/22/.test(source) &&
+    /remote_ip(?:.|\n)*2400:cb00::\/32/.test(source) &&
+    /remote_ip(?:.|\n)*2c0f:f248::\/32/.test(source) &&
+    /respond\s+@\w+\s+["']?Access Denied["']?\s+403/.test(source)
+  );
+}
+
 function 读取命令行参数(argv) {
   let scope = "full";
   let rootDir = process.cwd();
@@ -260,6 +282,12 @@ function 收集运行主链内容问题(rootDir) {
     }
     if (!有CloudflareDns01Caddy配置(source)) {
       issues.push("ops/Caddyfile 缺少 Cloudflare DNS-01 自动续期配置");
+    }
+    if (!有Cloudflare真实客户端IP透传(source)) {
+      issues.push("ops/Caddyfile 缺少 Cloudflare 真实客户端 IP 透传");
+    }
+    if (!有Cloudflare源站直连防伪门禁(source)) {
+      issues.push("ops/Caddyfile 缺少 Cloudflare 源站直连防伪门禁");
     }
   }
 

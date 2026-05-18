@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -7,6 +7,23 @@ import { spawnSync } from "node:child_process";
 
 const 仓库根目录 = resolve(import.meta.dirname, "..");
 const 门禁脚本路径 = join(仓库根目录, "scripts", "check-deployment-architecture-fitness.mjs");
+
+test("生产 HTTP 限流必须使用反代真实客户端 IP，避免所有用户共用 Caddy peer IP", () => {
+  const source = readFileSync(join(仓库根目录, "src", "外壳", "mod.rs"), "utf8");
+
+  assert.match(
+    source,
+    /\.key_extractor\(SmartIpKeyExtractor\)/,
+    "生产 HTTP 限流必须把真实 IP 提取器实际挂到 governor 配置上"
+  );
+  assert.match(source, /\.per_second\(30\)/);
+  assert.match(source, /\.burst_size\(120\)/);
+  assert.doesNotMatch(
+    source,
+    /GovernorConfigBuilder::default\(\)\s*\.per_second\(10\)\s*\.burst_size\(30\)/,
+    "反代后的全站限流不能沿用 10/s + 30 burst 的保守默认值"
+  );
+});
 
 function 创建临时夹具目录() {
   return mkdtempSync(join(tmpdir(), "koko-deploy-gate-"));
@@ -70,6 +87,7 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
         "",
         "FROM rust:1.92-bookworm AS builder",
         "WORKDIR /app",
+        "COPY assets ./assets",
         "RUN cargo build --release",
         "",
         "FROM debian:12-slim AS runtime",
@@ -91,10 +109,22 @@ function 创建合法运行主链夹具(rootDir, extra = {}) {
         "",
         "{$KOKO_DOMAIN} {",
         "  encode zstd gzip",
-        "  reverse_proxy /files* app:8080",
-        "  reverse_proxy /api/swarm/announce* app:8080",
-        "  reverse_proxy /api/* app:8080",
-        "  reverse_proxy app:8080",
+        "  @notCloudflare {",
+        "    not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32",
+        "  }",
+        '  respond @notCloudflare "Access Denied" 403',
+        "  reverse_proxy /files* app:8080 {",
+        "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+        "  }",
+        "  reverse_proxy /api/swarm/announce* app:8080 {",
+        "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+        "  }",
+        "  reverse_proxy /api/* app:8080 {",
+        "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+        "  }",
+        "  reverse_proxy app:8080 {",
+        "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+        "  }",
         "}",
         "",
       ].join("\n")
@@ -702,6 +732,62 @@ test("runtime 门禁会拦住 Caddyfile 没有收口 Cloudflare DNS-01", () => {
   const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
   assert.notEqual(result.status, 0);
   assert.match(result.output, /ops\/Caddyfile 缺少 Cloudflare DNS-01 自动续期配置/);
+});
+
+test("runtime 门禁会拦住 Caddyfile 没有把 Cloudflare 真实客户端 IP 传给后端限流", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法运行主链夹具(fixtureDir, {
+    Caddyfile: [
+      "{",
+      "  acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}",
+      "}",
+      "",
+      "{$KOKO_DOMAIN} {",
+      "  encode zstd gzip",
+      "  reverse_proxy /files* app:8080",
+      "  reverse_proxy /api/swarm/announce* app:8080",
+      "  reverse_proxy /api/* app:8080",
+      "  reverse_proxy app:8080",
+      "}",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/Caddyfile 缺少 Cloudflare 真实客户端 IP 透传/);
+});
+
+test("runtime 门禁会拦住 Caddyfile 没有拒绝非 Cloudflare 直连源站流量", () => {
+  const fixtureDir = 创建临时夹具目录();
+  创建合法运行主链夹具(fixtureDir, {
+    Caddyfile: [
+      "{",
+      "  acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}",
+      "}",
+      "",
+      "{$KOKO_DOMAIN} {",
+      "  encode zstd gzip",
+      "  reverse_proxy /files* app:8080 {",
+      "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+      "  }",
+      "  reverse_proxy /api/swarm/announce* app:8080 {",
+      "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+      "  }",
+      "  reverse_proxy /api/* app:8080 {",
+      "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+      "  }",
+      "  reverse_proxy app:8080 {",
+      "    header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}",
+      "  }",
+      "}",
+      "",
+    ].join("\n"),
+  });
+
+  const result = 运行部署门禁(fixtureDir, "--report", "--scope", "runtime");
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /ops\/Caddyfile 缺少 Cloudflare 源站直连防伪门禁/);
 });
 
 test("runtime 门禁会拦住 compose 里的 caddy 没有自定义 DNS 插件构建目标", () => {

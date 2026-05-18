@@ -5,7 +5,9 @@ use axum::{
     routing::{any, get, post},
     Router,
 };
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 use object_store::{
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
@@ -501,12 +503,14 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .layer(socket_layer)
         .with_state(state.clone()));
 
-    // IP 级 HTTP 限流：仅在防御启用时（有 KOKO_POW_SECRET）才加 governor layer。
-    // 开发态不设 secret 时跳过，避免 oneshot 测试缺少 ConnectInfo 导致 500。
+    // IP 级 HTTP 限流：生产在 Cloudflare + Caddy 后面，不能用默认 peer IP。
+    // tower-governor 默认 PeerIpKeyExtractor 会把所有用户归到 Caddy peer IP，
+    // 这里显式使用 SmartIpKeyExtractor 消费 X-Forwarded-For / Forwarded。
     if state.defense.is_some() {
         let governor_conf = GovernorConfigBuilder::default()
-            .per_second(10)
-            .burst_size(30)
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(30)
+            .burst_size(120)
             .finish()
             .unwrap();
         let governor_limiter = governor_conf.limiter().clone();

@@ -1,6 +1,16 @@
-use koko::shell::连接门禁::{PoWChallenge, PoW引擎, PoW验证结果, Ip追踪器, 访客计数器};
+use axum::{
+    Router,
+    body::Body,
+    http::{Request, StatusCode},
+    routing::get,
+};
+use koko::shell::连接门禁::{Ip追踪器, PoW引擎, PoW验证结果, 访客计数器};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
+use tower::ServiceExt;
+use tower_governor::{
+    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
+};
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PoW 引擎核心测试
@@ -34,7 +44,10 @@ fn 过期challenge应被拒绝() {
     challenge.expires_at = 0;
     // expires_at 被改了但签名没重签 → 签名不匹配 → 拒绝
     let result = engine.验证solution(&challenge, 0, "fake");
-    assert!(matches!(result, PoW验证结果::签名无效), "篡改 expires_at 应导致签名无效");
+    assert!(
+        matches!(result, PoW验证结果::签名无效),
+        "篡改 expires_at 应导致签名无效"
+    );
 }
 
 #[test]
@@ -54,7 +67,10 @@ fn 错误nonce应被拒绝() {
     let wrong_hash = engine.计算hash(&challenge.salt, 99999999);
     if !engine.满足难度(&wrong_hash, challenge.difficulty) {
         let result = engine.验证solution(&challenge, 99999999, &wrong_hash);
-        assert!(matches!(result, PoW验证结果::解题错误), "不满足难度应被拒绝");
+        assert!(
+            matches!(result, PoW验证结果::解题错误),
+            "不满足难度应被拒绝"
+        );
     }
 }
 
@@ -66,8 +82,7 @@ fn token签发后应能验证通过() {
     loop {
         let hash = engine.计算hash(&challenge.salt, nonce);
         if engine.满足难度(&hash, challenge.difficulty) {
-            if let PoW验证结果::通过 { pow_token } =
-                engine.验证solution(&challenge, nonce, &hash)
+            if let PoW验证结果::通过 { pow_token } = engine.验证solution(&challenge, nonce, &hash)
             {
                 assert!(engine.验证token(&pow_token), "签发的 token 应能验证通过");
                 break;
@@ -83,7 +98,10 @@ fn 伪造token应被拒绝() {
     assert!(!engine.验证token("fake.token"), "伪造 token 应被拒绝");
     assert!(!engine.验证token(""), "空 token 应被拒绝");
     assert!(!engine.验证token("9999999999.0000"), "伪造签名应被拒绝");
-    assert!(!engine.验证token("not-a-number.abcd"), "非数字过期时间应被拒绝");
+    assert!(
+        !engine.验证token("not-a-number.abcd"),
+        "非数字过期时间应被拒绝"
+    );
 }
 
 #[test]
@@ -223,10 +241,7 @@ fn 提取客户端ip_信任代理时读取xff() {
 #[test]
 fn 提取客户端ip_不信任代理时回退peer() {
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(
-        "x-forwarded-for",
-        "203.0.113.50".parse().unwrap(),
-    );
+    headers.insert("x-forwarded-for", "203.0.113.50".parse().unwrap());
     let peer = Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)));
     let ip = koko::shell::连接门禁::提取客户端ip(&headers, peer, false);
     assert_eq!(
@@ -234,4 +249,45 @@ fn 提取客户端ip_不信任代理时回退peer() {
         Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
         "不信任代理时应回退到 peer_addr"
     );
+}
+
+#[tokio::test]
+async fn http限流按反代真实客户端ip分桶且保留同ip限流() {
+    let governor_conf = GovernorConfigBuilder::default()
+        .key_extractor(SmartIpKeyExtractor)
+        .per_second(60)
+        .burst_size(2)
+        .finish()
+        .unwrap();
+    let app = Router::new()
+        .route("/", get(|| async { "ok" }))
+        .layer(GovernorLayer::new(governor_conf));
+
+    assert_eq!(
+        请求限流探针(app.clone(), "203.0.113.10").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        请求限流探针(app.clone(), "203.0.113.10").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        请求限流探针(app.clone(), "203.0.113.10").await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "同一真实客户端 IP 连续过量请求仍必须被 CC 限流"
+    );
+    assert_eq!(
+        请求限流探针(app, "203.0.113.20").await,
+        StatusCode::OK,
+        "不同真实客户端 IP 不能因为共用 Caddy peer IP 被一起误伤"
+    );
+}
+
+async fn 请求限流探针(app: Router, x_forwarded_for: &'static str) -> StatusCode {
+    let request = Request::builder()
+        .uri("/")
+        .header("x-forwarded-for", x_forwarded_for)
+        .body(Body::empty())
+        .expect("request");
+    app.oneshot(request).await.expect("response").status()
 }

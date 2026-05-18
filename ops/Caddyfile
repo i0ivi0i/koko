@@ -7,11 +7,16 @@
 {$KOKO_DOMAIN} {
   # 正式公网入口只允许一套：Caddy 收 80/443，后端继续做同源代理与业务裁决。
   encode zstd gzip
+  @notCloudflare {
+    not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+  }
+  respond @notCloudflare "Access Denied" 403
 
   # `/files` 是浏览器公开上传/读取 contract；
   # 它必须继续先进入 Rust 后端，再由后端决定如何转给内部 tusd。
   handle /files* {
     reverse_proxy app:8080 {
+      header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
       flush_interval -1
       transport http {
         versions 1.1
@@ -22,16 +27,22 @@
   # `/api/swarm/announce` 是浏览器唯一公开 announce contract；
   # tracker 本体永远留在内网，验票和 contract 收口继续由后端 owner 负责。
   handle /api/swarm/announce* {
-    reverse_proxy app:8080
+    reverse_proxy app:8080 {
+      header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+    }
   }
 
   # 其它 `/api/*` 也统一先交给后端，不让 Caddy 私自长第二套协议脑子。
   handle /api/* {
-    reverse_proxy app:8080
+    reverse_proxy app:8080 {
+      header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+    }
   }
 
   # 根页面和静态入口依然走后端壳层，由后端拼 `frontend/index.html + asset-manifest.json`。
   handle {
-    reverse_proxy app:8080
+    reverse_proxy app:8080 {
+      header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+    }
   }
 }
