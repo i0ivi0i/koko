@@ -72,7 +72,7 @@ export interface 媒体传输端口 {
   ): Promise<媒体附件转发结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
-  resumeMediaUpload?(
+  resumeMediaUpload(
     sessionId: string,
     attachmentId: string,
     uploadSessionId: string
@@ -280,6 +280,8 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
       媒体传输.abandonMediaUpload(sessionId, attachmentId),
     completeMediaUpload: (sessionId, attachmentId) =>
       媒体传输.completeMediaUpload(sessionId, attachmentId),
+    resumeMediaUpload: (sessionId, attachmentId, uploadSessionId) =>
+      媒体传输.resumeMediaUpload(sessionId, attachmentId, uploadSessionId),
     loadMediaLocator: (sessionId, attachmentId, signal) =>
       媒体传输.loadMediaLocator(sessionId, attachmentId, signal),
     buildAttachmentContentUrl: (

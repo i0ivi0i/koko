@@ -174,3 +174,21 @@ export function 删除媒体发送任务恢复记录(localId: string): void {
     读取媒体发送任务恢复记录().filter((item) => item.localId !== localId)
   );
 }
+
+export function 更新媒体发送任务恢复记录状态(
+  localId: string,
+  status: 媒体发送任务恢复记录["status"]
+): void {
+  const records = 读取媒体发送任务恢复记录();
+  let changed = false;
+  const nextRecords = records.map((record) => {
+    if (record.localId !== localId || record.status === status) {
+      return record;
+    }
+    changed = true;
+    return { ...record, status };
+  });
+  if (changed) {
+    保存媒体发送任务恢复记录(nextRecords);
+  }
+}

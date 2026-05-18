@@ -3,6 +3,7 @@ import type {
   媒体SourceHash复用请求,
   媒体SourceHash复用结果,
   媒体上传准备结果,
+  媒体上传恢复结果,
   媒体附件上传结果,
   媒体种类,
 } from "../../聊天共享/契约.js";
@@ -29,6 +30,11 @@ interface 播放会话草稿发布依赖 {
     ): Promise<媒体SourceHash复用结果>;
     abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
     completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
+    resumeMediaUpload(
+      sessionId: string,
+      attachmentId: string,
+      uploadSessionId: string
+    ): Promise<媒体上传恢复结果>;
   };
   读取会话编号(): string;
   读取当前房间标识?(): string | null;
@@ -87,6 +93,8 @@ export function 创建播放会话草稿发布(deps: 播放会话草稿发布依
           deps.transport().abandonMediaUpload(sessionId, attachmentId),
         completeMediaUpload: (sessionId, attachmentId) =>
           deps.transport().completeMediaUpload(sessionId, attachmentId),
+        resumeMediaUpload: (sessionId, attachmentId, uploadSessionId) =>
+          deps.transport().resumeMediaUpload(sessionId, attachmentId, uploadSessionId),
         readDrafts: () => deps.读取草稿(),
         writeDraft: 写入媒体草稿,
         updateDraft: 更新媒体草稿状态,

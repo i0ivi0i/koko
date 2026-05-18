@@ -29,6 +29,7 @@ import type {
   媒体SourceHash复用请求,
   媒体SourceHash复用结果,
   媒体上传准备结果,
+  媒体上传恢复结果,
   房间历史页,
   房间快照,
 } from "../聊天共享/契约";
@@ -227,6 +228,27 @@ class 端到端假传输 implements 前端传输端口 {
       width: attachmentId.includes("video") ? 1280 : 120,
       height: attachmentId.includes("video") ? 720 : 90,
       status: "ready",
+    };
+  }
+  async resumeMediaUpload(
+    _sessionId: string,
+    attachmentId: string,
+    uploadSessionId: string
+  ): Promise<媒体上传恢复结果> {
+    return {
+      status: "resumable",
+      attachment_id: attachmentId,
+      upload_session_id: uploadSessionId,
+      upload_method: "tus",
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: {
+        Authorization: "Bearer e2e-resume-token",
+      },
+      tus_metadata: {
+        attachment_id: attachmentId,
+        upload_session_id: uploadSessionId,
+      },
+      expires_at: "2026-04-10T12:00:00Z",
     };
   }
   async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {

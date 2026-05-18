@@ -43,7 +43,8 @@ tmp/
 .trash/
 
 # Local implementation plans are working notes and should not participate in version control.
-/docs/superpowers/plans/
+/docs/superpowers/plans/*
+!/docs/superpowers/plans/2026-05-05-纯WebTorrent主链收尾清理执行计划.md
 
 # Local Codex runtime noise
 .codex-*.log

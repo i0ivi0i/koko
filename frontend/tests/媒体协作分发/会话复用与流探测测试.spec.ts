@@ -20,6 +20,11 @@ import {
   重置资产协作分发运行时,
 } from "./测试支撑";
 
+const 创建可读探测响应 = (): Response =>
+  new Response(Uint8Array.from([1, 2]), {
+    status: 206,
+  });
+
 describe("媒体协作分发 / 会话复用与流探测", () => {
   注册媒体协作分发测试基线();
   it("client.remove 可用时只走官方移除链，不会再同步二次 destroy 同一 torrent", async () => {
@@ -412,10 +417,7 @@ describe("媒体协作分发 / 会话复用与流探测", () => {
         }
         if (url.includes("/webtorrent/stream-stale-1.mp4")) {
           return streamReadable
-            ? {
-                ok: true,
-                status: 206,
-              }
+            ? 创建可读探测响应()
             : {
                 ok: false,
                 status: 404,
@@ -484,10 +486,7 @@ describe("媒体协作分发 / 会话复用与流探测", () => {
               status: 404,
             };
           }
-          return {
-            ok: true,
-            status: 206,
-          };
+          return 创建可读探测响应();
         }
         return {
           ok: true,
@@ -546,10 +545,7 @@ describe("媒体协作分发 / 会话复用与流探测", () => {
               status: 404,
             };
           }
-          return {
-            ok: true,
-            status: 206,
-          };
+          return 创建可读探测响应();
         }
         return {
           ok: true,
@@ -708,10 +704,7 @@ describe("媒体协作分发 / 会话复用与流探测", () => {
           };
         }
         if (url.includes("/webtorrent/warning-after-wire.mp4")) {
-          return {
-            ok: true,
-            status: 206,
-          };
+          return 创建可读探测响应();
         }
         return {
           ok: true,
@@ -775,10 +768,7 @@ describe("媒体协作分发 / 会话复用与流探测", () => {
         };
       }
       if (url.includes("/webtorrent/offline-reopen.mp4")) {
-        return {
-          ok: true,
-          status: 206,
-        };
+        return 创建可读探测响应();
       }
       return {
         ok: true,

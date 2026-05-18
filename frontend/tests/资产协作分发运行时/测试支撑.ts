@@ -88,10 +88,7 @@ export function 准备已激活媒体ServiceWorker注册() {
   };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({
-      ok: true,
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-    }))
+    vi.fn(async () => new Response(Uint8Array.from([1, 2, 3]), { status: 206 }))
   );
   return registration;
 }

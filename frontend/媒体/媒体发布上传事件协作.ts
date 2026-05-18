@@ -1,6 +1,9 @@
 import type { 媒体附件上传结果 } from "../聊天共享/契约.js";
 import type { 媒体附件草稿 } from "./媒体草稿.js";
-import { 删除媒体发送任务恢复记录 } from "./媒体草稿持久化.js";
+import {
+  删除媒体发送任务恢复记录,
+  更新媒体发送任务恢复记录状态,
+} from "./媒体草稿持久化.js";
 import type {
   媒体上传器,
   媒体上传器创建参数,
@@ -94,6 +97,7 @@ async function 处理媒体上传成功事件(
     status: "processing",
     errorCode: "",
   });
+  更新媒体发送任务恢复记录状态(file.id, "processing");
   try {
     const ready = await deps.completeMediaUpload(deps.getSessionId(), attachmentId);
     const processedDraft = deps.读取媒体草稿(file.id);
@@ -124,6 +128,7 @@ async function 处理媒体上传成功事件(
       status: "failed",
       errorCode: 解析传输错误代码(error, "system_error"),
     });
+    更新媒体发送任务恢复记录状态(file.id, "failed");
   }
 }
 
@@ -151,6 +156,7 @@ function 处理媒体上传失败事件(
     status: "failed",
     errorCode,
   });
+  更新媒体发送任务恢复记录状态(file.id, "failed");
 }
 
 function 处理媒体上传移除事件(
@@ -172,6 +178,15 @@ function 处理媒体上传卡住事件(
   for (const file of files) {
     deps.草稿上传器键表.set(file.id, uploaderKey);
   }
+}
+
+function 是可自动续传的恢复文件(file: 媒体上传文件): boolean {
+  const restoredFile = file as 媒体上传文件 & { isGhost?: unknown };
+  /**
+   * Golden Retriever 找不到 Blob 时仍会恢复一个 ghost file。
+   * ghost 只能提示重新选择，不能当成真实文件继续 upload。
+   */
+  return restoredFile.isGhost !== true && file.data instanceof Blob;
 }
 
 export function 确保媒体上传器(
@@ -198,8 +213,11 @@ export function 确保媒体上传器(
   // Golden Retriever 恢复文件后自动续传：刷新/崩溃后用户无感
   nextUploader.on("restored", () => {
     const files = nextUploader.getFiles();
-    if (files.length > 0) {
-      void nextUploader.upload().catch(() => {});
+    const restorableFiles = files.filter(是可自动续传的恢复文件);
+    if (restorableFiles.length > 0) {
+      void nextUploader.upload().catch((error: unknown) => {
+        console.warn("[koko:media-upload:restore-upload-failed]", { error });
+      });
       return;
     }
     for (const [localId, mappedUploaderKey] of deps.草稿上传器键表.entries()) {
