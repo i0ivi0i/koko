@@ -515,7 +515,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
     if state.defense.is_some() {
         let governor_conf = GovernorConfigBuilder::default()
             .key_extractor(SmartIpKeyExtractor)
-            .per_second(30)
+            .per_millisecond(33)
             .burst_size(120)
             .finish()
             .unwrap();

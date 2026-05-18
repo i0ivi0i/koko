@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 const 仓库根目录 = resolve(import.meta.dirname, "..");
 const 门禁脚本路径 = join(仓库根目录, "scripts", "check-deployment-architecture-fitness.mjs");
 
-test("生产 HTTP 限流必须使用反代真实客户端 IP，避免所有用户共用 Caddy peer IP", () => {
+test("生产 HTTP 限流必须按真实客户端 IP 分桶且按每秒级速度恢复额度", () => {
   const source = readFileSync(join(仓库根目录, "src", "外壳", "mod.rs"), "utf8");
 
   assert.match(
@@ -16,8 +16,13 @@ test("生产 HTTP 限流必须使用反代真实客户端 IP，避免所有用�
     /\.key_extractor\(SmartIpKeyExtractor\)/,
     "生产 HTTP 限流必须把真实 IP 提取器实际挂到 governor 配置上"
   );
-  assert.match(source, /\.per_second\(30\)/);
+  assert.match(source, /\.per_millisecond\(33\)/);
   assert.match(source, /\.burst_size\(120\)/);
+  assert.doesNotMatch(
+    source,
+    /\.per_second\(30\)/,
+    "tower-governor 的 per_second(30) 表示每 30 秒补 1 个额度，不是每秒 30 个请求"
+  );
   assert.doesNotMatch(
     source,
     /GovernorConfigBuilder::default\(\)\s*\.per_second\(10\)\s*\.burst_size\(30\)/,
