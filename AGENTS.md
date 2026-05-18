@@ -48,7 +48,7 @@ _此项目：公网万人实时图文视频群聊，稳定秒达不崩。_
 - 修改前必须重新读目标文件、调用链、相邻模块、拥有层，以及受影响或声称不变的 contract/test/log/comment 表面；存在多种理解、前提不明或更简单路径时，先讲清假设/取舍，二次编辑前重新读当前内容。
 - 编写/分析代码或维修 bug 时，先从宏观层面看项目结构、关键链路、数据流、性能热点、并发压力和边界约束，再落到局部；实现必须保持高性能代码逻辑，默认考虑高并发下的内存、CPU、IO、锁竞争、背压和退场成本；禁止写出低性能代码，禁止写出会主动制造 OOM 风险的无界内存、整文件读入、无限队列、无背压缓存和资源不退场代码，禁止为求快写低效率、重复扫描、阻塞热路径或放大资源消耗的代码。
 - 分析代码、查 bug、评估影响必须走 GitNexus→Serena 两步工具链，禁止凭记忆/幻觉回答代码问题：**GitNexus 看宏观**（`context` 查调用链上下游、`impact` 看爆炸半径与风险等级、`detect_changes` 提交前检查影响、`cypher` 自定义图查询、`rename` 安全重命名）；**Serena 看微观**（`find_symbol` 跨文件精确定位、`get_symbols_overview` 扫文件结构、`find_declaration` 跳转定义、`find_referencing_symbols` 追所有引用点、`find_implementations` 找 trait 实现、`search_for_pattern` 正则搜索）；纯文本快扫可用 `rg` 辅助，禁止退化成只 grep 或只看当前标签页。
-- 发生 bug、维修 bug、查根因、卡住或重复失败时，必须调用 `supxcode`、`investigate`、`qa`、`superpowers:systematic-debugging` 等匹配的skill，先复现取证、追调用链/状态流/拥有层/逻辑层，抓到底层代码逻辑根因、破坏的不变量和唯一 owner/逻辑；修复强制从模型/架构/状态机/owner/数据流/逻辑等收口，优先改真正出错的层与逻辑，禁止连续打表面补丁、亡羊补牢、掩耳盗铃式 guard/timeout/mock 绿化；如果动手后才发现修法没有从底层逻辑收口，必须立刻止损，尽快回退或删除表面修补，重新回到逻辑根因路径上修复，必要时用 Context7 查官方文档与成熟实践。
+- 发生 bug、维修 bug、查根因、卡住或重复失败时，必须调用 `supxcode`、`investigate`、`qa`、`superpowers:systematic-debugging` 等匹配的skill，先复现取证、追调用链/状态流/拥有层/逻辑层，抓到底层代码逻辑根因、破坏的不变量和唯一 owner/逻辑；修复强制从模型/架构/状态机/owner/数据流/逻辑等逻辑巧妙地收口，优先改真正出错的层与逻辑，禁止在表面表象上堆叠补丁、亡羊补牢、掩耳盗铃式 guard/timeout/mock 绿化；如果动手后才发现修法没有从底层逻辑收口，必须立刻止损，尽快回退或删除表面修补，重新回到逻辑根因路径上修复，必要时用 Context7 查官方文档与成熟实践。
 - 执行任何任务前先看一眼 `skills` 目录/可用 skill 清单；命中或大致匹配时默认智能自动调用(多个)，无需主人点名或人工干预；只有破坏性、对外、高风险动作或 skill 明确 STOP/AskUserQuestion 时才请示。复杂任务再判断可并行边界，按宿主规则使用 subagent(也能使用skill)，子任务必须有读搜清单、写入边界和上下文约束。
 - 默认在当前 `main` 上完成；除非主人明确要求，不另开分支、worktree 或平行线路。
 - 本地 git 用 git；GitHub 平台操作用 GitHub skill / `gh`；本项目默认 Win11 原生环境，禁止 WSL2 开发；需要 PowerShell 时默认用最新版 `pwsh`，减少中文编码与旧版疑难杂症。
